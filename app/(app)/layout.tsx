@@ -94,10 +94,13 @@ export default async function AppLayout({
   const storedOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value
 
   // Validate stored org ID against memberships, fallback to first org
+  // Note: The middleware handles setting the cookie if it's missing/invalid
+  // Here we just determine what the active org should be for the UI
   let activeOrgId: string | null = null
   if (storedOrgId && memberships.some((m) => m.orgId === storedOrgId)) {
     activeOrgId = storedOrgId
   } else if (memberships.length > 0) {
+    // Fallback to first org - ensures there's ALWAYS an active org when user has memberships
     activeOrgId = memberships[0].orgId
   }
 

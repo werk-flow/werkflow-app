@@ -490,17 +490,19 @@ lib/
 
 4. **Cookie options must be consistent** - Always use `httpOnly: true`, `sameSite: 'lax'`
 
-5. **Hard navigation after cookie changes** - Use `window.location.href` not `router.push()` to ensure cookies are read correctly
+5. **Hard navigation after cookie changes** - Use `window.location.href` not `router.push()` to ensure cookies are read correctly. This is critical for production environments (like Vercel) where cookie timing can be an issue.
 
-6. **Invite validation happens server-side** - Use `get_invite_by_code` RPC for unauthenticated validation
+6. **Middleware handles org cookie fallback** - The middleware validates the `current_org_id` cookie for app routes (`/dashboard`, `/mitarbeiter`). If the cookie is missing or invalid, it automatically sets it to the user's first organization. This ensures there's NEVER a "no org selected" state when the user has memberships. Note: Cookies can only be SET in Server Actions, Route Handlers, or Middleware - NOT in Server Components like layouts.
 
-7. **`pending_invite_code` in user metadata** - Tracks invite-based signups for users who close the verification page
+7. **Invite validation happens server-side** - Use `get_invite_by_code` RPC for unauthenticated validation
 
-8. **Email validation in invite redemption** - RPC checks `auth.uid()`'s email matches invited email
+8. **`pending_invite_code` in user metadata** - Tracks invite-based signups for users who close the verification page
 
-9. **Admin ID compatibility** - Enforced in both `joinOrganization` and `redeem_organization_invite`
+9. **Email validation in invite redemption** - RPC checks `auth.uid()`'s email matches invited email
 
-10. **Role ordering in queries** - Use RPC `get_org_members` which orders by role enum then last_name
+10. **Admin ID compatibility** - Enforced in both `joinOrganization` and `redeem_organization_invite`
+
+11. **Role ordering in queries** - Use RPC `get_org_members` which orders by role enum then last_name
 
 ---
 

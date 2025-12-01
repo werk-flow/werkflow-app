@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import {
@@ -15,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { joinOrganization } from '@/lib/org/actions';
-import { useOrganization } from './organization-context';
 
 const ERROR_MESSAGES: Record<string, string> = {
   code_required: 'Bitte gib einen Organisationscode ein.',
@@ -34,8 +32,6 @@ interface JoinOrgDialogProps {
 }
 
 export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
-  const router = useRouter();
-  const { refreshMemberships, setActiveOrg } = useOrganization();
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,21 +44,9 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
     const result = await joinOrganization(code);
 
     if (result.success && result.organizationId) {
-      // Refresh memberships to include the new org
-      await refreshMemberships();
-
-      // Switch to the new organization
-      await setActiveOrg(result.organizationId);
-
-      // Close dialog and reset form
-      setCode('');
-      setError(null);
-      setIsLoading(false);
-      onOpenChange(false);
-
-      // Navigate to dashboard with joined flag for success banner
-      router.push(`/dashboard?joined=${result.organizationId}`);
-      router.refresh();
+      // Use hard navigation to ensure cookies are properly read on the new page
+      // This is critical for production environments where cookie timing can be an issue
+      window.location.href = `/dashboard?joined=${result.organizationId}`;
     } else {
       setError(
         ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??

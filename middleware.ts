@@ -9,6 +9,12 @@ const PROTECTED_PREFIXES = [
   '/upgrade'
 ];
 
+// App routes that need org cookie validation (not onboarding/upgrade)
+const APP_ROUTES_NEEDING_ORG = ['/dashboard', '/mitarbeiter'];
+
+const CURRENT_ORG_COOKIE = 'current_org_id';
+const CURRENT_ORG_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
 function isStaticAsset(pathname: string) {
   return (
     pathname.startsWith('/_next') ||
@@ -90,7 +96,7 @@ export async function middleware(req: NextRequest) {
     // Silently handle auth errors - treat as no session
     console.error('Auth error in middleware:', error);
   }
-  
+
   // For backward compatibility, treat user presence as "has session"
   const session = user ? { user } : null;
 
@@ -135,6 +141,42 @@ export async function middleware(req: NextRequest) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // For authenticated users on app routes, ensure org cookie is set
+  // This prevents "no org selected" states when user has memberships
+  const isAppRoute = APP_ROUTES_NEEDING_ORG.some(
+    (prefix) =>
+      normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)
+  );
+
+  if (session && user && isAppRoute) {
+    const currentOrgCookie = req.cookies.get(CURRENT_ORG_COOKIE)?.value;
+
+    // Fetch user's memberships to validate/set org cookie
+    const { data: memberships } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id);
+
+    const memberOrgIds = (memberships ?? []).map((m) => m.organization_id);
+
+    if (memberOrgIds.length > 0) {
+      // Check if current cookie is valid
+      const isValidCookie =
+        currentOrgCookie && memberOrgIds.includes(currentOrgCookie);
+
+      if (!isValidCookie) {
+        // Set cookie to first org - this ensures there's ALWAYS an active org
+        const firstOrgId = memberOrgIds[0];
+        response.cookies.set(CURRENT_ORG_COOKIE, firstOrgId, {
+          httpOnly: true,
+          sameSite: 'lax',
+          maxAge: CURRENT_ORG_MAX_AGE,
+          path: '/'
+        });
+      }
+    }
   }
 
   return response;

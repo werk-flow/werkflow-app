@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -21,7 +20,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function CreateOrganizationForm() {
-  const router = useRouter();
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +32,9 @@ export function CreateOrganizationForm() {
     const result = await createOrganization(name);
 
     if (result.success && result.organizationId) {
-      // Redirect to dashboard with created flag for success banner
-      router.replace(`/dashboard?created=${result.organizationId}`);
-      router.refresh();
+      // Use hard navigation to ensure cookies are properly read on the new page
+      // This is critical for production environments where cookie timing can be an issue
+      window.location.href = `/dashboard?created=${result.organizationId}`;
     } else {
       setError(
         ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??

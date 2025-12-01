@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 import {
@@ -15,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { createOrganization } from '@/lib/org/actions';
-import { useOrganization } from './organization-context';
 
 const ERROR_MESSAGES: Record<string, string> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -35,8 +33,6 @@ interface CreateOrgDialogProps {
 }
 
 export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
-  const router = useRouter();
-  const { refreshMemberships, setActiveOrg } = useOrganization();
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,22 +45,9 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     const result = await createOrganization(name);
 
     if (result.success && result.organizationId) {
-      // Refresh memberships to include the new org
-      await refreshMemberships();
-
-      // Switch to the new organization
-      await setActiveOrg(result.organizationId);
-
-      // Reset form state before closing
-      setName('');
-      setIsLoading(false);
-      
-      // Close dialog
-      onOpenChange(false);
-
-      // Navigate to dashboard with created flag for success banner
-      router.push(`/dashboard?created=${result.organizationId}`);
-      router.refresh();
+      // Use hard navigation to ensure cookies are properly read on the new page
+      // This is critical for production environments where cookie timing can be an issue
+      window.location.href = `/dashboard?created=${result.organizationId}`;
     } else {
       // Check if it's a subscription error - show upgrade prompt
       if (result.error === 'subscription_required') {
