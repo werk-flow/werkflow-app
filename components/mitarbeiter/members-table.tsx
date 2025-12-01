@@ -27,12 +27,14 @@ interface MembersTableProps {
   members: OrgMember[];
   currentUserId: string;
   currentUserRole: OrgRole;
+  onRoleChange?: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => void;
 }
 
 export function MembersTable({
   members,
   currentUserId,
   currentUserRole,
+  onRoleChange,
 }: MembersTableProps) {
   // Check if current user can manage members (admin or manager)
   const canManageMembers =
@@ -95,9 +97,12 @@ export function MembersTable({
                   <MemberActionsMenu
                     memberId={member.user_id}
                     memberName={memberName}
+                    memberFirstName={member.first_name}
+                    memberLastName={member.last_name}
                     memberRole={member.role}
                     currentUserId={currentUserId}
                     currentUserRole={currentUserRole}
+                    onRoleChange={onRoleChange}
                   />
                 </TableCell>
               )}

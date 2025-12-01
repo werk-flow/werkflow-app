@@ -5,7 +5,6 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies'
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog'
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs'
-import { RoleChangeBanner } from '@/components/mitarbeiter/role-change-banner'
 import type { OrgMember } from '@/components/mitarbeiter/members-table'
 import type { Invite } from '@/components/mitarbeiter/invitations-table'
 import type { OrgRole } from '@/lib/members/actions'
@@ -89,7 +88,6 @@ export default async function MitarbeiterPage() {
       </header>
 
       <div className="flex-1 overflow-auto p-6">
-        <RoleChangeBanner />
         <MitarbeiterTabs
           members={memberList}
           invites={inviteList}

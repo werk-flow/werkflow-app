@@ -46,17 +46,23 @@ const MANAGER_ASSIGNABLE_ROLES: OrgRole[] = ['accountant', 'secretary', 'employe
 interface MemberActionsMenuProps {
   memberId: string;
   memberName: string;
+  memberFirstName: string;
+  memberLastName: string;
   memberRole: OrgRole;
   currentUserId: string;
   currentUserRole: OrgRole;
+  onRoleChange?: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => void;
 }
 
 export function MemberActionsMenu({
   memberId,
   memberName,
+  memberFirstName,
+  memberLastName,
   memberRole,
   currentUserId,
   currentUserRole,
+  onRoleChange,
 }: MemberActionsMenuProps) {
   const router = useRouter();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -101,13 +107,10 @@ export function MemberActionsMenu({
     const result = await updateMemberRole(memberId, newRole);
 
     if (result.success) {
-      // Navigate with query params for the success banner
-      const displayName = memberName || 'Mitglied';
-      const url = new URL(window.location.href);
-      url.searchParams.set('role_changed_member', displayName);
-      url.searchParams.set('new_role', newRole);
-      router.push(url.pathname + url.search);
-      router.refresh();
+      // Call the callback for optimistic UI update and banner display
+      if (onRoleChange) {
+        onRoleChange(memberId, newRole, memberFirstName, memberLastName);
+      }
     } else {
       setError(result.error || 'Fehler beim Ändern der Rolle');
     }
