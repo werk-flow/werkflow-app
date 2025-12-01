@@ -43,10 +43,11 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
       : (searchParams as Record<string, string | string[] | undefined>);
 
   const email = resolveQueryParam(resolvedSearchParams, 'email');
+  const inviteCode = resolveQueryParam(resolvedSearchParams, 'invite_code');
 
   if (!email) {
     redirect('/signup');
   }
 
-  return <OTPForm email={email} />;
+  return <OTPForm email={email} inviteCode={inviteCode} />;
 }

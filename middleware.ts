@@ -2,7 +2,12 @@ import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const PROTECTED_PREFIXES = ['/dashboard'];
+const PROTECTED_PREFIXES = [
+  '/dashboard',
+  '/mitarbeiter',
+  '/onboarding',
+  '/upgrade'
+];
 
 function isStaticAsset(pathname: string) {
   return (
@@ -72,16 +77,22 @@ export async function middleware(req: NextRequest) {
   );
 
   // Handle potential auth errors gracefully (e.g., invalid refresh tokens)
-  let session = null;
+  // Use getUser() instead of getSession() for reliable auth checks
+  // getSession() only reads from cookies without validation
+  // getUser() actually validates the session with Supabase
+  let user = null;
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getUser();
     if (!error) {
-      session = data.session;
+      user = data.user;
     }
   } catch (error) {
     // Silently handle auth errors - treat as no session
     console.error('Auth error in middleware:', error);
   }
+  
+  // For backward compatibility, treat user presence as "has session"
+  const session = user ? { user } : null;
 
   const normalizedPath =
     pathname !== '/' && pathname.endsWith('/')
@@ -135,6 +146,9 @@ export const config = {
     '/login',
     '/signup',
     '/dashboard',
+    '/mitarbeiter',
+    '/onboarding/:path*',
+    '/upgrade',
     '/verify',
     '/forgot-password',
     '/reset-password'

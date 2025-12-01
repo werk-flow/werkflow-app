@@ -19,7 +19,7 @@ import {
   FormMessage
 } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
-import { createSupabaseImplicitClient } from '@/lib/supabase/implicit-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   getPasswordRequirements,
   getPasswordStrengthLevel,
@@ -43,12 +43,14 @@ type TokenState = 'loading' | 'valid' | 'invalid';
 
 export function ResetPasswordForm() {
   const router = useRouter();
-  const supabase = useMemo(() => createSupabaseImplicitClient(), []);
+  // Use SSR browser client to read session from cookies (set by server-side callback)
+  // This enables cross-browser and incognito password reset
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [tokenState, setTokenState] = useState<TokenState>('loading');
   const [tokenError, setTokenError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const isRedirectingRef = useRef(false);
 
   const form = useForm<ResetPasswordValues>({
@@ -74,8 +76,8 @@ export function ResetPasswordForm() {
     () => getPasswordStrengthLevel(passwordValue),
     [passwordValue]
   );
-  const { isValid } = form.formState;
-  const canSubmit = passwordRequirements.allMet && isValid && !isSubmitting;
+  // Button is clickable when password meets requirements (not disabled by confirmation mismatch)
+  const canSubmit = passwordRequirements.allMet && !isSubmitting;
 
   useEffect(() => {
     let hasResolvedToken = false;
@@ -120,21 +122,22 @@ export function ResetPasswordForm() {
       const codeParam = currentUrl.searchParams.get('code');
       const hash = window.location.hash;
 
-      const {
-        data: { session: existingSession }
-      } = await supabase.auth.getSession();
-
-      if (existingSession?.user) {
-        resolveToken('valid');
-        return;
-      }
-
+      // Check for errors in query params (server-side verification errors)
       if (error) {
         console.error('Supabase auth error:', error, errorDescription);
         resolveToken(
           'invalid',
           'Der Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.'
         );
+        return;
+      }
+
+      const {
+        data: { session: existingSession }
+      } = await supabase.auth.getSession();
+
+      if (existingSession?.user) {
+        resolveToken('valid');
         return;
       }
 
@@ -155,6 +158,35 @@ export function ResetPasswordForm() {
       }
 
       const params = new URLSearchParams(hash.slice(1));
+      
+      // Check for errors in hash fragment (Supabase returns errors this way for implicit flow)
+      const hashError = params.get('error');
+      const hashErrorCode = params.get('error_code');
+      const hashErrorDescription = params.get('error_description');
+      
+      if (hashError) {
+        console.error('Supabase auth error in hash:', hashError, hashErrorCode, hashErrorDescription);
+        
+        // Provide specific error messages based on error code
+        if (hashErrorCode === 'otp_expired') {
+          resolveToken(
+            'invalid',
+            'Der Link zum Zurücksetzen des Passworts ist abgelaufen. Links sind nur 1 Stunde gültig. Bitte fordere einen neuen Link an.'
+          );
+        } else if (hashErrorCode === 'otp_disabled') {
+          resolveToken(
+            'invalid',
+            'Der Link wurde bereits verwendet. Bitte fordere einen neuen Link an.'
+          );
+        } else {
+          resolveToken(
+            'invalid',
+            'Der Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.'
+          );
+        }
+        return;
+      }
+
       const type = params.get('type');
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
@@ -237,17 +269,30 @@ export function ResetPasswordForm() {
         clearTimeout(timeoutId);
       }
     };
-  }, [supabase, retryCount]);
+  }, [supabase]);
 
-  const handleRetry = () => {
-    setTokenState('loading');
-    setTokenError(null);
-    setRetryCount((count) => count + 1);
-  };
-
-  const handleSubmit = form.handleSubmit(async (values) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setHasAttemptedSubmit(true);
     setFormError(null);
     form.clearErrors('password');
+
+    const values = form.getValues();
+
+    // Check if passwords match before proceeding
+    if (values.password !== values.confirmPassword) {
+      form.setError('confirmPassword', {
+        type: 'manual',
+        message: 'Die Passwörter stimmen nicht überein.'
+      });
+      return;
+    }
+
+    // Validate password requirements
+    if (!passwordRequirements.allMet) {
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -304,7 +349,7 @@ export function ResetPasswordForm() {
       // Reset submitting state in case redirect fails or is delayed
       setIsSubmitting(false);
     }
-  });
+  };
 
   // Loading state
   if (tokenState === 'loading') {
@@ -323,16 +368,8 @@ export function ResetPasswordForm() {
           {tokenError ??
             'Der Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.'}
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleRetry}
-          >
-            Erneut versuchen
-          </Button>
-          <Button asChild className="w-full">
+        <div className="flex justify-center">
+          <Button asChild>
             <Link href="/forgot-password">Neuen Link anfordern</Link>
           </Button>
         </div>
@@ -379,7 +416,8 @@ export function ResetPasswordForm() {
                   placeholder="Passwort wiederholen"
                 />
               </FormControl>
-              <FormMessage />
+              {/* Only show mismatch error after user attempts to submit */}
+              {hasAttemptedSubmit && <FormMessage />}
             </FormItem>
           )}
         />

@@ -28,9 +28,15 @@ const RESEND_COOLDOWN_SECONDS = 60;
 
 type OTPFormProps = React.ComponentProps<typeof Card> & {
   email: string;
+  inviteCode?: string;
 };
 
-export function OTPForm({ email, className, ...props }: OTPFormProps) {
+export function OTPForm({
+  email,
+  inviteCode,
+  className,
+  ...props
+}: OTPFormProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [code, setCode] = useState('');
@@ -107,26 +113,74 @@ export function OTPForm({ email, className, ...props }: OTPFormProps) {
         })
       });
 
-      const metadata = session.user.user_metadata as {
-        first_name?: string;
-        last_name?: string;
-      };
+      // Note: Profile is automatically created by database trigger on auth.users INSERT
+      // The trigger extracts first_name and last_name from user_metadata
 
-      if (metadata?.first_name || metadata?.last_name) {
-        const { error: profileError } = await supabase.from('profiles').upsert(
-          {
-            id: session.user.id,
-            first_name: metadata?.first_name ?? null,
-            last_name: metadata?.last_name ?? null
-          },
-          { onConflict: 'id' }
-        );
+      // Determine the invite code to use:
+      // 1. If inviteCode prop is passed (user came from invite link), use that
+      // 2. Otherwise, check user metadata for pending_invite_code (user signed up via invite but logged in elsewhere)
+      const effectiveInviteCode =
+        inviteCode ||
+        (session.user.user_metadata?.pending_invite_code as string | undefined);
 
-        if (profileError) {
-          console.error(
-            'Failed to upsert profile after verification',
-            profileError
-          );
+      // If there's an invite code, redeem it via server action to ensure proper auth context
+      if (effectiveInviteCode) {
+        try {
+          const response = await fetch('/api/redeem-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inviteCode: effectiveInviteCode })
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            console.error('Failed to redeem invite:', result);
+            if (result.error === 'email_mismatch') {
+              const invitedEmail = result.invitedEmail || '';
+              window.location.href = `/invite-error?error=email_mismatch&email=${encodeURIComponent(
+                invitedEmail
+              )}&invite_code=${effectiveInviteCode}`;
+              return;
+            }
+            if (result.error === 'admin_mismatch') {
+              window.location.href = '/invite-error?error=admin_mismatch';
+              return;
+            }
+            if (result.error === 'invite_expired') {
+              window.location.href = '/invite-error?error=invite_expired';
+              return;
+            }
+            if (result.error === 'invite_cancelled') {
+              window.location.href = '/invite-error?error=invite_cancelled';
+              return;
+            }
+            if (result.error === 'invite_already_used') {
+              window.location.href = '/invite-error?error=invite_already_used';
+              return;
+            }
+            if (result.error === 'invalid_invite') {
+              window.location.href = '/invite-error?error=invalid_invite';
+              return;
+            }
+            // For other errors, continue to dashboard
+          } else if (result.success && result.organizationId) {
+            // Successfully redeemed - cookie is already set by the API
+            // Clear the pending_invite_code from user metadata since it's been used
+            await supabase.auth.updateUser({
+              data: { pending_invite_code: null }
+            });
+            // Use hard navigation to ensure the cookie is read correctly
+            if (result.alreadyMember) {
+              window.location.href = `/dashboard?already_member=${result.organizationId}`;
+            } else {
+              window.location.href = `/dashboard?joined=${result.organizationId}`;
+            }
+            return;
+          }
+        } catch (err) {
+          console.error('Error redeeming invite:', err);
+          // Continue to dashboard on error
         }
       }
 
@@ -150,9 +204,10 @@ export function OTPForm({ email, className, ...props }: OTPFormProps) {
     setIsResending(true);
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false }
+      // Use resend method to resend the signup confirmation email (OTP)
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email
       });
 
       if (error) {

@@ -1,0 +1,137 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Building2, Users, Copy, Check } from 'lucide-react';
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { useOrganization } from '@/components/organization/organization-context';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
+import { getRoleLabel } from '@/lib/roles';
+
+export function OrgInfoCard() {
+  const { activeOrg } = useOrganization();
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Fetch member count when active org changes
+  useEffect(() => {
+    async function fetchMemberCount() {
+      if (!activeOrg) {
+        setMemberCount(null);
+        return;
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      const { count, error } = await supabase
+        .from('organization_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', activeOrg.orgId);
+
+      if (!error && count !== null) {
+        setMemberCount(count);
+      }
+    }
+
+    fetchMemberCount();
+  }, [activeOrg]);
+
+  const handleCopyCode = async () => {
+    if (!activeOrg?.uniqueCode) return;
+
+    try {
+      await navigator.clipboard.writeText(activeOrg.uniqueCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy code:', error);
+    }
+  };
+
+  if (!activeOrg) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+            <Building2 className="size-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="text-lg">{activeOrg.name}</CardTitle>
+            <CardDescription>
+              Deine Rolle: {getRoleLabel(activeOrg.role)}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Member count */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="size-4" />
+          <span>
+            {memberCount !== null
+              ? `${memberCount} ${
+                  memberCount === 1 ? 'Mitglied' : 'Mitglieder'
+                }`
+              : 'Lade...'}
+          </span>
+        </div>
+
+        {/* Organization code - visible to admins and managers */}
+        {(activeOrg.role === 'admin' || activeOrg.role === 'manager') && (
+          <div className="rounded-lg border bg-muted/50 p-3">
+            <p className="mb-1 text-xs text-muted-foreground">
+              Organisationscode
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <code className="text-lg font-mono font-semibold tracking-wider">
+                {activeOrg.uniqueCode}
+              </code>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={handleCopyCode}
+              >
+                {copied ? (
+                  <Check className="size-4 text-green-600" />
+                ) : (
+                  <Copy className="size-4" />
+                )}
+                <span className="sr-only">Code kopieren</span>
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Teile diesen Code mit Mitarbeitern, damit sie deiner Organisation
+              beitreten können.
+            </p>
+          </div>
+        )}
+
+        {/* Delete organization - only visible to admins */}
+        {activeOrg.role === 'admin' && (
+          <>
+            <Separator />
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Gefahrenzone
+              </p>
+              <DeleteOrgDialog orgId={activeOrg.orgId} orgName={activeOrg.name} />
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
