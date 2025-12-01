@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { LayoutDashboard, Users } from 'lucide-react';
@@ -59,7 +60,33 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-full w-64 flex-col border-r bg-card">
-      {/* Organization Switcher at the top */}
+      {/* Logo */}
+      <div className="flex items-center justify-center px-4 py-5">
+        <Link href="/dashboard" className="flex items-center">
+          {/* Light mode logo */}
+          <Image
+            src="/logo-text-light.svg"
+            alt="WerkFlow"
+            width={160}
+            height={35}
+            className="h-9 w-auto dark:hidden"
+            priority
+          />
+          {/* Dark mode logo */}
+          <Image
+            src="/logo-text-dark.svg"
+            alt="WerkFlow"
+            width={160}
+            height={35}
+            className="hidden h-9 w-auto dark:block"
+            priority
+          />
+        </Link>
+      </div>
+
+      <Separator />
+
+      {/* Organization Switcher */}
       <div className="p-4">
         <OrganizationSwitcher />
       </div>
@@ -96,7 +123,7 @@ export default function Sidebar() {
 
       {/* Footer area */}
       <div className="border-t p-4">
-        <p className="text-xs text-muted-foreground">WerkFlow</p>
+        <p className="text-xs text-muted-foreground">© WerkFlow</p>
       </div>
     </aside>
   );
