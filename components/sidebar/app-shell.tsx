@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-page-skeleton';
 import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
+import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 
 const OrganizationSwitcher = dynamic(
   () =>
@@ -148,9 +149,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </ul>
       </nav>
 
-      {/* Footer area */}
-      <div className="border-t p-4">
-        <p className="text-xs text-muted-foreground">© WerkFlow</p>
+      {/* Profile card */}
+      <div className="mt-auto border-t">
+        <SidebarProfileCard />
       </div>
     </>
   );

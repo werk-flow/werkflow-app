@@ -108,4 +108,38 @@ export const getCachedMemberCount = cache(async (orgId: string): Promise<number 
   return count
 })
 
+export type UserProfile = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
+/**
+ * Cached user profile fetch - deduplicates within a single request render.
+ * Returns the user's profile with first name, last name, and email.
+ * Email is passed in since it comes from auth.users (already fetched in layout).
+ */
+export const getCachedUserProfile = cache(async (userId: string, email: string): Promise<UserProfile | null> => {
+  const supabase = await createSupabaseServerClient()
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name')
+    .eq('id', userId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching user profile:', error)
+    return null
+  }
+
+  return {
+    id: data.id,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    email,
+  }
+})
+
 
