@@ -35,7 +35,7 @@ export function InviteActionsMenu({
   inviteId,
   inviteEmail,
   status,
-  isExpired
+  isExpired,
 }: InviteActionsMenuProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);

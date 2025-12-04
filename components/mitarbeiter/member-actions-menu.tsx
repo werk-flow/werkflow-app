@@ -13,7 +13,7 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
@@ -23,9 +23,13 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { updateMemberRole, removeMember, type OrgRole } from '@/lib/members/actions';
+import {
+  updateMemberRole,
+  removeMember,
+  type OrgRole
+} from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 
 // Role hierarchy - lower number = higher rank
@@ -34,14 +38,23 @@ const ROLE_HIERARCHY: Record<OrgRole, number> = {
   manager: 2,
   accountant: 3,
   secretary: 4,
-  employee: 5,
+  employee: 5
 };
 
 // Roles that admins can assign (admin cannot be assigned)
-const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = ['manager', 'accountant', 'secretary', 'employee'];
+const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = [
+  'manager',
+  'accountant',
+  'secretary',
+  'employee'
+];
 
 // Roles that managers can assign (only roles below manager)
-const MANAGER_ASSIGNABLE_ROLES: OrgRole[] = ['accountant', 'secretary', 'employee'];
+const MANAGER_ASSIGNABLE_ROLES: OrgRole[] = [
+  'accountant',
+  'secretary',
+  'employee'
+];
 
 interface MemberActionsMenuProps {
   memberId: string;
@@ -51,7 +64,12 @@ interface MemberActionsMenuProps {
   memberRole: OrgRole;
   currentUserId: string;
   currentUserRole: OrgRole;
-  onRoleChange?: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => void;
+  onRoleChange?: (
+    memberId: string,
+    newRole: OrgRole,
+    firstName: string,
+    lastName: string
+  ) => void;
 }
 
 export function MemberActionsMenu({
@@ -62,7 +80,7 @@ export function MemberActionsMenu({
   memberRole,
   currentUserId,
   currentUserRole,
-  onRoleChange,
+  onRoleChange
 }: MemberActionsMenuProps) {
   const router = useRouter();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -85,7 +103,8 @@ export function MemberActionsMenu({
     ROLE_HIERARCHY[memberRole] > ROLE_HIERARCHY['manager'];
 
   // Admins can manage anyone except themselves
-  const canAdminManage = currentUserRole === 'admin' && !isOwnRow && memberRole !== 'admin';
+  const canAdminManage =
+    currentUserRole === 'admin' && !isOwnRow && memberRole !== 'admin';
 
   // Determine if current user can actually manage this member
   const canActuallyManage = canAdminManage || canManagerManage;
@@ -94,7 +113,9 @@ export function MemberActionsMenu({
   const getAvailableRoles = (): OrgRole[] => {
     // Admins can assign up to manager, managers can only assign below manager
     const assignableRoles =
-      currentUserRole === 'admin' ? ADMIN_ASSIGNABLE_ROLES : MANAGER_ASSIGNABLE_ROLES;
+      currentUserRole === 'admin'
+        ? ADMIN_ASSIGNABLE_ROLES
+        : MANAGER_ASSIGNABLE_ROLES;
     // Filter out the current role (no point in assigning the same role)
     return assignableRoles.filter((role) => role !== memberRole);
   };
@@ -111,6 +132,8 @@ export function MemberActionsMenu({
       if (onRoleChange) {
         onRoleChange(memberId, newRole, memberFirstName, memberLastName);
       }
+      // Refresh to get sorted data from server
+      router.refresh();
     } else {
       setError(result.error || 'Fehler beim Ändern der Rolle');
     }
@@ -127,12 +150,14 @@ export function MemberActionsMenu({
 
     if (result.success) {
       setShowRemoveDialog(false);
+      // Keep isRemoving true - the row will show spinner until it's removed
+      // when the table re-renders with fresh data after router.refresh()
       router.refresh();
+      // Don't set isRemoving to false on success - component will unmount
     } else {
       setError(result.error || 'Fehler beim Entfernen des Mitglieds');
+      setIsRemoving(false);
     }
-
-    setIsRemoving(false);
   };
 
   // Don't render anything if user can't manage this member
@@ -142,6 +167,9 @@ export function MemberActionsMenu({
 
   const availableRoles = getAvailableRoles();
 
+  // Show loading state for either role change or member removal
+  const isLoading = isUpdating || isRemoving;
+
   return (
     <>
       <DropdownMenu>
@@ -150,9 +178,9 @@ export function MemberActionsMenu({
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
-            disabled={isUpdating}
+            disabled={isLoading}
           >
-            {isUpdating ? (
+            {isLoading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <MoreHorizontal className="size-4" />
@@ -196,16 +224,18 @@ export function MemberActionsMenu({
             <AlertDialogTitle>Mitglied entfernen?</AlertDialogTitle>
             <AlertDialogDescription>
               Bist du sicher, dass du{' '}
-              <span className="font-medium">{memberName || 'dieses Mitglied'}</span>{' '}
+              <span className="font-medium">
+                {memberName || 'dieses Mitglied'}
+              </span>{' '}
               aus der Organisation entfernen möchtest? Diese Aktion kann nicht
               rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRemoving}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel disabled={isRemoving}>
+              Abbrechen
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemove}
               disabled={isRemoving}
@@ -226,4 +256,3 @@ export function MemberActionsMenu({
     </>
   );
 }
-

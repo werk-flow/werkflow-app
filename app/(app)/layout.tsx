@@ -1,82 +1,37 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
-import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies'
-import { isUserSubscribed } from '@/lib/subscription/helpers'
+import {
+  getCachedUser,
+  getCachedMemberships,
+  getCachedSubscriptionStatus,
+} from '@/lib/data/cached'
 import {
   OrganizationProvider,
-  type UserOrg,
 } from '@/components/organization/organization-context'
-import Sidebar from '@/components/sidebar/Sidebar'
-
-type OrganizationData = {
-  id: string
-  name: string
-  unique_code: string
-}
-
-async function getMemberships(userId: string): Promise<UserOrg[]> {
-  const supabase = await createSupabaseServerClient()
-
-  const { data, error } = await supabase
-    .from('organization_members')
-    .select(
-      `
-      organization_id,
-      role,
-      joined_at,
-      organizations (
-        id,
-        name,
-        unique_code
-      )
-    `
-    )
-    .eq('user_id', userId)
-
-  if (error) {
-    console.error('Error fetching memberships:', error)
-    return []
-  }
-
-  return (data ?? [])
-    .filter((m) => m.organizations !== null)
-    .map((m) => {
-      // organizations is returned as an object (single relation) not an array
-      const org = m.organizations as unknown as OrganizationData
-      return {
-        orgId: m.organization_id,
-        name: org.name,
-        uniqueCode: org.unique_code,
-        role: m.role,
-        joinedAt: m.joined_at,
-      }
-    })
-}
+import { AppShell } from '@/components/sidebar/app-shell'
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached user fetch - deduplicates if page also calls this
+  const { data: { user } } = await getCachedUser()
 
   if (!user) {
     redirect('/login')
   }
 
-  // Fetch memberships
-  const memberships = await getMemberships(user.id)
+  // Fetch memberships and subscription status in parallel using cached functions
+  const [memberships, subscribed] = await Promise.all([
+    getCachedMemberships(user.id),
+    getCachedSubscriptionStatus(user.id)
+  ])
 
   // If user has no organizations, redirect to onboarding
   if (memberships.length === 0) {
-    // Check if user has an active subscription
-    const subscribed = await isUserSubscribed(user.id)
-    
     if (subscribed) {
       // User is subscribed but has no orgs - redirect to create organization
       redirect('/onboarding/create-organization')
@@ -85,9 +40,6 @@ export default async function AppLayout({
       redirect('/onboarding/start')
     }
   }
-
-  // Check subscription status
-  const subscribed = await isUserSubscribed(user.id)
 
   // Read active org from cookie
   const cookieStore = await cookies()
@@ -110,11 +62,7 @@ export default async function AppLayout({
       initialActiveOrgId={activeOrgId}
       initialIsSubscribed={subscribed}
     >
-      <div className="flex h-screen bg-background">
-        <Sidebar />
-        <main className="flex-1 overflow-auto">{children}</main>
-      </div>
+      <AppShell>{children}</AppShell>
     </OrganizationProvider>
   )
 }
-

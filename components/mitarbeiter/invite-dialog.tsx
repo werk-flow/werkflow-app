@@ -125,9 +125,10 @@ export function InviteDialog() {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button>
+        <Button size="default" className="gap-2">
           <UserPlus className="size-4" />
-          Mitarbeiter hinzufügen
+          <span className="hidden sm:inline">Mitarbeiter hinzufügen</span>
+          <span className="sm:hidden">Hinzufügen</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">

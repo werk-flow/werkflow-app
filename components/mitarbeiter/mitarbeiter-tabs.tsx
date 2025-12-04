@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
 import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
@@ -16,15 +19,45 @@ interface MitarbeiterTabsProps {
 
 export function MitarbeiterTabs({
   members: initialMembers,
-  invites,
+  invites: initialInvites,
   currentUserId,
   currentUserRole
 }: MitarbeiterTabsProps) {
-  // Manage members state locally for optimistic updates
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  
+  // Sync members and invites state with props (for when server data refreshes)
   const [members, setMembers] = useState<OrgMember[]>(initialMembers);
+  const [invites, setInvites] = useState<Invite[]>(initialInvites);
+  
+  // Track previous counts for skeleton display during refresh
+  const [prevMemberCount, setPrevMemberCount] = useState(initialMembers.length);
+  const [prevInviteCount, setPrevInviteCount] = useState(initialInvites.length);
+  
+  // Update state when props change (after router.refresh())
+  useEffect(() => {
+    setMembers(initialMembers);
+    setPrevMemberCount(initialMembers.length);
+  }, [initialMembers]);
+  
+  useEffect(() => {
+    setInvites(initialInvites);
+    setPrevInviteCount(initialInvites.length);
+  }, [initialInvites]);
   
   // Track role change info for banner
   const [roleChangeInfo, setRoleChangeInfo] = useState<RoleChangeInfo | null>(null);
+
+  // Handle manual refresh
+  const handleRefresh = useCallback(() => {
+    // Store current counts before refresh
+    setPrevMemberCount(members.length);
+    setPrevInviteCount(invites.length);
+    
+    startTransition(() => {
+      router.refresh();
+    });
+  }, [router, members.length, invites.length]);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback((
@@ -63,32 +96,53 @@ export function MitarbeiterTabs({
         onDismiss={handleBannerDismiss} 
       />
       <Tabs defaultValue="members" className="w-full">
-        <TabsList className="gap-1">
-          <TabsTrigger value="members" className="group">
-            Mitglieder
-            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-[10px] font-semibold text-muted-foreground group-data-[state=active]:text-foreground">
-              {members.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="invitations" className="group">
-            Einladungen
-            {pendingCount > 0 && (
-              <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
-                {pendingCount}
+        <div className="flex items-center justify-between gap-2">
+          <TabsList className="gap-1">
+            <TabsTrigger value="members" className="group">
+              Mitglieder
+              <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-[10px] font-semibold text-muted-foreground group-data-[state=active]:text-foreground">
+                {members.length}
               </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+            </TabsTrigger>
+            <TabsTrigger value="invitations" className="group">
+              Einladungen
+              {pendingCount > 0 && (
+                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
+                  {pendingCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isPending}
+            className="h-8 w-8"
+            title="Tabellen aktualisieren"
+          >
+            <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
+            <span className="sr-only">Aktualisieren</span>
+          </Button>
+        </div>
+        
         <TabsContent value="members" className="mt-4">
           <MembersTable
             members={members}
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             onRoleChange={handleRoleChange}
+            isLoading={isPending}
+            skeletonCount={prevMemberCount}
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-4">
-          <InvitationsTable invites={invites} />
+          <InvitationsTable 
+            invites={invites} 
+            isLoading={isPending}
+            skeletonCount={prevInviteCount}
+          />
         </TabsContent>
       </Tabs>
     </>

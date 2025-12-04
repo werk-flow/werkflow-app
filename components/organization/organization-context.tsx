@@ -5,9 +5,11 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
+import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { setActiveOrgCookie } from '@/lib/org/actions'
 import type { Database } from '@/lib/supabase/database.types'
@@ -31,6 +33,7 @@ export type OrgContextValue = {
   refreshMemberships: () => Promise<void>
   isLoading: boolean
   isSubscribed: boolean
+  isSwitchingOrg: boolean
 }
 
 type OrganizationData = {
@@ -56,10 +59,14 @@ export function OrganizationProvider({
   initialActiveOrgId,
   initialIsSubscribed,
 }: OrganizationProviderProps) {
+  const router = useRouter()
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships)
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId)
   const [isLoading, setIsLoading] = useState(false)
   const [isSubscribed] = useState(initialIsSubscribed)
+  const [isSwitchingOrg, setIsSwitchingOrg] = useState(false)
+  // Track the org ID we're switching TO - used to know when server data has arrived
+  const pendingOrgIdRef = useRef<string | null>(null)
 
   // Sync state when initial props change (e.g., after router.refresh())
   useEffect(() => {
@@ -139,10 +146,38 @@ export function OrganizationProvider({
   }, [activeOrgId])
 
   // Set active organization and persist to cookie
-  const setActiveOrg = useCallback(async (orgId: string) => {
-    setActiveOrgId(orgId)
-    await setActiveOrgCookie(orgId)
-  }, [])
+  const setActiveOrg = useCallback(
+    async (orgId: string) => {
+      if (orgId === activeOrgId) {
+        return
+      }
+
+      // Track which org we're switching to
+      pendingOrgIdRef.current = orgId
+      setIsSwitchingOrg(true)
+      setActiveOrgId(orgId)
+
+      try {
+        await setActiveOrgCookie(orgId)
+        router.refresh()
+      } catch (error) {
+        console.error('Failed to switch organization', error)
+        pendingOrgIdRef.current = null
+        setIsSwitchingOrg(false)
+        throw error
+      }
+    },
+    [activeOrgId, router],
+  )
+
+  // Reset switching state when server data arrives for the org we switched to
+  useEffect(() => {
+    // Only reset if we were switching and the server now reflects the target org
+    if (pendingOrgIdRef.current && initialActiveOrgId === pendingOrgIdRef.current) {
+      pendingOrgIdRef.current = null
+      setIsSwitchingOrg(false)
+    }
+  }, [initialActiveOrgId])
 
   // Re-fetch memberships on visibility change (when tab becomes visible)
   useEffect(() => {
@@ -166,6 +201,7 @@ export function OrganizationProvider({
     refreshMemberships,
     isLoading,
     isSubscribed,
+    isSwitchingOrg,
   }
 
   return (

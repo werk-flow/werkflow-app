@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies'
+import { getCachedUser } from '@/lib/data/cached'
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog'
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs'
 import type { OrgMember } from '@/components/mitarbeiter/members-table'
@@ -10,10 +11,8 @@ import type { Invite } from '@/components/mitarbeiter/invitations-table'
 import type { OrgRole } from '@/lib/members/actions'
 
 export default async function MitarbeiterPage() {
-  const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached user - deduplicates with layout's call
+  const { data: { user } } = await getCachedUser()
 
   if (!user) {
     redirect('/login')
@@ -33,6 +32,9 @@ export default async function MitarbeiterPage() {
     )
   }
 
+  // Get Supabase client for page-specific queries
+  const supabase = await createSupabaseServerClient()
+
   // Check current user's membership and role in this org
   const { data: membership } = await supabase
     .from('organization_members')
@@ -49,45 +51,43 @@ export default async function MitarbeiterPage() {
     redirect('/dashboard')
   }
 
-  // Fetch members via RPC (already ordered by role and last_name)
-  const { data: members, error: membersError } = await supabase.rpc('get_org_members', {
-    p_org_id: activeOrgId,
-  })
+  // Fetch members and invites in parallel
+  const [membersResult, invitesResult] = await Promise.all([
+    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
+    supabase
+      .from('organization_invites')
+      .select('id, email, status, created_at, expires_at, accepted_at, invited_role')
+      .eq('organization_id', activeOrgId)
+      .order('created_at', { ascending: false })
+  ])
 
-  if (membersError) {
-    console.error('Error fetching members:', membersError)
+  if (membersResult.error) {
+    console.error('Error fetching members:', membersResult.error)
     return (
       <div className="flex h-full flex-col p-6">
         <h1 className="text-2xl font-bold">Mitarbeiter</h1>
         <p className="mt-4 text-destructive">
-          Fehler beim Laden der Mitarbeiter: {membersError.message || 'Unbekannter Fehler'}
+          Fehler beim Laden der Mitarbeiter: {membersResult.error.message || 'Unbekannter Fehler'}
         </p>
       </div>
     )
   }
 
-  // Fetch invitations for this organization (including invited_role)
-  const { data: invites, error: invitesError } = await supabase
-    .from('organization_invites')
-    .select('id, email, status, created_at, expires_at, accepted_at, invited_role')
-    .eq('organization_id', activeOrgId)
-    .order('created_at', { ascending: false })
-
-  if (invitesError) {
-    console.error('Error fetching invites:', invitesError)
+  if (invitesResult.error) {
+    console.error('Error fetching invites:', invitesResult.error)
   }
 
-  const memberList = (members as OrgMember[]) || []
-  const inviteList = (invites as Invite[]) || []
+  const memberList = (membersResult.data as OrgMember[]) || []
+  const inviteList = (invitesResult.data as Invite[]) || []
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-4">
-        <h1 className="text-2xl font-bold">Mitarbeiter</h1>
+      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
+        <h1 className="text-xl font-bold sm:text-2xl">Mitarbeiter</h1>
         <InviteDialog />
       </header>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         <MitarbeiterTabs
           members={memberList}
           invites={inviteList}
@@ -98,6 +98,3 @@ export default async function MitarbeiterPage() {
     </div>
   )
 }
-
-
-

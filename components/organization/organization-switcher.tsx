@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Building2, PlusCircle, UserPlus } from 'lucide-react';
 import {
   Select,
@@ -16,13 +16,39 @@ import { JoinOrgDialog } from './join-org-dialog';
 import { getRoleLabel } from '@/lib/roles';
 
 export function OrganizationSwitcher() {
-  const { memberships, activeOrgId, setActiveOrg, isLoading, isSubscribed } =
-    useOrganization();
+  const {
+    memberships,
+    activeOrgId,
+    setActiveOrg,
+    isLoading,
+    isSubscribed,
+    isSwitchingOrg
+  } = useOrganization();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
+  const [shouldBlurOnClose, setShouldBlurOnClose] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const handleValueChange = async (value: string) => {
+    if (value === activeOrgId) {
+      triggerRef.current?.blur();
+      return;
+    }
+
+    // Mark that we should blur when the dropdown closes
+    setShouldBlurOnClose(true);
     await setActiveOrg(value);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    // When dropdown closes and we switched orgs, blur the trigger
+    if (!open && shouldBlurOnClose) {
+      // Small delay to ensure Radix has finished refocusing
+      setTimeout(() => {
+        triggerRef.current?.blur();
+        setShouldBlurOnClose(false);
+      }, 0);
+    }
   };
 
   return (
@@ -30,9 +56,10 @@ export function OrganizationSwitcher() {
       <Select
         value={activeOrgId ?? undefined}
         onValueChange={handleValueChange}
-        disabled={isLoading || memberships.length === 0}
+        onOpenChange={handleOpenChange}
+        disabled={isLoading || isSwitchingOrg || memberships.length === 0}
       >
-        <SelectTrigger className="w-full h-12 px-4">
+        <SelectTrigger ref={triggerRef} className="w-full h-12 px-4">
           <div className="flex items-center gap-3 truncate">
             <Building2 className="size-5 shrink-0 text-muted-foreground" />
             <SelectValue placeholder="Organisation wählen" />

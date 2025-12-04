@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Building2, Users, Copy, Check } from 'lucide-react';
 
 import {
@@ -13,36 +13,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useOrganization } from '@/components/organization/organization-context';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
 import { getRoleLabel } from '@/lib/roles';
 
-export function OrgInfoCard() {
+interface OrgInfoCardProps {
+  initialMemberCount?: number | null;
+}
+
+export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
   const { activeOrg } = useOrganization();
-  const [memberCount, setMemberCount] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Fetch member count when active org changes
-  useEffect(() => {
-    async function fetchMemberCount() {
-      if (!activeOrg) {
-        setMemberCount(null);
-        return;
-      }
-
-      const supabase = createSupabaseBrowserClient();
-      const { count, error } = await supabase
-        .from('organization_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', activeOrg.orgId);
-
-      if (!error && count !== null) {
-        setMemberCount(count);
-      }
-    }
-
-    fetchMemberCount();
-  }, [activeOrg]);
+  // Use the server-provided member count
+  const memberCount = initialMemberCount;
 
   const handleCopyCode = async () => {
     if (!activeOrg?.uniqueCode) return;
