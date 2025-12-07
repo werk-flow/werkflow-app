@@ -70,7 +70,7 @@ export default async function KalenderPage() {
       if (currentUserRole === 'manager') {
         const MANAGED_ROLES = ['accountant', 'secretary', 'employee'];
         members = membersData.filter(
-          (m: { role: string }) =>
+          (m: { role: string; user_id: string }) =>
             MANAGED_ROLES.includes(m.role) || m.user_id === user.id
         );
       } else {
