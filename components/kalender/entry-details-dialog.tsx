@@ -47,7 +47,7 @@ import {
   reviewEntry
 } from '@/lib/time-tracking/actions';
 import type { WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 interface EntryDetailsDialogProps {
   open: boolean;

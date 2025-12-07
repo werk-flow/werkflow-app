@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
 import type { WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 interface WorkSessionBlockProps {
   session: WorkSession;

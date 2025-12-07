@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
 import { getCachedUser } from '@/lib/data/cached';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 export default async function KalenderPage() {
   // Use cached user - deduplicates with layout's call

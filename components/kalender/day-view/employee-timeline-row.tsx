@@ -12,7 +12,7 @@ import {
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 interface CalendarMember {
   user_id: string;

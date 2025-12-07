@@ -11,7 +11,7 @@ import { WeekViewSkeleton } from './week-view/week-view-skeleton';
 import { FullCalendarSkeleton } from './fullcalendar-skeleton';
 import { EntryDetailsDialog } from './entry-details-dialog';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 export type CalendarView = 'day' | 'week' | 'month';
 

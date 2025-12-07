@@ -9,7 +9,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 import type { CalendarView } from '../calendar-container';
 
 interface CalendarMember {

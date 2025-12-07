@@ -6,7 +6,7 @@ import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
 import { getCachedUser } from '@/lib/data/cached';
 import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 export default async function ZeiterfassungPage() {
   // Use cached user - deduplicates with layout's call

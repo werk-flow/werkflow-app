@@ -7,7 +7,7 @@ import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TIMELINE_WIDTH } from './timeline-grid';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/members/actions';
 
 interface CalendarMember {
   user_id: string;
