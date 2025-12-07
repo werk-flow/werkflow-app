@@ -1,0 +1,158 @@
+'use client';
+
+import {
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  CalendarPlus
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ManualEntryDialog } from '@/components/manual-entry-dialog';
+import type { CalendarView } from './calendar-container';
+
+interface CalendarHeaderProps {
+  currentDate: Date;
+  view: CalendarView;
+  isLoading?: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  onRefresh: () => void;
+}
+
+const MONTH_NAMES = [
+  'Januar',
+  'Februar',
+  'März',
+  'April',
+  'Mai',
+  'Juni',
+  'Juli',
+  'August',
+  'September',
+  'Oktober',
+  'November',
+  'Dezember'
+];
+
+const DAY_NAMES = [
+  'Sonntag',
+  'Montag',
+  'Dienstag',
+  'Mittwoch',
+  'Donnerstag',
+  'Freitag',
+  'Samstag'
+];
+
+function formatDateDisplay(date: Date, view: CalendarView): string {
+  if (view === 'day') {
+    return `${DAY_NAMES[date.getDay()]}, ${date.getDate()}. ${
+      MONTH_NAMES[date.getMonth()]
+    } ${date.getFullYear()}`;
+  }
+
+  if (view === 'week') {
+    // Get start and end of week
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const startOfWeek = new Date(date);
+    startOfWeek.setDate(diff);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    // Same month
+    if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
+      return `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${
+        MONTH_NAMES[startOfWeek.getMonth()]
+      } ${startOfWeek.getFullYear()}`;
+    }
+
+    // Different months
+    return `${startOfWeek.getDate()}. ${
+      MONTH_NAMES[startOfWeek.getMonth()]
+    } - ${endOfWeek.getDate()}. ${
+      MONTH_NAMES[endOfWeek.getMonth()]
+    } ${endOfWeek.getFullYear()}`;
+  }
+
+  // Month view
+  return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function CalendarHeader({
+  currentDate,
+  view,
+  isLoading = false,
+  onPrevious,
+  onNext,
+  onToday,
+  onRefresh
+}: CalendarHeaderProps) {
+  const isToday =
+    currentDate.toDateString() === new Date().toDateString() && view === 'day';
+
+  return (
+    <header className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+      <div className="flex items-center gap-4">
+        <h1 className="text-xl font-bold sm:text-2xl">Kalender</h1>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onPrevious}
+            title="Zurück"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onNext}
+            title="Weiter"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {!isToday && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToday}
+              className="ml-2"
+            >
+              Heute
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRefresh}
+            disabled={isLoading}
+            title="Aktualisieren"
+            className="ml-1"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
+            />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-muted-foreground sm:text-base">
+          {formatDateDisplay(currentDate, view)}
+        </span>
+        <ManualEntryDialog
+          preselectedDate={currentDate}
+          onSuccess={onRefresh}
+          trigger={
+            <Button size="default" className="gap-2">
+              <CalendarPlus className="size-4" />
+              <span>Kalendereintrag</span>
+            </Button>
+          }
+        />
+      </div>
+    </header>
+  );
+}

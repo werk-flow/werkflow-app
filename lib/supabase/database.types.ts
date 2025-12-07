@@ -4,326 +4,419 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[]
+  | Json[];
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
+    PostgrestVersion: '13.0.5';
+  };
   public: {
     Tables: {
       organization_invites: {
         Row: {
-          accepted_at: string | null
-          created_at: string
-          email: string
-          expires_at: string
-          id: string
-          invite_code: string
-          invited_role: Database["public"]["Enums"]["org_role"]
-          organization_id: string
-          status: Database["public"]["Enums"]["invite_status"]
-        }
+          accepted_at: string | null;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          id: string;
+          invite_code: string;
+          invited_role: Database['public']['Enums']['org_role'];
+          organization_id: string;
+          status: Database['public']['Enums']['invite_status'];
+        };
         Insert: {
-          accepted_at?: string | null
-          created_at?: string
-          email: string
-          expires_at?: string
-          id?: string
-          invite_code: string
-          invited_role?: Database["public"]["Enums"]["org_role"]
-          organization_id: string
-          status?: Database["public"]["Enums"]["invite_status"]
-        }
+          accepted_at?: string | null;
+          created_at?: string;
+          email: string;
+          expires_at?: string;
+          id?: string;
+          invite_code: string;
+          invited_role?: Database['public']['Enums']['org_role'];
+          organization_id: string;
+          status?: Database['public']['Enums']['invite_status'];
+        };
         Update: {
-          accepted_at?: string | null
-          created_at?: string
-          email?: string
-          expires_at?: string
-          id?: string
-          invite_code?: string
-          invited_role?: Database["public"]["Enums"]["org_role"]
-          organization_id?: string
-          status?: Database["public"]["Enums"]["invite_status"]
-        }
+          accepted_at?: string | null;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          id?: string;
+          invite_code?: string;
+          invited_role?: Database['public']['Enums']['org_role'];
+          organization_id?: string;
+          status?: Database['public']['Enums']['invite_status'];
+        };
         Relationships: [
           {
-            foreignKeyName: "organization_invites_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+            foreignKeyName: 'organization_invites_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       organization_members: {
         Row: {
-          id: string
-          joined_at: string
-          organization_id: string
-          role: Database["public"]["Enums"]["org_role"]
-          user_id: string
-        }
+          id: string;
+          joined_at: string;
+          organization_id: string;
+          role: Database['public']['Enums']['org_role'];
+          user_id: string;
+        };
         Insert: {
-          id?: string
-          joined_at?: string
-          organization_id: string
-          role?: Database["public"]["Enums"]["org_role"]
-          user_id: string
-        }
+          id?: string;
+          joined_at?: string;
+          organization_id: string;
+          role?: Database['public']['Enums']['org_role'];
+          user_id: string;
+        };
         Update: {
-          id?: string
-          joined_at?: string
-          organization_id?: string
-          role?: Database["public"]["Enums"]["org_role"]
-          user_id?: string
-        }
+          id?: string;
+          joined_at?: string;
+          organization_id?: string;
+          role?: Database['public']['Enums']['org_role'];
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "organization_members_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+            foreignKeyName: 'organization_members_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       organizations: {
         Row: {
-          admin_id: string
-          created_at: string
-          id: string
-          name: string
-          unique_code: string
-          updated_at: string
-        }
+          admin_id: string;
+          created_at: string;
+          id: string;
+          name: string;
+          unique_code: string;
+          updated_at: string;
+        };
         Insert: {
-          admin_id: string
-          created_at?: string
-          id?: string
-          name: string
-          unique_code: string
-          updated_at?: string
-        }
+          admin_id: string;
+          created_at?: string;
+          id?: string;
+          name: string;
+          unique_code: string;
+          updated_at?: string;
+        };
         Update: {
-          admin_id?: string
-          created_at?: string
-          id?: string
-          name?: string
-          unique_code?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
+          admin_id?: string;
+          created_at?: string;
+          id?: string;
+          name?: string;
+          unique_code?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
-          created_at: string
-          first_name: string
-          id: string
-          last_name: string
-        }
+          created_at: string;
+          email: string | null;
+          first_name: string | null;
+          id: string;
+          last_name: string | null;
+          updated_at: string | null;
+        };
         Insert: {
-          created_at?: string
-          first_name: string
-          id: string
-          last_name: string
-        }
+          created_at?: string;
+          email?: string | null;
+          first_name?: string | null;
+          id: string;
+          last_name?: string | null;
+          updated_at?: string | null;
+        };
         Update: {
-          created_at?: string
-          first_name?: string
-          id?: string
-          last_name?: string
-        }
-        Relationships: []
-      }
+          created_at?: string;
+          email?: string | null;
+          first_name?: string | null;
+          id?: string;
+          last_name?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
       subscriptions: {
         Row: {
-          created_at: string
-          id: string
-          plan_id: string | null
-          status: Database["public"]["Enums"]["subscription_status"]
-          updated_at: string
-          user_id: string
-        }
+          created_at: string;
+          id: string;
+          plan_id: string | null;
+          status: Database['public']['Enums']['subscription_status'];
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          created_at?: string
-          id?: string
-          plan_id?: string | null
-          status?: Database["public"]["Enums"]["subscription_status"]
-          updated_at?: string
-          user_id: string
-        }
+          created_at?: string;
+          id?: string;
+          plan_id?: string | null;
+          status?: Database['public']['Enums']['subscription_status'];
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          created_at?: string
-          id?: string
-          plan_id?: string | null
-          status?: Database["public"]["Enums"]["subscription_status"]
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-    }
+          created_at?: string;
+          id?: string;
+          plan_id?: string | null;
+          status?: Database['public']['Enums']['subscription_status'];
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      time_entries: {
+        Row: {
+          created_at: string;
+          entry_type: string;
+          id: string;
+          is_manual: boolean;
+          organization_id: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: Database['public']['Enums']['time_entry_status'];
+          timestamp: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          entry_type: string;
+          id?: string;
+          is_manual?: boolean;
+          organization_id: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: Database['public']['Enums']['time_entry_status'];
+          timestamp: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          entry_type?: string;
+          id?: string;
+          is_manual?: boolean;
+          organization_id?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: Database['public']['Enums']['time_entry_status'];
+          timestamp?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'time_entries_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
+      check_user_exists_by_email: {
+        Args: { p_email: string };
+        Returns: {
+          user_exists: boolean;
+          user_id: string;
+        }[];
+      };
+      get_invite_by_code: {
+        Args: { p_invite_code: string };
+        Returns: {
+          email: string;
+          expires_at: string;
+          id: string;
+          invited_role: Database['public']['Enums']['org_role'];
+          org_name: string;
+          organization_id: string;
+          status: Database['public']['Enums']['invite_status'];
+        }[];
+      };
       get_org_members: {
-        Args: { p_org_id: string }
+        Args: { p_org_id: string };
         Returns: {
-          email: string
-          first_name: string
-          joined_at: string
-          last_name: string
-          role: Database["public"]["Enums"]["org_role"]
-          user_id: string
-        }[]
-      }
+          email: string;
+          first_name: string;
+          joined_at: string;
+          last_name: string;
+          role: Database['public']['Enums']['org_role'];
+          user_id: string;
+        }[];
+      };
+      get_user_admin_or_manager_org_ids: {
+        Args: { p_user_id: string };
+        Returns: string[];
+      };
+      get_user_admin_org_ids: {
+        Args: { p_user_id: string };
+        Returns: string[];
+      };
+      get_user_org_ids: { Args: { p_user_id: string }; Returns: string[] };
+      is_member_of_org: {
+        Args: { p_org_id: string; p_user_id: string };
+        Returns: boolean;
+      };
       redeem_organization_invite: {
-        Args: { p_invite_code: string }
+        Args: { p_invite_code: string };
         Returns: {
-          already_member: boolean
-          org_id: string
-          org_name: string
-        }[]
-      }
-    }
+          already_member: boolean;
+          org_id: string;
+          org_name: string;
+        }[];
+      };
+    };
     Enums: {
-      invite_status: "pending" | "accepted" | "expired" | "cancelled"
-      org_role: "admin" | "manager" | "accountant" | "secretary" | "employee"
-      subscription_status: "active" | "inactive" | "canceled" | "trialing"
-    }
+      invite_status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+      org_role: 'admin' | 'employee' | 'accountant' | 'manager' | 'secretary';
+      subscription_status: 'active' | 'inactive' | 'canceled' | 'trialing';
+      time_entry_status: 'pending' | 'approved' | 'rejected';
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      [_ in never]: never;
+    };
+  };
+};
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>;
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<
+  keyof Database,
+  'public'
+>];
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
+    : never = never
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
+      Row: infer R;
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] &
+      DefaultSchema['Views'])
+  ? (DefaultSchema['Tables'] &
+      DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R;
+    }
+    ? R
     : never
+  : never;
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
+    | keyof DefaultSchema['Tables']
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Insert: infer I;
     }
     ? I
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+  ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+      Insert: infer I;
+    }
+    ? I
     : never
+  : never;
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
+    | keyof DefaultSchema['Tables']
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Update: infer U;
     }
     ? U
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+  ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+      Update: infer U;
+    }
+    ? U
     : never
+  : never;
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
+    | keyof DefaultSchema['Enums']
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
+    : never = never
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
+  ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
+  : never;
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
+    | keyof DefaultSchema['CompositeTypes']
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
+    : never = never
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
+  ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
+  : never;
 
 export const Constants = {
   public: {
     Enums: {
-      invite_status: ["pending", "accepted", "expired", "cancelled"],
-      org_role: ["admin", "manager", "accountant", "secretary", "employee"],
-      subscription_status: ["active", "inactive", "canceled", "trialing"],
-    },
-  },
-} as const
+      invite_status: ['pending', 'accepted', 'expired', 'cancelled'],
+      org_role: ['admin', 'employee', 'accountant', 'manager', 'secretary'],
+      subscription_status: ['active', 'inactive', 'canceled', 'trialing'],
+      time_entry_status: ['pending', 'approved', 'rejected']
+    }
+  }
+} as const;

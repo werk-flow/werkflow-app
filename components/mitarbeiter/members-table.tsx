@@ -8,12 +8,15 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
+  TableRow
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MemberActionsMenu } from './member-actions-menu';
+import { StatusBadge } from './status-badge';
+import { HoursDisplay } from './hours-display';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
+import type { MemberStatus } from '@/hooks/use-member-status-polling';
 
 export type OrgMember = {
   user_id: string;
@@ -28,9 +31,16 @@ interface MembersTableProps {
   members: OrgMember[];
   currentUserId: string;
   currentUserRole: OrgRole;
-  onRoleChange?: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => void;
+  onRoleChange?: (
+    memberId: string,
+    newRole: OrgRole,
+    firstName: string,
+    lastName: string
+  ) => void;
   isLoading?: boolean;
   skeletonCount?: number;
+  /** Status data from polling hook */
+  statusMap?: Record<string, MemberStatus>;
 }
 
 // Mobile card skeleton - matches exact card structure
@@ -62,8 +72,17 @@ function MemberRowSkeleton({ showActions }: { showActions: boolean }) {
       <TableCell>
         <Skeleton className="h-5 w-48" />
       </TableCell>
-      <TableCell>
+      <TableCell className="px-4">
         <Skeleton className="h-[22px] w-20 rounded-full" />
+      </TableCell>
+      <TableCell className="px-4">
+        <Skeleton className="h-[22px] w-24 rounded-full" />
+      </TableCell>
+      <TableCell className="px-4">
+        <div className="flex items-center gap-2 min-w-[100px]">
+          <Skeleton className="h-2 flex-1" />
+          <Skeleton className="h-4 w-8" />
+        </div>
       </TableCell>
       <TableCell className="text-muted-foreground">
         <Skeleton className="h-5 w-20" />
@@ -85,13 +104,20 @@ function MemberCard({
   currentUserId,
   currentUserRole,
   onRoleChange,
+  status
 }: {
   member: OrgMember;
   memberName: string;
   canManageMembers: boolean;
   currentUserId: string;
   currentUserRole: OrgRole;
-  onRoleChange?: (memberId: string, newRole: OrgRole, firstName: string, lastName: string) => void;
+  onRoleChange?: (
+    memberId: string,
+    newRole: OrgRole,
+    firstName: string,
+    lastName: string
+  ) => void;
+  status?: MemberStatus;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
@@ -107,13 +133,23 @@ function MemberCard({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <StatusBadge isClockedIn={status?.isClockedIn ?? false} />
+          <span className="text-muted-foreground/60">·</span>
+          <HoursDisplay
+            isClockedIn={status?.isClockedIn ?? false}
+            clockInTime={status?.clockInTime ?? null}
+            todayMinutes={status?.todayMinutes ?? 0}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <span className="truncate">{member.email}</span>
           <span className="text-muted-foreground/60">·</span>
           <span>
-            Beigetreten: {new Date(member.joined_at).toLocaleDateString('de-DE', {
+            Beigetreten:{' '}
+            {new Date(member.joined_at).toLocaleDateString('de-DE', {
               day: '2-digit',
               month: '2-digit',
-              year: '2-digit',
+              year: '2-digit'
             })}
           </span>
         </div>
@@ -141,6 +177,7 @@ export function MembersTable({
   onRoleChange,
   isLoading = false,
   skeletonCount = 0,
+  statusMap = {}
 }: MembersTableProps) {
   // Check if current user can manage members (admin or manager)
   const canManageMembers =
@@ -162,11 +199,17 @@ export function MembersTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[22%]">Name</TableHead>
+                <TableHead className="w-[18%]">Name</TableHead>
                 <TableHead>E-Mail</TableHead>
-                <TableHead className="w-[150px]">Rolle</TableHead>
-                <TableHead className="w-[150px]">Beigetreten</TableHead>
-                {canManageMembers && <TableHead className="w-[50px]"></TableHead>}
+                <TableHead className="w-[120px] px-4">Rolle</TableHead>
+                <TableHead className="w-[150px] px-4">Status</TableHead>
+                <TableHead className="w-[150px] px-4">
+                  Tagesfortschritt
+                </TableHead>
+                <TableHead className="w-[120px]">Beigetreten</TableHead>
+                {canManageMembers && (
+                  <TableHead className="w-[50px]"></TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -200,9 +243,10 @@ export function MembersTable({
       {/* Mobile view - Card layout */}
       <div className="space-y-2 md:hidden">
         {members.map((member) => {
-          const memberName = member.first_name || member.last_name
-            ? `${member.first_name} ${member.last_name}`.trim()
-            : member.email;
+          const memberName =
+            member.first_name || member.last_name
+              ? `${member.first_name} ${member.last_name}`.trim()
+              : member.email;
 
           return (
             <MemberCard
@@ -213,6 +257,7 @@ export function MembersTable({
               currentUserId={currentUserId}
               currentUserRole={currentUserRole}
               onRoleChange={onRoleChange}
+              status={statusMap[member.user_id]}
             />
           );
         })}
@@ -223,18 +268,22 @@ export function MembersTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[22%]">Name</TableHead>
+              <TableHead className="w-[18%]">Name</TableHead>
               <TableHead>E-Mail</TableHead>
-              <TableHead className="w-[150px]">Rolle</TableHead>
-              <TableHead className="w-[150px]">Beigetreten</TableHead>
+              <TableHead className="w-[120px] px-4">Rolle</TableHead>
+              <TableHead className="w-[150px] px-4">Status</TableHead>
+              <TableHead className="w-[150px] px-4">Tagesfortschritt</TableHead>
+              <TableHead className="w-[120px]">Beigetreten</TableHead>
               {canManageMembers && <TableHead className="w-[50px]"></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.map((member) => {
-              const memberName = member.first_name || member.last_name
-                ? `${member.first_name} ${member.last_name}`.trim()
-                : member.email;
+              const memberName =
+                member.first_name || member.last_name
+                  ? `${member.first_name} ${member.last_name}`.trim()
+                  : member.email;
+              const status = statusMap[member.user_id];
 
               return (
                 <TableRow key={member.user_id}>
@@ -244,16 +293,26 @@ export function MembersTable({
                       : '—'}
                   </TableCell>
                   <TableCell>{member.email}</TableCell>
-                  <TableCell>
+                  <TableCell className="px-4">
                     <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
                       {ROLE_LABELS[member.role] || member.role}
                     </span>
+                  </TableCell>
+                  <TableCell className="px-4">
+                    <StatusBadge isClockedIn={status?.isClockedIn ?? false} />
+                  </TableCell>
+                  <TableCell className="px-4">
+                    <HoursDisplay
+                      isClockedIn={status?.isClockedIn ?? false}
+                      clockInTime={status?.clockInTime ?? null}
+                      todayMinutes={status?.todayMinutes ?? 0}
+                    />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(member.joined_at).toLocaleDateString('de-DE', {
                       day: '2-digit',
                       month: '2-digit',
-                      year: 'numeric',
+                      year: 'numeric'
                     })}
                   </TableCell>
                   {canManageMembers && (

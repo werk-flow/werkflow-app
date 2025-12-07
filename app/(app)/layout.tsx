@@ -11,6 +11,7 @@ import {
 import { OrganizationProvider } from '@/components/organization/organization-context';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { AppShell } from '@/components/sidebar/app-shell';
+import { ClockFAB } from '@/components/clock-fab';
 
 export default async function AppLayout({
   children
@@ -67,6 +68,7 @@ export default async function AppLayout({
     >
       <UserProfileProvider initialProfile={userProfile}>
         <AppShell>{children}</AppShell>
+        <ClockFAB />
       </UserProfileProvider>
     </OrganizationProvider>
   );

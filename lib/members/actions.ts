@@ -12,10 +12,15 @@ const ROLE_HIERARCHY: Record<string, number> = {
   manager: 2,
   accountant: 3,
   secretary: 4,
-  employee: 5,
+  employee: 5
 };
 
-export type OrgRole = 'admin' | 'manager' | 'accountant' | 'secretary' | 'employee';
+export type OrgRole =
+  | 'admin'
+  | 'manager'
+  | 'accountant'
+  | 'secretary'
+  | 'employee';
 
 export type UpdateRoleResult = {
   success: boolean;
@@ -29,7 +34,7 @@ export type RemoveMemberResult = {
 
 /**
  * Update a member's role within an organization.
- * 
+ *
  * Rules:
  * - Only admins and managers can change roles
  * - Cannot change own role
@@ -45,7 +50,7 @@ export async function updateMemberRole(
   try {
     const supabase = await createSupabaseServerClient();
     const {
-      data: { user },
+      data: { user }
     } = await supabase.auth.getUser();
 
     if (!user) {
@@ -141,18 +146,20 @@ export async function updateMemberRole(
 
 /**
  * Remove a member from an organization.
- * 
+ *
  * Rules:
  * - Only admins and managers can remove members
  * - Cannot remove self
  * - Admins can remove anyone (except themselves)
  * - Managers can only remove users below manager level (accountant, secretary, employee)
  */
-export async function removeMember(memberId: string): Promise<RemoveMemberResult> {
+export async function removeMember(
+  memberId: string
+): Promise<RemoveMemberResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const {
-      data: { user },
+      data: { user }
     } = await supabase.auth.getUser();
 
     if (!user) {
@@ -218,6 +225,21 @@ export async function removeMember(memberId: string): Promise<RemoveMemberResult
       }
     }
 
+    // Delete the member's time entries first (before removing membership)
+    const { error: timeEntriesDeleteError } = await admin
+      .from('time_entries')
+      .delete()
+      .eq('user_id', memberId)
+      .eq('organization_id', orgId);
+
+    if (timeEntriesDeleteError) {
+      console.error(
+        'Error deleting member time entries:',
+        timeEntriesDeleteError
+      );
+      return { success: false, error: 'delete_time_entries_failed' };
+    }
+
     // Remove the member using admin client
     const { error: deleteError } = await admin
       .from('organization_members')
@@ -236,4 +258,3 @@ export async function removeMember(memberId: string): Promise<RemoveMemberResult
     return { success: false, error: 'unexpected_error' };
   }
 }
-

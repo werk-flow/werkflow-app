@@ -164,3 +164,29 @@ textarea::-moz-selection,
 .animate-out {
   animation: banner-fade-out 0.15s ease-in forwards;
 }
+
+/* Hide native time picker indicators for all browsers */
+input[type='time'].hide-time-picker::-webkit-calendar-picker-indicator,
+input[type='time'].hide-time-picker::-webkit-inner-spin-button,
+input[type='time'].hide-time-picker::-webkit-clear-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* Safari specific fix */
+input[type='time'].hide-time-picker {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Firefox */
+input[type='time'].hide-time-picker::-moz-focus-inner {
+  border: 0;
+}

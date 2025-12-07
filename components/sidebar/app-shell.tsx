@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-page-skeleton';
 import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
+import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
+import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfassung-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 
 const OrganizationSwitcher = dynamic(
@@ -42,6 +44,16 @@ const navItems: NavItem[] = [
     href: '/dashboard',
     label: 'Dashboard',
     icon: LayoutDashboard
+  },
+  {
+    href: '/kalender',
+    label: 'Kalender',
+    icon: Calendar
+  },
+  {
+    href: '/zeiterfassung',
+    label: 'Zeiterfassung',
+    icon: Clock
   },
   {
     href: '/mitarbeiter',
@@ -296,6 +308,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     if (pathname.startsWith('/dashboard')) {
       return <DashboardPageSkeleton />;
+    }
+
+    if (pathname.startsWith('/kalender')) {
+      return <KalenderPageSkeleton />;
+    }
+
+    if (pathname.startsWith('/zeiterfassung')) {
+      return <ZeiterfassungPageSkeleton />;
     }
 
     return null;

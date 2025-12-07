@@ -4,13 +4,20 @@ import { NextResponse } from 'next/server';
 
 const PROTECTED_PREFIXES = [
   '/dashboard',
+  '/kalender',
+  '/zeiterfassung',
   '/mitarbeiter',
   '/onboarding',
   '/upgrade'
 ];
 
 // App routes that need org cookie validation (not onboarding/upgrade)
-const APP_ROUTES_NEEDING_ORG = ['/dashboard', '/mitarbeiter'];
+const APP_ROUTES_NEEDING_ORG = [
+  '/dashboard',
+  '/kalender',
+  '/zeiterfassung',
+  '/mitarbeiter'
+];
 
 const CURRENT_ORG_COOKIE = 'current_org_id';
 const CURRENT_ORG_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -188,6 +195,8 @@ export const config = {
     '/login',
     '/signup',
     '/dashboard',
+    '/kalender',
+    '/zeiterfassung',
     '/mitarbeiter',
     '/onboarding/:path*',
     '/upgrade',

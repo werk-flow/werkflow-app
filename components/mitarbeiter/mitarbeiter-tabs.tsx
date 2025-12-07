@@ -1,6 +1,12 @@
 'use client';
 
-import { useState, useCallback, useEffect, useTransition } from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useTransition,
+  useMemo
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
 import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
+import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
 import type { OrgRole } from '@/lib/members/actions';
 
 interface MitarbeiterTabsProps {
@@ -15,69 +22,88 @@ interface MitarbeiterTabsProps {
   invites: Invite[];
   currentUserId: string;
   currentUserRole: OrgRole;
+  organizationId: string;
 }
 
 export function MitarbeiterTabs({
   members: initialMembers,
   invites: initialInvites,
   currentUserId,
-  currentUserRole
+  currentUserRole,
+  organizationId
 }: MitarbeiterTabsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  
+
   // Sync members and invites state with props (for when server data refreshes)
   const [members, setMembers] = useState<OrgMember[]>(initialMembers);
   const [invites, setInvites] = useState<Invite[]>(initialInvites);
-  
+
   // Track previous counts for skeleton display during refresh
   const [prevMemberCount, setPrevMemberCount] = useState(initialMembers.length);
   const [prevInviteCount, setPrevInviteCount] = useState(initialInvites.length);
-  
+
+  // Get member IDs for status polling
+  const memberIds = useMemo(() => members.map((m) => m.user_id), [members]);
+
+  // Poll for member status (working status and hours)
+  const { statusMap, refetch: refetchStatus } = useMemberStatusPolling({
+    organizationId,
+    memberIds,
+    interval: 30000, // 30 seconds
+    enabled: memberIds.length > 0
+  });
+
   // Update state when props change (after router.refresh())
   useEffect(() => {
     setMembers(initialMembers);
     setPrevMemberCount(initialMembers.length);
   }, [initialMembers]);
-  
+
   useEffect(() => {
     setInvites(initialInvites);
     setPrevInviteCount(initialInvites.length);
   }, [initialInvites]);
-  
+
   // Track role change info for banner
-  const [roleChangeInfo, setRoleChangeInfo] = useState<RoleChangeInfo | null>(null);
+  const [roleChangeInfo, setRoleChangeInfo] = useState<RoleChangeInfo | null>(
+    null
+  );
 
   // Handle manual refresh
   const handleRefresh = useCallback(() => {
     // Store current counts before refresh
     setPrevMemberCount(members.length);
     setPrevInviteCount(invites.length);
-    
+
+    // Also refetch status data
+    refetchStatus();
+
     startTransition(() => {
       router.refresh();
     });
-  }, [router, members.length, invites.length]);
+  }, [router, members.length, invites.length, refetchStatus]);
 
   // Handle role change with optimistic update
-  const handleRoleChange = useCallback((
-    memberId: string,
-    newRole: OrgRole,
-    firstName: string,
-    lastName: string
-  ) => {
-    // Optimistically update the members list
-    setMembers(prevMembers => 
-      prevMembers.map(member => 
-        member.user_id === memberId 
-          ? { ...member, role: newRole }
-          : member
-      )
-    );
-    
-    // Show the success banner
-    setRoleChangeInfo({ firstName, lastName, newRole });
-  }, []);
+  const handleRoleChange = useCallback(
+    (
+      memberId: string,
+      newRole: OrgRole,
+      firstName: string,
+      lastName: string
+    ) => {
+      // Optimistically update the members list
+      setMembers((prevMembers) =>
+        prevMembers.map((member) =>
+          member.user_id === memberId ? { ...member, role: newRole } : member
+        )
+      );
+
+      // Show the success banner
+      setRoleChangeInfo({ firstName, lastName, newRole });
+    },
+    []
+  );
 
   // Dismiss banner callback
   const handleBannerDismiss = useCallback(() => {
@@ -91,9 +117,9 @@ export function MitarbeiterTabs({
 
   return (
     <>
-      <RoleChangeBanner 
-        roleChangeInfo={roleChangeInfo} 
-        onDismiss={handleBannerDismiss} 
+      <RoleChangeBanner
+        roleChangeInfo={roleChangeInfo}
+        onDismiss={handleBannerDismiss}
       />
       <Tabs defaultValue="members" className="w-full">
         <div className="flex items-center justify-between gap-2">
@@ -113,7 +139,7 @@ export function MitarbeiterTabs({
               )}
             </TabsTrigger>
           </TabsList>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -122,11 +148,13 @@ export function MitarbeiterTabs({
             className="h-8 w-8"
             title="Tabellen aktualisieren"
           >
-            <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`size-4 ${isPending ? 'animate-spin' : ''}`}
+            />
             <span className="sr-only">Aktualisieren</span>
           </Button>
         </div>
-        
+
         <TabsContent value="members" className="mt-4">
           <MembersTable
             members={members}
@@ -135,11 +163,12 @@ export function MitarbeiterTabs({
             onRoleChange={handleRoleChange}
             isLoading={isPending}
             skeletonCount={prevMemberCount}
+            statusMap={statusMap}
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-4">
-          <InvitationsTable 
-            invites={invites} 
+          <InvitationsTable
+            invites={invites}
             isLoading={isPending}
             skeletonCount={prevInviteCount}
           />
