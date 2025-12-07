@@ -88,8 +88,8 @@ export default async function MitarbeiterPage() {
   const inviteList = (invitesResult.data as Invite[]) || [];
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Mitarbeiter</h1>
         <InviteDialog />
       </header>

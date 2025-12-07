@@ -152,11 +152,11 @@ export function MonthView({
   return (
     <div className="p-4 sm:p-6">
       {/* Month header */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
+      <div className="grid grid-cols-7 gap-px mb-px bg-border/50 rounded-t-lg overflow-hidden">
         {DAY_NAMES_SHORT.map((name) => (
           <div
             key={name}
-            className="text-center text-sm font-medium text-muted-foreground py-2"
+            className="text-center text-sm font-medium text-muted-foreground py-2 bg-background"
           >
             {name}
           </div>
@@ -164,10 +164,10 @@ export function MonthView({
       </div>
 
       {/* Month grid */}
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-px bg-border/50 rounded-b-lg overflow-hidden">
         {monthDays.map((day, i) => {
           if (!day) {
-            return <div key={i} className="min-h-[80px]" />;
+            return <div key={i} className="min-h-[80px] bg-background" />;
           }
 
           const dayStr = day.toDateString();
@@ -180,10 +180,10 @@ export function MonthView({
               key={i}
               onClick={() => handleDayClick(day)}
               className={cn(
-                'min-h-[80px] rounded-lg border p-1 text-left transition-colors',
-                'hover:bg-accent hover:border-accent-foreground/20',
+                'min-h-[80px] p-1 text-left transition-colors bg-background cursor-pointer',
+                'hover:bg-[rgba(123,44,191,0.06)]',
                 !isCurrentMonth && 'opacity-50',
-                isToday && 'border-primary bg-primary/5'
+                isToday && 'bg-[rgba(123,44,191,0.08)]'
               )}
             >
               {/* Day number */}
@@ -191,7 +191,7 @@ export function MonthView({
                 className={cn(
                   'text-xs font-medium mb-1',
                   isToday &&
-                    'inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground'
+                    'inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary text-primary-foreground px-1'
                 )}
               >
                 {day.getDate()}

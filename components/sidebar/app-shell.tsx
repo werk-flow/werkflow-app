@@ -252,7 +252,7 @@ function MobileHeader() {
   const { isOpen, setIsOpen } = useSidebar();
 
   return (
-    <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-3">
+    <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-3 sticky top-0 z-30">
       <Button
         variant="ghost"
         size="icon"

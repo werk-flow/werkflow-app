@@ -102,7 +102,7 @@ export function WeekView({
         <div className="min-w-[1150px] p-4">
           {/* Header Row */}
           <div className="grid grid-cols-[140px_repeat(7,_minmax(140px,_1fr))] gap-1 mb-1 sticky top-0 bg-background z-20">
-            <div className="p-2 font-medium text-sm text-muted-foreground flex items-center">
+            <div className="p-2 font-medium text-sm text-muted-foreground flex items-center sticky left-0 bg-background z-10">
               Mitarbeiter
             </div>
             {weekDays.map((day, i) => {
@@ -143,7 +143,7 @@ export function WeekView({
                   className="grid grid-cols-[140px_repeat(7,_minmax(140px,_1fr))] gap-1"
                 >
                   {/* Member Info Column */}
-                  <div className="p-3 bg-card border rounded-md flex flex-col justify-center sticky left-0 z-10">
+                  <div className="p-3 bg-card border border-border/60 rounded-md flex flex-col justify-center sticky left-0 z-10">
                     <div className="font-medium text-sm truncate">
                       {getMemberDisplayName(member)}
                     </div>
@@ -178,7 +178,8 @@ export function WeekView({
                       <button
                         key={i}
                         className={cn(
-                          'min-h-[110px] p-1.5 bg-card border rounded-md transition-colors text-left',
+                          'min-h-[110px] p-1.5 bg-card border border-border/60 rounded-md transition-colors text-left cursor-pointer',
+                          'hover:bg-[rgba(123,44,191,0.06)] hover:border-[rgba(123,44,191,0.3)]',
                           isToday &&
                             'bg-[rgba(123,44,191,0.08)] border-[rgba(123,44,191,0.4)]'
                         )}

@@ -6,7 +6,7 @@ import { ManualEntryDialog } from '@/components/manual-entry-dialog';
 
 export function ZeiterfassungHeader() {
   return (
-    <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
+    <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10">
       <h1 className="text-xl font-bold sm:text-2xl">Zeiterfassung</h1>
       <ManualEntryDialog
         trigger={

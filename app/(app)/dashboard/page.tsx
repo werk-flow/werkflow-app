@@ -15,11 +15,13 @@ export default async function DashboardPage() {
   const activeOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
 
   // Fetch member count server-side using cached function
-  const memberCount = activeOrgId ? await getCachedMemberCount(activeOrgId) : null;
+  const memberCount = activeOrgId
+    ? await getCachedMemberCount(activeOrgId)
+    : null;
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Dashboard</h1>
         <SignOutButton />
       </header>
@@ -40,7 +42,7 @@ export default async function DashboardPage() {
         <OrgDeletedBanner />
       </Suspense>
 
-      <div className="flex-1 p-4 sm:p-6">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="mx-auto max-w-2xl">
           <OrgInfoCard initialMemberCount={memberCount} />
         </div>

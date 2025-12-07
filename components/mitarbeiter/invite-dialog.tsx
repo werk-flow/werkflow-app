@@ -131,7 +131,10 @@ export function InviteDialog() {
           <span className="sm:hidden">Hinzufügen</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent
+        className="sm:max-w-[425px]"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Mitarbeiter einladen</DialogTitle>
           <DialogDescription>

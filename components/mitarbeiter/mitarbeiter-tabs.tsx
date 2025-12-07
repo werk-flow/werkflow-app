@@ -47,7 +47,11 @@ export function MitarbeiterTabs({
   const memberIds = useMemo(() => members.map((m) => m.user_id), [members]);
 
   // Poll for member status (working status and hours)
-  const { statusMap, refetch: refetchStatus } = useMemberStatusPolling({
+  const {
+    statusMap,
+    isLoading: isStatusLoading,
+    refetch: refetchStatus
+  } = useMemberStatusPolling({
     organizationId,
     memberIds,
     interval: 30000, // 30 seconds
@@ -161,7 +165,7 @@ export function MitarbeiterTabs({
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             onRoleChange={handleRoleChange}
-            isLoading={isPending}
+            isLoading={isPending || isStatusLoading}
             skeletonCount={prevMemberCount}
             statusMap={statusMap}
           />

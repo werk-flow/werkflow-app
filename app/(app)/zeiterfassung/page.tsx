@@ -52,7 +52,7 @@ export default async function ZeiterfassungPage() {
     currentUserRole === 'admin' || currentUserRole === 'manager';
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-hidden">
       <ZeiterfassungHeader />
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">

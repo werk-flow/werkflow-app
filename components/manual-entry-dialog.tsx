@@ -100,7 +100,7 @@ export function ManualEntryDialog({
 
   // Validation and feedback
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Check if user is admin or manager
   const isAdminOrManager =
@@ -138,7 +138,7 @@ export function ManualEntryDialog({
   useEffect(() => {
     if (open) {
       setError(null);
-      setSuccess(false);
+      setSuccessMessage(null);
       // Reset to default values
       setEntryMode('both');
       const resetIso =
@@ -164,7 +164,7 @@ export function ManualEntryDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
+    setSuccessMessage(null);
 
     if (!activeOrgId) {
       setError('Keine Organisation ausgewählt.');
@@ -246,7 +246,13 @@ export function ManualEntryDialog({
         });
 
         if (result.success) {
-          setSuccess(true);
+          // Check if entries are pending or approved
+          const isPending = result.entries.some((e) => e.status === 'pending');
+          if (isPending) {
+            setSuccessMessage('Antrag wurde zur Genehmigung eingereicht.');
+          } else {
+            setSuccessMessage('Eintrag erfolgreich erstellt!');
+          }
           // Refresh FAB clock status in case this affects "currently working" state
           dispatchClockStatusRefresh();
           onSuccess?.();
@@ -505,9 +511,9 @@ export function ManualEntryDialog({
               {error}
             </div>
           )}
-          {success && (
+          {successMessage && (
             <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
-              Eintrag erfolgreich erstellt!
+              {successMessage}
             </div>
           )}
 

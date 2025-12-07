@@ -93,7 +93,7 @@ export function CalendarHeader({
     currentDate.toDateString() === new Date().toDateString() && view === 'day';
 
   return (
-    <header className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+    <header className="flex flex-col gap-3 border-b bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 sticky top-0 z-10">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold sm:text-2xl">Kalender</h1>
         <div className="flex items-center gap-1">

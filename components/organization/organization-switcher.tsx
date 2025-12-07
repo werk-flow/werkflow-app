@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { useOrganization } from './organization-context';
+import { useSidebar } from '@/components/sidebar/app-shell';
 import { CreateOrgDialog } from './create-org-dialog';
 import { JoinOrgDialog } from './join-org-dialog';
 import { getRoleLabel } from '@/lib/roles';
@@ -24,6 +25,7 @@ export function OrganizationSwitcher() {
     isSubscribed,
     isSwitchingOrg
   } = useOrganization();
+  const { setIsOpen: setSidebarOpen } = useSidebar();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [shouldBlurOnClose, setShouldBlurOnClose] = useState(false);
@@ -37,6 +39,8 @@ export function OrganizationSwitcher() {
 
     // Mark that we should blur when the dropdown closes
     setShouldBlurOnClose(true);
+    // Collapse the sidebar on mobile after switching orgs
+    setSidebarOpen(false);
     await setActiveOrg(value);
   };
 
