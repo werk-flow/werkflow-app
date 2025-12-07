@@ -988,7 +988,12 @@ export async function getCurrentlyClockedIn(
     });
 
     // For each visible member, check if they have an open session
-    const clockedInUsers: GetCurrentlyClockedInResult['users'] = [];
+    const clockedInUsers: Array<{
+      userId: string;
+      clockInTime: string;
+      firstName: string | null;
+      lastName: string | null;
+    }> = [];
 
     for (const member of visibleMembers) {
       const entries = await getUserEntries(admin, member.user_id, orgId);
@@ -1003,10 +1008,16 @@ export async function getCurrentlyClockedIn(
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           )[0];
 
-        const profile = member.profiles as {
-          first_name: string | null;
-          last_name: string | null;
-        } | null;
+        // Handle profiles which may be returned as array or single object from Supabase
+        const profileData = member.profiles as unknown;
+        const profile = Array.isArray(profileData)
+          ? (profileData[0] as
+              | { first_name: string | null; last_name: string | null }
+              | undefined)
+          : (profileData as {
+              first_name: string | null;
+              last_name: string | null;
+            } | null);
 
         clockedInUsers.push({
           userId: member.user_id,

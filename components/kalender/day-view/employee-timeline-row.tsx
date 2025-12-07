@@ -113,7 +113,7 @@ export function EmployeeTimelineRow({
           width,
           isPending:
             session.clockIn?.status === 'pending' ||
-            (session.clockOut?.status === 'pending' ?? false)
+            session.clockOut?.status === 'pending'
         };
       })
       .filter(Boolean) as Array<{

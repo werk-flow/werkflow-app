@@ -23,7 +23,6 @@ export {
   checkMinuteOverlap,
   validateSingleEntryNoOverlap,
   checkWindowOverlap,
-  validateChronologicalOrder,
   validateManualPair,
   validateManualEntries,
   validateTimestampUpdate

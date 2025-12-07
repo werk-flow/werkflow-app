@@ -146,7 +146,7 @@ export function FullCalendarView({
 
       const isPending =
         session.clockIn!.status === 'pending' ||
-        (session.clockOut?.status === 'pending' ?? false);
+        session.clockOut?.status === 'pending';
       const isOpen = !session.clockOut && !session.isOrphan;
 
       // Calculate duration text
