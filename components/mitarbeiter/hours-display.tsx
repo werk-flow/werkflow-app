@@ -8,6 +8,8 @@ interface HoursDisplayProps {
   isClockedIn: boolean;
   clockInTime: string | null;
   todayMinutes: number;
+  /** Whether the viewer has permission to see this member's progress */
+  canViewStatus?: boolean;
 }
 
 // Daily goal in minutes (8 hours)
@@ -48,7 +50,8 @@ function formatPercentage(percentage: number): string {
 export function HoursDisplay({
   isClockedIn,
   clockInTime,
-  todayMinutes
+  todayMinutes,
+  canViewStatus = true
 }: HoursDisplayProps) {
   const [totalMinutes, setTotalMinutes] = useState(() =>
     calculateTotalMinutes(clockInTime, todayMinutes)
@@ -82,6 +85,22 @@ export function HoursDisplay({
     if (percentage >= 100) return 'bg-green-500';
     return 'bg-brand-purple';
   };
+
+  // Show "Nicht verfügbar" for members the current user can't view
+  if (!canViewStatus) {
+    return (
+      <div className="flex items-center gap-2 min-w-[100px]">
+        <Progress
+          value={0}
+          className="h-2 flex-1 bg-muted/30"
+          indicatorClassName="bg-muted-foreground/30"
+        />
+        <span className="text-xs font-medium text-muted-foreground/50 w-8 text-right">
+          —
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2 min-w-[100px]">

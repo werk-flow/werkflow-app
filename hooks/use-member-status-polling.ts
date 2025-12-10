@@ -12,6 +12,8 @@ import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
 
 export type MemberStatus = {
   isClockedIn: boolean;
+  /** Whether the current clock-in is pending approval */
+  isPending: boolean;
   clockInTime: string | null;
   todayMinutes: number;
 };
@@ -80,13 +82,19 @@ export function useMemberStatusPolling({
         const sessions = calculateWorkSessions(memberEntries);
         const todayMinutes = calculateTotalMinutes(sessions);
 
-        // If clocked in, find the last clock_in timestamp
+        // If clocked in, find the last clock_in timestamp and check if it's pending
         let clockInTime: string | null = null;
-        if (isClockedIn && lastEntry) {
-          // Find the most recent clock_in entry
+        let isPending = false;
+
+        if (isClockedIn) {
+          // Find the most recent clock_in entry (include pending since they now take effect)
+          // Exclude rejected and pending_delete entries
           const clockInEntry = memberEntries
             .filter(
-              (e) => e.entryType === 'clock_in' && e.status === 'approved'
+              (e) =>
+                e.entryType === 'clock_in' &&
+                e.status !== 'rejected' &&
+                e.status !== 'pending_delete'
             )
             .sort(
               (a, b) =>
@@ -95,10 +103,12 @@ export function useMemberStatusPolling({
             )[0];
 
           clockInTime = clockInEntry?.timestamp || null;
+          isPending = clockInEntry?.status === 'pending';
         }
 
         newStatusMap[memberId] = {
           isClockedIn,
+          isPending,
           clockInTime,
           todayMinutes
         };

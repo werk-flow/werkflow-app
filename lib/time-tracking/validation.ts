@@ -22,12 +22,20 @@ export function checkMinuteOverlap(existingTs: Date, newTs: Date): boolean {
 
 /**
  * Check if a single new entry overlaps (same minute) with any existing entry
+ *
+ * IMPORTANT: This includes PENDING entries because they take immediate effect
+ * and should be treated as "real" for validation purposes.
  */
 export function validateSingleEntryNoOverlap(
   existingEntries: TimeEntry[],
   newTimestamp: Date
 ): ValidationResult {
-  for (const entry of existingEntries) {
+  // Filter to only active entries (approved or pending, not rejected or pending_delete)
+  const activeEntries = existingEntries.filter(
+    (e) => e.status !== 'rejected' && e.status !== 'pending_delete'
+  );
+
+  for (const entry of activeEntries) {
     const existingTs = new Date(entry.timestamp);
     if (checkMinuteOverlap(existingTs, newTimestamp)) {
       return {
@@ -55,8 +63,31 @@ function isToday(date: Date): boolean {
 }
 
 /**
- * Calculate work sessions from a sorted list of approved entries
+ * Helper to determine the pending state of a session
+ */
+function determinePendingState(
+  clockIn: TimeEntry | null,
+  clockOut: TimeEntry | null
+): 'none' | 'partial' | 'full' {
+  const clockInPending = clockIn?.status === 'pending';
+  const clockOutPending = clockOut?.status === 'pending';
+
+  if (!clockIn && !clockOut) return 'none';
+  if (!clockIn) return clockOutPending ? 'full' : 'none';
+  if (!clockOut) return clockInPending ? 'full' : 'none';
+
+  if (clockInPending && clockOutPending) return 'full';
+  if (clockInPending || clockOutPending) return 'partial';
+  return 'none';
+}
+
+/**
+ * Calculate work sessions from a sorted list of entries
  * Sessions are formed by pairing clock_in with the next clock_out
+ *
+ * IMPORTANT: This now includes PENDING and PENDING_DELETE entries because they take
+ * "immediate effect" in the new optimistic approval model. Each session tracks its pendingState.
+ * pending_delete entries are shown with hatched styling in the calendar.
  *
  * Handles orphan entries:
  * - Unpaired clock_out (no preceding clock_in) → orphan
@@ -64,9 +95,10 @@ function isToday(date: Date): boolean {
  * - Unpaired clock_in from TODAY → open session (user is currently working)
  */
 export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
-  // Filter to only approved entries and sort by timestamp
-  const approvedEntries = entries
-    .filter((e) => e.status === 'approved')
+  // Filter to approved, pending, or pending_delete entries (exclude only rejected) and sort by timestamp
+  // pending_delete entries are shown with hatched styling in the calendar
+  const activeEntries = entries
+    .filter((e) => e.status !== 'rejected')
     .sort(
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
@@ -75,7 +107,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   const sessions: WorkSession[] = [];
   let currentClockIn: TimeEntry | null = null;
 
-  for (const entry of approvedEntries) {
+  for (const entry of activeEntries) {
     if (entry.entryType === 'clock_in') {
       // If we already have an open clock_in, it means there's a missing clock_out
       // Mark it as orphan since we're moving to a new clock_in
@@ -84,7 +116,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
           clockIn: currentClockIn,
           clockOut: null,
           durationMinutes: null,
-          isOrphan: true // Previous day's unclosed clock_in is an orphan
+          isOrphan: true, // Previous day's unclosed clock_in is an orphan
+          pendingState: determinePendingState(currentClockIn, null)
         });
       }
       currentClockIn = entry;
@@ -92,14 +125,14 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       if (currentClockIn) {
         const clockInTime = new Date(currentClockIn.timestamp).getTime();
         const clockOutTime = new Date(entry.timestamp).getTime();
-        const durationMinutes = Math.round(
-          (clockOutTime - clockInTime) / 60000
-        );
+        // Keep fractional minutes for precision (don't round)
+        const durationMinutes = (clockOutTime - clockInTime) / 60000;
 
         sessions.push({
           clockIn: currentClockIn,
           clockOut: entry,
-          durationMinutes
+          durationMinutes,
+          pendingState: determinePendingState(currentClockIn, entry)
         });
         currentClockIn = null;
       } else {
@@ -108,7 +141,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
           clockIn: null,
           clockOut: entry,
           durationMinutes: null,
-          isOrphan: true
+          isOrphan: true,
+          pendingState: determinePendingState(null, entry)
         });
       }
     }
@@ -125,7 +159,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       durationMinutes: null,
       // Only today's unpaired clock_in is an "open session" (currently working)
       // Previous days' unpaired clock_ins are orphans
-      isOrphan: !isOpenSession
+      isOrphan: !isOpenSession,
+      pendingState: determinePendingState(currentClockIn, null)
     });
   }
 
@@ -309,10 +344,26 @@ export function validateTimestampUpdate(
     return { valid: false, error: 'Eintrag nicht gefunden.' };
   }
 
-  // Filter out the entry being updated
-  const otherEntries = existingEntries.filter((e) => e.id !== entryId);
+  // Find the paired entry (if this is a clock_in, find its clock_out and vice versa)
+  // First, calculate sessions from ALL entries to find the current pairing
+  const allSessions = calculateWorkSessions(existingEntries);
+  const currentSession = allSessions.find(
+    (s) => s.clockIn?.id === entryId || s.clockOut?.id === entryId
+  );
 
-  // Check minute-level overlap
+  // Get the ID of the paired entry (if any)
+  const pairedEntryId =
+    currentSession?.clockIn?.id === entryId
+      ? currentSession?.clockOut?.id
+      : currentSession?.clockIn?.id;
+
+  // Filter out BOTH the entry being updated AND its paired entry
+  // This prevents false overlap detection when editing one entry of a pair
+  const otherEntries = existingEntries.filter(
+    (e) => e.id !== entryId && e.id !== pairedEntryId
+  );
+
+  // Check minute-level overlap with other entries (excluding the current session)
   const overlapResult = validateSingleEntryNoOverlap(
     otherEntries,
     newTimestamp
@@ -329,15 +380,8 @@ export function validateTimestampUpdate(
     };
   }
 
-  // Calculate sessions from other entries to check window overlap
+  // Calculate sessions from other entries (excluding the current session) to check window overlap
   const otherSessions = calculateWorkSessions(otherEntries);
-
-  // Find the paired entry (if this is a clock_in, find its clock_out and vice versa)
-  // First, calculate sessions from ALL entries to find the current pairing
-  const allSessions = calculateWorkSessions(existingEntries);
-  const currentSession = allSessions.find(
-    (s) => s.clockIn?.id === entryId || s.clockOut?.id === entryId
-  );
 
   if (currentSession) {
     // Check if this update creates an invalid session (clock_out before clock_in)

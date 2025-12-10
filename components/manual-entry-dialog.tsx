@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -478,12 +479,11 @@ export function ManualEntryDialog({
                 <Label htmlFor="clockInTime">Einstempeln</Label>
                 <div className="relative">
                   <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                  <Input
+                  <TimeInput
                     id="clockInTime"
-                    type="time"
                     value={clockInTime}
-                    onChange={(e) => setClockInTime(e.target.value)}
-                    className="hide-time-picker pl-10 pr-3"
+                    onChange={setClockInTime}
+                    className="pl-10 pr-3"
                   />
                 </div>
               </div>
@@ -493,12 +493,11 @@ export function ManualEntryDialog({
                 <Label htmlFor="clockOutTime">Ausstempeln</Label>
                 <div className="relative">
                   <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                  <Input
+                  <TimeInput
                     id="clockOutTime"
-                    type="time"
                     value={clockOutTime}
-                    onChange={(e) => setClockOutTime(e.target.value)}
-                    className="hide-time-picker pl-10 pr-3"
+                    onChange={setClockOutTime}
+                    className="pl-10 pr-3"
                   />
                 </div>
               </div>

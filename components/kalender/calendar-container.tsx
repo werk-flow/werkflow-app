@@ -10,7 +10,12 @@ import { DayViewSkeleton } from './day-view/day-view-skeleton';
 import { WeekViewSkeleton } from './week-view/week-view-skeleton';
 import { FullCalendarSkeleton } from './fullcalendar-skeleton';
 import { EntryDetailsDialog } from './entry-details-dialog';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type {
+  TimeEntry,
+  WorkSession,
+  ChangeRequest,
+  EntryChangeRequestMap
+} from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -58,6 +63,8 @@ export function CalendarContainer({
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
   const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [changeRequestMap, setChangeRequestMap] =
+    useState<EntryChangeRequestMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     members.map((m) => m.user_id)
@@ -71,34 +78,40 @@ export function CalendarContainer({
   });
 
   // Calculate date range based on view
+  // For proper session pairing, we fetch slightly beyond view boundaries
   const getDateRange = useCallback(() => {
     const start = new Date(currentDate);
     const end = new Date(currentDate);
 
     if (view === 'day') {
+      // For day view, also fetch previous day to catch overnight clock_ins
+      start.setDate(start.getDate() - 1);
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
     } else if (view === 'week') {
-      // Start of week (Monday)
+      // Start of week (Monday) - 1 day to catch previous day's clock_ins
       const day = start.getDay();
       const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-      start.setDate(diff);
+      start.setDate(diff - 1);
       start.setHours(0, 0, 0, 0);
-      // End of week (Sunday)
-      end.setDate(start.getDate() + 6);
+      // End of week (Sunday) + 1 day to catch next day's clock_outs
+      end.setDate(start.getDate() + 8);
       end.setHours(23, 59, 59, 999);
     } else if (view === 'month') {
+      // Fetch from a few days before month start to catch sessions spanning month boundary
       start.setDate(1);
+      start.setDate(start.getDate() - 3);
       start.setHours(0, 0, 0, 0);
+      // Fetch to a few days after month end
       end.setMonth(end.getMonth() + 1);
-      end.setDate(0);
+      end.setDate(3);
       end.setHours(23, 59, 59, 999);
     }
 
     return { start, end };
   }, [currentDate, view]);
 
-  // Fetch entries
+  // Fetch entries and their pending change requests
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -126,6 +139,43 @@ export function CalendarContainer({
 
       if (result.success && result.entries) {
         setEntries(result.entries);
+
+        // Fetch pending change requests for these entries via API
+        const entryIds = result.entries.map((e) => e.id);
+        if (entryIds.length > 0) {
+          try {
+            const crResponse = await fetch('/api/change-requests-for-entries', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ entryIds })
+            });
+
+            if (crResponse.ok) {
+              const crResult: {
+                success: boolean;
+                requests?: ChangeRequest[];
+                error?: string;
+              } = await crResponse.json();
+
+              if (crResult.success && crResult.requests) {
+                // Build a map of entry ID -> change request
+                const crMap: EntryChangeRequestMap = {};
+                for (const cr of crResult.requests) {
+                  crMap[cr.entryId] = cr;
+                  // Also map paired entry if exists
+                  if (cr.pairedEntryId) {
+                    crMap[cr.pairedEntryId] = cr;
+                  }
+                }
+                setChangeRequestMap(crMap);
+              }
+            }
+          } catch (crError) {
+            console.error('Error fetching change requests:', crError);
+          }
+        } else {
+          setChangeRequestMap({});
+        }
       } else {
         console.error('Error fetching entries:', result.error);
       }
@@ -270,6 +320,7 @@ export function CalendarContainer({
                 isAdminOrManager={isAdminOrManager}
                 isLoading={isLoading}
                 onRefresh={fetchEntries}
+                changeRequestMap={changeRequestMap}
               />
             )}
             {view === 'week' && (
@@ -284,6 +335,7 @@ export function CalendarContainer({
                 onDateSelect={handleDateSelect}
                 onViewChange={setView}
                 onSessionClick={handleEventClick}
+                changeRequestMap={changeRequestMap}
               />
             )}
           </>
@@ -297,6 +349,7 @@ export function CalendarContainer({
           onOpenChange={(open) => !open && setSelectedSession(null)}
           session={selectedSession}
           currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
           onRefresh={fetchEntries}
         />
       )}

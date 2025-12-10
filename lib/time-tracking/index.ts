@@ -15,7 +15,8 @@ export {
   formatDuration,
   filterEntriesByDateRange,
   groupEntriesByDate,
-  canAddEntriesFor
+  canAddEntriesFor,
+  needsChangeRequest
 } from './helpers';
 
 // Validation
@@ -41,5 +42,8 @@ export {
   getPendingEntries,
   getPendingSessions,
   getCurrentlyClockedIn,
-  getClockStatus
+  getClockStatus,
+  getPendingChangeRequests,
+  reviewChangeRequest,
+  getChangeRequestsForEntries
 } from './actions';

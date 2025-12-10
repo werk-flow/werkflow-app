@@ -57,6 +57,19 @@ export function ClockFAB() {
     fetchClockStatus();
   }, [fetchClockStatus]);
 
+  // Poll for clock status periodically to catch external changes
+  // (e.g., admin approving a manual entry in a different session)
+  useEffect(() => {
+    if (!activeOrgId) return;
+
+    // Poll every 30 seconds
+    const pollInterval = setInterval(() => {
+      fetchClockStatus();
+    }, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, [activeOrgId, fetchClockStatus]);
+
   // Listen for clock status refresh events (e.g., from manual entry dialog)
   useEffect(() => {
     const handleRefresh = () => {
@@ -66,6 +79,18 @@ export function ClockFAB() {
     window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
     return () => {
       window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
+    };
+  }, [fetchClockStatus]);
+
+  // Also refresh when window regains focus (user switches back to tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchClockStatus();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
     };
   }, [fetchClockStatus]);
 
@@ -81,6 +106,8 @@ export function ClockFAB() {
           if (result.success) {
             setIsClockedIn(false);
             setError(null);
+            // Notify other components (QuickStats, etc.) of the status change
+            dispatchClockStatusRefresh();
           } else {
             setError(result.error);
           }
@@ -90,6 +117,8 @@ export function ClockFAB() {
           if (result.success) {
             setIsClockedIn(true);
             setError(null);
+            // Notify other components (QuickStats, etc.) of the status change
+            dispatchClockStatusRefresh();
           } else {
             setError(result.error);
           }

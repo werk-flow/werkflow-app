@@ -1,6 +1,13 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, useMemo } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  createContext,
+  useContext,
+  useMemo
+} from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -17,6 +24,11 @@ import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfassung-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
+import {
+  getPendingSessions,
+  getPendingChangeRequests
+} from '@/lib/time-tracking/actions';
+import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
 
 const OrganizationSwitcher = dynamic(
   () =>
@@ -82,11 +94,58 @@ export function useSidebar() {
 // Sidebar content component (shared between desktop and mobile)
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { activeOrg } = useOrganization();
+  const { activeOrg, activeOrgId } = useOrganization();
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Check if user is admin or manager of the active organization
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'manager';
+  const isAdmin = activeOrg?.role === 'admin';
+
+  // Fetch pending approvals count for the badge
+  const fetchPendingCount = useCallback(async () => {
+    if (!activeOrgId || !isAdminOrManager) {
+      setPendingCount(0);
+      return;
+    }
+
+    try {
+      const sessionsResult = await getPendingSessions(activeOrgId);
+      let count = sessionsResult.success ? sessionsResult.sessions.length : 0;
+
+      // Admins also see change requests
+      if (isAdmin) {
+        const changeRequestsResult = await getPendingChangeRequests();
+        if (changeRequestsResult.success) {
+          count += changeRequestsResult.requests.length;
+        }
+      }
+
+      setPendingCount(count);
+    } catch (err) {
+      console.error('Error fetching pending count:', err);
+    }
+  }, [activeOrgId, isAdminOrManager, isAdmin]);
+
+  // Fetch on mount and when org changes
+  useEffect(() => {
+    fetchPendingCount();
+    // Poll every 60 seconds
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
+  }, [fetchPendingCount]);
+
+  // Listen for clock status refresh events
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchPendingCount();
+    };
+
+    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
+    return () => {
+      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
+    };
+  }, [fetchPendingCount]);
 
   // Filter nav items based on role
   const visibleNavItems = navItems.filter(
@@ -139,6 +198,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             const isActive =
               pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
+            const showBadge =
+              item.href === '/zeiterfassung' &&
+              isAdminOrManager &&
+              pendingCount > 0;
 
             return (
               <li key={item.href}>
@@ -153,7 +216,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   )}
                 >
                   <Icon className="size-4" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {showBadge && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

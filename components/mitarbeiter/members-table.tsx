@@ -18,6 +18,39 @@ import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status-polling';
 
+// Roles that managers can view status for (same as MANAGED_ROLES in time-tracking/types.ts)
+const MANAGER_VIEWABLE_ROLES: OrgRole[] = [
+  'accountant',
+  'secretary',
+  'employee'
+];
+
+/**
+ * Check if the current user can view a member's working status
+ * - Admins can view everyone
+ * - Managers can only view: themselves + managed roles (employee, accountant, secretary)
+ */
+function canViewMemberStatus(
+  currentUserRole: OrgRole,
+  currentUserId: string,
+  memberId: string,
+  memberRole: OrgRole
+): boolean {
+  // Admins can view everyone
+  if (currentUserRole === 'admin') return true;
+
+  // Users can always see their own status
+  if (currentUserId === memberId) return true;
+
+  // Managers can only view managed roles
+  if (currentUserRole === 'manager') {
+    return MANAGER_VIEWABLE_ROLES.includes(memberRole);
+  }
+
+  // Default: can't view
+  return false;
+}
+
 export type OrgMember = {
   user_id: string;
   first_name: string;
@@ -101,6 +134,7 @@ function MemberCard({
   member,
   memberName,
   canManageMembers,
+  canViewStatus,
   currentUserId,
   currentUserRole,
   onRoleChange,
@@ -109,6 +143,7 @@ function MemberCard({
   member: OrgMember;
   memberName: string;
   canManageMembers: boolean;
+  canViewStatus: boolean;
   currentUserId: string;
   currentUserRole: OrgRole;
   onRoleChange?: (
@@ -133,12 +168,17 @@ function MemberCard({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <StatusBadge isClockedIn={status?.isClockedIn ?? false} />
+          <StatusBadge
+            isClockedIn={status?.isClockedIn ?? false}
+            isPending={status?.isPending ?? false}
+            canViewStatus={canViewStatus}
+          />
           <span className="text-muted-foreground/60">·</span>
           <HoursDisplay
             isClockedIn={status?.isClockedIn ?? false}
             clockInTime={status?.clockInTime ?? null}
             todayMinutes={status?.todayMinutes ?? 0}
+            canViewStatus={canViewStatus}
           />
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -247,6 +287,12 @@ export function MembersTable({
             member.first_name || member.last_name
               ? `${member.first_name} ${member.last_name}`.trim()
               : member.email;
+          const canViewStatus = canViewMemberStatus(
+            currentUserRole,
+            currentUserId,
+            member.user_id,
+            member.role
+          );
 
           return (
             <MemberCard
@@ -254,6 +300,7 @@ export function MembersTable({
               member={member}
               memberName={memberName}
               canManageMembers={canManageMembers}
+              canViewStatus={canViewStatus}
               currentUserId={currentUserId}
               currentUserRole={currentUserRole}
               onRoleChange={onRoleChange}
@@ -284,6 +331,12 @@ export function MembersTable({
                   ? `${member.first_name} ${member.last_name}`.trim()
                   : member.email;
               const status = statusMap[member.user_id];
+              const canViewStatus = canViewMemberStatus(
+                currentUserRole,
+                currentUserId,
+                member.user_id,
+                member.role
+              );
 
               return (
                 <TableRow key={member.user_id}>
@@ -299,13 +352,18 @@ export function MembersTable({
                     </span>
                   </TableCell>
                   <TableCell className="px-4">
-                    <StatusBadge isClockedIn={status?.isClockedIn ?? false} />
+                    <StatusBadge
+                      isClockedIn={status?.isClockedIn ?? false}
+                      isPending={status?.isPending ?? false}
+                      canViewStatus={canViewStatus}
+                    />
                   </TableCell>
                   <TableCell className="px-4">
                     <HoursDisplay
                       isClockedIn={status?.isClockedIn ?? false}
                       clockInTime={status?.clockInTime ?? null}
                       todayMinutes={status?.todayMinutes ?? 0}
+                      canViewStatus={canViewStatus}
                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground">

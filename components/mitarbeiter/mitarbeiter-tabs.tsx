@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
 import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
+import { QuickStats } from './quick-stats';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
 import type { OrgRole } from '@/lib/members/actions';
 
@@ -57,6 +58,12 @@ export function MitarbeiterTabs({
     interval: 30000, // 30 seconds
     enabled: memberIds.length > 0
   });
+
+  // Calculate active working count from statusMap
+  const activeWorkingCount = useMemo(() => {
+    return Object.values(statusMap).filter((status) => status.isClockedIn)
+      .length;
+  }, [statusMap]);
 
   // Update state when props change (after router.refresh())
   useEffect(() => {
@@ -124,6 +131,12 @@ export function MitarbeiterTabs({
       <RoleChangeBanner
         roleChangeInfo={roleChangeInfo}
         onDismiss={handleBannerDismiss}
+      />
+      <QuickStats
+        organizationId={organizationId}
+        totalMembers={members.length}
+        activeWorkingCount={activeWorkingCount}
+        isAdmin={currentUserRole === 'admin'}
       />
       <Tabs defaultValue="members" className="w-full">
         <div className="flex items-center justify-between gap-2">

@@ -4,9 +4,37 @@ import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
   isClockedIn: boolean;
+  /** Whether the current working status is based on a pending entry */
+  isPending?: boolean;
+  /** Whether the viewer has permission to see this member's status */
+  canViewStatus?: boolean;
 }
 
-export function StatusBadge({ isClockedIn }: StatusBadgeProps) {
+export function StatusBadge({
+  isClockedIn,
+  isPending = false,
+  canViewStatus = true
+}: StatusBadgeProps) {
+  // Show "Nicht verfügbar" for members the current user can't view
+  if (!canViewStatus) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground/70">
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+        Nicht verfügbar
+      </span>
+    );
+  }
+
+  // Pending state (working but awaiting approval)
+  if (isClockedIn && isPending) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
+        Arbeitet (ausstehend)
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(

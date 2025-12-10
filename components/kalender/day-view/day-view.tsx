@@ -6,7 +6,10 @@ import { EmployeeTimelineRow } from './employee-timeline-row';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TIMELINE_WIDTH } from './timeline-grid';
-import type { TimeEntry } from '@/lib/time-tracking/types';
+import type {
+  TimeEntry,
+  EntryChangeRequestMap
+} from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
 interface CalendarMember {
@@ -26,6 +29,7 @@ interface DayViewProps {
   isAdminOrManager: boolean;
   isLoading: boolean;
   onRefresh: () => void;
+  changeRequestMap?: EntryChangeRequestMap;
 }
 
 /**
@@ -36,9 +40,11 @@ export function DayView({
   date,
   entries,
   members,
+  currentUserId,
   currentUserRole,
   isLoading,
-  onRefresh
+  onRefresh,
+  changeRequestMap = {}
 }: DayViewProps) {
   // Group entries by user
   const entriesByUser = useMemo(() => {
@@ -129,8 +135,10 @@ export function DayView({
                   entries={userEntries}
                   date={date}
                   currentUserRole={currentUserRole}
+                  currentUserId={currentUserId}
                   onRefresh={onRefresh}
                   showTimelineOnly
+                  changeRequestMap={changeRequestMap}
                 />
               );
             })}

@@ -20,8 +20,15 @@ import {
   type GetPendingSessionsResult,
   type GetCurrentlyClockedInResult,
   type PendingSession,
+  type ChangeRequest,
+  type ChangeRequestWithDetails,
+  type RequestChangeResult,
+  type ReviewChangeRequestResult,
+  type GetChangeRequestsResult,
+  type EntryChangeRequestMap,
   toTimeEntry,
   toTimeEntries,
+  toChangeRequest,
   MANAGED_ROLES
 } from './types';
 import {
@@ -29,7 +36,8 @@ import {
   determineApprovalStatus,
   canManageEntries,
   canApproveEntries,
-  canAddEntriesFor
+  canAddEntriesFor,
+  needsChangeRequest
 } from './helpers';
 import { validateManualEntries, validateTimestampUpdate } from './validation';
 
@@ -377,24 +385,46 @@ export async function reviewEntry(
       return { success: false, error: 'not_authorized' };
     }
 
-    // Update the entry
-    const { data: updatedEntry, error: updateError } = await admin
-      .from('time_entries')
-      .update({
-        status: decision,
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', entryId)
-      .select()
-      .single();
+    if (decision === 'approved') {
+      // Approval: Update the entry status to approved
+      const { data: updatedEntry, error: updateError } = await admin
+        .from('time_entries')
+        .update({
+          status: 'approved',
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', entryId)
+        .select()
+        .single();
 
-    if (updateError || !updatedEntry) {
-      console.error('Error updating entry:', updateError);
-      return { success: false, error: 'update_failed' };
+      if (updateError || !updatedEntry) {
+        console.error('Error updating entry:', updateError);
+        return { success: false, error: 'update_failed' };
+      }
+
+      return { success: true, entry: toTimeEntry(updatedEntry) };
+    } else {
+      // Rejection: DELETE the entry (since it took immediate effect, rejection removes it)
+      // First get the entry data to return
+      const entryData = toTimeEntry(entry);
+
+      const { error: deleteError } = await admin
+        .from('time_entries')
+        .delete()
+        .eq('id', entryId);
+
+      if (deleteError) {
+        console.error('Error deleting rejected entry:', deleteError);
+        return { success: false, error: 'delete_failed' };
+      }
+
+      // Return the entry data with rejected status for consistency
+      return {
+        success: true,
+        entry: { ...entryData, status: 'rejected' as const }
+      };
     }
-
-    return { success: true, entry: toTimeEntry(updatedEntry) };
   } catch (error) {
     console.error('Unexpected error in reviewEntry:', error);
     return { success: false, error: 'unexpected_error' };
@@ -407,11 +437,12 @@ export async function reviewEntry(
 
 /**
  * Update a time entry (admin/manager only)
+ * For managers editing their own entries, creates a change request for admin approval
  */
 export async function updateEntry(
   entryId: string,
   fields: { timestamp?: string }
-): Promise<UpdateEntryResult> {
+): Promise<UpdateEntryResult | RequestChangeResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -488,7 +519,64 @@ export async function updateEntry(
       }
     }
 
-    // Update the entry
+    // Check if this needs to be a change request (manager editing own entry)
+    if (needsChangeRequest(callerRole, targetRole, isOwnEntry)) {
+      // Check if there's already a pending request for this entry
+      const { data: existingRequest } = await admin
+        .from('entry_change_requests')
+        .select('id')
+        .eq('entry_id', entryId)
+        .eq('status', 'pending')
+        .single();
+
+      if (existingRequest) {
+        return { success: false, error: 'pending_request_exists' };
+      }
+
+      // Store original timestamp and apply edit immediately (immediate effect model)
+      const originalTimestamp = entry.timestamp;
+
+      // Create a change request with original timestamp stored for potential revert
+      const { data: request, error: requestError } = await admin
+        .from('entry_change_requests')
+        .insert({
+          entry_id: entryId,
+          organization_id: entry.organization_id,
+          requested_by: user.id,
+          change_type: 'edit',
+          proposed_timestamp: fields.timestamp || null,
+          original_timestamp: originalTimestamp // Store original for revert on rejection
+        })
+        .select()
+        .single();
+
+      if (requestError || !request) {
+        console.error('Error creating change request:', requestError);
+        return { success: false, error: 'request_failed' };
+      }
+
+      // Apply the edit immediately (immediate effect)
+      if (fields.timestamp) {
+        const { error: updateError } = await admin
+          .from('time_entries')
+          .update({ timestamp: fields.timestamp })
+          .eq('id', entryId);
+
+        if (updateError) {
+          console.error('Error applying immediate edit:', updateError);
+          // Rollback: delete the change request since we couldn't apply the edit
+          await admin
+            .from('entry_change_requests')
+            .delete()
+            .eq('id', request.id);
+          return { success: false, error: 'update_failed' };
+        }
+      }
+
+      return { success: true, request: toChangeRequest(request) };
+    }
+
+    // Direct update (admin or manager editing managed role's entry)
     const updateData: Record<string, unknown> = {};
     if (fields.timestamp) {
       updateData.timestamp = fields.timestamp;
@@ -515,8 +603,14 @@ export async function updateEntry(
 
 /**
  * Delete a time entry (admin/manager only)
+ * For managers deleting their own entries, creates a change request for admin approval
+ * @param entryId - The ID of the entry to delete (typically clock_in for pairs)
+ * @param pairedEntryId - Optional ID of paired entry (clock_out) for paired delete requests
  */
-export async function deleteEntry(entryId: string): Promise<DeleteEntryResult> {
+export async function deleteEntry(
+  entryId: string,
+  pairedEntryId?: string
+): Promise<DeleteEntryResult | RequestChangeResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -570,7 +664,107 @@ export async function deleteEntry(entryId: string): Promise<DeleteEntryResult> {
       return { success: false, error: 'not_authorized' };
     }
 
-    // Delete the entry
+    // Check if this needs to be a change request (manager deleting own entry)
+    if (needsChangeRequest(callerRole, targetRole, isOwnEntry)) {
+      // Check if there's already a pending request for this entry
+      const { data: existingRequest } = await admin
+        .from('entry_change_requests')
+        .select('id')
+        .eq('entry_id', entryId)
+        .eq('status', 'pending')
+        .single();
+
+      if (existingRequest) {
+        return { success: false, error: 'pending_request_exists' };
+      }
+
+      // Also check if there's a pending request for the paired entry
+      if (pairedEntryId) {
+        const { data: existingPairedRequest } = await admin
+          .from('entry_change_requests')
+          .select('id')
+          .eq('entry_id', pairedEntryId)
+          .eq('status', 'pending')
+          .single();
+
+        if (existingPairedRequest) {
+          return { success: false, error: 'pending_request_exists' };
+        }
+      }
+
+      // Create a delete request
+      const { data: request, error: requestError } = await admin
+        .from('entry_change_requests')
+        .insert({
+          entry_id: entryId,
+          paired_entry_id: pairedEntryId || null,
+          organization_id: entry.organization_id,
+          requested_by: user.id,
+          change_type: 'delete'
+        })
+        .select()
+        .single();
+
+      if (requestError || !request) {
+        console.error('Error creating change request:', requestError);
+        return { success: false, error: 'request_failed' };
+      }
+
+      // Mark main entry as pending_delete immediately (immediate effect)
+      const { error: markMainError } = await admin
+        .from('time_entries')
+        .update({ status: 'pending_delete' })
+        .eq('id', entryId);
+
+      if (markMainError) {
+        console.error('Error marking entry as pending_delete:', markMainError);
+        // Rollback: delete the change request
+        await admin.from('entry_change_requests').delete().eq('id', request.id);
+        return { success: false, error: 'update_failed' };
+      }
+
+      // Mark paired entry as pending_delete if provided
+      if (pairedEntryId) {
+        const { error: markPairedError } = await admin
+          .from('time_entries')
+          .update({ status: 'pending_delete' })
+          .eq('id', pairedEntryId);
+
+        if (markPairedError) {
+          console.error(
+            'Error marking paired entry as pending_delete:',
+            markPairedError
+          );
+          // Rollback: restore main entry and delete the request
+          await admin
+            .from('time_entries')
+            .update({ status: 'approved' })
+            .eq('id', entryId);
+          await admin
+            .from('entry_change_requests')
+            .delete()
+            .eq('id', request.id);
+          return { success: false, error: 'update_failed' };
+        }
+      }
+
+      return { success: true, request: toChangeRequest(request) };
+    }
+
+    // Direct delete (admin or manager deleting managed role's entry)
+    // Delete paired entry first if provided
+    if (pairedEntryId) {
+      const { error: pairedDeleteError } = await admin
+        .from('time_entries')
+        .delete()
+        .eq('id', pairedEntryId);
+
+      if (pairedDeleteError) {
+        console.error('Error deleting paired entry:', pairedDeleteError);
+        return { success: false, error: 'delete_failed' };
+      }
+    }
+
     const { error: deleteError } = await admin
       .from('time_entries')
       .delete()
@@ -983,8 +1177,11 @@ export async function getCurrentlyClockedIn(
       if (callerRole === 'admin') {
         return true;
       }
-      // Manager can only see managed roles
-      return MANAGED_ROLES.includes(member.role as OrgRole);
+      // Manager can see managed roles AND themselves
+      return (
+        MANAGED_ROLES.includes(member.role as OrgRole) ||
+        member.user_id === user.id
+      );
     });
 
     // For each visible member, check if they have an open session
@@ -1000,9 +1197,15 @@ export async function getCurrentlyClockedIn(
       const timeEntries = toTimeEntries(entries);
 
       if (hasOpenSession(timeEntries)) {
-        // Get the clock_in timestamp
+        // Get the clock_in timestamp (include pending entries as they take immediate effect)
+        // Exclude rejected and pending_delete entries
         const lastClockIn = timeEntries
-          .filter((e) => e.status === 'approved' && e.entryType === 'clock_in')
+          .filter(
+            (e) =>
+              e.status !== 'rejected' &&
+              e.status !== 'pending_delete' &&
+              e.entryType === 'clock_in'
+          )
           .sort(
             (a, b) =>
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -1077,6 +1280,338 @@ export async function getClockStatus(organizationId?: string): Promise<
     return { success: true, isClockedIn, lastEntry };
   } catch (error) {
     console.error('Unexpected error in getClockStatus:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+// ============================================
+// Change Request Actions
+// ============================================
+
+/**
+ * Get pending change requests for the organization (admin only)
+ */
+export async function getPendingChangeRequests(
+  organizationId?: string
+): Promise<GetChangeRequestsResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const orgId = organizationId || (await getCurrentOrgId());
+    if (!orgId) {
+      return { success: false, error: 'no_active_org' };
+    }
+
+    // Verify caller is admin
+    const callerRole = await getUserRole(supabase, user.id, orgId);
+    if (!callerRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    if (callerRole !== 'admin') {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    // Get all pending change requests for this org
+    const { data: requests, error: requestsError } = await admin
+      .from('entry_change_requests')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (requestsError) {
+      console.error('Error fetching change requests:', requestsError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    // Enrich requests with entry and requester info
+    const enrichedRequests: ChangeRequestWithDetails[] = [];
+
+    for (const request of requests || []) {
+      // Get the entry
+      const { data: entry } = await admin
+        .from('time_entries')
+        .select('*')
+        .eq('id', request.entry_id)
+        .single();
+
+      if (!entry) continue;
+
+      // Get paired entry if exists (for paired delete requests)
+      let pairedEntry: typeof entry | null = null;
+      if (request.paired_entry_id) {
+        const { data: paired } = await admin
+          .from('time_entries')
+          .select('*')
+          .eq('id', request.paired_entry_id)
+          .single();
+        pairedEntry = paired;
+      }
+
+      // Get requester profile
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', request.requested_by)
+        .single();
+
+      enrichedRequests.push({
+        ...toChangeRequest(request),
+        entry: toTimeEntry(entry),
+        pairedEntry: pairedEntry ? toTimeEntry(pairedEntry) : null,
+        requesterFirstName: profile?.first_name || null,
+        requesterLastName: profile?.last_name || null
+      });
+    }
+
+    return { success: true, requests: enrichedRequests };
+  } catch (error) {
+    console.error('Unexpected error in getPendingChangeRequests:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Review a change request (edit or delete) from a manager.
+ *
+ * IMMEDIATE EFFECT MODEL:
+ * - Edits are applied immediately when requested, original_timestamp stores the pre-edit value
+ * - Deletes mark entries as 'pending_delete' immediately
+ *
+ * On approval:
+ * - Edit: Nothing to do, the edit is already applied
+ * - Delete: Actually delete the entries (they're currently marked pending_delete)
+ *
+ * On rejection:
+ * - Edit: Revert timestamp to original_timestamp
+ * - Delete: Restore entries to 'approved' status
+ */
+export async function reviewChangeRequest(
+  requestId: string,
+  action: 'approve' | 'reject'
+): Promise<ReviewChangeRequestResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    // Get the change request
+    const { data: request, error: requestError } = await admin
+      .from('entry_change_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (requestError || !request) {
+      return { success: false, error: 'request_not_found' };
+    }
+
+    // Verify caller is admin in this org
+    const callerRole = await getUserRole(
+      supabase,
+      user.id,
+      request.organization_id
+    );
+    if (!callerRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    if (callerRole !== 'admin') {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    // Check request is still pending
+    if (request.status !== 'pending') {
+      return { success: false, error: 'request_already_reviewed' };
+    }
+
+    // Update the request status FIRST
+    const { data: updatedRequest, error: updateRequestError } = await admin
+      .from('entry_change_requests')
+      .update({
+        status: action === 'approve' ? 'approved' : 'rejected',
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select()
+      .single();
+
+    if (updateRequestError || !updatedRequest) {
+      console.error('Error updating request:', updateRequestError);
+      return { success: false, error: 'update_failed' };
+    }
+
+    if (action === 'approve') {
+      // APPROVAL LOGIC
+      if (request.change_type === 'edit') {
+        // Edit is already applied - nothing to do
+        // The timestamp was updated when the request was created
+      } else if (request.change_type === 'delete') {
+        // Entries are marked as pending_delete - now actually delete them
+        // Delete paired entry first if exists
+        if (request.paired_entry_id) {
+          const { error: pairedDeleteError } = await admin
+            .from('time_entries')
+            .delete()
+            .eq('id', request.paired_entry_id);
+
+          if (pairedDeleteError) {
+            console.error('Error deleting paired entry:', pairedDeleteError);
+            await admin
+              .from('entry_change_requests')
+              .update({
+                status: 'pending',
+                reviewed_by: null,
+                reviewed_at: null
+              })
+              .eq('id', requestId);
+            return { success: false, error: 'apply_failed' };
+          }
+        }
+
+        // Delete the main entry
+        const { error: deleteError } = await admin
+          .from('time_entries')
+          .delete()
+          .eq('id', request.entry_id);
+
+        if (deleteError) {
+          console.error('Error applying delete:', deleteError);
+          await admin
+            .from('entry_change_requests')
+            .update({ status: 'pending', reviewed_by: null, reviewed_at: null })
+            .eq('id', requestId);
+          return { success: false, error: 'apply_failed' };
+        }
+      }
+    } else {
+      // REJECTION LOGIC - revert the changes
+      if (request.change_type === 'edit') {
+        // Revert to original timestamp
+        if (request.original_timestamp) {
+          const { error: revertError } = await admin
+            .from('time_entries')
+            .update({ timestamp: request.original_timestamp })
+            .eq('id', request.entry_id);
+
+          if (revertError) {
+            console.error('Error reverting edit:', revertError);
+            // Revert the request status since we couldn't revert the edit
+            await admin
+              .from('entry_change_requests')
+              .update({
+                status: 'pending',
+                reviewed_by: null,
+                reviewed_at: null
+              })
+              .eq('id', requestId);
+            return { success: false, error: 'revert_failed' };
+          }
+        }
+      } else if (request.change_type === 'delete') {
+        // Restore entries from pending_delete to approved
+        const { error: restoreMainError } = await admin
+          .from('time_entries')
+          .update({ status: 'approved' })
+          .eq('id', request.entry_id);
+
+        if (restoreMainError) {
+          console.error('Error restoring main entry:', restoreMainError);
+          await admin
+            .from('entry_change_requests')
+            .update({ status: 'pending', reviewed_by: null, reviewed_at: null })
+            .eq('id', requestId);
+          return { success: false, error: 'restore_failed' };
+        }
+
+        // Restore paired entry if exists
+        if (request.paired_entry_id) {
+          const { error: restorePairedError } = await admin
+            .from('time_entries')
+            .update({ status: 'approved' })
+            .eq('id', request.paired_entry_id);
+
+          if (restorePairedError) {
+            console.error('Error restoring paired entry:', restorePairedError);
+            // Main entry is already restored, just log the error
+          }
+        }
+      }
+    }
+
+    return { success: true, request: toChangeRequest(updatedRequest) };
+  } catch (error) {
+    console.error('Unexpected error in reviewChangeRequest:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+// ============================================
+// Calendar Visualization Helpers
+// ============================================
+
+/**
+ * Get pending change requests for a list of entry IDs
+ * Used for calendar visualization to show edit/delete diffs
+ */
+export async function getChangeRequestsForEntries(
+  entryIds: string[]
+): Promise<
+  | { success: true; requests: ChangeRequest[] }
+  | { success: false; error: string }
+> {
+  if (entryIds.length === 0) {
+    return { success: true, requests: [] };
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    // Get all pending change requests for these entries
+    const { data: requests, error } = await admin
+      .from('entry_change_requests')
+      .select('*')
+      .in('entry_id', entryIds)
+      .eq('status', 'pending');
+
+    if (error) {
+      console.error('Error fetching change requests for entries:', error);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    return {
+      success: true,
+      requests: (requests || []).map(toChangeRequest)
+    };
+  } catch (error) {
+    console.error('Unexpected error in getChangeRequestsForEntries:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

@@ -14,6 +14,76 @@ export type Database = {
   };
   public: {
     Tables: {
+      entry_change_requests: {
+        Row: {
+          change_type: Database['public']['Enums']['entry_change_type'];
+          created_at: string;
+          entry_id: string;
+          id: string;
+          organization_id: string;
+          original_timestamp: string | null;
+          paired_entry_id: string | null;
+          proposed_timestamp: string | null;
+          requested_by: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: Database['public']['Enums']['change_request_status'];
+          updated_at: string;
+        };
+        Insert: {
+          change_type: Database['public']['Enums']['entry_change_type'];
+          created_at?: string;
+          entry_id: string;
+          id?: string;
+          organization_id: string;
+          original_timestamp?: string | null;
+          paired_entry_id?: string | null;
+          proposed_timestamp?: string | null;
+          requested_by: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: Database['public']['Enums']['change_request_status'];
+          updated_at?: string;
+        };
+        Update: {
+          change_type?: Database['public']['Enums']['entry_change_type'];
+          created_at?: string;
+          entry_id?: string;
+          id?: string;
+          organization_id?: string;
+          original_timestamp?: string | null;
+          paired_entry_id?: string | null;
+          proposed_timestamp?: string | null;
+          requested_by?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          status?: Database['public']['Enums']['change_request_status'];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'entry_change_requests_entry_id_fkey';
+            columns: ['entry_id'];
+            isOneToOne: false;
+            referencedRelation: 'time_entries';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'entry_change_requests_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'entry_change_requests_paired_entry_id_fkey';
+            columns: ['paired_entry_id'];
+            isOneToOne: false;
+            referencedRelation: 'time_entries';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       organization_invites: {
         Row: {
           accepted_at: string | null;
@@ -279,10 +349,12 @@ export type Database = {
       };
     };
     Enums: {
+      change_request_status: 'pending' | 'approved' | 'rejected';
+      entry_change_type: 'edit' | 'delete';
       invite_status: 'pending' | 'accepted' | 'expired' | 'cancelled';
       org_role: 'admin' | 'employee' | 'accountant' | 'manager' | 'secretary';
       subscription_status: 'active' | 'inactive' | 'canceled' | 'trialing';
-      time_entry_status: 'pending' | 'approved' | 'rejected';
+      time_entry_status: 'pending' | 'approved' | 'rejected' | 'pending_delete';
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -413,10 +485,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      change_request_status: ['pending', 'approved', 'rejected'],
+      entry_change_type: ['edit', 'delete'],
       invite_status: ['pending', 'accepted', 'expired', 'cancelled'],
       org_role: ['admin', 'employee', 'accountant', 'manager', 'secretary'],
       subscription_status: ['active', 'inactive', 'canceled', 'trialing'],
-      time_entry_status: ['pending', 'approved', 'rejected']
+      time_entry_status: ['pending', 'approved', 'rejected', 'pending_delete']
     }
   }
 } as const;

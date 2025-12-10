@@ -7,6 +7,7 @@ import {
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
 
 export type CurrentUserStatus = {
@@ -56,23 +57,13 @@ export function useCurrentUserStatus({
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Fetch entries via API route
-      const response = await fetch('/api/time-entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId,
-          from: today.toISOString(),
-          to: tomorrow.toISOString(),
-          userId
-        })
+      // Fetch entries via server action (same as useMemberStatusPolling)
+      const result = await getTimeEntries({
+        organizationId,
+        from: today.toISOString(),
+        to: tomorrow.toISOString(),
+        userId
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch entries');
-      }
-
-      const result = await response.json();
 
       if (!result.success) {
         setError(result.error);
@@ -86,16 +77,18 @@ export function useCurrentUserStatus({
       const sessions = calculateWorkSessions(userEntries);
       const todayMinutes = calculateTotalMinutes(sessions);
 
-      // If clocked in, find the last clock_in timestamp
+      // If clocked in, find the last active clock_in timestamp
+      // Include both approved AND pending entries since pending entries take immediate effect
       let clockInTime: string | null = null;
       if (isClockedIn && lastEntry) {
         const clockInEntry = userEntries
           .filter(
-            (e: { entryType: string; status: string }) =>
-              e.entryType === 'clock_in' && e.status === 'approved'
+            (e) =>
+              e.entryType === 'clock_in' &&
+              (e.status === 'approved' || e.status === 'pending')
           )
           .sort(
-            (a: { timestamp: string }, b: { timestamp: string }) =>
+            (a, b) =>
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           )[0];
 

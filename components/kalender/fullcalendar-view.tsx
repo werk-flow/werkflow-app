@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, EventContentArg } from '@fullcalendar/core';
-import { Clock } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import type { CalendarView } from './calendar-container';
@@ -65,9 +65,27 @@ export function FullCalendarView({
       ? entries
       : entries.filter((e) => e.userId === currentUserId);
 
-    const sessions = calculateWorkSessions(relevantEntries);
+    // Group entries by user first to calculate sessions correctly
+    // calculateWorkSessions expects entries from a single user to pair correctly
+    const entriesByUser: Record<string, typeof relevantEntries> = {};
+    for (const entry of relevantEntries) {
+      if (!entriesByUser[entry.userId]) {
+        entriesByUser[entry.userId] = [];
+      }
+      entriesByUser[entry.userId].push(entry);
+    }
 
-    return sessions.map((session, index) => {
+    // Calculate sessions for each user separately, then flatten
+    const allSessions = Object.values(entriesByUser).flatMap((userEntries) =>
+      calculateWorkSessions(userEntries)
+    );
+
+    return allSessions.map((session, index) => {
+      // Check for pending delete status
+      const isPendingDelete =
+        session.clockIn?.status === 'pending_delete' ||
+        session.clockOut?.status === 'pending_delete';
+
       // Handle orphan clock_out (no clockIn)
       if (session.isOrphan && !session.clockIn && session.clockOut) {
         const orphanTime = new Date(session.clockOut.timestamp);
@@ -79,26 +97,31 @@ export function FullCalendarView({
           title: '',
           start: orphanTime,
           end: orphanEnd,
-          backgroundColor: isPending
-            ? 'rgb(234 179 8 / 0.15)'
+          backgroundColor: isPendingDelete
+            ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+            : isPending
+            ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
             : 'rgb(239 68 68 / 0.15)', // red-ish for orphan
-          borderColor: isPending
+          borderColor: isPendingDelete
+            ? 'rgba(202, 138, 4, 0.5)'
+            : isPending
             ? 'rgba(202, 138, 4, 0.5)'
             : 'rgba(220, 38, 38, 0.4)',
           textColor: 'inherit',
           extendedProps: {
             session,
             isPending,
+            isPendingDelete,
             isOpen: false,
             isOrphan: true,
             isOrphanClockIn: false,
-            durationText: 'Ausstempeln',
+            durationText: isPendingDelete ? 'Löschen' : 'Ausstempeln',
             memberName: getMemberName(session.clockOut.userId)
           },
           classNames: [
             'fc-event-custom',
             'fc-event-orphan',
-            isPending ? 'fc-event-pending' : ''
+            isPendingDelete ? 'fc-event-pending-delete' : ''
           ].filter(Boolean)
         };
       }
@@ -114,26 +137,31 @@ export function FullCalendarView({
           title: '',
           start: orphanTime,
           end: orphanEnd,
-          backgroundColor: isPending
-            ? 'rgb(234 179 8 / 0.15)'
+          backgroundColor: isPendingDelete
+            ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+            : isPending
+            ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
             : 'rgb(239 68 68 / 0.15)', // red-ish for orphan
-          borderColor: isPending
+          borderColor: isPendingDelete
+            ? 'rgba(202, 138, 4, 0.5)'
+            : isPending
             ? 'rgba(202, 138, 4, 0.5)'
             : 'rgba(220, 38, 38, 0.4)',
           textColor: 'inherit',
           extendedProps: {
             session,
             isPending,
+            isPendingDelete,
             isOpen: false,
             isOrphan: true,
             isOrphanClockIn: true,
-            durationText: 'Einstempeln',
+            durationText: isPendingDelete ? 'Löschen' : 'Einstempeln',
             memberName: getMemberName(session.clockIn.userId)
           },
           classNames: [
             'fc-event-custom',
             'fc-event-orphan',
-            isPending ? 'fc-event-pending' : ''
+            isPendingDelete ? 'fc-event-pending-delete' : ''
           ].filter(Boolean)
         };
       }
@@ -153,25 +181,34 @@ export function FullCalendarView({
       const durationMs = end.getTime() - start.getTime();
       const hours = Math.floor(durationMs / (1000 * 60 * 60));
       const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-      const durationText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      const durationText = isPendingDelete
+        ? 'Löschen'
+        : hours > 0
+        ? `${hours}h ${minutes}m`
+        : `${minutes}m`;
 
       return {
         id: `${session.clockIn!.id}-${index}`,
         title: '', // Custom content will be used
         start,
         end,
-        backgroundColor: isPending
-          ? 'rgb(234 179 8 / 0.1)' // yellow bg
+        backgroundColor: isPendingDelete
+          ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+          : isPending
+          ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
           : isOpen
           ? 'rgb(34 197 94 / 0.1)' // green bg
-          : 'rgb(34 197 94 / 0.1)', // green bg
-        borderColor: isPending
+          : 'rgb(34 197 94 / 0.8)', // solid green bg
+        borderColor: isPendingDelete
+          ? 'rgba(202, 138, 4, 0.5)'
+          : isPending
           ? 'rgba(202, 138, 4, 0.4)'
           : 'rgba(22, 163, 74, 0.35)',
-        textColor: 'inherit',
+        textColor: isPending || isPendingDelete ? '#713f12' : '#fff',
         extendedProps: {
           session,
           isPending,
+          isPendingDelete,
           isOpen,
           isOrphan: false,
           isOrphanClockIn: false,
@@ -180,7 +217,7 @@ export function FullCalendarView({
         },
         classNames: [
           'fc-event-custom',
-          isPending ? 'fc-event-pending' : '',
+          isPendingDelete ? 'fc-event-pending-delete' : '',
           isOpen ? 'fc-event-open' : ''
         ].filter(Boolean)
       };
@@ -225,6 +262,7 @@ export function FullCalendarView({
   const renderEventContent = (eventInfo: EventContentArg) => {
     const {
       isPending,
+      isPendingDelete,
       isOpen,
       isOrphan,
       isOrphanClockIn,
@@ -232,29 +270,50 @@ export function FullCalendarView({
       memberName
     } = eventInfo.event.extendedProps;
 
-    // Orphan entries show differently
+    // Orphan entries show differently - CSS handles vertical centering via fc-event-orphan class
     if (isOrphan) {
-      const orphanLabel = isOrphanClockIn ? 'Einstempeln' : 'Ausstempeln';
-      const orphanIcon = isOrphanClockIn ? '⬆' : '⬇';
+      const orphanLabel = isPendingDelete
+        ? 'Löschen'
+        : isOrphanClockIn
+        ? 'Einstempeln'
+        : 'Ausstempeln';
+      const ArrowIcon = isOrphanClockIn ? ArrowUp : ArrowDown;
+      const textColorClass =
+        isPendingDelete || isPending
+          ? 'text-yellow-800 dark:text-yellow-200'
+          : 'text-red-600 dark:text-red-400';
       return (
-        <div className="flex items-center gap-1.5 pl-1 pr-0.5 py-0.5 overflow-hidden w-full text-red-600 dark:text-red-400">
+        <div
+          className={`flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full ${textColorClass}`}
+        >
           <Clock className="h-3 w-3 shrink-0 opacity-70" />
+          <ArrowIcon className="h-3 w-3 shrink-0" />
           <span className="font-medium truncate text-[10px]">
-            {orphanIcon} {isAdminOrManager ? memberName : orphanLabel}
+            {isAdminOrManager ? memberName : orphanLabel}
           </span>
         </div>
       );
     }
 
+    // Regular events - text at top
     const label = isAdminOrManager ? memberName : 'Arbeitszeit';
-    const activityText = isOpen
+    const activityText = isPendingDelete
+      ? 'Löschen'
+      : isOpen
       ? isAdminOrManager
         ? 'arbeitet'
         : 'Du arbeitest'
       : durationText;
 
+    const textColorClass =
+      isPendingDelete || isPending
+        ? 'text-yellow-800 dark:text-yellow-200'
+        : 'text-white';
+
     return (
-      <div className="flex items-center gap-1.5 pl-1 pr-0.5 py-0.5 overflow-hidden w-full">
+      <div
+        className={`flex items-center gap-1.5 pl-1 pr-0.5 py-0.5 overflow-hidden w-full ${textColorClass}`}
+      >
         <Clock className="h-3 w-3 shrink-0 opacity-70" />
         <span className="font-medium truncate">{label}</span>
         <span className="opacity-70 truncate text-[10px]">{activityText}</span>
@@ -380,6 +439,26 @@ export function FullCalendarView({
           padding: 0.125rem 0.25rem;
           border: 1px solid color-mix(in srgb, var(--border), transparent 30%);
           box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+          min-height: 22px !important; /* Ensure minimum height for short events */
+        }
+
+        /* Override FullCalendar's default short event handling */
+        .fullcalendar-wrapper .fc-timegrid-event-harness {
+          min-height: 22px !important;
+        }
+
+        /* Orphan events need vertical centering */
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-orphan {
+          display: flex !important;
+          align-items: center !important;
+        }
+
+        .fullcalendar-wrapper
+          .fc-timegrid-event.fc-event-orphan
+          .fc-event-main {
+          display: flex;
+          align-items: center;
+          width: 100%;
         }
 
         /* ===== DAY GRID (Month View) ===== */
@@ -491,8 +570,14 @@ export function FullCalendarView({
           z-index: 5;
         }
 
-        .fullcalendar-wrapper .fc-event-pending {
-          border-style: dashed !important;
+        .fullcalendar-wrapper .fc-event-pending-delete {
+          background-image: repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 4px,
+            rgba(161, 98, 7, 0.3) 4px,
+            rgba(161, 98, 7, 0.3) 8px
+          ) !important;
         }
 
         .fullcalendar-wrapper .fc-event-open {

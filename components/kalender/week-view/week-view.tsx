@@ -1,11 +1,15 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Clock } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type {
+  TimeEntry,
+  WorkSession,
+  EntryChangeRequestMap
+} from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { CalendarView } from '../calendar-container';
 
@@ -28,6 +32,8 @@ interface WeekViewProps {
   onDateSelect: (date: Date) => void;
   onViewChange: (view: CalendarView) => void;
   onSessionClick?: (session: WorkSession) => void;
+  /** Map of entry IDs to their pending change requests */
+  changeRequestMap?: EntryChangeRequestMap;
 }
 
 const DAY_NAMES_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -65,7 +71,8 @@ export function WeekView({
   isLoading,
   onDateSelect,
   onViewChange,
-  onSessionClick
+  onSessionClick,
+  changeRequestMap = {}
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const today = new Date();
@@ -191,6 +198,24 @@ export function WeekView({
                       >
                         <div className="space-y-1.5">
                           {visibleSessions.map((session, idx) => {
+                            // Check if pending delete
+                            const isPendingDelete =
+                              session.clockIn?.status === 'pending_delete' ||
+                              session.clockOut?.status === 'pending_delete';
+
+                            // CSS for diagonal hatching pattern
+                            const hatchedStyle = isPendingDelete
+                              ? {
+                                  backgroundImage: `repeating-linear-gradient(
+                                    -45deg,
+                                    transparent,
+                                    transparent 3px,
+                                    rgba(161, 98, 7, 0.3) 3px,
+                                    rgba(161, 98, 7, 0.3) 6px
+                                  )`
+                                }
+                              : {};
+
                             // Handle orphan clock_out (no clockIn)
                             if (
                               session.isOrphan &&
@@ -220,17 +245,18 @@ export function WeekView({
                                   }}
                                   className={cn(
                                     'text-xs p-1 rounded border flex items-center gap-1 shadow-sm w-full text-left transition-opacity hover:opacity-80',
-                                    isPending
-                                      ? 'bg-yellow-500/10 border-yellow-500/60 text-yellow-700 dark:text-yellow-400'
+                                    isPendingDelete
+                                      ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      : isPending
+                                      ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
                                       : 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-400'
                                   )}
-                                  style={
-                                    isPending ? { borderStyle: 'dashed' } : {}
-                                  }
+                                  style={hatchedStyle}
                                 >
                                   <Clock className="h-3 w-3 shrink-0 opacity-70" />
+                                  <ArrowDown className="h-3 w-3 shrink-0" />
                                   <span className="font-medium truncate text-[10px]">
-                                    ⬇ {timeStr}
+                                    {timeStr}
                                   </span>
                                 </button>
                               );
@@ -265,17 +291,18 @@ export function WeekView({
                                   }}
                                   className={cn(
                                     'text-xs p-1 rounded border flex items-center gap-1 shadow-sm w-full text-left transition-opacity hover:opacity-80',
-                                    isPending
-                                      ? 'bg-yellow-500/10 border-yellow-500/60 text-yellow-700 dark:text-yellow-400'
+                                    isPendingDelete
+                                      ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      : isPending
+                                      ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
                                       : 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-400'
                                   )}
-                                  style={
-                                    isPending ? { borderStyle: 'dashed' } : {}
-                                  }
+                                  style={hatchedStyle}
                                 >
                                   <Clock className="h-3 w-3 shrink-0 opacity-70" />
+                                  <ArrowUp className="h-3 w-3 shrink-0" />
                                   <span className="font-medium truncate text-[10px]">
-                                    ⬆ {timeStr}
+                                    {timeStr}
                                   </span>
                                 </button>
                               );
@@ -316,19 +343,23 @@ export function WeekView({
                                 }}
                                 className={cn(
                                   'text-xs p-1.5 rounded border flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity hover:opacity-80',
-                                  isPending
-                                    ? 'bg-yellow-500/10 border-yellow-500/60 text-yellow-700 dark:text-yellow-400'
+                                  isPendingDelete
+                                    ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                    : isPending
+                                    ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
                                     : isOpen
                                     ? 'bg-green-500/10 border-green-500/60 text-foreground animate-pulse'
-                                    : 'bg-background border-border/60 text-foreground'
+                                    : 'bg-green-500/80 border-green-500/60 text-white'
                                 )}
-                                style={
-                                  isPending ? { borderStyle: 'dashed' } : {}
-                                }
+                                style={hatchedStyle}
                               >
                                 <Clock className="h-3 w-3 shrink-0 opacity-70" />
                                 <span className="font-medium truncate">
-                                  {isOpen ? 'Arbeitet' : 'Arbeitszeit'}
+                                  {isPendingDelete
+                                    ? 'Löschen'
+                                    : isOpen
+                                    ? 'Arbeitet'
+                                    : 'Arbeitszeit'}
                                 </span>
                                 <span className="opacity-70 truncate text-[10px]">
                                   {durationText}

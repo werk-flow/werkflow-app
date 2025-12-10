@@ -20,6 +20,10 @@ export const ROLE_HIERARCHY: Record<OrgRole, number> = {
  * 1. The most recent entry TODAY is a clock_in
  * 2. Clock_ins from previous days without clock_outs are NOT considered open sessions
  *    (they are orphan entries that should be displayed but don't mean the user is working)
+ *
+ * IMPORTANT: This now includes PENDING entries because they take "immediate effect"
+ * in the new optimistic approval model. Pending entries affect the working state
+ * immediately - approval just confirms they stay, rejection removes them.
  */
 export function hasOpenSession(entries: TimeEntry[]): boolean {
   if (entries.length === 0) return false;
@@ -37,10 +41,12 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
     999
   );
 
-  // Filter to only approved entries from today and sort by timestamp descending
-  const todayApprovedEntries = entries
+  // Filter to approved OR pending entries from today and sort by timestamp descending
+  // (Rejected and pending_delete entries are excluded as they should not affect state)
+  const todayActiveEntries = entries
     .filter((e) => {
-      if (e.status !== 'approved') return false;
+      if (e.status === 'rejected' || e.status === 'pending_delete')
+        return false;
       const entryDate = new Date(e.timestamp);
       return entryDate >= todayStart && entryDate <= todayEnd;
     })
@@ -49,24 +55,26 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-  if (todayApprovedEntries.length === 0) return false;
+  if (todayActiveEntries.length === 0) return false;
 
   // Check if the most recent entry TODAY is a clock_in
-  return todayApprovedEntries[0].entryType === 'clock_in';
+  return todayActiveEntries[0].entryType === 'clock_in';
 }
 
 /**
- * Get the most recent entry for a user (approved entries only)
+ * Get the most recent entry for a user (approved OR pending entries)
+ * Pending entries are included because they take immediate effect.
+ * Entries marked for deletion (pending_delete) are excluded.
  */
 export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
-  const approvedEntries = entries
-    .filter((e) => e.status === 'approved')
+  const activeEntries = entries
+    .filter((e) => e.status !== 'rejected' && e.status !== 'pending_delete')
     .sort(
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-  return approvedEntries[0] || null;
+  return activeEntries[0] || null;
 }
 
 /**
@@ -125,10 +133,31 @@ export function canManageEntries(
 
   // Manager can manage entries for managed roles
   if (callerRole === 'manager') {
+    // Managers can manage their own entries (with approval required)
+    if (isOwnEntry) {
+      return true;
+    }
     return MANAGED_ROLES.includes(targetRole);
   }
 
   // Others cannot manage entries (not even their own for updates/deletes)
+  return false;
+}
+
+/**
+ * Check if a change request is needed (requires admin approval)
+ * This is true when a manager is trying to edit/delete their own entries
+ */
+export function needsChangeRequest(
+  callerRole: OrgRole,
+  targetRole: OrgRole,
+  isOwnEntry: boolean
+): boolean {
+  // Manager editing their own entry needs admin approval
+  if (callerRole === 'manager' && isOwnEntry) {
+    return true;
+  }
+
   return false;
 }
 
@@ -205,10 +234,13 @@ export function calculateTotalMinutes(sessions: WorkSession[]): number {
 
 /**
  * Format duration in minutes to human-readable string (German)
+ * Rounds to nearest minute for display purposes
  */
 export function formatDuration(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
+  // Round to nearest minute for display (prevents long decimal numbers)
+  const totalMins = Math.round(minutes);
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
 
   if (hours === 0) {
     return `${mins} Min.`;

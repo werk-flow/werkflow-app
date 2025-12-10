@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
@@ -54,6 +55,7 @@ interface EntryDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   session: WorkSession;
   currentUserRole: OrgRole;
+  currentUserId?: string;
   onRefresh: () => void;
 }
 
@@ -238,8 +240,7 @@ function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
     }
   };
 
-  const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTime = e.target.value;
+  const handleTimeChange = (newTime: string) => {
     setTimeValue(newTime);
     const [hours, minutes] = newTime.split(':').map(Number);
     if (!isNaN(hours) && !isNaN(minutes)) {
@@ -387,13 +388,12 @@ function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
         </div>
 
         {/* Time Input */}
-        <div className="relative w-24">
+        <div className="relative w-28">
           <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-          <Input
-            type="time"
+          <TimeInput
             value={timeValue}
             onChange={handleTimeChange}
-            className="hide-time-picker pl-10 pr-2"
+            className="pl-10 pr-2"
           />
         </div>
       </div>
@@ -406,11 +406,13 @@ export function EntryDetailsDialog({
   onOpenChange,
   session,
   currentUserRole,
+  currentUserId,
   onRefresh
 }: EntryDetailsDialogProps) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Handle orphan sessions (no clockIn)
   const isOrphan = session.isOrphan || !session.clockIn;
@@ -430,11 +432,21 @@ export function EntryDetailsDialog({
     ? new Date(session.clockOut.timestamp)
     : null;
 
+  // Determine if this is the user's own entry
+  const entryUserId = session.clockIn?.userId || session.clockOut?.userId;
+  const isOwnEntry = currentUserId && entryUserId === currentUserId;
+
   const canEdit = currentUserRole === 'admin' || currentUserRole === 'manager';
+
+  // Managers can only approve/reject entries from other users (not their own)
+  // Admins can approve/reject anyone's entries including their own
+  const hasPendingEntry =
+    session.clockIn?.status === 'pending' ||
+    session.clockOut?.status === 'pending';
   const canApprove =
-    (currentUserRole === 'admin' || currentUserRole === 'manager') &&
-    (session.clockIn?.status === 'pending' ||
-      session.clockOut?.status === 'pending');
+    hasPendingEntry &&
+    (currentUserRole === 'admin' ||
+      (currentUserRole === 'manager' && !isOwnEntry));
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -454,6 +466,7 @@ export function EntryDetailsDialog({
 
   const handleSaveEdit = async () => {
     setError(null);
+    setSuccessMessage(null);
 
     // Validate: clock out must be after clock in
     if (editedClockIn && editedClockOut) {
@@ -465,54 +478,134 @@ export function EntryDetailsDialog({
 
     startTransition(async () => {
       try {
-        // Update clock in timestamp if changed
-        if (
+        let requestCreated = false;
+
+        // Determine if clock-in and clock-out are both being changed
+        const clockInChanged =
           session.clockIn &&
           editedClockIn &&
           clockInDate &&
-          editedClockIn.getTime() !== clockInDate.getTime()
-        ) {
-          const result = await updateEntry(session.clockIn.id, {
-            timestamp: editedClockIn.toISOString()
-          });
-          if (!result.success) {
-            // Translate common error messages
-            if (result.error === 'overlapping_entries') {
-              setError(
-                'Diese Zeitspanne überschneidet sich mit einem anderen Eintrag.'
-              );
-            } else {
-              setError(result.error);
-            }
-            return;
-          }
-        }
+          editedClockIn.getTime() !== clockInDate.getTime();
 
-        // Update clock out timestamp if changed
-        if (
+        const clockOutChanged =
           session.clockOut &&
           editedClockOut &&
           clockOutDate &&
-          editedClockOut.getTime() !== clockOutDate.getTime()
-        ) {
-          const result = await updateEntry(session.clockOut.id, {
-            timestamp: editedClockOut.toISOString()
-          });
+          editedClockOut.getTime() !== clockOutDate.getTime();
+
+        // Helper function to update an entry and handle errors
+        const performUpdate = async (
+          entryId: string,
+          timestamp: string
+        ): Promise<boolean> => {
+          const result = await updateEntry(entryId, { timestamp });
           if (!result.success) {
-            // Translate common error messages
             if (result.error === 'overlapping_entries') {
               setError(
                 'Diese Zeitspanne überschneidet sich mit einem anderen Eintrag.'
               );
+            } else if (result.error === 'pending_request_exists') {
+              setError(
+                'Es gibt bereits einen ausstehenden Änderungsantrag für diesen Eintrag.'
+              );
             } else {
               setError(result.error);
             }
-            return;
+            return false;
+          }
+          if ('request' in result) {
+            requestCreated = true;
+          }
+          return true;
+        };
+
+        // When both are changing, we need to update in the correct order to avoid
+        // validation errors. The server validates each update against the current DB state.
+        // - If moving window LATER (new clock-in > old clock-in): update clock-out first
+        // - If moving window EARLIER (new clock-in < old clock-in): update clock-in first
+        // - If only one is changing, just update that one
+
+        if (clockInChanged && clockOutChanged && clockInDate && clockOutDate) {
+          // Both are changing - determine order based on direction
+          const movingLater = editedClockIn!.getTime() > clockInDate.getTime();
+
+          if (movingLater) {
+            // Moving window later: update clock-out first to make room
+            if (
+              !(await performUpdate(
+                session.clockOut!.id,
+                editedClockOut!.toISOString()
+              ))
+            ) {
+              return;
+            }
+            if (
+              !(await performUpdate(
+                session.clockIn!.id,
+                editedClockIn!.toISOString()
+              ))
+            ) {
+              return;
+            }
+          } else {
+            // Moving window earlier: update clock-in first
+            if (
+              !(await performUpdate(
+                session.clockIn!.id,
+                editedClockIn!.toISOString()
+              ))
+            ) {
+              return;
+            }
+            if (
+              !(await performUpdate(
+                session.clockOut!.id,
+                editedClockOut!.toISOString()
+              ))
+            ) {
+              return;
+            }
+          }
+        } else {
+          // Only one is changing (or neither) - update in standard order
+          if (clockInChanged) {
+            if (
+              !(await performUpdate(
+                session.clockIn!.id,
+                editedClockIn!.toISOString()
+              ))
+            ) {
+              return;
+            }
+          }
+
+          if (clockOutChanged) {
+            if (
+              !(await performUpdate(
+                session.clockOut!.id,
+                editedClockOut!.toISOString()
+              ))
+            ) {
+              return;
+            }
           }
         }
 
-        setIsEditing(false);
-        onRefresh();
+        if (requestCreated) {
+          // Show success message for change request
+          setSuccessMessage(
+            'Änderungsantrag wurde zur Genehmigung eingereicht.'
+          );
+          setIsEditing(false);
+          // Close dialog after short delay
+          setTimeout(() => {
+            onOpenChange(false);
+            onRefresh();
+          }, 2000);
+        } else {
+          setIsEditing(false);
+          onRefresh();
+        }
       } catch (err) {
         console.error('Error updating entry:', err);
         setError('Ein Fehler ist aufgetreten.');
@@ -521,28 +614,90 @@ export function EntryDetailsDialog({
   };
 
   const handleDelete = async () => {
+    setError(null);
+    setSuccessMessage(null);
+
     startTransition(async () => {
       try {
-        // Delete clock out first if exists
-        if (session.clockOut) {
-          const result = await deleteEntry(session.clockOut.id);
+        let requestCreated = false;
+
+        // Check if this is a paired session (both clockIn and clockOut exist)
+        const isPairedSession =
+          session.clockIn && session.clockOut && !session.isOrphan;
+
+        if (isPairedSession) {
+          // For paired sessions, delete both entries in a single request
+          // This ensures they are treated as a single unit for approval
+          const result = await deleteEntry(
+            session.clockIn!.id,
+            session.clockOut!.id
+          );
           if (!result.success) {
-            setError(result.error);
+            if (result.error === 'pending_request_exists') {
+              setError(
+                'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
+              );
+            } else {
+              setError(result.error);
+            }
             return;
+          }
+          // Check if a request was created instead of direct delete
+          if ('request' in result) {
+            requestCreated = true;
+          }
+        } else {
+          // For single entries (orphan clock_out or orphan clock_in), handle separately
+
+          // Delete clock out if it exists and is an orphan
+          if (session.clockOut && (!session.clockIn || session.isOrphan)) {
+            const result = await deleteEntry(session.clockOut.id);
+            if (!result.success) {
+              if (result.error === 'pending_request_exists') {
+                setError(
+                  'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
+                );
+              } else {
+                setError(result.error);
+              }
+              return;
+            }
+            if ('request' in result) {
+              requestCreated = true;
+            }
+          }
+
+          // Delete clock in if it exists and is an orphan
+          if (session.clockIn && (!session.clockOut || session.isOrphan)) {
+            const result = await deleteEntry(session.clockIn.id);
+            if (!result.success) {
+              if (result.error === 'pending_request_exists') {
+                setError(
+                  'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
+                );
+              } else {
+                setError(result.error);
+              }
+              return;
+            }
+            if ('request' in result) {
+              requestCreated = true;
+            }
           }
         }
 
-        // Delete clock in if exists
-        if (session.clockIn) {
-          const result = await deleteEntry(session.clockIn.id);
-          if (!result.success) {
-            setError(result.error);
-            return;
-          }
+        if (requestCreated) {
+          // Show success message for delete request
+          setSuccessMessage('Löschantrag wurde zur Genehmigung eingereicht.');
+          // Close dialog after short delay
+          setTimeout(() => {
+            onOpenChange(false);
+            onRefresh();
+          }, 2000);
+        } else {
+          onOpenChange(false);
+          onRefresh();
         }
-
-        onOpenChange(false);
-        onRefresh();
       } catch (err) {
         console.error('Error deleting entry:', err);
         setError('Ein Fehler ist aufgetreten.');
@@ -736,6 +891,13 @@ export function EntryDetailsDialog({
                 <Label>Ausstempeln</Label>
               </div>
               <p className="text-sm text-muted-foreground">Noch aktiv</p>
+            </div>
+          )}
+
+          {/* Success message */}
+          {successMessage && (
+            <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
+              {successMessage}
             </div>
           )}
 

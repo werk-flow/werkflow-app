@@ -1,41 +1,47 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
 import { PendingApprovals } from './pending-approvals';
 import { EntryHistory } from './entry-history';
-import { getPendingSessions } from '@/lib/time-tracking/actions';
+
+interface MemberInfo {
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+}
 
 interface ZeiterfassungContentProps {
   organizationId: string;
   userId: string;
   isAdminOrManager: boolean;
+  isAdmin: boolean;
+  initialTab?: 'overview' | 'approvals' | 'history';
+  /** Initial pending count fetched on the server for immediate display */
+  initialPendingCount?: number;
+  /** Members for the history filter (admin/manager only) */
+  members?: MemberInfo[];
 }
 
 export function ZeiterfassungContent({
   organizationId,
   userId,
-  isAdminOrManager
+  isAdminOrManager,
+  isAdmin,
+  initialTab = 'overview',
+  initialPendingCount = 0,
+  members = []
 }: ZeiterfassungContentProps) {
-  const [pendingCount, setPendingCount] = useState(0);
+  // Use the server-fetched initial count for immediate display
+  const [pendingCount, setPendingCount] = useState(initialPendingCount);
 
-  // Fetch initial pending count
-  const fetchPendingCount = useCallback(async () => {
-    if (!isAdminOrManager) return;
-    try {
-      const result = await getPendingSessions(organizationId);
-      if (result.success) {
-        setPendingCount(result.sessions.length);
-      }
-    } catch (err) {
-      console.error('Error fetching pending count:', err);
-    }
-  }, [organizationId, isAdminOrManager]);
-
-  useEffect(() => {
-    fetchPendingCount();
-  }, [fetchPendingCount]);
+  // Stable callback to prevent unnecessary re-renders
+  const handleCountChange = useCallback((count: number) => {
+    setPendingCount(count);
+  }, []);
 
   // For regular employees, just show the dashboard
   if (!isAdminOrManager) {
@@ -46,7 +52,7 @@ export function ZeiterfassungContent({
 
   // For admin/manager, show tabs with dashboard + approvals + history
   return (
-    <Tabs defaultValue="overview" className="w-full">
+    <Tabs defaultValue={initialTab} className="w-full">
       <TabsList className="gap-1">
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
         <TabsTrigger value="approvals" className="group">
@@ -70,12 +76,13 @@ export function ZeiterfassungContent({
       <TabsContent value="approvals" className="mt-4">
         <PendingApprovals
           organizationId={organizationId}
-          onCountChange={setPendingCount}
+          isAdmin={isAdmin}
+          onCountChange={handleCountChange}
         />
       </TabsContent>
 
       <TabsContent value="history" className="mt-4">
-        <EntryHistory organizationId={organizationId} />
+        <EntryHistory organizationId={organizationId} members={members} />
       </TabsContent>
     </Tabs>
   );

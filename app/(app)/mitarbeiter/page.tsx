@@ -6,7 +6,6 @@ import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
 import { getCachedUser } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
-import { QuickStats } from '@/components/mitarbeiter/quick-stats';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import type { OrgRole } from '@/lib/members/actions';
@@ -95,10 +94,6 @@ export default async function MitarbeiterPage() {
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <QuickStats
-          organizationId={activeOrgId}
-          totalMembers={memberList.length}
-        />
         <MitarbeiterTabs
           members={memberList}
           invites={inviteList}

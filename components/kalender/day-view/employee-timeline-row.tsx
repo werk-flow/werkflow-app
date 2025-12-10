@@ -11,7 +11,11 @@ import {
   formatDuration,
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type {
+  TimeEntry,
+  WorkSession,
+  EntryChangeRequestMap
+} from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
 interface CalendarMember {
@@ -28,11 +32,14 @@ interface EmployeeTimelineRowProps {
   entries: TimeEntry[];
   date?: Date;
   currentUserRole?: OrgRole;
+  currentUserId?: string;
   onRefresh?: () => void;
   /** Show only the name column */
   showNameOnly?: boolean;
   /** Show only the timeline column */
   showTimelineOnly?: boolean;
+  /** Map of entry IDs to their pending change requests */
+  changeRequestMap?: EntryChangeRequestMap;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -58,9 +65,11 @@ export function EmployeeTimelineRow({
   entries,
   date,
   currentUserRole,
+  currentUserId,
   onRefresh,
   showNameOnly = false,
-  showTimelineOnly = false
+  showTimelineOnly = false,
+  changeRequestMap = {}
 }: EmployeeTimelineRowProps) {
   const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(
     null
@@ -201,7 +210,9 @@ export function EmployeeTimelineRow({
               width={width}
               isPending={isPending}
               currentUserRole={currentUserRole!}
+              currentUserId={currentUserId}
               onRefresh={onRefresh!}
+              changeRequestMap={changeRequestMap}
             />
           )
         )}

@@ -35,9 +35,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
+import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
+
+interface MemberInfo {
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+}
 
 interface EntryHistoryProps {
   organizationId: string;
+  members?: MemberInfo[];
 }
 
 interface EntryWithProfile extends TimeEntry {
@@ -60,6 +70,10 @@ const STATUS_LABELS: Record<
   rejected: {
     label: 'Abgelehnt',
     className: 'bg-red-500/20 text-red-700 dark:text-red-300'
+  },
+  pending_delete: {
+    label: 'Löschung ausstehend',
+    className: 'bg-orange-500/20 text-orange-700 dark:text-orange-300'
   }
 };
 
@@ -358,13 +372,17 @@ function DatePicker({ value, onChange, label }: DatePickerProps) {
   );
 }
 
-export function EntryHistory({ organizationId }: EntryHistoryProps) {
+export function EntryHistory({
+  organizationId,
+  members = []
+}: EntryHistoryProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [entries, setEntries] = useState<EntryWithProfile[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [memberFilter, setMemberFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 30); // Last 30 days
@@ -373,6 +391,14 @@ export function EntryHistory({ organizationId }: EntryHistoryProps) {
   const [dateTo, setDateTo] = useState(() => {
     return toISODate(new Date());
   });
+
+  // Helper to get member display name
+  const getMemberDisplayName = (member: MemberInfo): string => {
+    if (member.first_name || member.last_name) {
+      return `${member.first_name || ''} ${member.last_name || ''}`.trim();
+    }
+    return member.email;
+  };
 
   const fetchEntries = useCallback(async () => {
     setIsLoading(true);
@@ -388,7 +414,10 @@ export function EntryHistory({ organizationId }: EntryHistoryProps) {
         from: fromDate.toISOString(),
         to: toDate.toISOString(),
         status:
-          statusFilter !== 'all' ? (statusFilter as TimeEntryStatus) : undefined
+          statusFilter !== 'all'
+            ? (statusFilter as TimeEntryStatus)
+            : undefined,
+        userId: memberFilter !== 'all' ? memberFilter : undefined
       });
 
       if (result.success) {
@@ -442,10 +471,22 @@ export function EntryHistory({ organizationId }: EntryHistoryProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId, dateFrom, dateTo, statusFilter]);
+  }, [organizationId, dateFrom, dateTo, statusFilter, memberFilter]);
 
   useEffect(() => {
     fetchEntries();
+  }, [fetchEntries]);
+
+  // Listen for clock status refresh events to update the history
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchEntries();
+    };
+
+    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
+    return () => {
+      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
+    };
   }, [fetchEntries]);
 
   const getDisplayName = (entry: EntryWithProfile): string => {
@@ -458,14 +499,34 @@ export function EntryHistory({ organizationId }: EntryHistoryProps) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+        <div className="flex-1 min-w-[140px]">
           <DatePicker value={dateFrom} onChange={setDateFrom} label="Von" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-[140px]">
           <DatePicker value={dateTo} onChange={setDateTo} label="Bis" />
         </div>
-        <div className="flex-1 space-y-1">
+        {members.length > 0 && (
+          <div className="flex-1 min-w-[180px] space-y-1">
+            <label className="text-sm font-medium text-muted-foreground">
+              Mitarbeiter
+            </label>
+            <Select value={memberFilter} onValueChange={setMemberFilter}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Mitarbeiter</SelectItem>
+                {members.map((member) => (
+                  <SelectItem key={member.user_id} value={member.user_id}>
+                    {getMemberDisplayName(member)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div className="flex-1 min-w-[140px] space-y-1">
           <label className="text-sm font-medium text-muted-foreground">
             Status
           </label>

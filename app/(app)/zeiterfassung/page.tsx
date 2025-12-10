@@ -6,9 +6,20 @@ import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
 import { getCachedUser } from '@/lib/data/cached';
 import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
+import {
+  getPendingSessions,
+  getPendingChangeRequests
+} from '@/lib/time-tracking/actions';
 import type { OrgRole } from '@/lib/members/actions';
 
-export default async function ZeiterfassungPage() {
+interface ZeiterfassungPageProps {
+  searchParams: Promise<{ tab?: string }>;
+}
+
+export default async function ZeiterfassungPage({
+  searchParams
+}: ZeiterfassungPageProps) {
+  const { tab } = await searchParams;
   // Use cached user - deduplicates with layout's call
   const {
     data: { user }
@@ -50,6 +61,57 @@ export default async function ZeiterfassungPage() {
   const currentUserRole = membership.role as OrgRole;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'manager';
+  const isAdmin = currentUserRole === 'admin';
+
+  // Fetch initial pending count on the server for immediate display
+  let initialPendingCount = 0;
+  if (isAdminOrManager) {
+    try {
+      const sessionsResult = await getPendingSessions(activeOrgId);
+      if (sessionsResult.success) {
+        initialPendingCount += sessionsResult.sessions.length;
+      }
+
+      if (isAdmin) {
+        const changeRequestsResult = await getPendingChangeRequests(
+          activeOrgId
+        );
+        if (changeRequestsResult.success) {
+          initialPendingCount += changeRequestsResult.requests.length;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching initial pending count:', err);
+    }
+  }
+
+  // Fetch members for admin/manager to use in history filter
+  let members: Array<{
+    user_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    role: string;
+  }> = [];
+
+  if (isAdminOrManager) {
+    const { data: membersData } = await supabase.rpc('get_org_members', {
+      p_org_id: activeOrgId
+    });
+
+    if (membersData) {
+      // For managers, filter to only managed roles
+      if (currentUserRole === 'manager') {
+        const MANAGED_ROLES = ['accountant', 'secretary', 'employee'];
+        members = membersData.filter(
+          (m: { role: string; user_id: string }) =>
+            MANAGED_ROLES.includes(m.role) || m.user_id === user.id
+        );
+      } else {
+        members = membersData;
+      }
+    }
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -60,6 +122,10 @@ export default async function ZeiterfassungPage() {
           organizationId={activeOrgId}
           userId={user.id}
           isAdminOrManager={isAdminOrManager}
+          isAdmin={isAdmin}
+          initialTab={tab === 'approvals' ? 'approvals' : 'overview'}
+          initialPendingCount={initialPendingCount}
+          members={members}
         />
       </div>
     </div>
