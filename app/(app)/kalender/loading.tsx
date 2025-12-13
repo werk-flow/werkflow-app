@@ -3,3 +3,4 @@ import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-
 export default function Loading() {
   return <KalenderPageSkeleton />;
 }
+

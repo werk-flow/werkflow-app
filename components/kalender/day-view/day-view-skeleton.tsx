@@ -43,3 +43,4 @@ export function DayViewSkeleton({ memberCount = 5 }: DayViewSkeletonProps) {
     </div>
   );
 }
+

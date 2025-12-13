@@ -389,7 +389,10 @@ export function EntryHistory({
     return toISODate(date);
   });
   const [dateTo, setDateTo] = useState(() => {
-    return toISODate(new Date());
+    // Include future dates to show pending entries with future timestamps
+    const date = new Date();
+    date.setDate(date.getDate() + 14); // 2 weeks into the future
+    return toISODate(date);
   });
 
   // Helper to get member display name
@@ -539,6 +542,9 @@ export function EntryHistory({
               <SelectItem value="approved">Genehmigt</SelectItem>
               <SelectItem value="pending">Ausstehend</SelectItem>
               <SelectItem value="rejected">Abgelehnt</SelectItem>
+              <SelectItem value="pending_delete">
+                Löschung ausstehend
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>

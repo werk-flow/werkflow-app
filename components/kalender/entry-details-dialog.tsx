@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef, useMemo } from 'react';
+import { useState, useTransition, useRef, useMemo, useEffect } from 'react';
 import {
   Loader2,
   Pencil,
@@ -57,6 +57,8 @@ interface EntryDetailsDialogProps {
   currentUserRole: OrgRole;
   currentUserId?: string;
   onRefresh: () => void;
+  /** If true, opens the dialog directly in edit mode */
+  startInEditMode?: boolean;
 }
 
 function formatDateTime(date: Date): string {
@@ -407,10 +409,11 @@ export function EntryDetailsDialog({
   session,
   currentUserRole,
   currentUserId,
-  onRefresh
+  onRefresh,
+  startInEditMode = false
 }: EntryDetailsDialogProps) {
   const [isPending, startTransition] = useTransition();
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(startInEditMode);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -431,6 +434,23 @@ export function EntryDetailsDialog({
   const clockOutDate = session.clockOut
     ? new Date(session.clockOut.timestamp)
     : null;
+
+  // Handle dialog open/close - initialize editing state based on startInEditMode
+  useEffect(() => {
+    if (open) {
+      // When dialog opens, set editing state based on prop
+      setIsEditing(startInEditMode);
+      setError(null);
+      setSuccessMessage(null);
+      // Initialize edit values
+      setEditedClockIn(
+        session.clockIn ? new Date(session.clockIn.timestamp) : null
+      );
+      setEditedClockOut(
+        session.clockOut ? new Date(session.clockOut.timestamp) : null
+      );
+    }
+  }, [open, startInEditMode, session.clockIn, session.clockOut]);
 
   // Determine if this is the user's own entry
   const entryUserId = session.clockIn?.userId || session.clockOut?.userId;
@@ -936,7 +956,7 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {/* Edit/Delete buttons */}
+          {/* Edit/Delete buttons - hide delete for pending entries (use approve/reject instead) */}
           {canEdit && !isEditing && (
             <div className="flex gap-2">
               <Button
@@ -949,42 +969,45 @@ export function EntryDetailsDialog({
                 <Pencil className="h-4 w-4" />
                 Bearbeiten
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isPending}
-                    className="gap-1 text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Löschen
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {isPairedSession
-                        ? 'Arbeitszeit löschen?'
-                        : 'Eintrag löschen?'}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {isPairedSession
-                        ? 'Diese Aktion kann nicht rückgängig gemacht werden. Die gesamte Arbeitszeit (Einstempeln und Ausstempeln) wird permanent gelöscht.'
-                        : 'Diese Aktion kann nicht rückgängig gemacht werden. Dieser einzelne Eintrag wird permanent gelöscht.'}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDelete}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              {/* Only show delete for approved entries - pending entries should use reject */}
+              {!hasPendingEntry && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isPending}
+                      className="gap-1 text-destructive hover:text-destructive"
                     >
+                      <Trash2 className="h-4 w-4" />
                       Löschen
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {isPairedSession
+                          ? 'Arbeitszeit löschen?'
+                          : 'Eintrag löschen?'}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {isPairedSession
+                          ? 'Diese Aktion kann nicht rückgängig gemacht werden. Die gesamte Arbeitszeit (Einstempeln und Ausstempeln) wird permanent gelöscht.'
+                          : 'Diese Aktion kann nicht rückgängig gemacht werden. Dieser einzelne Eintrag wird permanent gelöscht.'}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Löschen
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
           )}
 

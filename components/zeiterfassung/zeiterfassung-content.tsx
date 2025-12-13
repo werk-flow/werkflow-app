@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
 import { PendingApprovals } from './pending-approvals';
 import { EntryHistory } from './entry-history';
+import type { OrgRole } from '@/lib/members/actions';
 
 interface MemberInfo {
   user_id: string;
@@ -19,6 +20,7 @@ interface ZeiterfassungContentProps {
   userId: string;
   isAdminOrManager: boolean;
   isAdmin: boolean;
+  currentUserRole: OrgRole;
   initialTab?: 'overview' | 'approvals' | 'history';
   /** Initial pending count fetched on the server for immediate display */
   initialPendingCount?: number;
@@ -31,6 +33,7 @@ export function ZeiterfassungContent({
   userId,
   isAdminOrManager,
   isAdmin,
+  currentUserRole,
   initialTab = 'overview',
   initialPendingCount = 0,
   members = []
@@ -77,6 +80,8 @@ export function ZeiterfassungContent({
         <PendingApprovals
           organizationId={organizationId}
           isAdmin={isAdmin}
+          currentUserRole={currentUserRole}
+          currentUserId={userId}
           onCountChange={handleCountChange}
         />
       </TabsContent>

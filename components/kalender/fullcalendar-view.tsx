@@ -674,11 +674,13 @@ export function FullCalendarView({
           hour12: false,
           meridiem: false
         }}
-        dayHeaderFormat={{
-          weekday: 'short',
-          day: 'numeric',
-          month: 'numeric'
-        }}
+        dayHeaderFormat={
+          // In month view, only show weekday name (no dates)
+          // In day/week views, show weekday + date
+          view === 'month'
+            ? { weekday: 'short' }
+            : { weekday: 'short', day: 'numeric', month: 'numeric' }
+        }
         nowIndicator={true}
         selectable={false}
         editable={false}

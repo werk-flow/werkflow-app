@@ -3,3 +3,4 @@ import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfas
 export default function Loading() {
   return <ZeiterfassungPageSkeleton />;
 }
+

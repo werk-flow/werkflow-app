@@ -405,25 +405,24 @@ export async function reviewEntry(
 
       return { success: true, entry: toTimeEntry(updatedEntry) };
     } else {
-      // Rejection: DELETE the entry (since it took immediate effect, rejection removes it)
-      // First get the entry data to return
-      const entryData = toTimeEntry(entry);
-
-      const { error: deleteError } = await admin
+      // Rejection: Update entry status to 'rejected' so it appears in history
+      const { data: updatedEntry, error: updateError } = await admin
         .from('time_entries')
-        .delete()
-        .eq('id', entryId);
+        .update({
+          status: 'rejected',
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString()
+        })
+        .eq('id', entryId)
+        .select()
+        .single();
 
-      if (deleteError) {
-        console.error('Error deleting rejected entry:', deleteError);
-        return { success: false, error: 'delete_failed' };
+      if (updateError || !updatedEntry) {
+        console.error('Error rejecting entry:', updateError);
+        return { success: false, error: 'update_failed' };
       }
 
-      // Return the entry data with rejected status for consistency
-      return {
-        success: true,
-        entry: { ...entryData, status: 'rejected' as const }
-      };
+      return { success: true, entry: toTimeEntry(updatedEntry) };
     }
   } catch (error) {
     console.error('Unexpected error in reviewEntry:', error);

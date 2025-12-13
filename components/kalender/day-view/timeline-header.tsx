@@ -5,12 +5,27 @@ import { HOUR_WIDTH, TIMELINE_WIDTH } from './timeline-grid';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
-export function TimelineHeader() {
+interface TimelineHeaderProps {
+  /** The date being displayed - current time indicator only shows if this is today */
+  date?: Date;
+}
+
+export function TimelineHeader({ date }: TimelineHeaderProps) {
   const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(
     null
   );
 
+  // Check if the displayed date is today
+  const isToday = date
+    ? date.toDateString() === new Date().toDateString()
+    : true;
+
   useEffect(() => {
+    if (!isToday) {
+      setCurrentTimePosition(null);
+      return;
+    }
+
     const updateCurrentTime = () => {
       const now = new Date();
       const hours = now.getHours();
@@ -22,7 +37,7 @@ export function TimelineHeader() {
     updateCurrentTime();
     const interval = setInterval(updateCurrentTime, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isToday]);
 
   return (
     <div
@@ -42,8 +57,8 @@ export function TimelineHeader() {
         </div>
       ))}
 
-      {/* Current time indicator */}
-      {currentTimePosition !== null && (
+      {/* Current time indicator - only on today */}
+      {isToday && currentTimePosition !== null && (
         <div
           className="absolute top-0 h-full w-0.5 bg-destructive z-10"
           style={{ left: currentTimePosition }}
