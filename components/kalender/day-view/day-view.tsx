@@ -120,7 +120,7 @@ export function DayView({
       <div className="flex-1 overflow-x-auto">
         <div style={{ minWidth: TIMELINE_WIDTH }}>
           {/* Timeline header */}
-          <TimelineHeader />
+          <TimelineHeader date={date} />
 
           {/* Timeline rows */}
           <div className="divide-y">

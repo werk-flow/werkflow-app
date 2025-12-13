@@ -123,6 +123,7 @@ export default async function ZeiterfassungPage({
           userId={user.id}
           isAdminOrManager={isAdminOrManager}
           isAdmin={isAdmin}
+          currentUserRole={currentUserRole}
           initialTab={tab === 'approvals' ? 'approvals' : 'overview'}
           initialPendingCount={initialPendingCount}
           members={members}

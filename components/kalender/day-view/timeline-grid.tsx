@@ -115,3 +115,4 @@ export function calculateBlockPosition(
 }
 
 export { HOUR_WIDTH, TIMELINE_WIDTH };
+

@@ -22,13 +22,18 @@ import {
 } from '@/lib/time-tracking/actions';
 import type {
   PendingSession,
-  ChangeRequestWithDetails
+  ChangeRequestWithDetails,
+  WorkSession
 } from '@/lib/time-tracking/types';
+import type { OrgRole } from '@/lib/members/actions';
 import { dispatchClockStatusRefresh } from '@/components/clock-fab';
+import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
 
 interface PendingApprovalsProps {
   organizationId: string;
   isAdmin: boolean;
+  currentUserRole: OrgRole;
+  currentUserId: string;
   onCountChange?: (count: number) => void;
 }
 
@@ -114,6 +119,8 @@ function RequestTypeIcon() {
 export function PendingApprovals({
   organizationId,
   isAdmin,
+  currentUserRole,
+  currentUserId,
   onCountChange
 }: PendingApprovalsProps) {
   // Use separate states for initial load vs refresh to preserve UI during refresh
@@ -225,6 +232,7 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setSessions((prev) => prev.filter((s) => s.id !== session.id));
+        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to reject session:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -268,6 +276,7 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
+        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to reject change request:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -396,6 +405,9 @@ export function PendingApprovals({
                 }
                 onApprove={() => handleApproveSession(item.data)}
                 onReject={() => handleRejectSession(item.data)}
+                onRefresh={() => fetchPendingItems(true)}
+                currentUserRole={currentUserRole}
+                currentUserId={currentUserId}
                 disabled={processingAction !== null}
               />
             );
@@ -472,6 +484,28 @@ export function PendingApprovals({
   );
 }
 
+// Helper to convert PendingSession to WorkSession for the dialog
+function pendingSessionToWorkSession(session: PendingSession): WorkSession {
+  let durationMinutes: number | null = null;
+  if (session.clockIn && session.clockOut) {
+    const start = new Date(session.clockIn.timestamp);
+    const end = new Date(session.clockOut.timestamp);
+    durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+  }
+
+  return {
+    clockIn: session.clockIn,
+    clockOut: session.clockOut,
+    durationMinutes,
+    isOrphan: false,
+    pendingState:
+      session.clockIn?.status === 'pending' ||
+      session.clockOut?.status === 'pending'
+        ? 'full'
+        : 'none'
+  };
+}
+
 // Card for session requests (new entry)
 function SessionRequestCard({
   session,
@@ -479,6 +513,9 @@ function SessionRequestCard({
   processingAction,
   onApprove,
   onReject,
+  onRefresh,
+  currentUserRole,
+  currentUserId,
   disabled
 }: {
   session: PendingSession;
@@ -486,8 +523,13 @@ function SessionRequestCard({
   processingAction: 'approve' | 'reject' | null;
   onApprove: () => void;
   onReject: () => void;
+  onRefresh: () => void;
+  currentUserRole: OrgRole;
+  currentUserId: string;
   disabled: boolean;
 }) {
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
   const isApproving = isProcessing && processingAction === 'approve';
   const isRejecting = isProcessing && processingAction === 'reject';
   const isPair = session.clockIn && session.clockOut;
@@ -497,72 +539,104 @@ function SessionRequestCard({
       ? `${session.firstName || ''} ${session.lastName || ''}`.trim()
       : 'Unbekannt';
 
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between p-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <RequestTypeIcon />
-            <span className="font-medium">{displayName}</span>
-            <RequestTypeBadge type="session" />
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {formatDate(session.date)}
-          </p>
-          {isPair ? (
-            <p className="text-xs text-muted-foreground">
-              {formatTime(session.clockIn!.timestamp)} –{' '}
-              {formatTime(session.clockOut!.timestamp)}
-              <span className="ml-2 text-foreground/70">
-                (
-                {formatDuration(
-                  session.clockIn!.timestamp,
-                  session.clockOut!.timestamp
-                )}
-                )
-              </span>
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {session.clockIn
-                ? `Einstempeln: ${formatTime(session.clockIn.timestamp)}`
-                : `Ausstempeln: ${formatTime(session.clockOut!.timestamp)}`}
-            </p>
-          )}
-        </div>
+  // Convert to WorkSession for the dialog
+  const workSession = pendingSessionToWorkSession(session);
 
-        <div className="flex gap-2 shrink-0 ml-4">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onApprove}
-            disabled={disabled}
-            title="Genehmigen - Eintrag bleibt erhalten"
-            className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
-          >
-            {isApproving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+  const handleDialogRefresh = () => {
+    setIsEditDialogOpen(false);
+    onRefresh();
+    dispatchClockStatusRefresh();
+  };
+
+  return (
+    <>
+      <Card>
+        <CardContent className="flex items-center justify-between p-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <RequestTypeIcon />
+              <span className="font-medium">{displayName}</span>
+              <RequestTypeBadge type="session" />
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatDate(session.date)}
+            </p>
+            {isPair ? (
+              <p className="text-xs text-muted-foreground">
+                {formatTime(session.clockIn!.timestamp)} –{' '}
+                {formatTime(session.clockOut!.timestamp)}
+                <span className="ml-2 text-foreground/70">
+                  (
+                  {formatDuration(
+                    session.clockIn!.timestamp,
+                    session.clockOut!.timestamp
+                  )}
+                  )
+                </span>
+              </p>
             ) : (
-              <Check className="h-4 w-4" />
+              <p className="text-xs text-muted-foreground">
+                {session.clockIn
+                  ? `Einstempeln: ${formatTime(session.clockIn.timestamp)}`
+                  : `Ausstempeln: ${formatTime(session.clockOut!.timestamp)}`}
+              </p>
             )}
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onReject}
-            disabled={disabled}
-            title="Ablehnen - Eintrag wird entfernt"
-            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            {isRejecting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <X className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+
+          <div className="flex gap-2 shrink-0 ml-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsEditDialogOpen(true)}
+              disabled={disabled}
+              title="Bearbeiten"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onApprove}
+              disabled={disabled}
+              title="Genehmigen - Eintrag bleibt erhalten"
+              className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+            >
+              {isApproving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onReject}
+              disabled={disabled}
+              title="Ablehnen - Eintrag wird entfernt"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              {isRejecting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <X className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Dialog - opens directly in edit mode */}
+      <EntryDetailsDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        session={workSession}
+        currentUserRole={currentUserRole}
+        currentUserId={currentUserId}
+        onRefresh={handleDialogRefresh}
+        startInEditMode={true}
+      />
+    </>
   );
 }
 

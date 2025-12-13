@@ -133,9 +133,17 @@ export function EmployeeTimelineRow({
     }>;
   }, [sessions, date]);
 
-  // Current time indicator
+  // Check if the displayed date is today
+  const isToday = date
+    ? date.toDateString() === new Date().toDateString()
+    : false;
+
+  // Current time indicator - only show on today's date
   useEffect(() => {
-    if (showNameOnly) return;
+    if (showNameOnly || !isToday) {
+      setCurrentTimePosition(null);
+      return;
+    }
 
     const updateCurrentTime = () => {
       const now = new Date();
@@ -148,7 +156,7 @@ export function EmployeeTimelineRow({
     updateCurrentTime();
     const interval = setInterval(updateCurrentTime, 60000);
     return () => clearInterval(interval);
-  }, [showNameOnly]);
+  }, [showNameOnly, isToday]);
 
   // Show only the employee name column
   if (showNameOnly) {
@@ -190,8 +198,8 @@ export function EmployeeTimelineRow({
           />
         ))}
 
-        {/* Current time indicator */}
-        {currentTimePosition !== null && (
+        {/* Current time indicator - only on today */}
+        {isToday && currentTimePosition !== null && (
           <div
             className="absolute top-0 h-full w-0.5 bg-destructive/50 z-10"
             style={{ left: currentTimePosition }}

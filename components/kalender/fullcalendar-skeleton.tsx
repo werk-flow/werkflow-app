@@ -146,3 +146,4 @@ function MonthGridSkeleton() {
     </div>
   );
 }
+

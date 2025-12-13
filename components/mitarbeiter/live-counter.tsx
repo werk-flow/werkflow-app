@@ -44,3 +44,4 @@ export function LiveCounter({ clockInTime, todayMinutes }: LiveCounterProps) {
     </span>
   );
 }
+

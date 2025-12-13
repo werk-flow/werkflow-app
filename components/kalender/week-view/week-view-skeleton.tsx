@@ -60,3 +60,4 @@ export function WeekViewSkeleton({ memberCount = 5 }: WeekViewSkeletonProps) {
     </div>
   );
 }
+
