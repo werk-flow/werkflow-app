@@ -11,8 +11,8 @@ interface TimelineGridProps {
 
 // Timeline configuration
 const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0-23
-const HOUR_WIDTH = 60; // pixels per hour
-const TIMELINE_WIDTH = HOURS.length * HOUR_WIDTH;
+const HOUR_WIDTH = 60; // minimum pixels per hour (used for positioning calculations)
+const TIMELINE_WIDTH = HOURS.length * HOUR_WIDTH; // minimum width before horizontal scroll kicks in
 
 export function TimelineGrid({
   showHeader = false,
@@ -115,4 +115,3 @@ export function calculateBlockPosition(
 }
 
 export { HOUR_WIDTH, TIMELINE_WIDTH };
-

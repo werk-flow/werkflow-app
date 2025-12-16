@@ -39,17 +39,20 @@ export function TimelineHeader({ date }: TimelineHeaderProps) {
     return () => clearInterval(interval);
   }, [isToday]);
 
+  // Calculate current time as percentage of day
+  const currentTimePercent =
+    currentTimePosition !== null
+      ? (currentTimePosition / TIMELINE_WIDTH) * 100
+      : null;
+
   return (
-    <div
-      className="relative h-10 border-b bg-muted/30"
-      style={{ minWidth: TIMELINE_WIDTH }}
-    >
-      {/* Hour markers */}
+    <div className="relative h-10 border-b bg-muted/30 min-w-[1440px] w-full">
+      {/* Hour markers - positioned as percentage to fill available width */}
       {HOURS.map((hour) => (
         <div
           key={hour}
           className="absolute top-0 h-full border-l border-border/50"
-          style={{ left: hour * HOUR_WIDTH }}
+          style={{ left: `${(hour / 24) * 100}%` }}
         >
           <span className="absolute top-2 -translate-x-1/2 text-xs font-medium text-muted-foreground">
             {hour.toString().padStart(2, '0')}:00
@@ -58,10 +61,10 @@ export function TimelineHeader({ date }: TimelineHeaderProps) {
       ))}
 
       {/* Current time indicator - only on today */}
-      {isToday && currentTimePosition !== null && (
+      {isToday && currentTimePercent !== null && (
         <div
           className="absolute top-0 h-full w-0.5 bg-destructive z-10"
-          style={{ left: currentTimePosition }}
+          style={{ left: `${currentTimePercent}%` }}
         >
           <div className="absolute -top-0.5 -left-1 h-2 w-2 rounded-full bg-destructive" />
         </div>

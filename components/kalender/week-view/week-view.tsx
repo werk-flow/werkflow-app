@@ -34,6 +34,8 @@ interface WeekViewProps {
   onSessionClick?: (session: WorkSession) => void;
   /** Map of entry IDs to their pending change requests */
   changeRequestMap?: EntryChangeRequestMap;
+  /** Called when clicking on a specific employee's day cell (not header) */
+  onMemberDayClick?: (memberId: string, date: Date) => void;
 }
 
 const DAY_NAMES_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -72,7 +74,8 @@ export function WeekView({
   onDateSelect,
   onViewChange,
   onSessionClick,
-  changeRequestMap = {}
+  changeRequestMap = {},
+  onMemberDayClick
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const today = new Date();
@@ -192,8 +195,13 @@ export function WeekView({
                         )}
                         type="button"
                         onClick={() => {
-                          onDateSelect(day);
-                          onViewChange('day');
+                          // Use onMemberDayClick if available (highlights specific employee row)
+                          if (onMemberDayClick) {
+                            onMemberDayClick(member.user_id, day);
+                          } else {
+                            onDateSelect(day);
+                            onViewChange('day');
+                          }
                         }}
                       >
                         <div className="space-y-1.5">

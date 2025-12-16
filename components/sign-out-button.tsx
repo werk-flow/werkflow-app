@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clockOutBeforeSignOut } from '@/lib/time-tracking/actions';
 
 export function SignOutButton() {
   const router = useRouter();
@@ -13,6 +14,13 @@ export function SignOutButton() {
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
+    // Best-effort: ensure any open working session is clocked out before sign-out.
+    // Ignore errors and proceed with sign-out regardless.
+    try {
+      await clockOutBeforeSignOut();
+    } catch (e) {
+      console.error('Failed to clock out before sign out:', e);
+    }
     await supabase.auth.signOut();
     await fetch('/auth/callback', {
       method: 'POST',
@@ -40,6 +48,3 @@ export function SignOutButton() {
     </Button>
   );
 }
-
-
-

@@ -76,6 +76,15 @@ export function CalendarContainer({
     showWorkingHours: true
     // Future filters will be added here
   });
+  // Track which member to highlight when navigating from week view cell click
+  // We use two states: pendingHighlight stores the ID while loading,
+  // highlightMemberId is the active highlight (only set after loading completes)
+  const [pendingHighlightMemberId, setPendingHighlightMemberId] = useState<
+    string | null
+  >(null);
+  const [highlightMemberId, setHighlightMemberId] = useState<string | null>(
+    null
+  );
 
   // Calculate date range based on view
   // For proper session pairing, we fetch slightly beyond view boundaries
@@ -228,6 +237,30 @@ export function CalendarContainer({
     setCurrentDate(date);
   }, []);
 
+  // Handle click on a specific member's day cell in the week view
+  const handleMemberDayClick = useCallback((memberId: string, date: Date) => {
+    setCurrentDate(date);
+    // Store as pending - will be activated after loading completes
+    setPendingHighlightMemberId(memberId);
+    setView('day');
+  }, []);
+
+  // When loading finishes and we have a pending highlight, activate it
+  useEffect(() => {
+    if (!isLoading && pendingHighlightMemberId && view === 'day') {
+      // Activate the highlight now that the view is visible
+      setHighlightMemberId(pendingHighlightMemberId);
+      setPendingHighlightMemberId(null);
+
+      // Clear highlight after animation duration (1.5s)
+      const timer = setTimeout(() => {
+        setHighlightMemberId(null);
+      }, 1500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, pendingHighlightMemberId, view]);
+
   // Filter entries based on selected members and filters
   const filteredEntries = useMemo(() => {
     // If working hours filter is off, return empty array (no time entries to show)
@@ -321,6 +354,7 @@ export function CalendarContainer({
                 isLoading={isLoading}
                 onRefresh={fetchEntries}
                 changeRequestMap={changeRequestMap}
+                highlightMemberId={highlightMemberId}
               />
             )}
             {view === 'week' && (
@@ -336,6 +370,7 @@ export function CalendarContainer({
                 onViewChange={setView}
                 onSessionClick={handleEventClick}
                 changeRequestMap={changeRequestMap}
+                onMemberDayClick={handleMemberDayClick}
               />
             )}
           </>

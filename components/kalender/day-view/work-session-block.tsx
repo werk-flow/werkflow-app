@@ -22,6 +22,8 @@ interface WorkSessionBlockProps {
   currentUserId?: string;
   onRefresh: () => void;
   changeRequestMap?: EntryChangeRequestMap;
+  /** If true, left and width are percentages instead of pixels */
+  usePercentage?: boolean;
 }
 
 function formatTime(date: Date): string {
@@ -95,8 +97,11 @@ export function WorkSessionBlock({
   currentUserRole,
   currentUserId,
   onRefresh,
-  changeRequestMap = {}
+  changeRequestMap = {},
+  usePercentage = false
 }: WorkSessionBlockProps) {
+  // Helper to format position values
+  const posUnit = usePercentage ? '%' : 'px';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Get change requests for this session's entries
@@ -148,8 +153,8 @@ export function WorkSessionBlock({
               : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
           )}
           style={{
-            left: `${left}px`,
-            width: '90px',
+            left: `${left}${posUnit}`,
+            width: usePercentage ? '6%' : '90px',
             ...(isPendingDelete ? hatchedStyle : {})
           }}
           title={`Ausstempeln: ${formatTime(clockOutTime)}`}
@@ -192,8 +197,8 @@ export function WorkSessionBlock({
               : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
           )}
           style={{
-            left: `${left}px`,
-            width: '90px',
+            left: `${left}${posUnit}`,
+            width: usePercentage ? '6%' : '90px',
             ...(isPendingDelete ? hatchedStyle : {})
           }}
           title={`Einstempeln: ${formatTime(clockInTime)}`}
@@ -311,8 +316,8 @@ export function WorkSessionBlock({
             'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
           )}
           style={{
-            left: `${left}px`,
-            width: `${width}px`,
+            left: `${left}${posUnit}`,
+            width: `${width}${posUnit}`,
             ...hatchedStyle
           }}
           title={`${timeRangeText} (${durationText}) - Löschung ausstehend`}
@@ -451,12 +456,13 @@ export function WorkSessionBlock({
             'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
         )}
         style={{
-          left: `${left}px`,
-          width: `${width}px`
+          left: `${left}${posUnit}`,
+          width: `${width}${posUnit}`
         }}
         title={`${timeRangeText} (${durationText})`}
       >
-        {width > 80 && (
+        {/* Use percentage thresholds when in percentage mode, pixel thresholds otherwise */}
+        {(usePercentage ? width > 5.5 : width > 80) && (
           <>
             <div className="flex items-center gap-1 truncate">
               <Clock className="h-3 w-3 shrink-0 opacity-80" />
@@ -467,13 +473,17 @@ export function WorkSessionBlock({
             </span>
           </>
         )}
-        {width <= 80 && width > 40 && (
+        {(usePercentage
+          ? width <= 5.5 && width > 2.8
+          : width <= 80 && width > 40) && (
           <div className="flex items-center gap-1 truncate">
             <Clock className="h-3 w-3 shrink-0 opacity-80" />
             <span className="truncate">{durationText}</span>
           </div>
         )}
-        {width <= 40 && <Clock className="h-3 w-3 shrink-0 opacity-80" />}
+        {(usePercentage ? width <= 2.8 : width <= 40) && (
+          <Clock className="h-3 w-3 shrink-0 opacity-80" />
+        )}
       </button>
 
       <EntryDetailsDialog

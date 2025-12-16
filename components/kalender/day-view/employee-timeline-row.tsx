@@ -11,6 +11,7 @@ import {
   formatDuration,
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
+import { cn } from '@/lib/utils';
 import type {
   TimeEntry,
   WorkSession,
@@ -40,6 +41,8 @@ interface EmployeeTimelineRowProps {
   showTimelineOnly?: boolean;
   /** Map of entry IDs to their pending change requests */
   changeRequestMap?: EntryChangeRequestMap;
+  /** Whether this row should be highlighted (briefly flash animation) */
+  isHighlighted?: boolean;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -69,7 +72,8 @@ export function EmployeeTimelineRow({
   onRefresh,
   showNameOnly = false,
   showTimelineOnly = false,
-  changeRequestMap = {}
+  changeRequestMap = {},
+  isHighlighted = false
 }: EmployeeTimelineRowProps) {
   const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(
     null
@@ -161,7 +165,14 @@ export function EmployeeTimelineRow({
   // Show only the employee name column
   if (showNameOnly) {
     return (
-      <div className="h-16 px-3 flex flex-col justify-center hover:bg-muted/30 transition-colors">
+      <div
+        className={cn(
+          'h-16 px-3 flex flex-col justify-center transition-colors',
+          isHighlighted
+            ? 'animate-row-highlight bg-[rgba(123,44,191,0.15)]'
+            : 'hover:bg-muted/30'
+        )}
+      >
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm truncate">
             {getMemberDisplayName(member)}
@@ -184,29 +195,39 @@ export function EmployeeTimelineRow({
 
   // Show only the timeline column
   if (showTimelineOnly) {
+    // Calculate current time as percentage of day
+    const currentTimePercent =
+      currentTimePosition !== null
+        ? (currentTimePosition / TIMELINE_WIDTH) * 100
+        : null;
+
     return (
       <div
-        className="relative h-16 hover:bg-muted/30 transition-colors"
-        style={{ minWidth: TIMELINE_WIDTH }}
+        className={cn(
+          'relative h-16 transition-colors min-w-[1440px] w-full',
+          isHighlighted
+            ? 'animate-row-highlight bg-[rgba(123,44,191,0.15)]'
+            : 'hover:bg-muted/30'
+        )}
       >
-        {/* Hour grid lines */}
+        {/* Hour grid lines - positioned as percentage to fill available width */}
         {HOURS.map((hour) => (
           <div
             key={hour}
             className="absolute top-0 h-full border-l border-border/30"
-            style={{ left: hour * HOUR_WIDTH }}
+            style={{ left: `${(hour / 24) * 100}%` }}
           />
         ))}
 
         {/* Current time indicator - only on today */}
-        {isToday && currentTimePosition !== null && (
+        {isToday && currentTimePercent !== null && (
           <div
             className="absolute top-0 h-full w-0.5 bg-destructive/50 z-10"
-            style={{ left: currentTimePosition }}
+            style={{ left: `${currentTimePercent}%` }}
           />
         )}
 
-        {/* Work session blocks */}
+        {/* Work session blocks - convert pixel positions to percentages */}
         {daySessionsWithBlocks.map(
           ({ session, left, width, isPending }, index) => (
             <WorkSessionBlock
@@ -214,13 +235,14 @@ export function EmployeeTimelineRow({
                 session.clockIn?.id ?? session.clockOut?.id ?? index
               }-${index}`}
               session={session}
-              left={left}
-              width={width}
+              left={(left / TIMELINE_WIDTH) * 100}
+              width={(width / TIMELINE_WIDTH) * 100}
               isPending={isPending}
               currentUserRole={currentUserRole!}
               currentUserId={currentUserId}
               onRefresh={onRefresh!}
               changeRequestMap={changeRequestMap}
+              usePercentage
             />
           )
         )}
