@@ -188,7 +188,7 @@ export function ClockFAB() {
       {banner && (
         <div
           className={cn(
-            'fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg',
+            'fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg',
             isBannerExiting ? 'animate-out' : 'animate-in'
           )}
         >
