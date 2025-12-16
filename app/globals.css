@@ -165,6 +165,20 @@ textarea::-moz-selection,
   animation: banner-fade-out 0.15s ease-in forwards;
 }
 
+/* Row highlight animation (for calendar day view navigation from week view) */
+@keyframes row-highlight {
+  0% {
+    background-color: rgba(123, 44, 191, 0.25);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: row-highlight 1.5s ease-out forwards;
+}
+
 /* Hide native time picker indicators for all browsers */
 input[type='time'].hide-time-picker::-webkit-calendar-picker-indicator,
 input[type='time'].hide-time-picker::-webkit-inner-spin-button,

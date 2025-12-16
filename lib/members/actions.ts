@@ -225,6 +225,62 @@ export async function removeMember(
       }
     }
 
+    // If the member is currently working today in this org, insert an automatic clock_out
+    // before removal (best-effort). This mirrors "clock out via FAB, then remove from org".
+    try {
+      const now = new Date();
+      const todayStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+      const todayEnd = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
+
+      const { data: lastTodayEntry, error: lastEntryError } = await admin
+        .from('time_entries')
+        .select('entry_type')
+        .eq('user_id', memberId)
+        .eq('organization_id', orgId)
+        .gte('timestamp', todayStart.toISOString())
+        .lte('timestamp', todayEnd.toISOString())
+        .neq('status', 'rejected')
+        .neq('status', 'pending_delete')
+        .order('timestamp', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lastEntryError && lastTodayEntry?.entry_type === 'clock_in') {
+        const { error: clockOutError } = await admin.from('time_entries').insert({
+          user_id: memberId,
+          organization_id: orgId,
+          entry_type: 'clock_out',
+          timestamp: now.toISOString(),
+          is_manual: false,
+          status: 'approved'
+        });
+
+        if (clockOutError) {
+          console.error('Error inserting auto clock_out on member removal:', clockOutError);
+        }
+      } else if (lastEntryError) {
+        console.error('Error checking open session on member removal:', lastEntryError);
+      }
+    } catch (e) {
+      console.error('Unexpected error handling auto clock_out on member removal:', e);
+    }
+
     // Delete the member's time entries first (before removing membership)
     const { error: timeEntriesDeleteError } = await admin
       .from('time_entries')

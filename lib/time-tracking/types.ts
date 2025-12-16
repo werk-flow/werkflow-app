@@ -81,10 +81,22 @@ export type GetTimeEntriesParams = {
  */
 export type ClockResult =
   | { success: true; entry: TimeEntry }
+  | {
+      success: false;
+      error: 'working_in_other_org';
+      otherOrgId: string;
+      otherOrgName: string;
+    }
   | { success: false; error: string };
 
 export type AddManualEntryResult =
   | { success: true; entries: TimeEntry[] }
+  | {
+      success: false;
+      error: 'working_in_other_org';
+      otherOrgId: string;
+      otherOrgName: string;
+    }
   | { success: false; error: string };
 
 export type ReviewEntryResult =

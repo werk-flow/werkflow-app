@@ -30,6 +30,8 @@ interface DayViewProps {
   isLoading: boolean;
   onRefresh: () => void;
   changeRequestMap?: EntryChangeRequestMap;
+  /** Member ID to highlight (briefly flash) when navigating from week view */
+  highlightMemberId?: string | null;
 }
 
 /**
@@ -44,7 +46,8 @@ export function DayView({
   currentUserRole,
   isLoading,
   onRefresh,
-  changeRequestMap = {}
+  changeRequestMap = {},
+  highlightMemberId
 }: DayViewProps) {
   // Group entries by user
   const entriesByUser = useMemo(() => {
@@ -102,6 +105,7 @@ export function DayView({
             members.map((member) => {
               const sessions = sessionsByUser[member.user_id] || [];
               const userEntries = entriesByUser[member.user_id] || [];
+              const isHighlighted = highlightMemberId === member.user_id;
               return (
                 <EmployeeTimelineRow
                   key={member.user_id}
@@ -109,6 +113,7 @@ export function DayView({
                   sessions={sessions}
                   entries={userEntries}
                   showNameOnly
+                  isHighlighted={isHighlighted}
                 />
               );
             })
@@ -116,9 +121,9 @@ export function DayView({
         </div>
       </div>
 
-      {/* Scrollable timeline area */}
+      {/* Scrollable timeline area - uses CSS grid to fill available width on wide screens */}
       <div className="flex-1 overflow-x-auto">
-        <div style={{ minWidth: TIMELINE_WIDTH }}>
+        <div className="min-w-[1440px] w-full">
           {/* Timeline header */}
           <TimelineHeader date={date} />
 
@@ -127,6 +132,7 @@ export function DayView({
             {members.map((member) => {
               const sessions = sessionsByUser[member.user_id] || [];
               const userEntries = entriesByUser[member.user_id] || [];
+              const isHighlighted = highlightMemberId === member.user_id;
               return (
                 <EmployeeTimelineRow
                   key={member.user_id}
@@ -139,6 +145,7 @@ export function DayView({
                   onRefresh={onRefresh}
                   showTimelineOnly
                   changeRequestMap={changeRequestMap}
+                  isHighlighted={isHighlighted}
                 />
               );
             })}

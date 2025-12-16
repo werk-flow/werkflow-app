@@ -7,7 +7,9 @@ import {
   Calendar as CalendarIcon,
   Clock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import {
   Dialog,
@@ -102,6 +104,12 @@ export function ManualEntryDialog({
   // Validation and feedback
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [otherOrgBanner, setOtherOrgBanner] = useState<null | {
+    title: string;
+    message: string;
+  }>(null);
+  const [isBannerExiting, setIsBannerExiting] = useState(false);
+  const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if user is admin or manager
   const isAdminOrManager =
@@ -140,6 +148,7 @@ export function ManualEntryDialog({
     if (open) {
       setError(null);
       setSuccessMessage(null);
+      setOtherOrgBanner(null);
       // Reset to default values
       setEntryMode('both');
       const resetIso =
@@ -166,6 +175,7 @@ export function ManualEntryDialog({
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setOtherOrgBanner(null);
 
     if (!activeOrgId) {
       setError('Keine Organisation ausgewählt.');
@@ -261,7 +271,35 @@ export function ManualEntryDialog({
             setOpen(false);
           }, 1500);
         } else {
-          setError(getErrorMessage(result.error));
+          if (
+            result.error === 'working_in_other_org' &&
+            'otherOrgName' in result &&
+            typeof result.otherOrgName === 'string'
+          ) {
+            const isSelf = targetUserId === currentUserId;
+            const title = isSelf
+              ? 'Bereits in anderer Organisation eingestempelt'
+              : 'Mitarbeiter ist bereits in anderer Organisation eingestempelt';
+            const message = isSelf
+              ? `Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+              : `Der ausgewählte Mitarbeiter ist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
+
+            setOtherOrgBanner({ title, message });
+            setError(message);
+
+            if (bannerTimerRef.current) {
+              clearTimeout(bannerTimerRef.current);
+            }
+            bannerTimerRef.current = setTimeout(() => {
+              setIsBannerExiting(true);
+              setTimeout(() => {
+                setIsBannerExiting(false);
+                setOtherOrgBanner(null);
+              }, 150);
+            }, 6000);
+          } else {
+            setError(getErrorMessage(result.error));
+          }
         }
       } catch (err) {
         console.error('Error submitting manual entry:', err);
@@ -353,192 +391,227 @@ export function ManualEntryDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="outline" size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Manuelle Eintragung
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Manuelle Eintragung</DialogTitle>
-          <DialogDescription>
-            Füge einen manuellen Zeiteintrag hinzu. Dieser muss ggf. genehmigt
-            werden.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Entry Type Selection */}
-          <div className="space-y-2">
-            <Label>Art des Eintrags</Label>
-            <Select
-              value={entryMode}
-              onValueChange={(value) => setEntryMode(value as EntryMode)}
+    <>
+      {otherOrgBanner && (
+        <div
+          className={`fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${
+            isBannerExiting ? 'animate-out' : 'animate-in'
+          }`}
+        >
+          <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50">
+            <AlertCircle className="size-5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{otherOrgBanner.title}</p>
+              <p className="mt-0.5 text-sm">{otherOrgBanner.message}</p>
+            </div>
+            <button
+              onClick={() => {
+                setIsBannerExiting(true);
+                setTimeout(() => {
+                  setIsBannerExiting(false);
+                  setOtherOrgBanner(null);
+                }, 150);
+              }}
+              className="shrink-0 rounded-md p-1 hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
+              aria-label="Banner schließen"
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="both">Einstempeln & Ausstempeln</SelectItem>
-                <SelectItem value="clock_in">Nur Einstempeln</SelectItem>
-                <SelectItem value="clock_out">Nur Ausstempeln</SelectItem>
-              </SelectContent>
-            </Select>
+              <X className="size-4" />
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* Employee Selection (admin/manager only) */}
-          {isAdminOrManager && (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Manuelle Eintragung
+            </Button>
+          )}
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manuelle Eintragung</DialogTitle>
+            <DialogDescription>
+              Füge einen manuellen Zeiteintrag hinzu. Dieser muss ggf. genehmigt
+              werden.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Entry Type Selection */}
             <div className="space-y-2">
-              <Label>Mitarbeiter</Label>
+              <Label>Art des Eintrags</Label>
               <Select
-                value={selectedUserId}
-                onValueChange={setSelectedUserId}
-                disabled={isLoadingMembers}
+                value={entryMode}
+                onValueChange={(value) => setEntryMode(value as EntryMode)}
               >
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingMembers ? 'Lädt...' : 'Mitarbeiter auswählen'
-                    }
-                  />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {members.map((member) => (
-                    <SelectItem key={member.user_id} value={member.user_id}>
-                      {member.first_name || member.last_name
-                        ? `${member.first_name || ''} ${member.last_name || ''}`
-                        : member.email}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="both">
+                    Einstempeln & Ausstempeln
+                  </SelectItem>
+                  <SelectItem value="clock_in">Nur Einstempeln</SelectItem>
+                  <SelectItem value="clock_out">Nur Ausstempeln</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          )}
 
-          {/* Date Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="date">Datum</Label>
-            <div className="relative flex-1">
-              <Popover open={showCalendar} onOpenChange={setShowCalendar}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Datum auswählen"
-                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground"
-                    onClick={() => setShowCalendar(true)}
-                  >
-                    <CalendarIcon className="h-4 w-4" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="p-3 w-[320px]" align="start">
-                  <SimpleCalendar
-                    selectedDate={dateIso ? new Date(dateIso) : null}
-                    visibleMonth={visibleMonth}
-                    onMonthChange={setVisibleMonth}
-                    onSelectDate={(selected) => {
-                      if (selected) {
-                        const iso = toISODate(selected);
-                        setDateIso(iso);
-                        setDateDisplay(formatDisplayDate(iso));
-                        setVisibleMonth(selected);
+            {/* Employee Selection (admin/manager only) */}
+            {isAdminOrManager && (
+              <div className="space-y-2">
+                <Label>Mitarbeiter</Label>
+                <Select
+                  value={selectedUserId}
+                  onValueChange={setSelectedUserId}
+                  disabled={isLoadingMembers}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isLoadingMembers ? 'Lädt...' : 'Mitarbeiter auswählen'
                       }
-                      setShowCalendar(false);
-                    }}
-                    onClear={() => {
-                      setDateIso('');
-                      setDateDisplay('');
-                      setShowCalendar(false);
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-              <Input
-                id="date"
-                ref={dateInputRef}
-                type="text"
-                inputMode="numeric"
-                value={dateDisplay}
-                placeholder="TT.MM.JJJJ"
-                onFocus={handleDateFocus}
-                onClick={handleDateClick}
-                onKeyDown={handleDateKeyDown}
-                onChange={handleDateInputChange}
-                className="pl-10 pr-3"
-              />
-            </div>
-          </div>
-
-          {/* Time Selection */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {(entryMode === 'clock_in' || entryMode === 'both') && (
-              <div className="space-y-2">
-                <Label htmlFor="clockInTime">Einstempeln</Label>
-                <div className="relative">
-                  <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                  <TimeInput
-                    id="clockInTime"
-                    value={clockInTime}
-                    onChange={setClockInTime}
-                    className="pl-10 pr-3"
-                  />
-                </div>
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.user_id} value={member.user_id}>
+                        {member.first_name || member.last_name
+                          ? `${member.first_name || ''} ${
+                              member.last_name || ''
+                            }`
+                          : member.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
-            {(entryMode === 'clock_out' || entryMode === 'both') && (
-              <div className="space-y-2">
-                <Label htmlFor="clockOutTime">Ausstempeln</Label>
-                <div className="relative">
-                  <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
-                  <TimeInput
-                    id="clockOutTime"
-                    value={clockOutTime}
-                    onChange={setClockOutTime}
-                    className="pl-10 pr-3"
-                  />
-                </div>
+
+            {/* Date Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="date">Datum</Label>
+              <div className="relative flex-1">
+                <Popover open={showCalendar} onOpenChange={setShowCalendar}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Datum auswählen"
+                      className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground"
+                      onClick={() => setShowCalendar(true)}
+                    >
+                      <CalendarIcon className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-3 w-[320px]" align="start">
+                    <SimpleCalendar
+                      selectedDate={dateIso ? new Date(dateIso) : null}
+                      visibleMonth={visibleMonth}
+                      onMonthChange={setVisibleMonth}
+                      onSelectDate={(selected) => {
+                        if (selected) {
+                          const iso = toISODate(selected);
+                          setDateIso(iso);
+                          setDateDisplay(formatDisplayDate(iso));
+                          setVisibleMonth(selected);
+                        }
+                        setShowCalendar(false);
+                      }}
+                      onClear={() => {
+                        setDateIso('');
+                        setDateDisplay('');
+                        setShowCalendar(false);
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <Input
+                  id="date"
+                  ref={dateInputRef}
+                  type="text"
+                  inputMode="numeric"
+                  value={dateDisplay}
+                  placeholder="TT.MM.JJJJ"
+                  onFocus={handleDateFocus}
+                  onClick={handleDateClick}
+                  onKeyDown={handleDateKeyDown}
+                  onChange={handleDateInputChange}
+                  className="pl-10 pr-3"
+                />
               </div>
-            )}
-          </div>
-
-          {/* Error/Success Messages */}
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
             </div>
-          )}
-          {successMessage && (
-            <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
-              {successMessage}
-            </div>
-          )}
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setOpen(false)}
-              disabled={isPending}
-            >
-              Abbrechen
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Speichern...
-                </>
-              ) : (
-                'Speichern'
+            {/* Time Selection */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {(entryMode === 'clock_in' || entryMode === 'both') && (
+                <div className="space-y-2">
+                  <Label htmlFor="clockInTime">Einstempeln</Label>
+                  <div className="relative">
+                    <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
+                    <TimeInput
+                      id="clockInTime"
+                      value={clockInTime}
+                      onChange={setClockInTime}
+                      className="pl-10 pr-3"
+                    />
+                  </div>
+                </div>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {(entryMode === 'clock_out' || entryMode === 'both') && (
+                <div className="space-y-2">
+                  <Label htmlFor="clockOutTime">Ausstempeln</Label>
+                  <div className="relative">
+                    <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
+                    <TimeInput
+                      id="clockOutTime"
+                      value={clockOutTime}
+                      onChange={setClockOutTime}
+                      className="pl-10 pr-3"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Error/Success Messages */}
+            {error && (
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+            {successMessage && (
+              <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
+                {successMessage}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Speichern...
+                  </>
+                ) : (
+                  'Speichern'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

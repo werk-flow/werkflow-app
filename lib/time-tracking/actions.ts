@@ -90,6 +90,84 @@ async function getUserEntries(
   return data || [];
 }
 
+type TodayBounds = {
+  start: Date;
+  end: Date;
+};
+
+function getTodayBounds(): TodayBounds {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    23,
+    59,
+    59,
+    999
+  );
+  return { start, end };
+}
+
+type OpenSessionOrg = { organizationId: string; organizationName: string };
+
+async function getOpenSessionOrgsForUserToday(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string
+): Promise<OpenSessionOrg[]> {
+  const { start, end } = getTodayBounds();
+
+  const { data: rows, error } = await admin
+    .from('time_entries')
+    .select('organization_id, entry_type, timestamp, status')
+    .eq('user_id', userId)
+    .gte('timestamp', start.toISOString())
+    .lte('timestamp', end.toISOString())
+    .neq('status', 'rejected')
+    .neq('status', 'pending_delete')
+    .order('timestamp', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching user entries for open-session check:', error);
+    return [];
+  }
+
+  const seenOrgs = new Set<string>();
+  const openOrgIds: string[] = [];
+
+  for (const row of rows || []) {
+    const orgId = row.organization_id as string;
+    if (!orgId || seenOrgs.has(orgId)) continue;
+    seenOrgs.add(orgId);
+
+    if (row.entry_type === 'clock_in') {
+      openOrgIds.push(orgId);
+    }
+  }
+
+  if (openOrgIds.length === 0) return [];
+
+  const { data: orgs, error: orgErr } = await admin
+    .from('organizations')
+    .select('id, name')
+    .in('id', openOrgIds);
+
+  if (orgErr) {
+    console.error('Error fetching org names for open-session check:', orgErr);
+  }
+
+  const nameById = new Map<string, string>();
+  for (const o of orgs || []) {
+    nameById.set(o.id, o.name);
+  }
+
+  return openOrgIds.map((id) => ({
+    organizationId: id,
+    organizationName: nameById.get(id) || 'Unbekannte Organisation'
+  }));
+}
+
 // ============================================
 // Real-Time Clock In/Out Actions
 // ============================================
@@ -120,6 +198,18 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
     }
 
     const admin = createSupabaseAdminClient();
+
+    // Cross-org guard: user may not be "currently working" in another org
+    const openOrgs = await getOpenSessionOrgsForUserToday(admin, user.id);
+    const openOther = openOrgs.find((o) => o.organizationId !== orgId);
+    if (openOther) {
+      return {
+        success: false,
+        error: 'working_in_other_org',
+        otherOrgId: openOther.organizationId,
+        otherOrgName: openOther.organizationName
+      };
+    }
 
     // Get user's entries
     const entries = await getUserEntries(admin, user.id, orgId);
@@ -218,6 +308,64 @@ export async function clockOut(organizationId?: string): Promise<ClockResult> {
   }
 }
 
+/**
+ * Best-effort: clock out the current user in any org where they are currently working today.
+ * Used before sign-out so users don't get "stuck clocked in".
+ */
+export async function clockOutBeforeSignOut(): Promise<
+  | { success: true; clockedOutOrgIds: string[] }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: true, clockedOutOrgIds: [] };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const openOrgs = await getOpenSessionOrgsForUserToday(admin, user.id);
+
+    if (openOrgs.length === 0) {
+      return { success: true, clockedOutOrgIds: [] };
+    }
+
+    const nowIso = new Date().toISOString();
+    const clockedOutOrgIds: string[] = [];
+
+    for (const org of openOrgs) {
+      const { error: insertError } = await admin.from('time_entries').insert({
+        user_id: user.id,
+        organization_id: org.organizationId,
+        entry_type: 'clock_out',
+        timestamp: nowIso,
+        is_manual: false,
+        status: 'approved'
+      });
+
+      if (insertError) {
+        console.error(
+          'Error inserting clock_out before sign-out:',
+          insertError,
+          { orgId: org.organizationId }
+        );
+        // Best-effort: continue trying other orgs
+        continue;
+      }
+
+      clockedOutOrgIds.push(org.organizationId);
+    }
+
+    return { success: true, clockedOutOrgIds };
+  } catch (error) {
+    console.error('Unexpected error in clockOutBeforeSignOut:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
 // ============================================
 // Manual Entry Actions
 // ============================================
@@ -286,6 +434,43 @@ export async function addManualEntry(
 
     // Determine approval status
     const status = determineApprovalStatus(callerRole, targetUserId, user.id);
+
+    // Cross-org guard: only run if these entries would result in an "open session" today
+    const simulatedEntries: TimeEntry[] = entries.map((e, idx) => ({
+      id: `simulated-${idx}`,
+      userId: targetUserId,
+      organizationId,
+      entryType: e.entryType,
+      timestamp: e.timestamp,
+      isManual: true,
+      status,
+      reviewedBy: null,
+      reviewedAt: null,
+      createdAt: e.timestamp,
+      updatedAt: e.timestamp
+    }));
+
+    const wouldBeClockedIn = hasOpenSession([
+      ...timeEntries,
+      ...simulatedEntries
+    ]);
+    if (wouldBeClockedIn) {
+      const openOrgs = await getOpenSessionOrgsForUserToday(
+        admin,
+        targetUserId
+      );
+      const openOther = openOrgs.find(
+        (o) => o.organizationId !== organizationId
+      );
+      if (openOther) {
+        return {
+          success: false,
+          error: 'working_in_other_org',
+          otherOrgId: openOther.organizationId,
+          otherOrgName: openOther.organizationName
+        };
+      }
+    }
 
     // Insert entries
     const insertData = entries.map((entry) => ({

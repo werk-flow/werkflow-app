@@ -326,17 +326,10 @@ export function FullCalendarView({
       <style jsx global>{`
         /* ===== BASE VARIABLES ===== */
         .fullcalendar-wrapper {
-          border-radius: 1rem;
-          background: var(--card);
-          border: 1px solid color-mix(in srgb, var(--border), transparent 20%);
-          box-shadow: 0 18px 40px rgb(15 23 42 / 0.18);
+          background: transparent;
           --fc-border-color: var(--border);
-          --fc-today-bg-color: color-mix(
-            in srgb,
-            var(--brand-purple),
-            transparent 92%
-          );
-          --fc-page-bg-color: var(--background);
+          --fc-today-bg-color: rgba(123, 44, 191, 0.08);
+          --fc-page-bg-color: transparent;
           --fc-neutral-bg-color: color-mix(
             in srgb,
             var(--muted),
@@ -348,8 +341,8 @@ export function FullCalendarView({
         .fullcalendar-wrapper .fc {
           font-family: inherit;
           background: transparent;
-          border-radius: 0.75rem;
           border: none;
+          border-radius: 0.75rem;
           overflow: hidden;
         }
 
@@ -359,6 +352,24 @@ export function FullCalendarView({
           border-spacing: 0;
         }
 
+        /* Ensure view containers use transparent background */
+        .fullcalendar-wrapper .fc-view-harness,
+        .fullcalendar-wrapper .fc-view,
+        .fullcalendar-wrapper .fc-scrollgrid {
+          background: transparent;
+        }
+
+        /* Scrollgrid border and radius */
+        .fullcalendar-wrapper .fc-scrollgrid {
+          border-radius: 0.75rem;
+          border: 1px solid color-mix(in srgb, var(--border), transparent 40%);
+          overflow: hidden;
+        }
+
+        .fullcalendar-wrapper .fc-scrollgrid-section > td {
+          border: none;
+        }
+
         /* ===== HIDE DEFAULT TOOLBAR ===== */
         .fullcalendar-wrapper .fc-toolbar {
           display: none !important;
@@ -366,7 +377,7 @@ export function FullCalendarView({
 
         /* ===== HEADER STYLING ===== */
         .fullcalendar-wrapper .fc-col-header {
-          background: color-mix(in srgb, var(--muted), transparent 50%);
+          background: transparent;
         }
 
         .fullcalendar-wrapper .fc-col-header-cell {
@@ -374,6 +385,7 @@ export function FullCalendarView({
           font-weight: 600;
           font-size: 0.875rem;
           border-bottom: 1px solid var(--border);
+          background: transparent;
         }
 
         .fullcalendar-wrapper .fc-col-header-cell-cushion {
@@ -383,7 +395,7 @@ export function FullCalendarView({
 
         /* ===== TIME GRID (Day & Week Views) ===== */
         .fullcalendar-wrapper .fc-timegrid {
-          background: var(--card);
+          background: transparent;
         }
 
         .fullcalendar-wrapper .fc-timegrid-slot {
@@ -391,7 +403,7 @@ export function FullCalendarView({
           border-top: 1px solid
             color-mix(in srgb, var(--border), transparent 70%) !important;
           border-bottom: none !important;
-          background-color: color-mix(in srgb, var(--muted), transparent 97%);
+          background-color: transparent;
         }
 
         .fullcalendar-wrapper .fc-timegrid-slot-minor {
@@ -418,7 +430,7 @@ export function FullCalendarView({
 
         .fullcalendar-wrapper .fc-timegrid-axis {
           border-color: var(--border);
-          background: color-mix(in srgb, var(--muted), transparent 70%);
+          background: transparent;
         }
 
         .fullcalendar-wrapper .fc-timegrid-now-indicator-line {
@@ -463,24 +475,31 @@ export function FullCalendarView({
 
         /* ===== DAY GRID (Month View) ===== */
         .fullcalendar-wrapper .fc-daygrid {
-          background: var(--card);
+          background: transparent;
         }
 
         .fullcalendar-wrapper .fc-daygrid-body {
-          border-top: 1px solid var(--border);
+          border-top: none;
         }
 
+        /* Day cells - match weekly view styling */
         .fullcalendar-wrapper .fc-daygrid-day {
           border: 1px solid color-mix(in srgb, var(--border), transparent 40%) !important;
+          background: var(--card);
+          transition: background-color 0.15s, border-color 0.15s;
+          cursor: pointer;
+        }
+
+        .fullcalendar-wrapper .fc-daygrid-day:hover {
+          background: rgba(123, 44, 191, 0.06) !important;
+          border-color: rgba(123, 44, 191, 0.3) !important;
         }
 
         /* Fixed height for day cells */
         .fullcalendar-wrapper .fc-daygrid-day-frame {
           height: 120px; /* Fixed height */
           padding: 0.25rem;
-          box-shadow: inset 0 0 0 1px
-            color-mix(in srgb, var(--border), transparent 85%);
-          background-color: color-mix(in srgb, var(--muted), transparent 95%);
+          background-color: transparent;
           overflow: hidden;
         }
 
@@ -497,8 +516,15 @@ export function FullCalendarView({
           text-decoration: none;
         }
 
+        /* Today cell styling - matches weekly view */
         .fullcalendar-wrapper .fc-daygrid-day.fc-day-today {
-          background: color-mix(in srgb, var(--brand-purple), transparent 90%);
+          background: rgba(123, 44, 191, 0.08) !important;
+          border-color: rgba(123, 44, 191, 0.4) !important;
+        }
+
+        .fullcalendar-wrapper .fc-daygrid-day.fc-day-today:hover {
+          background: rgba(123, 44, 191, 0.12) !important;
+          border-color: rgba(123, 44, 191, 0.5) !important;
         }
 
         .fullcalendar-wrapper
@@ -515,11 +541,20 @@ export function FullCalendarView({
           padding: 0;
         }
 
+        /* Other month days (grayed out) */
         .fullcalendar-wrapper .fc-daygrid-day.fc-day-other {
           background: color-mix(
             in srgb,
             var(--muted),
-            transparent 88%
+            transparent 92%
+          ) !important;
+        }
+
+        .fullcalendar-wrapper .fc-daygrid-day.fc-day-other:hover {
+          background: color-mix(
+            in srgb,
+            var(--muted),
+            transparent 85%
           ) !important;
         }
 
@@ -628,11 +663,31 @@ export function FullCalendarView({
 
         /* ===== DARK MODE ===== */
         .dark .fullcalendar-wrapper .fc {
+          background: transparent;
+        }
+
+        .dark .fullcalendar-wrapper .fc-daygrid-day {
           background: var(--card);
         }
 
+        .dark .fullcalendar-wrapper .fc-daygrid-day:hover {
+          background: rgba(123, 44, 191, 0.08) !important;
+        }
+
         .dark .fullcalendar-wrapper .fc-daygrid-day.fc-day-other {
-          background: color-mix(in srgb, var(--muted), transparent 85%);
+          background: color-mix(
+            in srgb,
+            var(--muted),
+            transparent 90%
+          ) !important;
+        }
+
+        .dark .fullcalendar-wrapper .fc-daygrid-day.fc-day-other:hover {
+          background: color-mix(
+            in srgb,
+            var(--muted),
+            transparent 80%
+          ) !important;
         }
       `}</style>
 
