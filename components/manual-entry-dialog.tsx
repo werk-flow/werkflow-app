@@ -394,7 +394,7 @@ export function ManualEntryDialog({
     <>
       {otherOrgBanner && (
         <div
-          className={`fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${
             isBannerExiting ? 'animate-out' : 'animate-in'
           }`}
         >
