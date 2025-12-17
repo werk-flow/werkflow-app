@@ -54,10 +54,7 @@ function formatDateDisplay(date: Date, view: CalendarView): string {
 
   if (view === 'week') {
     // Get start and end of week
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    const startOfWeek = new Date(date);
-    startOfWeek.setDate(diff);
+    const startOfWeek = getStartOfWeek(date);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
@@ -80,6 +77,15 @@ function formatDateDisplay(date: Date, view: CalendarView): string {
   return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+function getStartOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export function CalendarHeader({
   currentDate,
   view,
@@ -89,8 +95,18 @@ export function CalendarHeader({
   onToday,
   onRefresh
 }: CalendarHeaderProps) {
-  const isToday =
-    currentDate.toDateString() === new Date().toDateString() && view === 'day';
+  const now = new Date();
+  const isCurrentPeriod =
+    (view === 'day' && currentDate.toDateString() === now.toDateString()) ||
+    (view === 'week' &&
+      getStartOfWeek(currentDate).toDateString() ===
+        getStartOfWeek(now).toDateString()) ||
+    (view === 'month' &&
+      currentDate.getFullYear() === now.getFullYear() &&
+      currentDate.getMonth() === now.getMonth());
+
+  const todayLabel =
+    view === 'day' ? 'Heute' : view === 'week' ? 'Diese Woche' : 'Dieser Monat';
 
   return (
     <header className="flex flex-col gap-3 border-b bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4 sticky top-0 z-10">
@@ -113,28 +129,28 @@ export function CalendarHeader({
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          {!isToday && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onToday}
-              className="ml-2"
-            >
-              Heute
-            </Button>
-          )}
           <Button
             variant="ghost"
             size="icon-sm"
             onClick={onRefresh}
             disabled={isLoading}
             title="Aktualisieren"
-            className="ml-1"
+            className="ml-2"
           >
             <RefreshCw
               className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
             />
           </Button>
+          {!isCurrentPeriod && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToday}
+              className="ml-2"
+            >
+              {todayLabel}
+            </Button>
+          )}
         </div>
       </div>
 

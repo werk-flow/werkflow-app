@@ -13,6 +13,21 @@ import type {
 import type { OrgRole } from '@/lib/members/actions';
 import type { CalendarView } from '../calendar-container';
 
+// CSS for day cell hover behavior - only highlights when not hovering on entry buttons
+const dayCellStyles = `
+  .week-view-day-cell {
+    transition: background-color 0.15s, border-color 0.15s;
+  }
+  .week-view-day-cell:hover:not(:has(.week-view-entry:hover)) {
+    background-color: rgba(123, 44, 191, 0.06) !important;
+    border-color: rgba(123, 44, 191, 0.3) !important;
+  }
+  .week-view-day-cell.is-today:hover:not(:has(.week-view-entry:hover)) {
+    background-color: rgba(123, 44, 191, 0.12) !important;
+    border-color: rgba(123, 44, 191, 0.5) !important;
+  }
+`;
+
 interface CalendarMember {
   user_id: string;
   first_name: string | null;
@@ -108,6 +123,7 @@ export function WeekView({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <style dangerouslySetInnerHTML={{ __html: dayCellStyles }} />
       <div className="flex-1 overflow-auto">
         <div className="min-w-[1150px] p-4">
           {/* Header Row */}
@@ -185,15 +201,13 @@ export function WeekView({
                       sessions.length - visibleSessions.length;
 
                     return (
-                      <button
+                      <div
                         key={i}
                         className={cn(
-                          'min-h-[110px] p-1.5 bg-card border border-border/60 rounded-md transition-colors text-left cursor-pointer',
-                          'hover:bg-[rgba(123,44,191,0.06)] hover:border-[rgba(123,44,191,0.3)]',
+                          'week-view-day-cell min-h-[110px] p-1.5 bg-card border border-border/60 rounded-md text-left cursor-pointer',
                           isToday &&
-                            'bg-[rgba(123,44,191,0.08)] border-[rgba(123,44,191,0.4)]'
+                            'is-today bg-[rgba(123,44,191,0.08)] border-[rgba(123,44,191,0.4)]'
                         )}
-                        type="button"
                         onClick={() => {
                           // Use onMemberDayClick if available (highlights specific employee row)
                           if (onMemberDayClick) {
@@ -252,12 +266,12 @@ export function WeekView({
                                     onSessionClick?.(session);
                                   }}
                                   className={cn(
-                                    'text-xs p-1 rounded border flex items-center gap-1 shadow-sm w-full text-left transition-opacity hover:opacity-80',
+                                    'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                     isPendingDelete
-                                      ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
                                       : isPending
-                                      ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                                      : 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-400'
+                                      ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                                      : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
                                   )}
                                   style={hatchedStyle}
                                 >
@@ -298,12 +312,12 @@ export function WeekView({
                                     onSessionClick?.(session);
                                   }}
                                   className={cn(
-                                    'text-xs p-1 rounded border flex items-center gap-1 shadow-sm w-full text-left transition-opacity hover:opacity-80',
+                                    'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                     isPendingDelete
-                                      ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                      ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
                                       : isPending
-                                      ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-                                      : 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-400'
+                                      ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                                      : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
                                   )}
                                   style={hatchedStyle}
                                 >
@@ -350,14 +364,14 @@ export function WeekView({
                                   onSessionClick?.(session);
                                 }}
                                 className={cn(
-                                  'text-xs p-1.5 rounded border flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity hover:opacity-80',
+                                  'week-view-entry text-xs p-1.5 rounded-md flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
                                   isPendingDelete
-                                    ? 'bg-yellow-200/80 border-yellow-500/60 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
+                                    ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
                                     : isPending
-                                    ? 'bg-yellow-400/80 border-yellow-500/60 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                                    ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
                                     : isOpen
-                                    ? 'bg-green-500/10 border-green-500/60 text-foreground animate-pulse'
-                                    : 'bg-green-500/80 border-green-500/60 text-white'
+                                    ? 'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse'
+                                    : 'bg-green-500/80 text-white dark:bg-green-600/80'
                                 )}
                                 style={hatchedStyle}
                               >
@@ -376,12 +390,12 @@ export function WeekView({
                             );
                           })}
                           {extraSessions > 0 && (
-                            <span className="text-[11px] font-medium text-[rgb(123,44,191)]">
+                            <span className="text-[11px] font-medium text-[rgb(123,44,191)] cursor-pointer">
                               +{extraSessions} mehr
                             </span>
                           )}
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
