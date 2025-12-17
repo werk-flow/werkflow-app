@@ -79,7 +79,9 @@ export function QuickStats({
         <Clock className="h-4 w-4 text-green-500" />
         <span className="text-sm">
           <span className="font-medium">{activeWorkingCount}</span>
-          <span className="text-muted-foreground ml-1">arbeiten gerade</span>
+          <span className="text-muted-foreground ml-1">
+            {activeWorkingCount === 1 ? 'arbeitet gerade' : 'arbeiten gerade'}
+          </span>
         </span>
       </div>
 

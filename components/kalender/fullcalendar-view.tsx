@@ -98,15 +98,15 @@ export function FullCalendarView({
           start: orphanTime,
           end: orphanEnd,
           backgroundColor: isPendingDelete
-            ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+            ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
             : isPending
-            ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
-            : 'rgb(239 68 68 / 0.15)', // red-ish for orphan
+            ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
+            : 'rgb(239 68 68 / 0.2)', // red-500/20 - matches day view orphan style
           borderColor: isPendingDelete
             ? 'rgba(202, 138, 4, 0.5)'
             : isPending
             ? 'rgba(202, 138, 4, 0.5)'
-            : 'rgba(220, 38, 38, 0.4)',
+            : 'rgba(239, 68, 68, 0.4)', // red-500/40 - matches day view orphan border
           textColor: 'inherit',
           extendedProps: {
             session,
@@ -138,15 +138,15 @@ export function FullCalendarView({
           start: orphanTime,
           end: orphanEnd,
           backgroundColor: isPendingDelete
-            ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+            ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
             : isPending
-            ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
-            : 'rgb(239 68 68 / 0.15)', // red-ish for orphan
+            ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
+            : 'rgb(239 68 68 / 0.2)', // red-500/20 - matches day view orphan style
           borderColor: isPendingDelete
             ? 'rgba(202, 138, 4, 0.5)'
             : isPending
             ? 'rgba(202, 138, 4, 0.5)'
-            : 'rgba(220, 38, 38, 0.4)',
+            : 'rgba(239, 68, 68, 0.4)', // red-500/40 - matches day view orphan border
           textColor: 'inherit',
           extendedProps: {
             session,
@@ -193,17 +193,17 @@ export function FullCalendarView({
         start,
         end,
         backgroundColor: isPendingDelete
-          ? 'rgb(254 240 138 / 0.8)' // hatched yellow bg
+          ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
           : isPending
-          ? 'rgb(250 204 21 / 0.8)' // solid yellow for new pending
+          ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
           : isOpen
-          ? 'rgb(34 197 94 / 0.1)' // green bg
-          : 'rgb(34 197 94 / 0.8)', // solid green bg
+          ? 'rgb(34 197 94 / 0.6)' // green-500/60 - pulsing green for open
+          : 'rgb(34 197 94 / 0.8)', // green-500/80 - solid green bg
         borderColor: isPendingDelete
           ? 'rgba(202, 138, 4, 0.5)'
           : isPending
           ? 'rgba(202, 138, 4, 0.4)'
-          : 'rgba(22, 163, 74, 0.35)',
+          : 'transparent',
         textColor: isPending || isPendingDelete ? '#713f12' : '#fff',
         extendedProps: {
           session,
@@ -217,6 +217,7 @@ export function FullCalendarView({
         },
         classNames: [
           'fc-event-custom',
+          isPending && !isPendingDelete ? 'fc-event-pending' : '',
           isPendingDelete ? 'fc-event-pending-delete' : '',
           isOpen ? 'fc-event-open' : ''
         ].filter(Boolean)
@@ -250,6 +251,120 @@ export function FullCalendarView({
     });
 
     return () => window.cancelAnimationFrame(frame);
+  }, [view]);
+
+  // Handle column hover highlighting for timeGrid week view via JavaScript
+  // FullCalendar overlays slots table on columns table, so CSS :hover doesn't work reliably
+  // Note: This is disabled for day view as there's no navigation action in single day view
+  useEffect(() => {
+    if (view !== 'week') return;
+
+    const wrapper = document.querySelector('.fullcalendar-wrapper');
+    if (!wrapper) return;
+
+    let hoveredDay: string | null = null;
+
+    const clearHover = () => {
+      if (hoveredDay) {
+        // Remove highlight from header
+        const header = wrapper.querySelector(
+          `.fc-col-header-cell.fc-day-${hoveredDay}`
+        );
+        header?.classList.remove('column-hovered');
+
+        // Remove highlight from column frame
+        const colFrame = wrapper.querySelector(
+          `.fc-timegrid-col.fc-day-${hoveredDay} .fc-timegrid-col-frame`
+        );
+        colFrame?.classList.remove('column-hovered');
+
+        hoveredDay = null;
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      // Check if hovering over an event - if so, clear hover
+      if (target.closest('.fc-event')) {
+        clearHover();
+        return;
+      }
+
+      // Find the column we're in by looking for the timegrid-col parent
+      // or by calculating position based on slot lane
+      const slotLane = target.closest('.fc-timegrid-slot-lane');
+      const colElement = target.closest('.fc-timegrid-col');
+
+      let dayClass: string | null = null;
+
+      if (colElement) {
+        // Direct column hover (when clicking on events area)
+        dayClass =
+          Array.from(colElement.classList).find((c) =>
+            c.match(/^fc-day-(mon|tue|wed|thu|fri|sat|sun|today)$/)
+          ) || null;
+      } else if (slotLane) {
+        // Slot lane hover - calculate which column based on X position
+        const cols = wrapper.querySelectorAll('.fc-timegrid-col');
+        const mouseX = e.clientX;
+
+        for (const col of cols) {
+          const rect = col.getBoundingClientRect();
+          if (mouseX >= rect.left && mouseX <= rect.right) {
+            dayClass =
+              Array.from(col.classList).find((c) =>
+                c.match(/^fc-day-(mon|tue|wed|thu|fri|sat|sun|today)$/)
+              ) || null;
+            break;
+          }
+        }
+      }
+
+      if (dayClass) {
+        // Extract the day part (e.g., "mon" from "fc-day-mon")
+        const day = dayClass.replace('fc-day-', '');
+
+        if (day !== hoveredDay) {
+          clearHover();
+          hoveredDay = day;
+
+          // Add highlight to header
+          const header = wrapper.querySelector(
+            `.fc-col-header-cell.fc-day-${day}`
+          );
+          header?.classList.add('column-hovered');
+
+          // Add highlight to column frame
+          const colFrame = wrapper.querySelector(
+            `.fc-timegrid-col.fc-day-${day} .fc-timegrid-col-frame`
+          );
+          colFrame?.classList.add('column-hovered');
+        }
+      } else {
+        clearHover();
+      }
+    };
+
+    const handleMouseLeave = () => {
+      clearHover();
+    };
+
+    const timegridBody = wrapper.querySelector('.fc-timegrid-body');
+    timegridBody?.addEventListener(
+      'mousemove',
+      handleMouseMove as EventListener
+    );
+    timegridBody?.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      timegridBody?.removeEventListener(
+        'mousemove',
+        handleMouseMove as EventListener
+      );
+      timegridBody?.removeEventListener('mouseleave', handleMouseLeave);
+      clearHover();
+    };
   }, [view]);
 
   const handleEventClick = (info: EventClickArg) => {
@@ -386,11 +501,34 @@ export function FullCalendarView({
           font-size: 0.875rem;
           border-bottom: 1px solid var(--border);
           background: transparent;
+          transition: background-color 0.15s;
         }
 
         .fullcalendar-wrapper .fc-col-header-cell-cushion {
           color: var(--foreground);
           text-decoration: none;
+        }
+
+        /* Time grid (day/week) header cells are clickable */
+        .fullcalendar-wrapper .fc-timegrid .fc-col-header-cell {
+          cursor: pointer;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid .fc-col-header-cell:hover {
+          background: var(--accent);
+        }
+
+        .fullcalendar-wrapper .fc-timegrid .fc-col-header-cell-cushion {
+          cursor: pointer;
+        }
+
+        /* Day grid (month) header cells are NOT clickable - just labels */
+        .fullcalendar-wrapper .fc-daygrid .fc-col-header-cell {
+          cursor: default;
+        }
+
+        .fullcalendar-wrapper .fc-daygrid .fc-col-header-cell-cushion {
+          cursor: default;
         }
 
         /* ===== TIME GRID (Day & Week Views) ===== */
@@ -426,6 +564,198 @@ export function FullCalendarView({
 
         .fullcalendar-wrapper .fc-timegrid-col {
           border-left: none;
+          cursor: pointer;
+        }
+
+        /* Column frame - this is the div that actually needs the background */
+        .fullcalendar-wrapper .fc-timegrid-col-frame {
+          transition: background-color 0.15s;
+        }
+
+        /* Timegrid header cells transition */
+        .fullcalendar-wrapper .fc-timegrid .fc-col-header-cell {
+          transition: background-color 0.15s;
+        }
+
+        /* Make the slot lanes receive hover events */
+        .fullcalendar-wrapper .fc-timegrid-slot-lane {
+          cursor: pointer;
+        }
+
+        /* === Column highlighting via JavaScript-added class === */
+
+        /* Column frame highlight when JS adds .column-hovered class */
+        .fullcalendar-wrapper .fc-timegrid-col-frame.column-hovered {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Header highlight when JS adds .column-hovered class */
+        /* Note: Must override "today header base" rule below, so we scope to views for higher specificity */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view
+          .fc-col-header-cell.column-hovered,
+        .fullcalendar-wrapper
+          .fc-timeGridDay-view
+          .fc-col-header-cell.column-hovered {
+          background-color: var(--accent) !important;
+        }
+
+        /* Today column base */
+        .fullcalendar-wrapper
+          .fc-timegrid-col.fc-day-today
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.06) !important;
+        }
+
+        /* Today header base (week + day views) */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view
+          .fc-day-today.fc-col-header-cell,
+        .fullcalendar-wrapper
+          .fc-timeGridDay-view
+          .fc-day-today.fc-col-header-cell {
+          background-color: rgba(123, 44, 191, 0.06) !important;
+        }
+
+        /* Week view: hovering a column sets .column-hovered on the header via JS */
+        /* This must come AFTER the "today header base" rule to override it. */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view
+          .fc-col-header-cell.column-hovered {
+          background-color: var(--accent) !important;
+        }
+
+        /* Today column hover (via JS class) */
+        .fullcalendar-wrapper
+          .fc-timegrid-col.fc-day-today
+          .fc-timegrid-col-frame.column-hovered {
+          background-color: rgba(123, 44, 191, 0.1) !important;
+        }
+
+        /* === DAY VIEW: Disable hover/click interactions on column/header === */
+        /* In day view, there's only one day shown and no navigation action */
+        .fullcalendar-wrapper .fc-timeGridDay-view .fc-timegrid-col {
+          cursor: default;
+        }
+
+        .fullcalendar-wrapper .fc-timeGridDay-view .fc-timegrid-slot-lane {
+          cursor: default;
+        }
+
+        .fullcalendar-wrapper .fc-timeGridDay-view .fc-col-header-cell {
+          cursor: default;
+        }
+
+        .fullcalendar-wrapper .fc-timeGridDay-view .fc-col-header-cell-cushion {
+          cursor: default;
+        }
+
+        /* No hover highlight on header in day view */
+        .fullcalendar-wrapper
+          .fc-timeGridDay-view
+          .fc-col-header-cell:hover:not(.fc-day-today) {
+          background-color: transparent !important;
+        }
+
+        /* Header hover -> column highlight (CSS :has() works for header hover) */
+        /* Only applies to week view - day view has these disabled below */
+        /* Monday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-mon.fc-col-header-cell:hover)
+          .fc-day-mon.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-mon.fc-col-header-cell:hover)
+          .fc-day-mon.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Tuesday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-tue.fc-col-header-cell:hover)
+          .fc-day-tue.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-tue.fc-col-header-cell:hover)
+          .fc-day-tue.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Wednesday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-wed.fc-col-header-cell:hover)
+          .fc-day-wed.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-wed.fc-col-header-cell:hover)
+          .fc-day-wed.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Thursday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-thu.fc-col-header-cell:hover)
+          .fc-day-thu.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-thu.fc-col-header-cell:hover)
+          .fc-day-thu.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Friday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-fri.fc-col-header-cell:hover)
+          .fc-day-fri.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-fri.fc-col-header-cell:hover)
+          .fc-day-fri.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Saturday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-sat.fc-col-header-cell:hover)
+          .fc-day-sat.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-sat.fc-col-header-cell:hover)
+          .fc-day-sat.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Sunday */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-sun.fc-col-header-cell:hover)
+          .fc-day-sun.fc-col-header-cell {
+          background-color: var(--accent) !important;
+        }
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-sun.fc-col-header-cell:hover)
+          .fc-day-sun.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.04) !important;
+        }
+
+        /* Today header hover -> column highlight (week view only) */
+        .fullcalendar-wrapper
+          .fc-timeGridWeek-view:has(.fc-day-today.fc-col-header-cell:hover)
+          .fc-day-today.fc-timegrid-col
+          .fc-timegrid-col-frame {
+          background-color: rgba(123, 44, 191, 0.1) !important;
         }
 
         .fullcalendar-wrapper .fc-timegrid-axis {
@@ -449,9 +779,31 @@ export function FullCalendarView({
           border-radius: 0.375rem;
           font-size: 0.75rem;
           padding: 0.125rem 0.25rem;
-          border: 1px solid color-mix(in srgb, var(--border), transparent 30%);
+          /* Use JS-set borderColor instead of CSS override */
           box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
           min-height: 22px !important; /* Ensure minimum height for short events */
+        }
+
+        /* Force timegrid event backgrounds based on class */
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-custom {
+          background-color: rgb(34 197 94 / 0.8) !important;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-pending {
+          background-color: rgb(250 204 21 / 0.8) !important;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-orphan {
+          background-color: rgb(239 68 68 / 0.2) !important;
+          border: 1px solid rgba(239, 68, 68, 0.4) !important;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-pending-delete {
+          background-color: rgb(254 240 138 / 0.8) !important;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-open {
+          background-color: rgb(34 197 94 / 0.6) !important;
         }
 
         /* Override FullCalendar's default short event handling */
@@ -490,7 +842,11 @@ export function FullCalendarView({
           cursor: pointer;
         }
 
-        .fullcalendar-wrapper .fc-daygrid-day:hover {
+        /* Only highlight day cell when hovering on empty space, not on events or "mehr" link */
+        .fullcalendar-wrapper
+          .fc-daygrid-day:hover:not(
+            :has(.fc-event:hover, .fc-daygrid-more-link:hover)
+          ) {
           background: rgba(123, 44, 191, 0.06) !important;
           border-color: rgba(123, 44, 191, 0.3) !important;
         }
@@ -522,7 +878,11 @@ export function FullCalendarView({
           border-color: rgba(123, 44, 191, 0.4) !important;
         }
 
-        .fullcalendar-wrapper .fc-daygrid-day.fc-day-today:hover {
+        /* Only highlight today cell when hovering on empty space */
+        .fullcalendar-wrapper
+          .fc-daygrid-day.fc-day-today:hover:not(
+            :has(.fc-event:hover, .fc-daygrid-more-link:hover)
+          ) {
           background: rgba(123, 44, 191, 0.12) !important;
           border-color: rgba(123, 44, 191, 0.5) !important;
         }
@@ -550,7 +910,11 @@ export function FullCalendarView({
           ) !important;
         }
 
-        .fullcalendar-wrapper .fc-daygrid-day.fc-day-other:hover {
+        /* Only highlight other month day cell when hovering on empty space */
+        .fullcalendar-wrapper
+          .fc-daygrid-day.fc-day-other:hover:not(
+            :has(.fc-event:hover, .fc-daygrid-more-link:hover)
+          ) {
           background: color-mix(
             in srgb,
             var(--muted),
@@ -572,11 +936,58 @@ export function FullCalendarView({
 
         .fullcalendar-wrapper .fc-daygrid-event {
           margin: 1px 2px;
-          padding: 0 0.4rem;
-          border-radius: 0.25rem;
+          padding: 0.125rem 0.4rem;
+          border-radius: 0.375rem;
           font-size: 0.7rem;
-          border: 1px solid color-mix(in srgb, var(--border), transparent 60%);
-          background: color-mix(in srgb, var(--card), transparent 10%);
+          border: none !important;
+          cursor: pointer;
+        }
+
+        /* Default green background for approved events in daygrid */
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-custom {
+          background-color: rgb(34 197 94 / 0.8) !important;
+        }
+
+        /* Pending events - yellow background */
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-pending {
+          background-color: rgb(250 204 21 / 0.8) !important;
+        }
+
+        /* Orphan events - red background */
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-orphan {
+          background-color: rgb(239 68 68 / 0.2) !important;
+          border: 1px solid rgba(239, 68, 68, 0.4) !important;
+        }
+
+        /* Pending delete events - lighter yellow background with hatching */
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-pending-delete {
+          background-color: rgb(254 240 138 / 0.8) !important;
+        }
+
+        /* Open/pulsing events - lighter green */
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-open {
+          background-color: rgb(34 197 94 / 0.6) !important;
+        }
+
+        /* Ensure daygrid event harness doesn't override event styling */
+        .fullcalendar-wrapper .fc-daygrid-event-harness {
+          margin: 0;
+        }
+
+        /* Daygrid event hover effect - matches day/week view */
+        .fullcalendar-wrapper .fc-daygrid-event:hover {
+          opacity: 0.85;
+          transform: scale(1.02);
+        }
+
+        /* Ensure event main container is transparent so parent bg shows */
+        .fullcalendar-wrapper .fc-daygrid-event .fc-event-main {
+          background: transparent !important;
+        }
+
+        /* Force inner frame to be transparent */
+        .fullcalendar-wrapper .fc-daygrid-event .fc-event-main-frame {
+          background: transparent !important;
         }
 
         /* More link */
@@ -600,8 +1011,8 @@ export function FullCalendarView({
         }
 
         .fullcalendar-wrapper .fc-event:hover {
-          opacity: 0.9;
-          transform: scale(1.01);
+          opacity: 0.85;
+          transform: scale(1.02);
           z-index: 5;
         }
 
@@ -619,8 +1030,27 @@ export function FullCalendarView({
           animation: fc-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
 
+        /* Default event text is white (for green approved events) */
         .fullcalendar-wrapper .fc-event-custom {
-          color: var(--foreground);
+          color: #fff;
+        }
+
+        /* Orphan events use red text */
+        .fullcalendar-wrapper .fc-event-orphan {
+          color: rgb(185 28 28); /* red-700 */
+        }
+
+        .dark .fullcalendar-wrapper .fc-event-orphan {
+          color: rgb(252 165 165); /* red-300 */
+        }
+
+        /* Pending/delete events use yellow text */
+        .fullcalendar-wrapper .fc-event-pending-delete {
+          color: rgb(113 63 18); /* yellow-900 */
+        }
+
+        .dark .fullcalendar-wrapper .fc-event-pending-delete {
+          color: rgb(254 240 138); /* yellow-200 */
         }
 
         @keyframes fc-pulse {
@@ -670,7 +1100,12 @@ export function FullCalendarView({
           background: var(--card);
         }
 
-        .dark .fullcalendar-wrapper .fc-daygrid-day:hover {
+        /* Only highlight day cell when hovering on empty space (dark mode) */
+        .dark
+          .fullcalendar-wrapper
+          .fc-daygrid-day:hover:not(
+            :has(.fc-event:hover, .fc-daygrid-more-link:hover)
+          ) {
           background: rgba(123, 44, 191, 0.08) !important;
         }
 
@@ -682,7 +1117,12 @@ export function FullCalendarView({
           ) !important;
         }
 
-        .dark .fullcalendar-wrapper .fc-daygrid-day.fc-day-other:hover {
+        /* Only highlight other month day cell when hovering on empty space (dark mode) */
+        .dark
+          .fullcalendar-wrapper
+          .fc-daygrid-day.fc-day-other:hover:not(
+            :has(.fc-event:hover, .fc-daygrid-more-link:hover)
+          ) {
           background: color-mix(
             in srgb,
             var(--muted),
@@ -697,9 +1137,13 @@ export function FullCalendarView({
         initialView={VIEW_MAP[view]}
         initialDate={date}
         events={events}
+        eventDisplay="block"
         eventClick={handleEventClick}
         eventContent={renderEventContent}
         dateClick={(arg) => {
+          // In day view, clicking the column/header should do nothing (no navigation)
+          // Only week/month views should navigate to day view
+          if (view === 'day') return;
           onDateSelect(arg.date);
           onViewChange('day');
         }}

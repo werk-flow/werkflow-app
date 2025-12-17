@@ -336,6 +336,56 @@ export function ManualEntryDialog({
     requestAnimationFrame(() => selectSegment(segment));
   };
 
+  const DATE_MASK = '__.__.____';
+  const SEGMENT_RANGES: Record<'day' | 'month' | 'year', [number, number]> = {
+    day: [0, 2],
+    month: [3, 5],
+    year: [6, 10]
+  };
+  const SEGMENT_ORDER: Array<'day' | 'month' | 'year'> = [
+    'day',
+    'month',
+    'year'
+  ];
+  const pendingSelectionRef = useRef<[number, number] | null>(null);
+
+  const normalizeDisplayForEdit = (raw: string) => {
+    if (!raw) return DATE_MASK;
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) return raw;
+    const digits = raw.replace(/\D/g, '').slice(0, 8);
+    const padded = digits.padEnd(8, '_');
+    return `${padded.slice(0, 2)}.${padded.slice(2, 4)}.${padded.slice(4)}`;
+  };
+
+  const isCompleteDisplay = (display: string) =>
+    /^\d{2}\.\d{2}\.\d{4}$/.test(display);
+
+  const updateIsoFromDisplay = (display: string) => {
+    const normalized = normalizeDisplayForEdit(display);
+    if (isCompleteDisplay(normalized)) {
+      const parsed = parseDisplayDate(normalized);
+      if (parsed) {
+        setDateIso(toISODate(parsed));
+        return;
+      }
+    }
+    setDateIso('');
+  };
+
+  useEffect(() => {
+    const pending = pendingSelectionRef.current;
+    const input = dateInputRef.current;
+    if (!pending || !input) return;
+    pendingSelectionRef.current = null;
+    requestAnimationFrame(() => {
+      try {
+        input.setSelectionRange(pending[0], pending[1]);
+      } catch {
+        // noop
+      }
+    });
+  }, [dateDisplay]);
+
   const handleDateFocus = () => {
     const input = dateInputRef.current;
     const pos = input?.selectionStart ?? 0;
@@ -363,31 +413,56 @@ export function ManualEntryDialog({
     if (allowed.includes(e.key)) return;
     if (!/^\d$/.test(e.key)) {
       e.preventDefault();
+      return;
     }
-  };
 
-  const buildMaskedDate = (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 8);
-    let masked = digits;
-    if (digits.length > 2) {
-      masked = `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    // Segment-aware digit editing: keep caret inside the segment and never jump to end.
+    e.preventDefault();
+    const input = dateInputRef.current;
+    if (!input) return;
+
+    const current = normalizeDisplayForEdit(dateDisplay);
+    const selectionStart = input.selectionStart ?? 0;
+    const selectionEnd = input.selectionEnd ?? selectionStart;
+    const segment = getSegmentFromPosition(selectionStart);
+    const [segStart, segEnd] = SEGMENT_RANGES[segment];
+
+    // If user clicked anywhere inside segment, place caret at that digit.
+    let writePos = Math.min(Math.max(selectionStart, segStart), segEnd - 1);
+    // If entire segment is selected (common), start writing at segment start.
+    if (selectionEnd - selectionStart > 0 && selectionStart === segStart) {
+      writePos = segStart;
     }
-    if (digits.length > 4) {
-      masked = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
+
+    const next = `${current.slice(0, writePos)}${e.key}${current.slice(
+      writePos + 1
+    )}`;
+    setDateDisplay(next);
+    updateIsoFromDisplay(next);
+
+    const nextPos = writePos + 1;
+    if (nextPos < segEnd) {
+      pendingSelectionRef.current = [nextPos, nextPos];
+      return;
     }
-    return masked;
+
+    // Move to next segment and select it fully.
+    const nextSegment =
+      SEGMENT_ORDER[SEGMENT_ORDER.indexOf(segment) + 1] ?? segment;
+    const [nStart, nEnd] = SEGMENT_RANGES[nextSegment];
+    pendingSelectionRef.current = [nStart, nEnd];
   };
 
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const masked = buildMaskedDate(e.target.value);
-    setDateDisplay(masked);
-    const parsed = parseDisplayDate(masked);
-    if (parsed) {
-      const iso = toISODate(parsed);
-      setDateIso(iso);
-    } else {
-      setDateIso('');
-    }
+    // Fallback for non-keyboard input (paste/mobile).
+    const normalized = normalizeDisplayForEdit(e.target.value);
+    setDateDisplay(normalized);
+    updateIsoFromDisplay(normalized);
+
+    const pos = e.target.selectionStart ?? 0;
+    const segment = getSegmentFromPosition(pos);
+    const [s, en] = SEGMENT_RANGES[segment];
+    pendingSelectionRef.current = [s, en];
   };
 
   return (

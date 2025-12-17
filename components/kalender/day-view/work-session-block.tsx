@@ -142,7 +142,7 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all',
+            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -186,7 +186,7 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all',
+            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -309,7 +309,7 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all',
+            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -385,7 +385,7 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all',
+            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -439,7 +439,7 @@ export function WorkSessionBlock({
       <button
         onClick={() => setIsDialogOpen(true)}
         className={cn(
-          'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all',
+          'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
           'flex flex-col items-center justify-center overflow-hidden',
           'hover:shadow-md hover:z-20 hover:scale-[1.02]',
           'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',

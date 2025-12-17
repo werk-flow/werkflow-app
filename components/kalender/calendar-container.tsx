@@ -235,6 +235,10 @@ export function CalendarContainer({
 
   const handleDateSelect = useCallback((date: Date) => {
     setCurrentDate(date);
+    // Clear any pending/active highlight when navigating via date selection
+    // (e.g., clicking day header in week view - no specific member)
+    setPendingHighlightMemberId(null);
+    setHighlightMemberId(null);
   }, []);
 
   // Handle click on a specific member's day cell in the week view

@@ -151,24 +151,37 @@ function DatePicker({ value, onChange, label }: DatePickerProps) {
     value ? new Date(`${value}T00:00:00`) : new Date()
   );
   const dateInputRef = useRef<HTMLInputElement>(null);
-  const [dateDisplay, setDateDisplay] = useState(formatDisplayDate(value));
+  const DATE_MASK = '__.__.____';
+  const [dateDisplay, setDateDisplay] = useState(
+    value ? formatDisplayDate(value) : DATE_MASK
+  );
+  const SEGMENT_RANGES: Record<'day' | 'month' | 'year', [number, number]> = {
+    day: [0, 2],
+    month: [3, 5],
+    year: [6, 10]
+  };
+  const SEGMENT_ORDER: Array<'day' | 'month' | 'year'> = [
+    'day',
+    'month',
+    'year'
+  ];
+  const pendingSelectionRef = useRef<[number, number] | null>(null);
 
   // Update display when value changes externally
   useEffect(() => {
-    setDateDisplay(formatDisplayDate(value));
+    setDateDisplay(value ? formatDisplayDate(value) : DATE_MASK);
   }, [value]);
 
-  const buildMaskedDate = (raw: string) => {
+  const normalizeDisplayForEdit = (raw: string) => {
+    if (!raw) return DATE_MASK;
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) return raw;
     const digits = raw.replace(/\D/g, '').slice(0, 8);
-    let masked = digits;
-    if (digits.length > 2) {
-      masked = `${digits.slice(0, 2)}.${digits.slice(2)}`;
-    }
-    if (digits.length > 4) {
-      masked = `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
-    }
-    return masked;
+    const padded = digits.padEnd(8, '_');
+    return `${padded.slice(0, 2)}.${padded.slice(2, 4)}.${padded.slice(4)}`;
   };
+
+  const isCompleteDisplay = (display: string) =>
+    /^\d{2}\.\d{2}\.\d{4}$/.test(display);
 
   const selectSegment = (segment: 'day' | 'month' | 'year') => {
     const input = dateInputRef.current;
@@ -193,6 +206,20 @@ function DatePicker({ value, onChange, label }: DatePickerProps) {
   const scheduleSegmentSelect = (segment: 'day' | 'month' | 'year') => {
     requestAnimationFrame(() => selectSegment(segment));
   };
+
+  useEffect(() => {
+    const pending = pendingSelectionRef.current;
+    const input = dateInputRef.current;
+    if (!pending || !input) return;
+    pendingSelectionRef.current = null;
+    requestAnimationFrame(() => {
+      try {
+        input.setSelectionRange(pending[0], pending[1]);
+      } catch {
+        // noop
+      }
+    });
+  }, [dateDisplay]);
 
   const handleDateFocus = () => {
     const input = dateInputRef.current;
@@ -221,16 +248,61 @@ function DatePicker({ value, onChange, label }: DatePickerProps) {
     if (allowed.includes(e.key)) return;
     if (!/^\d$/.test(e.key)) {
       e.preventDefault();
+      return;
     }
+
+    e.preventDefault();
+    const input = dateInputRef.current;
+    if (!input) return;
+
+    const current = normalizeDisplayForEdit(dateDisplay);
+    const selectionStart = input.selectionStart ?? 0;
+    const selectionEnd = input.selectionEnd ?? selectionStart;
+    const segment = getSegmentFromPosition(selectionStart);
+    const [segStart, segEnd] = SEGMENT_RANGES[segment];
+
+    let writePos = Math.min(Math.max(selectionStart, segStart), segEnd - 1);
+    if (selectionEnd - selectionStart > 0 && selectionStart === segStart) {
+      writePos = segStart;
+    }
+
+    const next = `${current.slice(0, writePos)}${e.key}${current.slice(
+      writePos + 1
+    )}`;
+    setDateDisplay(next);
+    if (isCompleteDisplay(next)) {
+      const parsed = parseDisplayDate(next);
+      if (parsed) {
+        onChange(toISODate(parsed));
+      }
+    }
+
+    const nextPos = writePos + 1;
+    if (nextPos < segEnd) {
+      pendingSelectionRef.current = [nextPos, nextPos];
+      return;
+    }
+    const nextSegment =
+      SEGMENT_ORDER[SEGMENT_ORDER.indexOf(segment) + 1] ?? segment;
+    const [nStart, nEnd] = SEGMENT_RANGES[nextSegment];
+    pendingSelectionRef.current = [nStart, nEnd];
   };
 
   const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const masked = buildMaskedDate(e.target.value);
-    setDateDisplay(masked);
-    const parsed = parseDisplayDate(masked);
-    if (parsed) {
-      onChange(toISODate(parsed));
+    // Fallback for non-keyboard input (paste/mobile).
+    const normalized = normalizeDisplayForEdit(e.target.value);
+    setDateDisplay(normalized);
+    if (isCompleteDisplay(normalized)) {
+      const parsed = parseDisplayDate(normalized);
+      if (parsed) {
+        onChange(toISODate(parsed));
+      }
     }
+
+    const pos = e.target.selectionStart ?? 0;
+    const segment = getSegmentFromPosition(pos);
+    const [s, en] = SEGMENT_RANGES[segment];
+    pendingSelectionRef.current = [s, en];
   };
 
   const handleDateSelect = (selectedDate: Date) => {
