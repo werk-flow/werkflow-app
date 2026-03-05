@@ -1,11 +1,13 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isUserSubscribed } from '@/lib/subscription/helpers';
 import { generateUniqueOrgCode } from './generate-code';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from './cookies';
+import { CACHE_TAGS } from '@/lib/data/cached';
 
 /**
  * Sets the active organization cookie
@@ -110,6 +112,8 @@ export async function createOrganization(
       maxAge: CURRENT_ORG_MAX_AGE,
       path: '/'
     });
+
+    updateTag(CACHE_TAGS.memberships(user.id));
 
     return { success: true, organizationId: org.id };
   } catch (error) {
@@ -222,6 +226,9 @@ export async function joinOrganization(
       maxAge: CURRENT_ORG_MAX_AGE,
       path: '/'
     });
+
+    updateTag(CACHE_TAGS.memberships(user.id));
+    updateTag(CACHE_TAGS.memberCount(org.id));
 
     return { success: true, organizationId: org.id };
   } catch (error) {

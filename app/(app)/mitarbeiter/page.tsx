@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
-import { getCachedUser } from '@/lib/data/cached';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
@@ -11,17 +11,16 @@ import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import type { OrgRole } from '@/lib/members/actions';
 
 export default async function MitarbeiterPage() {
-  // Use cached user - deduplicates with layout's call
-  const {
-    data: { user }
-  } = await getCachedUser();
+  const [{ data: { user } }, cookieStore] = await Promise.all([
+    getCachedUser(),
+    cookies()
+  ]);
 
   if (!user) {
     redirect('/login');
   }
 
-  const cookieStore = await cookies();
-  const activeOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
 
   if (!activeOrgId) {
     return (
@@ -34,27 +33,20 @@ export default async function MitarbeiterPage() {
     );
   }
 
-  // Get Supabase client for page-specific queries
-  const supabase = await createSupabaseServerClient();
+  const memberships = await getCachedMemberships(user.id);
+  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
-  // Check current user's membership and role in this org
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('organization_id', activeOrgId)
-    .eq('user_id', user.id)
-    .single();
-
-  const currentUserRole = membership?.role as OrgRole | undefined;
+  const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'manager';
 
-  // Redirect non-admins and non-managers to dashboard
   if (!isAdminOrManager) {
     redirect('/dashboard');
   }
 
   // Fetch members and invites in parallel
+  const supabase = await createSupabaseServerClient();
+
   const [membersResult, invitesResult] = await Promise.all([
     supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
     supabase

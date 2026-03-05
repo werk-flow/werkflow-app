@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getCachedUser,
   getCachedMemberships,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/data/cached';
 import { OrganizationProvider } from '@/components/organization/organization-context';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
+import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { AppShell } from '@/components/sidebar/app-shell';
 import { ClockFAB } from '@/components/clock-fab';
 
@@ -45,20 +46,8 @@ export default async function AppLayout({
     }
   }
 
-  // Read active org from cookie
   const cookieStore = await cookies();
-  const storedOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
-
-  // Validate stored org ID against memberships, fallback to first org
-  // Note: The middleware handles setting the cookie if it's missing/invalid
-  // Here we just determine what the active org should be for the UI
-  let activeOrgId: string | null = null;
-  if (storedOrgId && memberships.some((m) => m.orgId === storedOrgId)) {
-    activeOrgId = storedOrgId;
-  } else if (memberships.length > 0) {
-    // Fallback to first org - ensures there's ALWAYS an active org when user has memberships
-    activeOrgId = memberships[0].orgId;
-  }
+  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
 
   return (
     <OrganizationProvider
@@ -66,10 +55,12 @@ export default async function AppLayout({
       initialActiveOrgId={activeOrgId}
       initialIsSubscribed={subscribed}
     >
-      <UserProfileProvider initialProfile={userProfile}>
-        <AppShell>{children}</AppShell>
-        <ClockFAB />
-      </UserProfileProvider>
+      <RealtimeProvider>
+        <UserProfileProvider initialProfile={userProfile}>
+          <AppShell>{children}</AppShell>
+          <ClockFAB />
+        </UserProfileProvider>
+      </RealtimeProvider>
     </OrganizationProvider>
   );
 }

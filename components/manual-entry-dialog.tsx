@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/popover';
 import { useOrganization } from '@/components/organization/organization-context';
 import { addManualEntry, getTimeEntries } from '@/lib/time-tracking/actions';
+import { getOrgMembersAction } from '@/lib/members/actions';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
 import type {
   TimeEntryType,
@@ -45,8 +46,6 @@ import type {
   TimeEntry
 } from '@/lib/time-tracking/types';
 import { useUserProfile } from '@/components/user/user-profile-context';
-import { dispatchClockStatusRefresh } from '@/components/clock-fab';
-
 type EntryMode = 'clock_in' | 'clock_out' | 'both';
 
 type OrgMember = {
@@ -123,15 +122,9 @@ export function ManualEntryDialog({
     const fetchMembers = async () => {
       setIsLoadingMembers(true);
       try {
-        const response = await fetch('/api/get-org-members', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId: activeOrgId })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setMembers(data.members || []);
+        const result = await getOrgMembersAction(activeOrgId!);
+        if (result.success) {
+          setMembers(result.members || []);
         }
       } catch (err) {
         console.error('Error fetching members:', err);
@@ -264,8 +257,6 @@ export function ManualEntryDialog({
           } else {
             setSuccessMessage('Eintrag erfolgreich erstellt!');
           }
-          // Refresh FAB clock status in case this affects "currently working" state
-          dispatchClockStatusRefresh();
           onSuccess?.();
           setTimeout(() => {
             setOpen(false);

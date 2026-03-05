@@ -1,7 +1,17 @@
 'use server';
 
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { CACHE_TAGS } from '@/lib/data/cached';
+
+/**
+ * Invalidate the cached profile for a user.
+ * Call this after upserting a profile from a client component.
+ */
+export async function invalidateProfileCache(userId: string): Promise<void> {
+  updateTag(CACHE_TAGS.profile(userId));
+}
 
 export type DeleteAccountResult =
   | { success: true }

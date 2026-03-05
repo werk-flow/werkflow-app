@@ -16,6 +16,7 @@ import { InvitationsTable, type Invite } from './invitations-table';
 import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
 import { QuickStats } from './quick-stats';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
 
 interface MitarbeiterTabsProps {
@@ -55,7 +56,6 @@ export function MitarbeiterTabs({
   } = useMemberStatusPolling({
     organizationId,
     memberIds,
-    interval: 30000, // 30 seconds
     enabled: memberIds.length > 0
   });
 
@@ -83,17 +83,16 @@ export function MitarbeiterTabs({
 
   // Handle manual refresh
   const handleRefresh = useCallback(() => {
-    // Store current counts before refresh
     setPrevMemberCount(members.length);
     setPrevInviteCount(invites.length);
-
-    // Also refetch status data
     refetchStatus();
-
     startTransition(() => {
       router.refresh();
     });
   }, [router, members.length, invites.length, refetchStatus]);
+
+  // Realtime: refetch server data when invitations change (e.g. accepted)
+  useRealtimeEvent('organization_invites', handleRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(

@@ -1,11 +1,19 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { ArrowUp, ArrowDown, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
-import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
 import { HOUR_WIDTH } from './timeline-grid';
+
+const EntryDetailsDialog = dynamic(
+  () =>
+    import('@/components/kalender/entry-details-dialog').then(
+      (mod) => mod.EntryDetailsDialog
+    ),
+  { ssr: false }
+);
 import type {
   WorkSession,
   EntryChangeRequestMap,
@@ -164,14 +172,16 @@ export function WorkSessionBlock({
           <span className="truncate">{formatTime(clockOutTime)}</span>
         </button>
 
-        <EntryDetailsDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          session={session}
-          currentUserRole={currentUserRole}
-          currentUserId={currentUserId}
-          onRefresh={onRefresh}
-        />
+        {isDialogOpen && (
+          <EntryDetailsDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            session={session}
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            onRefresh={onRefresh}
+          />
+        )}
       </>
     );
   }
@@ -208,14 +218,16 @@ export function WorkSessionBlock({
           <span className="truncate">{formatTime(clockInTime)}</span>
         </button>
 
-        <EntryDetailsDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          session={session}
-          currentUserRole={currentUserRole}
-          currentUserId={currentUserId}
-          onRefresh={onRefresh}
-        />
+        {isDialogOpen && (
+          <EntryDetailsDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            session={session}
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            onRefresh={onRefresh}
+          />
+        )}
       </>
     );
   }
@@ -342,14 +354,16 @@ export function WorkSessionBlock({
           {width <= 40 && <Clock className="h-3 w-3 shrink-0 opacity-80" />}
         </button>
 
-        <EntryDetailsDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          session={session}
-          currentUserRole={currentUserRole}
-          currentUserId={currentUserId}
-          onRefresh={onRefresh}
-        />
+        {isDialogOpen && (
+          <EntryDetailsDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            session={session}
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            onRefresh={onRefresh}
+          />
+        )}
       </>
     );
   }
@@ -421,14 +435,16 @@ export function WorkSessionBlock({
           )}
         </button>
 
-        <EntryDetailsDialog
-          open={isDialogOpen}
-          onOpenChange={setIsDialogOpen}
-          session={session}
-          currentUserRole={currentUserRole}
-          currentUserId={currentUserId}
-          onRefresh={onRefresh}
-        />
+        {isDialogOpen && (
+          <EntryDetailsDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            session={session}
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            onRefresh={onRefresh}
+          />
+        )}
       </>
     );
   }
@@ -486,14 +502,16 @@ export function WorkSessionBlock({
         )}
       </button>
 
-      <EntryDetailsDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        session={session}
-        currentUserRole={currentUserRole}
-        currentUserId={currentUserId}
-        onRefresh={onRefresh}
-      />
+      {isDialogOpen && (
+        <EntryDetailsDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          session={session}
+          currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
+          onRefresh={onRefresh}
+        />
+      )}
     </>
   );
 }

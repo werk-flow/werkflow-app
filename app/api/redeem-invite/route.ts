@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { CACHE_TAGS } from '@/lib/data/cached';
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,6 +92,9 @@ export async function POST(req: NextRequest) {
       maxAge: CURRENT_ORG_MAX_AGE,
       path: '/'
     });
+
+    updateTag(CACHE_TAGS.memberships(user.id));
+    updateTag(CACHE_TAGS.memberCount(orgId));
 
     return NextResponse.json({
       success: true,

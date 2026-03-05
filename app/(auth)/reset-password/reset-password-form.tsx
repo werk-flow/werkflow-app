@@ -232,7 +232,7 @@ export function ResetPasswordForm() {
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event: string, session: { user?: { id: string } } | null) => {
       if (!isActive || isRedirectingRef.current || hasResolvedToken) {
         return;
       }

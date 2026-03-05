@@ -9,7 +9,16 @@ import { WeekView } from './week-view/week-view';
 import { DayViewSkeleton } from './day-view/day-view-skeleton';
 import { WeekViewSkeleton } from './week-view/week-view-skeleton';
 import { FullCalendarSkeleton } from './fullcalendar-skeleton';
-import { EntryDetailsDialog } from './entry-details-dialog';
+import {
+  getTimeEntries,
+  getChangeRequestsForEntries
+} from '@/lib/time-tracking/actions';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+
+const EntryDetailsDialog = dynamic(
+  () => import('./entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
+  { ssr: false }
+);
 import type {
   TimeEntry,
   WorkSession,
@@ -51,6 +60,8 @@ interface CalendarContainerProps {
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
   members: CalendarMember[];
+  initialEntries?: TimeEntry[];
+  initialChangeRequestMap?: EntryChangeRequestMap;
 }
 
 export function CalendarContainer({
@@ -58,14 +69,16 @@ export function CalendarContainer({
   currentUserId,
   currentUserRole,
   isAdminOrManager,
-  members
+  members,
+  initialEntries,
+  initialChangeRequestMap
 }: CalendarContainerProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
-  const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [entries, setEntries] = useState<TimeEntry[]>(initialEntries ?? []);
   const [changeRequestMap, setChangeRequestMap] =
-    useState<EntryChangeRequestMap>({});
-  const [isLoading, setIsLoading] = useState(true);
+    useState<EntryChangeRequestMap>(initialChangeRequestMap ?? {});
+  const [isLoading, setIsLoading] = useState(!initialEntries);
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     members.map((m) => m.user_id)
   );
@@ -120,64 +133,36 @@ export function CalendarContainer({
     return { start, end };
   }, [currentDate, view]);
 
-  // Fetch entries and their pending change requests
-  const fetchEntries = useCallback(async () => {
-    setIsLoading(true);
+  // Fetch entries and their pending change requests via server actions (no API proxy).
+  // When `silent` is true (Realtime refetch), the loading skeleton is skipped so the
+  // current calendar content stays visible until fresh data arrives.
+  const fetchEntries = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const { start, end } = getDateRange();
 
-      const response = await fetch('/api/time-entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organizationId,
-          from: start.toISOString(),
-          to: end.toISOString()
-        })
+      const result = await getTimeEntries({
+        organizationId,
+        from: start.toISOString(),
+        to: end.toISOString()
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch entries: ${response.status}`);
-      }
-
-      const result: {
-        success: boolean;
-        entries?: TimeEntry[];
-        error?: string;
-      } = await response.json();
 
       if (result.success && result.entries) {
         setEntries(result.entries);
 
-        // Fetch pending change requests for these entries via API
         const entryIds = result.entries.map((e) => e.id);
         if (entryIds.length > 0) {
           try {
-            const crResponse = await fetch('/api/change-requests-for-entries', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ entryIds })
-            });
-
-            if (crResponse.ok) {
-              const crResult: {
-                success: boolean;
-                requests?: ChangeRequest[];
-                error?: string;
-              } = await crResponse.json();
-
-              if (crResult.success && crResult.requests) {
-                // Build a map of entry ID -> change request
-                const crMap: EntryChangeRequestMap = {};
-                for (const cr of crResult.requests) {
-                  crMap[cr.entryId] = cr;
-                  // Also map paired entry if exists
-                  if (cr.pairedEntryId) {
-                    crMap[cr.pairedEntryId] = cr;
-                  }
+            const crResult = await getChangeRequestsForEntries(entryIds);
+            if (crResult.success && crResult.requests) {
+              const crMap: EntryChangeRequestMap = {};
+              for (const cr of crResult.requests) {
+                crMap[cr.entryId] = cr;
+                if (cr.pairedEntryId) {
+                  crMap[cr.pairedEntryId] = cr;
                 }
-                setChangeRequestMap(crMap);
               }
+              setChangeRequestMap(crMap);
             }
           } catch (crError) {
             console.error('Error fetching change requests:', crError);
@@ -185,7 +170,7 @@ export function CalendarContainer({
         } else {
           setChangeRequestMap({});
         }
-      } else {
+      } else if (!result.success) {
         console.error('Error fetching entries:', result.error);
       }
     } catch (error) {
@@ -199,6 +184,10 @@ export function CalendarContainer({
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
+
+  // Realtime: silently refetch so the calendar stays visible during the update
+  useRealtimeEvent('time_entries', () => fetchEntries(true));
+  useRealtimeEvent('entry_change_requests', () => fetchEntries(true));
 
   // Navigation handlers
   const handlePrevious = useCallback(() => {

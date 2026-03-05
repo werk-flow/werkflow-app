@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
-import { getCachedUser } from '@/lib/data/cached';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
 import {
@@ -19,18 +19,17 @@ interface ZeiterfassungPageProps {
 export default async function ZeiterfassungPage({
   searchParams
 }: ZeiterfassungPageProps) {
-  const { tab } = await searchParams;
-  // Use cached user - deduplicates with layout's call
-  const {
-    data: { user }
-  } = await getCachedUser();
+  const [{ tab }, { data: { user } }, cookieStore] = await Promise.all([
+    searchParams,
+    getCachedUser(),
+    cookies()
+  ]);
 
   if (!user) {
     redirect('/login');
   }
 
-  const cookieStore = await cookies();
-  const activeOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
 
   if (!activeOrgId) {
     return (
@@ -43,49 +42,20 @@ export default async function ZeiterfassungPage({
     );
   }
 
-  // Get Supabase client for page-specific queries
-  const supabase = await createSupabaseServerClient();
+  const memberships = await getCachedMemberships(user.id);
+  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
-  // Check current user's membership and role in this org
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('organization_id', activeOrgId)
-    .eq('user_id', user.id)
-    .single();
-
-  if (!membership) {
+  if (!currentMembership) {
     redirect('/dashboard');
   }
 
-  const currentUserRole = membership.role as OrgRole;
+  const currentUserRole = currentMembership.role as OrgRole;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'manager';
   const isAdmin = currentUserRole === 'admin';
 
-  // Fetch initial pending count on the server for immediate display
+  // Fetch pending counts and members in parallel
   let initialPendingCount = 0;
-  if (isAdminOrManager) {
-    try {
-      const sessionsResult = await getPendingSessions(activeOrgId);
-      if (sessionsResult.success) {
-        initialPendingCount += sessionsResult.sessions.length;
-      }
-
-      if (isAdmin) {
-        const changeRequestsResult = await getPendingChangeRequests(
-          activeOrgId
-        );
-        if (changeRequestsResult.success) {
-          initialPendingCount += changeRequestsResult.requests.length;
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching initial pending count:', err);
-    }
-  }
-
-  // Fetch members for admin/manager to use in history filter
   let members: Array<{
     user_id: string;
     first_name: string | null;
@@ -95,12 +65,23 @@ export default async function ZeiterfassungPage({
   }> = [];
 
   if (isAdminOrManager) {
-    const { data: membersData } = await supabase.rpc('get_org_members', {
-      p_org_id: activeOrgId
-    });
+    const supabase = await createSupabaseServerClient();
+
+    const [sessionsResult, changeRequestsResult, { data: membersData }] =
+      await Promise.all([
+        getPendingSessions(activeOrgId),
+        isAdmin ? getPendingChangeRequests(activeOrgId) : null,
+        supabase.rpc('get_org_members', { p_org_id: activeOrgId })
+      ]);
+
+    if (sessionsResult.success) {
+      initialPendingCount += sessionsResult.sessions.length;
+    }
+    if (changeRequestsResult?.success) {
+      initialPendingCount += changeRequestsResult.requests.length;
+    }
 
     if (membersData) {
-      // For managers, filter to only managed roles
       if (currentUserRole === 'manager') {
         const MANAGED_ROLES = ['accountant', 'secretary', 'employee'];
         members = membersData.filter(

@@ -1,9 +1,11 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { CACHE_TAGS } from '@/lib/data/cached';
 
 export type DeleteOrgResult = {
   success: boolean;
@@ -58,6 +60,13 @@ export async function deleteOrganization(
     }
 
     const admin = createSupabaseAdminClient();
+
+    // Fetch all member user IDs before deletion so we can invalidate their caches
+    const { data: allMembers } = await admin
+      .from('organization_members')
+      .select('user_id')
+      .eq('organization_id', orgId);
+    const memberUserIds = (allMembers ?? []).map((m) => m.user_id);
 
     // Delete all organization members first (due to foreign key constraints)
     const { error: membersDeleteError } = await admin
@@ -125,6 +134,11 @@ export async function deleteOrganization(
         path: '/',
       });
     }
+
+    for (const uid of memberUserIds) {
+      updateTag(CACHE_TAGS.memberships(uid));
+    }
+    updateTag(CACHE_TAGS.memberCount(orgId));
 
     return { success: true, nextOrgId };
   } catch (error) {

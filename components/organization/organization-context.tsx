@@ -77,6 +77,16 @@ export function OrganizationProvider({
     setActiveOrgId(initialActiveOrgId)
   }, [initialActiveOrgId])
 
+  // Proactively set the cookie when the active org is resolved from fallback
+  // so that subsequent server-side renders can read it immediately.
+  const hasSetCookieRef = useRef(false)
+  useEffect(() => {
+    if (initialActiveOrgId && !hasSetCookieRef.current) {
+      hasSetCookieRef.current = true
+      setActiveOrgCookie(initialActiveOrgId).catch(() => {})
+    }
+  }, [initialActiveOrgId])
+
   // Derive active org from memberships
   const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null
 
@@ -117,8 +127,8 @@ export function OrganizationProvider({
       }
 
       const newMemberships: UserOrg[] = (data ?? [])
-        .filter((m) => m.organizations !== null)
-        .map((m) => {
+        .filter((m: { organizations: unknown }) => m.organizations !== null)
+        .map((m: { organization_id: string; role: OrgRole; joined_at: string; organizations: unknown }) => {
           // organizations is returned as an object (single relation) not an array
           const org = m.organizations as unknown as OrganizationData
           return {

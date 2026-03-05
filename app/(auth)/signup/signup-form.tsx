@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { invalidateProfileCache } from '@/lib/auth/actions';
 import {
   getPasswordRequirements,
   getPasswordStrengthLevel,
@@ -231,6 +232,8 @@ export function SignupForm({
         setIsSubmitting(false);
         return;
       }
+
+      await invalidateProfileCache(data.user.id);
     }
 
     if (data.session) {

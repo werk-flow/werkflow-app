@@ -1,9 +1,11 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { userHasOrganizations } from './helpers';
+import { CACHE_TAGS } from '@/lib/data/cached';
 
 export type SimulatePaymentResult = {
   success: boolean;
@@ -50,6 +52,8 @@ export async function simulatePayment(): Promise<SimulatePaymentResult> {
     console.error('Error activating subscription:', error);
     return { success: false, error: 'subscription_activation_failed' };
   }
+
+  updateTag(CACHE_TAGS.subscription(user.id));
 
   // Redirect to organization creation page
   redirect('/onboarding/create-organization');

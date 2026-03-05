@@ -3,7 +3,8 @@
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getCachedMemberships } from '@/lib/data/cached';
 import {
   type TimeEntry,
   type TimeEntryRow,
@@ -42,29 +43,11 @@ import {
 import { validateManualEntries, validateTimestampUpdate } from './validation';
 
 /**
- * Get the current organization ID from cookies
+ * Get the current organization ID from cookies (with membership fallback).
  */
-async function getCurrentOrgId(): Promise<string | null> {
+async function getCurrentOrgId(userId: string): Promise<string | null> {
   const cookieStore = await cookies();
-  return cookieStore.get(CURRENT_ORG_COOKIE)?.value || null;
-}
-
-/**
- * Get user's role in the organization
- */
-async function getUserRole(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  userId: string,
-  orgId: string
-): Promise<OrgRole | null> {
-  const { data } = await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('user_id', userId)
-    .eq('organization_id', orgId)
-    .single();
-
-  return data?.role as OrgRole | null;
+  return resolveActiveOrgId(cookieStore, userId);
 }
 
 /**
@@ -88,6 +71,49 @@ async function getUserEntries(
   }
 
   return data || [];
+}
+
+/**
+ * Get only today's entries for the user in an org.
+ * Much faster than getUserEntries for clock status checks.
+ */
+async function getUserTodayEntries(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  orgId: string
+): Promise<TimeEntryRow[]> {
+  const { start, end } = getTodayBounds();
+
+  const { data, error } = await admin
+    .from('time_entries')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('organization_id', orgId)
+    .gte('timestamp', start.toISOString())
+    .lte('timestamp', end.toISOString())
+    .neq('status', 'rejected')
+    .neq('status', 'pending_delete')
+    .order('timestamp', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching user today entries:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Verify user is a member of the org using cached memberships.
+ * Falls back to a direct DB query if cache is empty.
+ */
+async function verifyMembershipFromCache(
+  userId: string,
+  orgId: string
+): Promise<OrgRole | null> {
+  const memberships = await getCachedMemberships(userId);
+  const membership = memberships.find((m) => m.orgId === orgId);
+  return (membership?.role as OrgRole) ?? null;
 }
 
 type TodayBounds = {
@@ -186,21 +212,24 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify user is member of org
-    const userRole = await getUserRole(supabase, user.id, orgId);
+    const admin = createSupabaseAdminClient();
+
+    // Run membership check, cross-org guard, and today's entries in parallel
+    const [userRole, openOrgs, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, orgId),
+      getOpenSessionOrgsForUserToday(admin, user.id),
+      getUserTodayEntries(admin, user.id, orgId)
+    ]);
+
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
     }
 
-    const admin = createSupabaseAdminClient();
-
-    // Cross-org guard: user may not be "currently working" in another org
-    const openOrgs = await getOpenSessionOrgsForUserToday(admin, user.id);
     const openOther = openOrgs.find((o) => o.organizationId !== orgId);
     if (openOther) {
       return {
@@ -211,16 +240,11 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
       };
     }
 
-    // Get user's entries
-    const entries = await getUserEntries(admin, user.id, orgId);
-    const timeEntries = toTimeEntries(entries);
-
-    // Check if user already has an open session
+    const timeEntries = toTimeEntries(todayRows);
     if (hasOpenSession(timeEntries)) {
       return { success: false, error: 'already_clocked_in' };
     }
 
-    // Insert clock_in entry
     const { data: newEntry, error: insertError } = await admin
       .from('time_entries')
       .insert({
@@ -229,7 +253,7 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
         entry_type: 'clock_in',
         timestamp: new Date().toISOString(),
         is_manual: false,
-        status: 'approved' // Real-time entries are always approved
+        status: 'approved'
       })
       .select()
       .single();
@@ -260,29 +284,28 @@ export async function clockOut(organizationId?: string): Promise<ClockResult> {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify user is member of org
-    const userRole = await getUserRole(supabase, user.id, orgId);
+    const admin = createSupabaseAdminClient();
+
+    // Run membership check and today's entries in parallel
+    const [userRole, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, orgId),
+      getUserTodayEntries(admin, user.id, orgId)
+    ]);
+
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
     }
 
-    const admin = createSupabaseAdminClient();
-
-    // Get user's entries
-    const entries = await getUserEntries(admin, user.id, orgId);
-    const timeEntries = toTimeEntries(entries);
-
-    // Check if user has an open session
+    const timeEntries = toTimeEntries(todayRows);
     if (!hasOpenSession(timeEntries)) {
       return { success: false, error: 'not_clocked_in' };
     }
 
-    // Insert clock_out entry
     const { data: newEntry, error: insertError } = await admin
       .from('time_entries')
       .insert({
@@ -291,7 +314,7 @@ export async function clockOut(organizationId?: string): Promise<ClockResult> {
         entry_type: 'clock_out',
         timestamp: new Date().toISOString(),
         is_manual: false,
-        status: 'approved' // Real-time entries are always approved
+        status: 'approved'
       })
       .select()
       .single();
@@ -388,8 +411,7 @@ export async function addManualEntry(
 
     const { organizationId, targetUserId, entries } = params;
 
-    // Verify caller is member of org
-    const callerRole = await getUserRole(supabase, user.id, organizationId);
+    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -541,12 +563,7 @@ export async function reviewEntry(
       return { success: false, error: 'entry_not_pending' };
     }
 
-    // Get caller's role in the org
-    const callerRole = await getUserRole(
-      supabase,
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -650,12 +667,7 @@ export async function updateEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    // Get caller's role in the org
-    const callerRole = await getUserRole(
-      supabase,
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -818,12 +830,7 @@ export async function deleteEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    // Get caller's role in the org
-    const callerRole = await getUserRole(
-      supabase,
-      user.id,
-      entry.organization_id
-    );
+    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -989,8 +996,8 @@ export async function getTimeEntries(
 
     const { organizationId, from, to, userId, status } = params;
 
-    // Verify caller is member of org
-    const callerRole = await getUserRole(supabase, user.id, organizationId);
+    // Verify caller is member of org (cache hit for repeated calls)
+    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1004,12 +1011,10 @@ export async function getTimeEntries(
       .lte('timestamp', to)
       .order('timestamp', { ascending: true });
 
-    // Filter by user if specified
     if (userId) {
       query = query.eq('user_id', userId);
     }
 
-    // Filter by status if specified
     if (status) {
       query = query.eq('status', status);
     }
@@ -1044,13 +1049,12 @@ export async function getPendingEntries(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify caller is member of org
-    const callerRole = await getUserRole(supabase, user.id, orgId);
+    const callerRole = await verifyMembershipFromCache(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1124,13 +1128,12 @@ export async function getPendingSessions(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify caller is member of org
-    const callerRole = await getUserRole(supabase, user.id, orgId);
+    const callerRole = await verifyMembershipFromCache(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1319,13 +1322,12 @@ export async function getCurrentlyClockedIn(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify caller is member of org and is admin or manager
-    const callerRole = await getUserRole(supabase, user.id, orgId);
+    const callerRole = await verifyMembershipFromCache(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1443,21 +1445,24 @@ export async function getClockStatus(organizationId?: string): Promise<
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify user is member of org
-    const userRole = await getUserRole(supabase, user.id, orgId);
+    const admin = createSupabaseAdminClient();
+
+    // Run membership check and today's entries in parallel
+    const [userRole, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, orgId),
+      getUserTodayEntries(admin, user.id, orgId)
+    ]);
+
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
     }
 
-    const admin = createSupabaseAdminClient();
-    const entries = await getUserEntries(admin, user.id, orgId);
-    const timeEntries = toTimeEntries(entries);
-
+    const timeEntries = toTimeEntries(todayRows);
     const isClockedIn = hasOpenSession(timeEntries);
     const lastEntry = timeEntries.length > 0 ? timeEntries[0] : null;
 
@@ -1488,13 +1493,12 @@ export async function getPendingChangeRequests(
       return { success: false, error: 'not_authenticated' };
     }
 
-    const orgId = organizationId || (await getCurrentOrgId());
+    const orgId = organizationId || (await getCurrentOrgId(user.id));
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Verify caller is admin
-    const callerRole = await getUserRole(supabase, user.id, orgId);
+    const callerRole = await verifyMembershipFromCache(user.id, orgId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1607,12 +1611,7 @@ export async function reviewChangeRequest(
       return { success: false, error: 'request_not_found' };
     }
 
-    // Verify caller is admin in this org
-    const callerRole = await getUserRole(
-      supabase,
-      user.id,
-      request.organization_id
-    );
+    const callerRole = await verifyMembershipFromCache(user.id, request.organization_id);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }

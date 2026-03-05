@@ -7,7 +7,7 @@ import {
   getPendingSessions,
   getPendingChangeRequests
 } from '@/lib/time-tracking/actions';
-import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 interface QuickStatsProps {
   organizationId: string;
@@ -48,22 +48,11 @@ export function QuickStats({
 
   useEffect(() => {
     fetchPendingStats();
-    // Poll every 30 seconds
-    const interval = setInterval(fetchPendingStats, 30000);
-    return () => clearInterval(interval);
   }, [fetchPendingStats]);
 
-  // Listen for clock status refresh events (e.g., from manual entry dialog or FAB)
-  useEffect(() => {
-    const handleRefresh = () => {
-      fetchPendingStats();
-    };
-
-    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    return () => {
-      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    };
-  }, [fetchPendingStats]);
+  // Realtime: refetch when time entries or change requests change
+  useRealtimeEvent('time_entries', fetchPendingStats);
+  useRealtimeEvent('entry_change_requests', fetchPendingStats);
 
   return (
     <div className="flex flex-wrap gap-4 mb-4">

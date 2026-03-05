@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Check,
   X,
@@ -26,8 +27,15 @@ import type {
   WorkSession
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
-import { dispatchClockStatusRefresh } from '@/components/clock-fab';
-import { EntryDetailsDialog } from '@/components/kalender/entry-details-dialog';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+
+const EntryDetailsDialog = dynamic(
+  () =>
+    import('@/components/kalender/entry-details-dialog').then(
+      (mod) => mod.EntryDetailsDialog
+    ),
+  { ssr: false }
+);
 
 interface PendingApprovalsProps {
   organizationId: string;
@@ -186,6 +194,10 @@ export function PendingApprovals({
     fetchPendingItems(false);
   }, [fetchPendingItems]);
 
+  // Realtime: refetch when time entries or change requests change
+  useRealtimeEvent('time_entries', () => fetchPendingItems(true));
+  useRealtimeEvent('entry_change_requests', () => fetchPendingItems(true));
+
   // Keep the count in sync when sessions or changeRequests change (after approve/reject)
   useEffect(() => {
     // Only update if we're not in initial loading (to preserve the badge during load)
@@ -209,7 +221,6 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setSessions((prev) => prev.filter((s) => s.id !== session.id));
-        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to approve session:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -232,7 +243,6 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setSessions((prev) => prev.filter((s) => s.id !== session.id));
-        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to reject session:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -254,7 +264,6 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
-        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to approve change request:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -276,7 +285,6 @@ export function PendingApprovals({
       if (result.success) {
         // Remove from list immediately
         setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
-        dispatchClockStatusRefresh();
       } else {
         console.error('Failed to reject change request:', result.error);
         setError(`Fehler: ${result.error}`);
@@ -545,7 +553,6 @@ function SessionRequestCard({
   const handleDialogRefresh = () => {
     setIsEditDialogOpen(false);
     onRefresh();
-    dispatchClockStatusRefresh();
   };
 
   return (
@@ -626,16 +633,17 @@ function SessionRequestCard({
         </CardContent>
       </Card>
 
-      {/* Edit Dialog - opens directly in edit mode */}
-      <EntryDetailsDialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        session={workSession}
-        currentUserRole={currentUserRole}
-        currentUserId={currentUserId}
-        onRefresh={handleDialogRefresh}
-        startInEditMode={true}
-      />
+      {isEditDialogOpen && (
+        <EntryDetailsDialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          session={workSession}
+          currentUserRole={currentUserRole}
+          currentUserId={currentUserId}
+          onRefresh={handleDialogRefresh}
+          startInEditMode={true}
+        />
+      )}
     </>
   );
 }

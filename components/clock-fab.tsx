@@ -6,20 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { clockIn, clockOut, getClockStatus } from '@/lib/time-tracking/actions';
 import { useOrganization } from '@/components/organization/organization-context';
-
-/**
- * Custom event name for clock status refresh
- * Used to sync FAB state when manual entries are added
- */
-export const CLOCK_STATUS_REFRESH_EVENT = 'clockStatusRefresh';
-
-/**
- * Dispatch event to trigger FAB clock status refresh
- * Call this after manual entries are added/approved that might affect clock status
- */
-export function dispatchClockStatusRefresh() {
-  window.dispatchEvent(new CustomEvent(CLOCK_STATUS_REFRESH_EVENT));
-}
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
@@ -42,7 +29,6 @@ export function ClockFAB() {
     }, 150);
   }, []);
 
-  // Fetch initial clock status
   const fetchClockStatus = useCallback(async () => {
     if (!activeOrgId) {
       setIsLoading(false);
@@ -65,48 +51,14 @@ export function ClockFAB() {
     }
   }, [activeOrgId]);
 
-  // Fetch clock status on mount and when org changes
+  // Fetch on mount and when org changes
   useEffect(() => {
     setIsLoading(true);
     fetchClockStatus();
   }, [fetchClockStatus]);
 
-  // Poll for clock status periodically to catch external changes
-  // (e.g., admin approving a manual entry in a different session)
-  useEffect(() => {
-    if (!activeOrgId) return;
-
-    // Poll every 30 seconds
-    const pollInterval = setInterval(() => {
-      fetchClockStatus();
-    }, 30000);
-
-    return () => clearInterval(pollInterval);
-  }, [activeOrgId, fetchClockStatus]);
-
-  // Listen for clock status refresh events (e.g., from manual entry dialog)
-  useEffect(() => {
-    const handleRefresh = () => {
-      fetchClockStatus();
-    };
-
-    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    return () => {
-      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    };
-  }, [fetchClockStatus]);
-
-  // Also refresh when window regains focus (user switches back to tab)
-  useEffect(() => {
-    const handleFocus = () => {
-      fetchClockStatus();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [fetchClockStatus]);
+  // Realtime: refetch when any time_entry changes for this org
+  useRealtimeEvent('time_entries', fetchClockStatus);
 
   // Handle clock in/out
   const handleToggle = useCallback(() => {
@@ -115,24 +67,18 @@ export function ClockFAB() {
     startTransition(async () => {
       try {
         if (isClockedIn) {
-          // Clock out
           const result = await clockOut(activeOrgId);
           if (result.success) {
             setIsClockedIn(false);
             setStatusError(null);
-            // Notify other components (QuickStats, etc.) of the status change
-            dispatchClockStatusRefresh();
           } else {
             setStatusError(result.error);
           }
         } else {
-          // Clock in
           const result = await clockIn(activeOrgId);
           if (result.success) {
             setIsClockedIn(true);
             setStatusError(null);
-            // Notify other components (QuickStats, etc.) of the status change
-            dispatchClockStatusRefresh();
           } else {
             // Special case: show a banner when the user is already working in another org
             if (

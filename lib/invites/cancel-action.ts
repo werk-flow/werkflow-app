@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
 
 export type CancelInviteResult = {
   success: boolean;
@@ -31,7 +31,7 @@ export async function cancelInvite(
     }
 
     const cookieStore = await cookies();
-    const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+    const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };

@@ -1,11 +1,41 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
-import { PendingApprovals } from './pending-approvals';
-import { EntryHistory } from './entry-history';
+import {
+  getPendingSessions,
+  getPendingChangeRequests
+} from '@/lib/time-tracking/actions';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
+
+const PendingApprovals = dynamic(
+  () => import('./pending-approvals').then((mod) => mod.PendingApprovals),
+  {
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    )
+  }
+);
+
+const EntryHistory = dynamic(
+  () => import('./entry-history').then((mod) => mod.EntryHistory),
+  {
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+);
 
 interface MemberInfo {
   user_id: string;
@@ -38,13 +68,34 @@ export function ZeiterfassungContent({
   initialPendingCount = 0,
   members = []
 }: ZeiterfassungContentProps) {
-  // Use the server-fetched initial count for immediate display
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
 
-  // Stable callback to prevent unnecessary re-renders
   const handleCountChange = useCallback((count: number) => {
     setPendingCount(count);
   }, []);
+
+  // Fetch pending count directly so the tab badge updates even when
+  // PendingApprovals is unmounted (Radix TabsContent unmounts inactive tabs).
+  const fetchPendingCount = useCallback(async () => {
+    try {
+      const sessionsResult = await getPendingSessions(organizationId);
+      let count = sessionsResult.success ? sessionsResult.sessions.length : 0;
+      if (isAdmin) {
+        const crResult = await getPendingChangeRequests(organizationId);
+        if (crResult.success) count += crResult.requests.length;
+      }
+      setPendingCount(count);
+    } catch {
+      // keep current count on error
+    }
+  }, [organizationId, isAdmin]);
+
+  useEffect(() => {
+    fetchPendingCount();
+  }, [fetchPendingCount]);
+
+  useRealtimeEvent('time_entries', fetchPendingCount);
+  useRealtimeEvent('entry_change_requests', fetchPendingCount);
 
   // For regular employees, just show the dashboard
   if (!isAdminOrManager) {

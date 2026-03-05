@@ -28,7 +28,7 @@ import {
   getPendingSessions,
   getPendingChangeRequests
 } from '@/lib/time-tracking/actions';
-import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 const OrganizationSwitcher = dynamic(
   () =>
@@ -127,25 +127,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     }
   }, [activeOrgId, isAdminOrManager, isAdmin]);
 
-  // Fetch on mount and when org changes
+  // Fetch on mount and when org/role changes
   useEffect(() => {
     fetchPendingCount();
-    // Poll every 60 seconds
-    const interval = setInterval(fetchPendingCount, 60000);
-    return () => clearInterval(interval);
   }, [fetchPendingCount]);
 
-  // Listen for clock status refresh events
-  useEffect(() => {
-    const handleRefresh = () => {
-      fetchPendingCount();
-    };
-
-    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    return () => {
-      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    };
-  }, [fetchPendingCount]);
+  // Realtime: refetch when time entries or change requests change
+  useRealtimeEvent('time_entries', fetchPendingCount);
+  useRealtimeEvent('entry_change_requests', fetchPendingCount);
 
   // Filter nav items based on role
   const visibleNavItems = navItems.filter(

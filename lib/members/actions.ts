@@ -1,9 +1,11 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { CACHE_TAGS } from '@/lib/data/cached';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
@@ -58,7 +60,7 @@ export async function updateMemberRole(
     }
 
     const cookieStore = await cookies();
-    const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+    const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
@@ -137,6 +139,8 @@ export async function updateMemberRole(
       return { success: false, error: 'update_failed' };
     }
 
+    updateTag(CACHE_TAGS.memberships(memberId));
+
     return { success: true };
   } catch (error) {
     console.error('Unexpected error in updateMemberRole:', error);
@@ -167,7 +171,7 @@ export async function removeMember(
     }
 
     const cookieStore = await cookies();
-    const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+    const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
@@ -308,9 +312,105 @@ export async function removeMember(
       return { success: false, error: 'delete_failed' };
     }
 
+    updateTag(CACHE_TAGS.memberships(memberId));
+    if (orgId) {
+      updateTag(CACHE_TAGS.memberCount(orgId));
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Unexpected error in removeMember:', error);
     return { success: false, error: 'unexpected_error' };
+  }
+}
+
+export type OrgMemberInfo = {
+  user_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+};
+
+/**
+ * Get org members (server action replacement for /api/get-org-members).
+ * Enforces admin/manager authorization and filters by role for managers.
+ */
+export async function getOrgMembersAction(
+  organizationId: string
+): Promise<{ success: true; members: OrgMemberInfo[] } | { success: false; error: string }> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', organizationId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (!membership) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    const userRole = membership.role as OrgRole;
+    if (userRole !== 'admin' && userRole !== 'manager') {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    const { data: members, error } = await supabase.rpc('get_org_members', {
+      p_org_id: organizationId
+    });
+
+    if (error) {
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    let filtered = (members ?? []) as OrgMemberInfo[];
+
+    if (userRole === 'manager') {
+      const MANAGED_ROLES: OrgRole[] = ['accountant', 'secretary', 'employee'];
+      filtered = filtered.filter(
+        (m) => MANAGED_ROLES.includes(m.role as OrgRole) || m.role === 'manager'
+      );
+    }
+
+    return { success: true, members: filtered };
+  } catch {
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get profile display names for a list of user IDs (server action replacement for /api/get-profiles).
+ */
+export async function getProfilesByIds(
+  userIds: string[]
+): Promise<Record<string, { firstName: string | null; lastName: string | null }>> {
+  if (!userIds || userIds.length === 0) return {};
+
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: profiles, error } = await admin
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', userIds);
+
+    if (error || !profiles) return {};
+
+    const map: Record<string, { firstName: string | null; lastName: string | null }> = {};
+    for (const p of profiles) {
+      map[p.id] = { firstName: p.first_name, lastName: p.last_name };
+    }
+    return map;
+  } catch {
+    return {};
   }
 }

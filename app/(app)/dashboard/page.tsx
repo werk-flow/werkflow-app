@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 
-import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
-import { getCachedMemberCount } from '@/lib/data/cached';
+import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getCachedUser, getCachedMemberCount } from '@/lib/data/cached';
 import { SignOutButton } from '@/components/sign-out-button';
 import { JoinedBanner } from '@/components/dashboard/joined-banner';
 import { CreatedOrgBanner } from '@/components/dashboard/created-org-banner';
@@ -11,10 +11,15 @@ import { OrgDeletedBanner } from '@/components/dashboard/org-deleted-banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
 
 export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const activeOrgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
+  const [{ data: { user } }, cookieStore] = await Promise.all([
+    getCachedUser(),
+    cookies()
+  ]);
 
-  // Fetch member count server-side using cached function
+  const activeOrgId = user
+    ? await resolveActiveOrgId(cookieStore, user.id)
+    : null;
+
   const memberCount = activeOrgId
     ? await getCachedMemberCount(activeOrgId)
     : null;

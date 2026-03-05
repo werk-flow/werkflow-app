@@ -77,8 +77,7 @@ export function ZeiterfassungDashboard({
 }: ZeiterfassungDashboardProps) {
   const { status, isLoading, error } = useCurrentUserStatus({
     organizationId,
-    userId,
-    interval: 30000 // Poll every 30 seconds
+    userId
   });
 
   // Live timer state

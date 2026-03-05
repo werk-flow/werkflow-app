@@ -8,7 +8,7 @@ import {
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
-import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 export type CurrentUserStatus = {
   isClockedIn: boolean;
@@ -19,16 +19,13 @@ export type CurrentUserStatus = {
 interface UseCurrentUserStatusOptions {
   organizationId: string;
   userId: string;
-  /** Polling interval in milliseconds. Default: 30000 (30 seconds) */
-  interval?: number;
-  /** Enable or disable polling. Default: true */
+  /** Enable or disable fetching. Default: true */
   enabled?: boolean;
 }
 
 export function useCurrentUserStatus({
   organizationId,
   userId,
-  interval = 30000,
   enabled = true
 }: UseCurrentUserStatusOptions): {
   status: CurrentUserStatus;
@@ -116,25 +113,8 @@ export function useCurrentUserStatus({
     }
   }, [fetchStatus, enabled]);
 
-  // Polling
-  useEffect(() => {
-    if (!enabled) return;
-
-    const pollInterval = setInterval(fetchStatus, interval);
-    return () => clearInterval(pollInterval);
-  }, [fetchStatus, interval, enabled]);
-
-  // Listen for clock status refresh events (e.g., from manual entry dialog)
-  useEffect(() => {
-    const handleRefresh = () => {
-      fetchStatus();
-    };
-
-    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    return () => {
-      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    };
-  }, [fetchStatus]);
+  // Realtime: refetch when time entries change
+  useRealtimeEvent('time_entries', fetchStatus);
 
   return {
     status,

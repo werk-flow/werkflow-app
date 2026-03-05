@@ -34,8 +34,9 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
+import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
-import { CLOCK_STATUS_REFRESH_EVENT } from '@/components/clock-fab';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 interface MemberInfo {
   user_id: string;
@@ -496,25 +497,8 @@ export function EntryHistory({
       });
 
       if (result.success) {
-        // Fetch profiles for all unique user IDs
         const userIds = [...new Set(result.entries.map((e) => e.userId))];
-
-        // Fetch profiles via API
-        const profilesResponse = await fetch('/api/get-profiles', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userIds })
-        });
-
-        let profileMap: Record<
-          string,
-          { firstName: string | null; lastName: string | null }
-        > = {};
-
-        if (profilesResponse.ok) {
-          const profilesData = await profilesResponse.json();
-          profileMap = profilesData.profiles || {};
-        }
+        const profileMap = await getProfilesByIds(userIds);
 
         // Merge profile data with entries
         const entriesWithProfiles: EntryWithProfile[] = result.entries.map(
@@ -552,17 +536,8 @@ export function EntryHistory({
     fetchEntries();
   }, [fetchEntries]);
 
-  // Listen for clock status refresh events to update the history
-  useEffect(() => {
-    const handleRefresh = () => {
-      fetchEntries();
-    };
-
-    window.addEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    return () => {
-      window.removeEventListener(CLOCK_STATUS_REFRESH_EVENT, handleRefresh);
-    };
-  }, [fetchEntries]);
+  // Realtime: refetch when time entries change
+  useRealtimeEvent('time_entries', fetchEntries);
 
   const getDisplayName = (entry: EntryWithProfile): string => {
     if (entry.firstName || entry.lastName) {
