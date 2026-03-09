@@ -37,7 +37,12 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover';
 import { useOrganization } from '@/components/organization/organization-context';
-import { addManualEntry, getTimeEntries } from '@/lib/time-tracking/actions';
+import {
+  addManualEntry,
+  getTimeEntries,
+  getAssignedJobs,
+  getAllOrgJobs
+} from '@/lib/time-tracking/actions';
 import { getOrgMembersAction } from '@/lib/members/actions';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
 import type {
@@ -54,6 +59,14 @@ type OrgMember = {
   last_name: string | null;
   email: string;
   role: string;
+};
+
+type JobOption = {
+  id: string;
+  title: string;
+  jobNumber: string | null;
+  status: string;
+  projectName: string | null;
 };
 
 interface ManualEntryDialogProps {
@@ -100,6 +113,11 @@ export function ManualEntryDialog({
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
+  // Job selection
+  const [jobOptions, setJobOptions] = useState<JobOption[]>([]);
+  const [isLoadingJobs, setIsLoadingJobs] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string>('');
+
   // Validation and feedback
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -136,6 +154,29 @@ export function ManualEntryDialog({
     fetchMembers();
   }, [open, isAdminOrManager, activeOrgId]);
 
+  // Fetch jobs when dialog opens
+  useEffect(() => {
+    if (!open || !activeOrgId) return;
+
+    const fetchJobs = async () => {
+      setIsLoadingJobs(true);
+      try {
+        const result = isAdminOrManager
+          ? await getAllOrgJobs(activeOrgId!)
+          : await getAssignedJobs(activeOrgId!);
+        if (result.success) {
+          setJobOptions(result.jobs);
+        }
+      } catch (err) {
+        console.error('Error fetching jobs:', err);
+      } finally {
+        setIsLoadingJobs(false);
+      }
+    };
+
+    fetchJobs();
+  }, [open, activeOrgId, isAdminOrManager]);
+
   // Reset form when dialog opens/closes
   useEffect(() => {
     if (open) {
@@ -155,6 +196,7 @@ export function ManualEntryDialog({
       setSelectedUserId(
         preselectedUserId || (isAdminOrManager ? '' : currentUserId || '')
       );
+      setSelectedJobId('');
     }
   }, [
     open,
@@ -242,11 +284,11 @@ export function ManualEntryDialog({
           return;
         }
 
-        // Submit the entries
         const result = await addManualEntry({
           organizationId: activeOrgId,
           targetUserId,
-          entries
+          entries,
+          jobId: selectedJobId || undefined
         });
 
         if (result.success) {
@@ -556,6 +598,36 @@ export function ManualEntryDialog({
                 </Select>
               </div>
             )}
+
+            {/* Job Selection */}
+            <div className="space-y-2">
+              <Label>Auftrag (optional)</Label>
+              <Select
+                value={selectedJobId}
+                onValueChange={(v) =>
+                  setSelectedJobId(v === 'none' ? '' : v)
+                }
+                disabled={isLoadingJobs}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Kein Auftrag</SelectItem>
+                  {jobOptions.map((job) => (
+                    <SelectItem key={job.id} value={job.id}>
+                      {job.title}
+                      {job.jobNumber ? ` (${job.jobNumber})` : ''}
+                      {job.projectName ? ` · ${job.projectName}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Date Selection */}
             <div className="space-y-2">

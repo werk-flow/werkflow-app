@@ -8,6 +8,7 @@ import {
   getTimeEntries,
   getChangeRequestsForEntries
 } from '@/lib/time-tracking/actions';
+import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import type { OrgRole } from '@/lib/members/actions';
 import type { EntryChangeRequestMap } from '@/lib/time-tracking/types';
@@ -77,13 +78,17 @@ export default async function KalenderPage() {
     return data;
   }
 
-  const [entriesResult, members] = await Promise.all([
+  const fromIso = dayStart.toISOString().split('T')[0];
+  const toIso = dayEnd.toISOString().split('T')[0];
+
+  const [entriesResult, members, jobsResult] = await Promise.all([
     getTimeEntries({
       organizationId: activeOrgId,
       from: dayStart.toISOString(),
       to: dayEnd.toISOString()
     }),
-    fetchMembers()
+    fetchMembers(),
+    getJobsForCalendar(fromIso, toIso)
   ]);
 
   // Build initial change request map if we have entries
@@ -110,6 +115,7 @@ export default async function KalenderPage() {
       members={members}
       initialEntries={entriesResult.success ? entriesResult.entries : undefined}
       initialChangeRequestMap={initialChangeRequestMap}
+      initialJobs={jobsResult.success ? jobsResult.jobs : undefined}
     />
   );
 }

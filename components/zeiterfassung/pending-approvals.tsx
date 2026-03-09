@@ -505,7 +505,8 @@ function pendingSessionToWorkSession(session: PendingSession): WorkSession {
     clockIn: session.clockIn,
     clockOut: session.clockOut,
     durationMinutes,
-    isOrphan: false,
+    jobId: session.clockIn?.jobId ?? session.clockOut?.jobId ?? null,
+    isOrphan: !session.clockIn || !session.clockOut,
     pendingState:
       session.clockIn?.status === 'pending' ||
       session.clockOut?.status === 'pending'

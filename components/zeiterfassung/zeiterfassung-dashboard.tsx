@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Briefcase,
   Coffee,
@@ -8,25 +8,37 @@ import {
   Clock,
   Palmtree,
   ChevronRight,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { useCurrentUserStatus } from '@/hooks/use-current-user-status';
+import {
+  getActiveJobId,
+  switchJob,
+  getJobsForPicker,
+} from '@/lib/time-tracking/actions';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { JobPickerModal } from '@/components/job-picker-modal';
+
+type PickerJob = {
+  id: string;
+  title: string;
+  jobNumber: string | null;
+  status: string;
+  projectName: string | null;
+  clientName: string | null;
+};
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
   userId: string;
 }
 
-// Daily goal in minutes (8 hours)
-const DAILY_GOAL_MINUTES = 8 * 60; // 480 minutes
+const DAILY_GOAL_MINUTES = 8 * 60;
 
-/**
- * Format total minutes to HH:MM:SS with live elapsed time
- */
 function formatLiveTime(
   baseMinutes: number,
   clockInTime: string | null,
@@ -50,9 +62,6 @@ function formatLiveTime(
     .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-/**
- * Calculate live percentage towards daily goal
- */
 function calculateLivePercentage(
   baseMinutes: number,
   clockInTime: string | null,
@@ -80,11 +89,61 @@ export function ZeiterfassungDashboard({
     userId
   });
 
-  // Live timer state
   const [liveTime, setLiveTime] = useState('00:00:00');
   const [livePercentage, setLivePercentage] = useState(0);
 
-  // Update live timer every second
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeJobTitle, setActiveJobTitle] = useState<string | null>(null);
+  const [showJobPicker, setShowJobPicker] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  const fetchActiveJob = useCallback(async () => {
+    try {
+      const [activeResult, jobsResult] = await Promise.all([
+        getActiveJobId(organizationId),
+        getJobsForPicker(organizationId),
+      ]);
+      if (activeResult.success) {
+        setActiveJobId(activeResult.jobId);
+        if (activeResult.jobId && jobsResult.success) {
+          const job = jobsResult.jobs.find((j) => j.id === activeResult.jobId);
+          setActiveJobTitle(job?.title ?? null);
+        } else {
+          setActiveJobTitle(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching active job:', err);
+    }
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchActiveJob();
+  }, [fetchActiveJob]);
+
+  useRealtimeEvent('jobs', fetchActiveJob);
+  useRealtimeEvent('job_assignments', fetchActiveJob);
+  useRealtimeEvent('time_entries', fetchActiveJob);
+
+  const handlePickerConfirm = async (jobId: string | null) => {
+    if (!status.isClockedIn) {
+      setShowJobPicker(false);
+      return;
+    }
+    setIsSwitching(true);
+    try {
+      const result = await switchJob(organizationId, jobId);
+      if (result.success) {
+        setActiveJobId(jobId);
+      }
+    } catch (err) {
+      console.error('Error switching job:', err);
+    } finally {
+      setIsSwitching(false);
+      setShowJobPicker(false);
+    }
+  };
+
   useEffect(() => {
     const updateLiveValues = () => {
       setLiveTime(
@@ -103,10 +162,8 @@ export function ZeiterfassungDashboard({
       );
     };
 
-    // Update immediately
     updateLiveValues();
 
-    // Then update every second
     const interval = setInterval(updateLiveValues, 1000);
     return () => clearInterval(interval);
   }, [status.todayMinutes, status.clockInTime, status.isClockedIn]);
@@ -130,7 +187,7 @@ export function ZeiterfassungDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Hero Section - Time Progress Ring */}
+      {/* Hero Section */}
       <div className="flex flex-col items-center py-8">
         <TimeProgressRing
           percentage={livePercentage}
@@ -144,7 +201,6 @@ export function ZeiterfassungDashboard({
           <span className="mt-1 text-sm text-muted-foreground">Gesamtzeit</span>
         </TimeProgressRing>
 
-        {/* Status text */}
         <p
           className={cn(
             'mt-6 text-lg font-medium',
@@ -158,27 +214,33 @@ export function ZeiterfassungDashboard({
             : 'Du bist nicht eingestempelt.'}
         </p>
 
-        {/* Goal indicator */}
         <p className="mt-1 text-sm text-muted-foreground">
           Tagesziel: 8 Stunden ({Math.round(livePercentage)}% erreicht)
         </p>
       </div>
 
-      {/* Quick Actions / Menu */}
+      {/* Quick Actions */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground px-1">
           Schnellzugriff
         </h3>
 
-        {/* Project Selection - Cosmetic */}
         <MenuCard
           icon={Briefcase}
-          title="Projekt auswählen"
-          subtitle="Noch kein Projekt gewählt"
-          disabled
+          title="Auftrag auswählen"
+          subtitle={
+            activeJobTitle
+              ? activeJobTitle
+              : status.isClockedIn
+                ? 'Kein Auftrag gewählt'
+                : 'Auftrag für nächste Schicht'
+          }
+          onClick={() => setShowJobPicker(true)}
+          active={!!activeJobTitle && status.isClockedIn}
+          disabled={!status.isClockedIn}
+          disabledHint="Stemple zuerst ein"
         />
 
-        {/* Break/Pause - Cosmetic */}
         <MenuCard
           icon={Coffee}
           title="Pause"
@@ -186,7 +248,6 @@ export function ZeiterfassungDashboard({
           disabled
         />
 
-        {/* Travel Time - Cosmetic */}
         <MenuCard
           icon={Car}
           title="Fahrzeit"
@@ -214,7 +275,6 @@ export function ZeiterfassungDashboard({
                     9 von 30 genutzt
                   </span>
                 </div>
-                {/* Progress bar */}
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
                     className="h-full rounded-full bg-brand-purple transition-all"
@@ -236,7 +296,7 @@ export function ZeiterfassungDashboard({
         </Card>
       </div>
 
-      {/* Working Time Status - Shows current status */}
+      {/* Working Time Status */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground px-1">
           Status
@@ -289,16 +349,27 @@ export function ZeiterfassungDashboard({
           </CardContent>
         </Card>
       </div>
+
+      <JobPickerModal
+        open={showJobPicker}
+        onClose={() => setShowJobPicker(false)}
+        onConfirm={handlePickerConfirm}
+        organizationId={organizationId}
+        mode="switch"
+        currentJobId={activeJobId}
+        isPending={isSwitching}
+      />
     </div>
   );
 }
 
-// Menu Card Component
 interface MenuCardProps {
   icon: React.ElementType;
   title: string;
   subtitle: string;
   disabled?: boolean;
+  disabledHint?: string;
+  active?: boolean;
   onClick?: () => void;
 }
 
@@ -307,6 +378,8 @@ function MenuCard({
   title,
   subtitle,
   disabled,
+  disabledHint,
+  active,
   onClick
 }: MenuCardProps) {
   return (
@@ -315,18 +388,31 @@ function MenuCard({
         'transition-colors',
         disabled
           ? 'opacity-60 cursor-not-allowed'
-          : 'cursor-pointer hover:bg-accent/50'
+          : 'cursor-pointer hover:bg-accent/50',
+        active && 'ring-1 ring-primary/30'
       )}
       onClick={disabled ? undefined : onClick}
     >
       <CardContent className="flex items-center justify-between p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-purple/10">
-            <Icon className="h-5 w-5 text-brand-purple" />
+          <div
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full',
+              active ? 'bg-primary/10' : 'bg-brand-purple/10'
+            )}
+          >
+            <Icon
+              className={cn(
+                'h-5 w-5',
+                active ? 'text-primary' : 'text-brand-purple'
+              )}
+            />
           </div>
           <div>
             <p className="font-medium">{title}</p>
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+              {disabled && disabledHint ? disabledHint : subtitle}
+            </p>
           </div>
         </div>
         <ChevronRight className="h-5 w-5 text-muted-foreground" />
@@ -335,18 +421,15 @@ function MenuCard({
   );
 }
 
-// Dashboard Skeleton
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      {/* Hero skeleton */}
       <div className="flex flex-col items-center py-8">
         <Skeleton className="h-[260px] w-[260px] rounded-full" />
         <Skeleton className="mt-6 h-6 w-48" />
         <Skeleton className="mt-2 h-4 w-32" />
       </div>
 
-      {/* Quick actions skeleton */}
       <div className="space-y-3">
         <Skeleton className="h-4 w-24" />
         {[1, 2, 3].map((i) => (
@@ -354,7 +437,6 @@ function DashboardSkeleton() {
         ))}
       </div>
 
-      {/* Vacation skeleton */}
       <div className="space-y-3">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-[100px] w-full rounded-lg" />
@@ -362,4 +444,3 @@ function DashboardSkeleton() {
     </div>
   );
 }
-

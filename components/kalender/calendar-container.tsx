@@ -13,7 +13,9 @@ import {
   getTimeEntries,
   getChangeRequestsForEntries
 } from '@/lib/time-tracking/actions';
+import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import type { CalendarJob } from '@/lib/jobs/types';
 
 const EntryDetailsDialog = dynamic(
   () => import('./entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
@@ -32,9 +34,7 @@ export type CalendarView = 'day' | 'week' | 'month';
 // Filters for what types of events to show in the calendar
 export interface CalendarFilters {
   showWorkingHours: boolean;
-  // Future filters:
-  // showAppointments: boolean;
-  // showProjectDates: boolean;
+  showJobs: boolean;
 }
 
 // Dynamically import FullCalendar to avoid SSR issues
@@ -62,6 +62,7 @@ interface CalendarContainerProps {
   members: CalendarMember[];
   initialEntries?: TimeEntry[];
   initialChangeRequestMap?: EntryChangeRequestMap;
+  initialJobs?: CalendarJob[];
 }
 
 export function CalendarContainer({
@@ -71,7 +72,8 @@ export function CalendarContainer({
   isAdminOrManager,
   members,
   initialEntries,
-  initialChangeRequestMap
+  initialChangeRequestMap,
+  initialJobs
 }: CalendarContainerProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
@@ -85,9 +87,10 @@ export function CalendarContainer({
   const [selectedSession, setSelectedSession] = useState<WorkSession | null>(
     null
   );
+  const [calendarJobs, setCalendarJobs] = useState<CalendarJob[]>(initialJobs ?? []);
   const [filters, setFilters] = useState<CalendarFilters>({
-    showWorkingHours: true
-    // Future filters will be added here
+    showWorkingHours: true,
+    showJobs: true
   });
   // Track which member to highlight when navigating from week view cell click
   // We use two states: pendingHighlight stores the ID while loading,
@@ -180,14 +183,30 @@ export function CalendarContainer({
     }
   }, [organizationId, getDateRange]);
 
-  // Fetch entries when date/view changes
+  const fetchJobs = useCallback(async (silent = false) => {
+    try {
+      const { start, end } = getDateRange();
+      const fromIso = start.toISOString().split('T')[0];
+      const toIso = end.toISOString().split('T')[0];
+
+      const result = await getJobsForCalendar(fromIso, toIso);
+      if (result.success) {
+        setCalendarJobs(result.jobs);
+      }
+    } catch (error) {
+      console.error('Error fetching calendar jobs:', error);
+    }
+  }, [getDateRange]);
+
   useEffect(() => {
     fetchEntries();
-  }, [fetchEntries]);
+    fetchJobs();
+  }, [fetchEntries, fetchJobs]);
 
-  // Realtime: silently refetch so the calendar stays visible during the update
   useRealtimeEvent('time_entries', () => fetchEntries(true));
   useRealtimeEvent('entry_change_requests', () => fetchEntries(true));
+  useRealtimeEvent('jobs', () => fetchJobs(true));
+  useRealtimeEvent('job_assignments', () => fetchJobs(true));
 
   // Navigation handlers
   const handlePrevious = useCallback(() => {
@@ -272,10 +291,23 @@ export function CalendarContainer({
     filters.showWorkingHours
   ]);
 
-  // Filter members based on selection
   const filteredMembers = isAdminOrManager
     ? members.filter((m) => selectedMembers.includes(m.user_id))
     : members.filter((m) => m.user_id === currentUserId);
+
+  const filteredJobs = useMemo(() => {
+    if (!filters.showJobs) return [];
+
+    return isAdminOrManager
+      ? calendarJobs.filter(
+          (j) =>
+            j.assignedUserIds.length === 0 ||
+            j.assignedUserIds.some((uid) => selectedMembers.includes(uid))
+        )
+      : calendarJobs.filter(
+          (j) => j.assignedUserIds.includes(currentUserId)
+        );
+  }, [calendarJobs, filters.showJobs, selectedMembers, isAdminOrManager, currentUserId]);
 
   // Determine whether to use FullCalendar or custom views
   // - Employees: Use FullCalendar for all views
@@ -333,6 +365,7 @@ export function CalendarContainer({
             onEventClick={handleEventClick}
             onDateSelect={handleDateSelect}
             onViewChange={setView}
+            jobs={filteredJobs}
           />
         ) : (
           <>
@@ -348,6 +381,7 @@ export function CalendarContainer({
                 onRefresh={fetchEntries}
                 changeRequestMap={changeRequestMap}
                 highlightMemberId={highlightMemberId}
+                jobs={filteredJobs}
               />
             )}
             {view === 'week' && (
@@ -364,6 +398,7 @@ export function CalendarContainer({
                 onSessionClick={handleEventClick}
                 changeRequestMap={changeRequestMap}
                 onMemberDayClick={handleMemberDayClick}
+                jobs={filteredJobs}
               />
             )}
           </>

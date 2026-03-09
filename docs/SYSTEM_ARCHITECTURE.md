@@ -57,6 +57,60 @@ WerkFlow is a Next.js 15 application with Supabase for authentication and databa
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
+#### `clients`
+- `id` (uuid, PK)
+- `organization_id` (uuid, FK to organizations.id, ON DELETE CASCADE)
+- `name` (text, NOT NULL)
+- `client_type` (client_type enum, default 'privat')
+- `email` (text, nullable)
+- `phone` (text, nullable)
+- `address` (text, nullable)
+- `notes` (text, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### `projects`
+- `id` (uuid, PK)
+- `organization_id` (uuid, FK to organizations.id, ON DELETE CASCADE)
+- `client_id` (uuid, FK to clients.id, nullable, ON DELETE SET NULL)
+- `name` (text, NOT NULL)
+- `description` (text, nullable)
+- `project_number` (text, nullable)
+- `status_override` (project_status enum, nullable) - When NULL, status is derived from child jobs
+- `planned_start_date` (date, nullable)
+- `planned_end_date` (date, nullable)
+- `created_by` (uuid, FK to profiles.id, NOT NULL)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### `jobs`
+- `id` (uuid, PK)
+- `organization_id` (uuid, FK to organizations.id, ON DELETE CASCADE)
+- `project_id` (uuid, FK to projects.id, nullable, ON DELETE SET NULL) - NULL = standalone job
+- `client_id` (uuid, FK to clients.id, nullable, ON DELETE SET NULL)
+- `job_number` (text, nullable) - Auto-generated as AUF-{YEAR}-{SEQ}, overridable
+- `title` (text, NOT NULL)
+- `description` (text, nullable)
+- `status` (job_status enum, default 'nicht_bearbeitet')
+- `priority` (job_priority enum, default 'mittel')
+- `planned_date` (date, nullable)
+- `planned_time` (time, nullable)
+- `estimated_duration_minutes` (integer, nullable)
+- `actual_completion_date` (date, nullable)
+- `location` (text, nullable)
+- `created_by` (uuid, FK to profiles.id, NOT NULL)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### `job_assignments`
+- `id` (uuid, PK)
+- `job_id` (uuid, FK to jobs.id, ON DELETE CASCADE)
+- `user_id` (uuid, FK to profiles.id, ON DELETE CASCADE)
+- `assigned_by` (uuid, FK to profiles.id)
+- `assigned_at` (timestamptz)
+
+**Unique constraint**: (job_id, user_id)
+
 ### Enums
 
 #### `org_role`
@@ -72,6 +126,25 @@ Values (in hierarchy order, highest to lowest):
 - `accepted` - User joined the organization
 - `expired` - Invite expired (by date)
 - `cancelled` - Admin/manager revoked the invite
+
+#### `client_type`
+- `privat` - Private/individual client
+- `geschaeftlich` - Corporate/business client
+
+#### `job_status`
+- `nicht_bearbeitet` - Not yet started
+- `in_bearbeitung` - In progress
+- `fertig` - Completed
+
+#### `job_priority`
+- `niedrig` - Low priority
+- `mittel` - Medium priority
+- `hoch` - High priority
+
+#### `project_status`
+- `nicht_begonnen` - Not yet started
+- `in_bearbeitung` - In progress
+- `abgeschlossen` - Completed
 
 ---
 
@@ -99,6 +172,12 @@ check_user_exists_by_email(p_email text) RETURNS {user_id, user_exists}
 
 -- Gets invite details by code (bypasses RLS for unauthenticated users)
 get_invite_by_code(p_invite_code text) RETURNS invite details
+
+-- Gets all clients for an organization
+get_org_clients(p_org_id uuid) RETURNS SETOF clients
+
+-- Generates the next sequential job number for an org (AUF-{YEAR}-{SEQ})
+generate_job_number(p_org_id uuid) RETURNS text
 ```
 
 ### RLS Summary
@@ -107,6 +186,12 @@ get_invite_by_code(p_invite_code text) RETURNS invite details
 - **organization_members**: Users can SELECT members of orgs they belong to
 - **organization_invites**: Only admins/managers can SELECT invites for their orgs
 - **subscriptions**: Users can SELECT their own subscription only
+- **clients**: Users can SELECT clients in orgs they belong to
+- **projects**: Users can SELECT projects in orgs they belong to
+- **jobs**: Users can SELECT jobs in orgs they belong to
+- **job_assignments**: Users can SELECT assignments for jobs in their orgs
+
+**Note**: Non-admin/manager filtering (e.g., employees only see their assigned jobs) is enforced at the query level in server actions, not via RLS policies.
 
 ---
 
@@ -229,6 +314,11 @@ get_invite_by_code(p_invite_code text) RETURNS invite details
 | Change roles | Up to manager | Below manager | ❌ |
 | Remove members | All roles | Below manager | ❌ |
 | Delete organization | ✅ | ❌ | ❌ |
+| Create/edit/delete jobs | ✅ | ✅ | ❌ |
+| Create/edit/delete projects | ✅ | ✅ | ❌ |
+| Create/edit/delete clients | ✅ | ✅ | ❌ |
+| View all jobs/projects | ✅ | ✅ | ❌ |
+| View assigned jobs only | - | - | ✅ |
 
 ### Role Labels (German, Gender-Inclusive)
 ```typescript
@@ -409,7 +499,10 @@ app/
 ├── (app)/                    # Protected routes with sidebar
 │   ├── layout.tsx            # OrganizationProvider wrapper
 │   ├── dashboard/page.tsx
-│   └── mitarbeiter/page.tsx
+│   ├── mitarbeiter/page.tsx
+│   ├── auftraege/             # Jobs (future: Phase 4)
+│   ├── projekte/              # Projects (future: Phase 5)
+│   └── kunden/                # Clients (future: Phase 3)
 ├── (auth)/                   # Auth pages (centered card layout)
 │   ├── login/
 │   ├── signup/
@@ -456,6 +549,8 @@ components/
 └── sidebar/Sidebar.tsx
 
 lib/
+├── jobs/
+│   └── types.ts              # Job, Project, Client types, converters, constants
 ├── auth/actions.ts           # deleteAccount
 ├── invites/
 │   ├── actions.ts            # sendOrgInvite

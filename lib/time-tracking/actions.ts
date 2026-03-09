@@ -201,7 +201,7 @@ async function getOpenSessionOrgsForUserToday(
 /**
  * Clock in for the current user (real-time)
  */
-export async function clockIn(organizationId?: string): Promise<ClockResult> {
+export async function clockIn(organizationId?: string, jobId?: string | null): Promise<ClockResult> {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -245,6 +245,8 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
       return { success: false, error: 'already_clocked_in' };
     }
 
+    const resolvedJobId = jobId || null;
+
     const { data: newEntry, error: insertError } = await admin
       .from('time_entries')
       .insert({
@@ -253,7 +255,8 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
         entry_type: 'clock_in',
         timestamp: new Date().toISOString(),
         is_manual: false,
-        status: 'approved'
+        status: 'approved',
+        job_id: resolvedJobId
       })
       .select()
       .single();
@@ -261,6 +264,21 @@ export async function clockIn(organizationId?: string): Promise<ClockResult> {
     if (insertError || !newEntry) {
       console.error('Error inserting clock_in:', insertError);
       return { success: false, error: 'insert_failed' };
+    }
+
+    if (resolvedJobId) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('status')
+        .eq('id', resolvedJobId)
+        .single();
+
+      if (job && job.status === 'nicht_bearbeitet') {
+        await admin
+          .from('jobs')
+          .update({ status: 'in_bearbeitung' })
+          .eq('id', resolvedJobId);
+      }
     }
 
     return { success: true, entry: toTimeEntry(newEntry) };
@@ -465,6 +483,7 @@ export async function addManualEntry(
       entryType: e.entryType,
       timestamp: e.timestamp,
       isManual: true,
+      jobId: params.jobId ?? null,
       status,
       reviewedBy: null,
       reviewedAt: null,
@@ -494,7 +513,6 @@ export async function addManualEntry(
       }
     }
 
-    // Insert entries
     const insertData = entries.map((entry) => ({
       user_id: targetUserId,
       organization_id: organizationId,
@@ -502,9 +520,9 @@ export async function addManualEntry(
       timestamp: entry.timestamp,
       is_manual: true,
       status,
-      // If immediately approved by admin/manager, record who approved
       reviewed_by: status === 'approved' ? user.id : null,
-      reviewed_at: status === 'approved' ? new Date().toISOString() : null
+      reviewed_at: status === 'approved' ? new Date().toISOString() : null,
+      job_id: params.jobId || null
     }));
 
     const { data: newEntries, error: insertError } = await admin
@@ -1795,6 +1813,531 @@ export async function getChangeRequestsForEntries(
     };
   } catch (error) {
     console.error('Unexpected error in getChangeRequestsForEntries:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+// ============================================
+// Job-Linked Time Tracking
+// ============================================
+
+/**
+ * Switch the active job for the current session.
+ * Atomically clocks out of the current session and clocks back in with the new job.
+ */
+export async function switchJob(
+  organizationId: string,
+  newJobId: string | null
+): Promise<ClockResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const [userRole, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, organizationId),
+      getUserTodayEntries(admin, user.id, organizationId)
+    ]);
+
+    if (!userRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    const timeEntries = toTimeEntries(todayRows);
+    if (!hasOpenSession(timeEntries)) {
+      return { success: false, error: 'not_clocked_in' };
+    }
+
+    const nowIso = new Date().toISOString();
+
+    const { error: clockOutError } = await admin
+      .from('time_entries')
+      .insert({
+        user_id: user.id,
+        organization_id: organizationId,
+        entry_type: 'clock_out',
+        timestamp: nowIso,
+        is_manual: false,
+        status: 'approved'
+      });
+
+    if (clockOutError) {
+      console.error('Error inserting clock_out during switchJob:', clockOutError);
+      return { success: false, error: 'insert_failed' };
+    }
+
+    const { data: newEntry, error: clockInError } = await admin
+      .from('time_entries')
+      .insert({
+        user_id: user.id,
+        organization_id: organizationId,
+        entry_type: 'clock_in',
+        timestamp: nowIso,
+        is_manual: false,
+        status: 'approved',
+        job_id: newJobId
+      })
+      .select()
+      .single();
+
+    if (clockInError || !newEntry) {
+      console.error('Error inserting clock_in during switchJob:', clockInError);
+      return { success: false, error: 'insert_failed' };
+    }
+
+    if (newJobId) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('status')
+        .eq('id', newJobId)
+        .single();
+
+      if (job && job.status === 'nicht_bearbeitet') {
+        await admin
+          .from('jobs')
+          .update({ status: 'in_bearbeitung' })
+          .eq('id', newJobId);
+      }
+    }
+
+    return { success: true, entry: toTimeEntry(newEntry) };
+  } catch (error) {
+    console.error('Unexpected error in switchJob:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get all time entries linked to a specific job.
+ */
+export async function getTimeEntriesForJob(
+  jobId: string
+): Promise<GetTimeEntriesResult> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const { data, error } = await admin
+      .from('time_entries')
+      .select('*')
+      .eq('job_id', jobId)
+      .neq('status', 'rejected')
+      .order('timestamp', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching time entries for job:', error);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    return { success: true, entries: toTimeEntries(data || []) };
+  } catch (error) {
+    console.error('Unexpected error in getTimeEntriesForJob:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get the job_id from the user's currently open clock-in entry (if any).
+ */
+export async function getActiveJobId(
+  organizationId: string
+): Promise<
+  | { success: true; jobId: string | null; isClockedIn: boolean }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const todayRows = await getUserTodayEntries(admin, user.id, organizationId);
+    const timeEntries = toTimeEntries(todayRows);
+
+    if (!hasOpenSession(timeEntries)) {
+      return { success: true, jobId: null, isClockedIn: false };
+    }
+
+    const sortedClockIns = timeEntries
+      .filter((e) => e.entryType === 'clock_in')
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+    const latestClockIn = sortedClockIns[0];
+    return {
+      success: true,
+      jobId: latestClockIn?.jobId ?? null,
+      isClockedIn: true
+    };
+  } catch (error) {
+    console.error('Unexpected error in getActiveJobId:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get jobs assigned to a specific user in an organization.
+ * Used by clock-in job picker and Zeiterfassung dashboard.
+ */
+export async function getAssignedJobs(
+  organizationId: string,
+  userId?: string
+): Promise<
+  | {
+      success: true;
+      jobs: Array<{
+        id: string;
+        title: string;
+        jobNumber: string | null;
+        status: string;
+        projectName: string | null;
+      }>;
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const targetUserId = userId || user.id;
+    const admin = createSupabaseAdminClient();
+
+    const { data: assignments, error: assignError } = await admin
+      .from('job_assignments')
+      .select('job_id')
+      .eq('user_id', targetUserId);
+
+    if (assignError) {
+      console.error('Error fetching job assignments:', assignError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    if (!assignments || assignments.length === 0) {
+      return { success: true, jobs: [] };
+    }
+
+    const jobIds = assignments.map((a) => a.job_id);
+
+    const { data: jobs, error: jobsError } = await admin
+      .from('jobs')
+      .select('id, title, job_number, status, project_id')
+      .eq('organization_id', organizationId)
+      .in('id', jobIds)
+      .neq('status', 'fertig')
+      .order('planned_date', { ascending: true, nullsFirst: false });
+
+    if (jobsError) {
+      console.error('Error fetching assigned jobs:', jobsError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const projectIds = (jobs || [])
+      .map((j) => j.project_id)
+      .filter((id): id is string => id !== null);
+
+    let projectMap: Record<string, string> = {};
+    if (projectIds.length > 0) {
+      const { data: projects } = await admin
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
+
+      if (projects) {
+        projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+      }
+    }
+
+    return {
+      success: true,
+      jobs: (jobs || []).map((j) => ({
+        id: j.id,
+        title: j.title,
+        jobNumber: j.job_number,
+        status: j.status,
+        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
+      }))
+    };
+  } catch (error) {
+    console.error('Unexpected error in getAssignedJobs:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get ALL org jobs (for admin/manager use in manual entry dialog).
+ */
+export async function getAllOrgJobs(
+  organizationId: string
+): Promise<
+  | {
+      success: true;
+      jobs: Array<{
+        id: string;
+        title: string;
+        jobNumber: string | null;
+        status: string;
+        projectName: string | null;
+      }>;
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const { data: jobs, error: jobsError } = await admin
+      .from('jobs')
+      .select('id, title, job_number, status, project_id')
+      .eq('organization_id', organizationId)
+      .neq('status', 'fertig')
+      .order('planned_date', { ascending: true, nullsFirst: false });
+
+    if (jobsError) {
+      console.error('Error fetching all org jobs:', jobsError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const projectIds = (jobs || [])
+      .map((j) => j.project_id)
+      .filter((id): id is string => id !== null);
+
+    let projectMap: Record<string, string> = {};
+    if (projectIds.length > 0) {
+      const { data: projects } = await admin
+        .from('projects')
+        .select('id, name')
+        .in('id', projectIds);
+
+      if (projects) {
+        projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+      }
+    }
+
+    return {
+      success: true,
+      jobs: (jobs || []).map((j) => ({
+        id: j.id,
+        title: j.title,
+        jobNumber: j.job_number,
+        status: j.status,
+        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
+      }))
+    };
+  } catch (error) {
+    console.error('Unexpected error in getAllOrgJobs:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+type PickerJob = {
+  id: string;
+  title: string;
+  jobNumber: string | null;
+  status: string;
+  projectName: string | null;
+  clientName: string | null;
+};
+
+/**
+ * Get jobs for the clock-in / job-switch picker.
+ * Admin/manager: all non-archived org jobs.
+ * Employee: only assigned, non-archived jobs.
+ */
+export async function getJobsForPicker(
+  organizationId: string
+): Promise<
+  | { success: true; jobs: PickerJob[] }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const role = await verifyMembershipFromCache(user.id, organizationId);
+    if (!role) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const isManagerOrAbove = role === 'admin' || role === 'manager';
+
+    let jobIds: string[] | null = null;
+
+    if (!isManagerOrAbove) {
+      const { data: assignments, error: assignError } = await admin
+        .from('job_assignments')
+        .select('job_id')
+        .eq('user_id', user.id);
+
+      if (assignError) {
+        console.error('Error fetching job assignments:', assignError);
+        return { success: false, error: 'fetch_failed' };
+      }
+
+      if (!assignments || assignments.length === 0) {
+        return { success: true, jobs: [] };
+      }
+
+      jobIds = assignments.map((a) => a.job_id);
+    }
+
+    let query = admin
+      .from('jobs')
+      .select('id, title, job_number, status, project_id, client_id')
+      .eq('organization_id', organizationId)
+      .neq('status', 'fertig')
+      .order('title', { ascending: true });
+
+    if (jobIds) {
+      query = query.in('id', jobIds);
+    }
+
+    const { data: jobs, error: jobsError } = await query;
+
+    if (jobsError) {
+      console.error('Error fetching picker jobs:', jobsError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const projectIds = (jobs || [])
+      .map((j) => j.project_id)
+      .filter((id): id is string => id !== null);
+    const clientIds = (jobs || [])
+      .map((j) => j.client_id)
+      .filter((id): id is string => id !== null);
+
+    let projectMap: Record<string, string> = {};
+    let clientMap: Record<string, string> = {};
+
+    const [projectsData, clientsData] = await Promise.all([
+      projectIds.length > 0
+        ? admin.from('projects').select('id, name').in('id', [...new Set(projectIds)])
+        : null,
+      clientIds.length > 0
+        ? admin.from('clients').select('id, name').in('id', [...new Set(clientIds)])
+        : null,
+    ]);
+
+    if (projectsData?.data) {
+      projectMap = Object.fromEntries(projectsData.data.map((p) => [p.id, p.name]));
+    }
+    if (clientsData?.data) {
+      clientMap = Object.fromEntries(clientsData.data.map((c) => [c.id, c.name]));
+    }
+
+    return {
+      success: true,
+      jobs: (jobs || []).map((j) => ({
+        id: j.id,
+        title: j.title,
+        jobNumber: j.job_number,
+        status: j.status,
+        projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null,
+        clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,
+      }))
+    };
+  } catch (error) {
+    console.error('Unexpected error in getJobsForPicker:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get the set of job IDs that currently have at least one worker clocked in.
+ * Used for the "active work" pulsation indicator across all tables.
+ */
+export async function getActiveJobIdsForOrg(
+  organizationId: string
+): Promise<
+  | { success: true; activeJobIds: string[] }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const { start, end } = getTodayBounds();
+
+    const { data: todayEntries, error } = await admin
+      .from('time_entries')
+      .select('user_id, entry_type, timestamp, job_id')
+      .eq('organization_id', organizationId)
+      .gte('timestamp', start.toISOString())
+      .lte('timestamp', end.toISOString())
+      .neq('status', 'rejected')
+      .neq('status', 'pending_delete')
+      .order('timestamp', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching active job ids:', error);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const activeJobIds = new Set<string>();
+    const seenUsers = new Set<string>();
+
+    for (const row of todayEntries || []) {
+      const uid = row.user_id as string;
+      if (seenUsers.has(uid)) continue;
+      seenUsers.add(uid);
+
+      if (row.entry_type === 'clock_in' && row.job_id) {
+        activeJobIds.add(row.job_id as string);
+      }
+    }
+
+    return { success: true, activeJobIds: [...activeJobIds] };
+  } catch (error) {
+    console.error('Unexpected error in getActiveJobIdsForOrg:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

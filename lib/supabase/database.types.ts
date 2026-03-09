@@ -14,6 +14,53 @@ export type Database = {
   };
   public: {
     Tables: {
+      clients: {
+        Row: {
+          address: string | null;
+          client_type: Database['public']['Enums']['client_type'];
+          created_at: string;
+          email: string | null;
+          id: string;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          phone: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          address?: string | null;
+          client_type?: Database['public']['Enums']['client_type'];
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          name: string;
+          notes?: string | null;
+          organization_id: string;
+          phone?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          address?: string | null;
+          client_type?: Database['public']['Enums']['client_type'];
+          created_at?: string;
+          email?: string | null;
+          id?: string;
+          name?: string;
+          notes?: string | null;
+          organization_id?: string;
+          phone?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'clients_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       entry_change_requests: {
         Row: {
           change_type: Database['public']['Enums']['entry_change_type'];
@@ -80,6 +127,141 @@ export type Database = {
             columns: ['paired_entry_id'];
             isOneToOne: false;
             referencedRelation: 'time_entries';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      job_assignments: {
+        Row: {
+          assigned_at: string;
+          assigned_by: string;
+          id: string;
+          job_id: string;
+          user_id: string;
+        };
+        Insert: {
+          assigned_at?: string;
+          assigned_by: string;
+          id?: string;
+          job_id: string;
+          user_id: string;
+        };
+        Update: {
+          assigned_at?: string;
+          assigned_by?: string;
+          id?: string;
+          job_id?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'job_assignments_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'job_assignments_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'job_assignments_assigned_by_fkey';
+            columns: ['assigned_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      jobs: {
+        Row: {
+          actual_completion_date: string | null;
+          client_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          estimated_duration_minutes: number | null;
+          id: string;
+          job_number: string | null;
+          location: string | null;
+          organization_id: string;
+          planned_date: string | null;
+          planned_time: string | null;
+          priority: Database['public']['Enums']['job_priority'];
+          project_id: string | null;
+          status: Database['public']['Enums']['job_status'];
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          actual_completion_date?: string | null;
+          client_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          description?: string | null;
+          estimated_duration_minutes?: number | null;
+          id?: string;
+          job_number?: string | null;
+          location?: string | null;
+          organization_id: string;
+          planned_date?: string | null;
+          planned_time?: string | null;
+          priority?: Database['public']['Enums']['job_priority'];
+          project_id?: string | null;
+          status?: Database['public']['Enums']['job_status'];
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          actual_completion_date?: string | null;
+          client_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          description?: string | null;
+          estimated_duration_minutes?: number | null;
+          id?: string;
+          job_number?: string | null;
+          location?: string | null;
+          organization_id?: string;
+          planned_date?: string | null;
+          planned_time?: string | null;
+          priority?: Database['public']['Enums']['job_priority'];
+          project_id?: string | null;
+          status?: Database['public']['Enums']['job_status'];
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'jobs_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'jobs_project_id_fkey';
+            columns: ['project_id'];
+            isOneToOne: false;
+            referencedRelation: 'projects';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'jobs_client_id_fkey';
+            columns: ['client_id'];
+            isOneToOne: false;
+            referencedRelation: 'clients';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'jobs_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
             referencedColumns: ['id'];
           }
         ];
@@ -214,6 +396,79 @@ export type Database = {
         };
         Relationships: [];
       };
+      projects: {
+        Row: {
+          client_id: string | null;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          id: string;
+          name: string;
+          organization_id: string;
+          planned_end_date: string | null;
+          planned_start_date: string | null;
+          project_number: string | null;
+          status_override:
+            | Database['public']['Enums']['project_status']
+            | null;
+          updated_at: string;
+        };
+        Insert: {
+          client_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          description?: string | null;
+          id?: string;
+          name: string;
+          organization_id: string;
+          planned_end_date?: string | null;
+          planned_start_date?: string | null;
+          project_number?: string | null;
+          status_override?:
+            | Database['public']['Enums']['project_status']
+            | null;
+          updated_at?: string;
+        };
+        Update: {
+          client_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          planned_end_date?: string | null;
+          planned_start_date?: string | null;
+          project_number?: string | null;
+          status_override?:
+            | Database['public']['Enums']['project_status']
+            | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'projects_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'projects_client_id_fkey';
+            columns: ['client_id'];
+            isOneToOne: false;
+            referencedRelation: 'clients';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'projects_created_by_fkey';
+            columns: ['created_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       subscriptions: {
         Row: {
           created_at: string;
@@ -247,6 +502,7 @@ export type Database = {
           entry_type: string;
           id: string;
           is_manual: boolean;
+          job_id: string | null;
           organization_id: string;
           reviewed_at: string | null;
           reviewed_by: string | null;
@@ -260,6 +516,7 @@ export type Database = {
           entry_type: string;
           id?: string;
           is_manual?: boolean;
+          job_id?: string | null;
           organization_id: string;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
@@ -273,6 +530,7 @@ export type Database = {
           entry_type?: string;
           id?: string;
           is_manual?: boolean;
+          job_id?: string | null;
           organization_id?: string;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
@@ -287,6 +545,13 @@ export type Database = {
             columns: ['organization_id'];
             isOneToOne: false;
             referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'time_entries_job_id_fkey';
+            columns: ['job_id'];
+            isOneToOne: false;
+            referencedRelation: 'jobs';
             referencedColumns: ['id'];
           }
         ];
@@ -347,12 +612,39 @@ export type Database = {
           org_name: string;
         }[];
       };
+      generate_job_number: {
+        Args: { p_org_id: string };
+        Returns: string;
+      };
+      generate_project_number: {
+        Args: { p_org_id: string };
+        Returns: string;
+      };
+      get_org_clients: {
+        Args: { p_org_id: string };
+        Returns: {
+          address: string | null;
+          client_type: Database['public']['Enums']['client_type'];
+          created_at: string;
+          email: string | null;
+          id: string;
+          name: string;
+          notes: string | null;
+          organization_id: string;
+          phone: string | null;
+          updated_at: string;
+        }[];
+      };
     };
     Enums: {
       change_request_status: 'pending' | 'approved' | 'rejected';
+      client_type: 'privat' | 'geschaeftlich';
       entry_change_type: 'edit' | 'delete';
       invite_status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+      job_priority: 'niedrig' | 'mittel' | 'hoch';
+      job_status: 'nicht_bearbeitet' | 'in_bearbeitung' | 'fertig';
       org_role: 'admin' | 'employee' | 'accountant' | 'manager' | 'secretary';
+      project_status: 'nicht_begonnen' | 'in_bearbeitung' | 'abgeschlossen';
       subscription_status: 'active' | 'inactive' | 'canceled' | 'trialing';
       time_entry_status: 'pending' | 'approved' | 'rejected' | 'pending_delete';
     };
@@ -486,9 +778,13 @@ export const Constants = {
   public: {
     Enums: {
       change_request_status: ['pending', 'approved', 'rejected'],
+      client_type: ['privat', 'geschaeftlich'],
       entry_change_type: ['edit', 'delete'],
       invite_status: ['pending', 'accepted', 'expired', 'cancelled'],
+      job_priority: ['niedrig', 'mittel', 'hoch'],
+      job_status: ['nicht_bearbeitet', 'in_bearbeitung', 'fertig'],
       org_role: ['admin', 'employee', 'accountant', 'manager', 'secretary'],
+      project_status: ['nicht_begonnen', 'in_bearbeitung', 'abgeschlossen'],
       subscription_status: ['active', 'inactive', 'canceled', 'trialing'],
       time_entry_status: ['pending', 'approved', 'rejected', 'pending_delete']
     }

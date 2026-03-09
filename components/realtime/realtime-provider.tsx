@@ -15,7 +15,7 @@ import type {
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/components/organization/organization-context';
 
-export type RealtimeTable = 'time_entries' | 'entry_change_requests' | 'organization_invites';
+export type RealtimeTable = 'time_entries' | 'entry_change_requests' | 'organization_invites' | 'jobs' | 'job_assignments';
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
@@ -39,7 +39,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     new Map([
       ['time_entries', new Set()],
       ['entry_change_requests', new Set()],
-      ['organization_invites', new Set()]
+      ['organization_invites', new Set()],
+      ['jobs', new Set()],
+      ['job_assignments', new Set()]
     ])
   );
 
@@ -110,6 +112,27 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('organization_invites', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'jobs',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('jobs', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'job_assignments'
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_assignments', p)
         )
         .subscribe((status: string, err?: Error) => {
           console.log(`[Realtime] channel status: ${status}`);

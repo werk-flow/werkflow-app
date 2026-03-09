@@ -5,6 +5,7 @@ import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
 
 // Role hierarchy for permission checks
@@ -412,5 +413,76 @@ export async function getProfilesByIds(
     return map;
   } catch {
     return {};
+  }
+}
+
+// ============================================
+// Member Detail
+// ============================================
+
+export type MemberDetail = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: OrgRole;
+  joinedAt: string;
+};
+
+/**
+ * Get detailed info for a single org member.
+ * Requires admin/manager access.
+ */
+export async function getMemberDetail(
+  userId: string
+): Promise<
+  { success: true; member: MemberDetail } | { success: false; error: string }
+> {
+  try {
+    const auth = await authenticateAndAuthorize();
+    if (!auth.success) return auth;
+    const { orgId, isManagerOrAbove } = auth.context;
+
+    if (!isManagerOrAbove) {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const { data: membership, error: membershipError } = await admin
+      .from('organization_members')
+      .select('user_id, role, joined_at')
+      .eq('organization_id', orgId)
+      .eq('user_id', userId)
+      .single();
+
+    if (membershipError || !membership) {
+      return { success: false, error: 'not_found' };
+    }
+
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      return { success: false, error: 'not_found' };
+    }
+
+    return {
+      success: true,
+      member: {
+        userId: profile.id,
+        firstName: profile.first_name ?? '',
+        lastName: profile.last_name ?? '',
+        email: profile.email ?? '',
+        role: membership.role as OrgRole,
+        joinedAt: membership.joined_at,
+      },
+    };
+  } catch (error) {
+    console.error('Unexpected error in getMemberDetail:', error);
+    return { success: false, error: 'unexpected_error' };
   }
 }

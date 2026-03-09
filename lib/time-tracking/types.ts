@@ -22,6 +22,7 @@ export type TimeEntry = {
   entryType: TimeEntryType;
   timestamp: string;
   isManual: boolean;
+  jobId: string | null;
   status: TimeEntryStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
@@ -37,6 +38,8 @@ export type WorkSession = {
   clockIn: TimeEntry | null; // null for orphan clock_out
   clockOut: TimeEntry | null; // null if session is open or orphan clock_in
   durationMinutes: number | null; // null if session is open or orphan
+  /** Job linked to this session (derived from clockIn entry) */
+  jobId: string | null;
   /** True if this is an orphan entry (unpaired clock_out without preceding clock_in) */
   isOrphan?: boolean;
   /**
@@ -63,6 +66,7 @@ export type AddManualEntryParams = {
   organizationId: string;
   targetUserId: string;
   entries: ManualEntryInput[];
+  jobId?: string;
 };
 
 /**
@@ -180,6 +184,7 @@ export function toTimeEntry(row: TimeEntryRow): TimeEntry {
     entryType: row.entry_type as TimeEntryType,
     timestamp: row.timestamp,
     isManual: row.is_manual,
+    jobId: row.job_id ?? null,
     status: row.status,
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,

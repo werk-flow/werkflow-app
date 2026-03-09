@@ -1,12 +1,28 @@
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useRef } from 'react';
-import { Play, Square, Loader2, X, AlertCircle } from 'lucide-react';
+import {
+  Play,
+  Square,
+  Loader2,
+  X,
+  AlertCircle,
+  Briefcase,
+  ArrowLeftRight,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { clockIn, clockOut, getClockStatus } from '@/lib/time-tracking/actions';
+import {
+  clockIn,
+  clockOut,
+  getClockStatus,
+  getActiveJobId,
+  switchJob,
+  getJobsForPicker,
+} from '@/lib/time-tracking/actions';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { JobPickerModal } from '@/components/job-picker-modal';
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
@@ -20,6 +36,11 @@ export function ClockFAB() {
   }>(null);
   const [isBannerExiting, setIsBannerExiting] = useState(false);
   const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [showJobPicker, setShowJobPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'clock_in' | 'switch'>('clock_in');
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeJobTitle, setActiveJobTitle] = useState<string | null>(null);
 
   const dismissBanner = useCallback(() => {
     setIsBannerExiting(true);
@@ -36,12 +57,20 @@ export function ClockFAB() {
     }
 
     try {
-      const result = await getClockStatus(activeOrgId);
-      if (result.success) {
-        setIsClockedIn(result.isClockedIn);
+      const [statusResult, activeResult] = await Promise.all([
+        getClockStatus(activeOrgId),
+        getActiveJobId(activeOrgId)
+      ]);
+
+      if (statusResult.success) {
+        setIsClockedIn(statusResult.isClockedIn);
         setStatusError(null);
       } else {
-        setStatusError(result.error);
+        setStatusError(statusResult.error);
+      }
+
+      if (activeResult.success) {
+        setActiveJobId(activeResult.jobId);
       }
     } catch (err) {
       console.error('Error fetching clock status:', err);
@@ -51,70 +80,129 @@ export function ClockFAB() {
     }
   }, [activeOrgId]);
 
-  // Fetch on mount and when org changes
   useEffect(() => {
     setIsLoading(true);
     fetchClockStatus();
   }, [fetchClockStatus]);
 
-  // Realtime: refetch when any time_entry changes for this org
   useRealtimeEvent('time_entries', fetchClockStatus);
 
-  // Handle clock in/out
-  const handleToggle = useCallback(() => {
+  const fetchActiveJobTitle = useCallback(async () => {
+    if (!activeJobId || !activeOrgId) {
+      setActiveJobTitle(null);
+      return;
+    }
+    try {
+      const result = await getJobsForPicker(activeOrgId);
+      if (result.success) {
+        const job = result.jobs.find((j) => j.id === activeJobId);
+        setActiveJobTitle(job?.title ?? null);
+      }
+    } catch {
+      setActiveJobTitle(null);
+    }
+  }, [activeJobId, activeOrgId]);
+
+  useEffect(() => {
+    fetchActiveJobTitle();
+  }, [fetchActiveJobTitle]);
+
+  const openJobPicker = useCallback(
+    (mode: 'clock_in' | 'switch') => {
+      setPickerMode(mode);
+      setShowJobPicker(true);
+    },
+    []
+  );
+
+  const handlePickerConfirm = useCallback(
+    (jobId: string | null) => {
+      if (!activeOrgId) return;
+
+      if (pickerMode === 'clock_in') {
+        startTransition(async () => {
+          try {
+            const result = await clockIn(activeOrgId, jobId);
+            if (result.success) {
+              setIsClockedIn(true);
+              setActiveJobId(jobId);
+              setStatusError(null);
+              setShowJobPicker(false);
+            } else {
+              if (
+                result.error === 'working_in_other_org' &&
+                'otherOrgName' in result &&
+                typeof result.otherOrgName === 'string'
+              ) {
+                setBanner({
+                  title: 'Bereits in anderer Organisation eingestempelt',
+                  message: `Du bist aktuell in „${result.otherOrgName}" eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+                });
+                if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+                bannerTimerRef.current = setTimeout(dismissBanner, 6000);
+                setStatusError(null);
+                setShowJobPicker(false);
+              } else {
+                setStatusError(result.error);
+              }
+            }
+          } catch (err) {
+            console.error('Error clocking in:', err);
+            setStatusError('unexpected_error');
+          }
+        });
+      } else {
+        startTransition(async () => {
+          try {
+            const result = await switchJob(activeOrgId, jobId);
+            if (result.success) {
+              setActiveJobId(jobId);
+              setShowJobPicker(false);
+            } else {
+              setStatusError(result.error);
+            }
+          } catch (err) {
+            console.error('Error switching job:', err);
+            setStatusError('unexpected_error');
+          }
+        });
+      }
+    },
+    [activeOrgId, pickerMode, dismissBanner]
+  );
+
+  const handleClockOut = useCallback(() => {
     if (!activeOrgId) return;
 
     startTransition(async () => {
       try {
-        if (isClockedIn) {
-          const result = await clockOut(activeOrgId);
-          if (result.success) {
-            setIsClockedIn(false);
-            setStatusError(null);
-          } else {
-            setStatusError(result.error);
-          }
+        const result = await clockOut(activeOrgId);
+        if (result.success) {
+          setIsClockedIn(false);
+          setActiveJobId(null);
+          setStatusError(null);
         } else {
-          const result = await clockIn(activeOrgId);
-          if (result.success) {
-            setIsClockedIn(true);
-            setStatusError(null);
-          } else {
-            // Special case: show a banner when the user is already working in another org
-            if (
-              result.error === 'working_in_other_org' &&
-              'otherOrgName' in result &&
-              typeof result.otherOrgName === 'string'
-            ) {
-              const title = 'Bereits in anderer Organisation eingestempelt';
-              const message = `Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`;
-              setBanner({ title, message });
-              // Auto-dismiss after 6 seconds
-              if (bannerTimerRef.current) {
-                clearTimeout(bannerTimerRef.current);
-              }
-              bannerTimerRef.current = setTimeout(() => {
-                dismissBanner();
-              }, 6000);
-              setStatusError(null);
-            } else {
-              setStatusError(result.error);
-            }
-          }
+          setStatusError(result.error);
         }
       } catch (err) {
-        console.error('Error toggling clock:', err);
+        console.error('Error clocking out:', err);
         setStatusError('unexpected_error');
       }
     });
-  }, [activeOrgId, isClockedIn, dismissBanner]);
+  }, [activeOrgId]);
 
-  // Don't show FAB if user has no active org
+  const handleFABClick = useCallback(() => {
+    if (isClockedIn) {
+      handleClockOut();
+    } else {
+      openJobPicker('clock_in');
+    }
+  }, [isClockedIn, handleClockOut, openJobPicker]);
+
   if (!activeOrgId || !activeOrg) {
     return null;
   }
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="fixed bottom-6 right-6 z-50">
@@ -155,11 +243,41 @@ export function ClockFAB() {
         </div>
       )}
 
+      <JobPickerModal
+        open={showJobPicker}
+        onClose={() => setShowJobPicker(false)}
+        onConfirm={handlePickerConfirm}
+        organizationId={activeOrgId}
+        mode={pickerMode}
+        currentJobId={activeJobId}
+        isPending={isPending}
+      />
+
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-        {/* FAB Button */}
+        {isClockedIn && (
+          <div className="flex items-center gap-1.5">
+            {activeJobTitle && (
+              <div className="max-w-[180px] rounded-full bg-background/90 px-3 py-1 text-xs font-medium shadow-md ring-1 ring-border backdrop-blur-sm truncate">
+                <Briefcase className="mr-1 inline-block h-3 w-3 text-muted-foreground" />
+                {activeJobTitle}
+              </div>
+            )}
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-8 w-8 rounded-full shadow-md"
+              onClick={() => openJobPicker('switch')}
+              disabled={isPending}
+              title="Auftrag wechseln"
+            >
+              <ArrowLeftRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
+
         <Button
           size="icon"
-          onClick={handleToggle}
+          onClick={handleFABClick}
           disabled={isPending || !!statusError}
           className={cn(
             'h-14 w-14 rounded-full shadow-lg transition-all',
@@ -178,7 +296,6 @@ export function ClockFAB() {
           )}
         </Button>
 
-        {/* Error indicator */}
         {statusError && (
           <div className="max-w-[200px] rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
             Fehler

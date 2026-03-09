@@ -81,6 +81,13 @@ export function CalendarViewTabs({
     });
   };
 
+  const handleToggleJobs = () => {
+    onFiltersChange({
+      ...filters,
+      showJobs: !filters.showJobs
+    });
+  };
+
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
@@ -123,8 +130,30 @@ export function CalendarViewTabs({
             </span>
           </label>
 
-          {/* Future filters will go here */}
-          {/* Example: Termine, Projektdaten, etc. */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              className={cn(
+                'flex h-4 w-4 items-center justify-center rounded border transition-colors',
+                filters.showJobs
+                  ? 'border-brand-purple bg-brand-purple text-white'
+                  : 'border-muted-foreground/50 bg-background'
+              )}
+              onClick={handleToggleJobs}
+            >
+              {filters.showJobs && <Check className="h-3 w-3" />}
+            </div>
+            <span
+              className={cn(
+                'transition-colors',
+                filters.showJobs
+                  ? 'text-foreground'
+                  : 'text-muted-foreground'
+              )}
+              onClick={handleToggleJobs}
+            >
+              Aufträge
+            </span>
+          </label>
         </div>
       </div>
 

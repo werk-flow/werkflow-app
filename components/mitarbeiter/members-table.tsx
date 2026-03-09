@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Users } from 'lucide-react';
 
 import {
@@ -154,8 +155,13 @@ function MemberCard({
   ) => void;
   status?: MemberStatus;
 }) {
+  const router = useRouter();
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <div
+      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+      onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
+    >
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <p className="font-medium truncate text-sm">
@@ -195,16 +201,18 @@ function MemberCard({
         </div>
       </div>
       {canManageMembers && (
-        <MemberActionsMenu
-          memberId={member.user_id}
-          memberName={memberName}
-          memberFirstName={member.first_name}
-          memberLastName={member.last_name}
-          memberRole={member.role}
-          currentUserId={currentUserId}
-          currentUserRole={currentUserRole}
-          onRoleChange={onRoleChange}
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <MemberActionsMenu
+            memberId={member.user_id}
+            memberName={memberName}
+            memberFirstName={member.first_name}
+            memberLastName={member.last_name}
+            memberRole={member.role}
+            currentUserId={currentUserId}
+            currentUserRole={currentUserRole}
+            onRoleChange={onRoleChange}
+          />
+        </div>
       )}
     </div>
   );
@@ -219,7 +227,7 @@ export function MembersTable({
   skeletonCount = 0,
   statusMap = {}
 }: MembersTableProps) {
-  // Check if current user can manage members (admin or manager)
+  const router = useRouter();
   const canManageMembers =
     currentUserRole === 'admin' || currentUserRole === 'manager';
 
@@ -339,7 +347,11 @@ export function MembersTable({
               );
 
               return (
-                <TableRow key={member.user_id}>
+                <TableRow
+                  key={member.user_id}
+                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
+                >
                   <TableCell className="font-medium">
                     {member.first_name || member.last_name
                       ? `${member.first_name} ${member.last_name}`.trim()
@@ -374,7 +386,7 @@ export function MembersTable({
                     })}
                   </TableCell>
                   {canManageMembers && (
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <MemberActionsMenu
                         memberId={member.user_id}
                         memberName={memberName}

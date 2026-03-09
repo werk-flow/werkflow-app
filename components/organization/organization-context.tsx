@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { setActiveOrgCookie } from '@/lib/org/actions'
 import type { Database } from '@/lib/supabase/database.types'
@@ -42,6 +42,27 @@ type OrganizationData = {
   unique_code: string
 }
 
+/**
+ * Maps detail page paths back to their parent list page.
+ * Returns the list path if the current pathname is a detail sub-route,
+ * or null if it's already a top-level page (safe to just refresh).
+ */
+function getParentListPath(pathname: string): string | null {
+  const detailPrefixes = [
+    { prefix: '/auftraege/', parent: '/auftraege' },
+    { prefix: '/mitarbeiter/', parent: '/mitarbeiter' },
+    { prefix: '/kunden/', parent: '/kunden' },
+  ]
+
+  for (const { prefix, parent } of detailPrefixes) {
+    if (pathname.startsWith(prefix) && pathname !== parent) {
+      return parent
+    }
+  }
+
+  return null
+}
+
 // Context
 const OrganizationContext = createContext<OrgContextValue | null>(null)
 
@@ -60,6 +81,7 @@ export function OrganizationProvider({
   initialIsSubscribed,
 }: OrganizationProviderProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships)
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId)
   const [isLoading, setIsLoading] = useState(false)
@@ -169,7 +191,15 @@ export function OrganizationProvider({
 
       try {
         await setActiveOrgCookie(orgId)
-        router.refresh()
+
+        // When on an org-specific detail page, redirect to the parent list
+        // page instead of refreshing (the entity won't exist in the new org).
+        const parentPath = getParentListPath(pathname)
+        if (parentPath) {
+          router.push(parentPath)
+        } else {
+          router.refresh()
+        }
       } catch (error) {
         console.error('Failed to switch organization', error)
         pendingOrgIdRef.current = null
@@ -177,7 +207,7 @@ export function OrganizationProvider({
         throw error
       }
     },
-    [activeOrgId, router],
+    [activeOrgId, router, pathname],
   )
 
   // Reset switching state when server data arrives for the org we switched to

@@ -7,6 +7,8 @@ const PROTECTED_PREFIXES = [
   '/kalender',
   '/zeiterfassung',
   '/mitarbeiter',
+  '/kunden',
+  '/auftraege',
   '/onboarding',
   '/upgrade'
 ];
@@ -150,7 +152,9 @@ export const config = {
     '/dashboard',
     '/kalender',
     '/zeiterfassung',
-    '/mitarbeiter',
+    '/mitarbeiter/:path*',
+    '/kunden/:path*',
+    '/auftraege/:path*',
     '/onboarding/:path*',
     '/upgrade',
     '/verify',

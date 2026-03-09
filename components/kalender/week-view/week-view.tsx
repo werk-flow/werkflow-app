@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Clock, ArrowUp, ArrowDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -10,8 +10,10 @@ import type {
   WorkSession,
   EntryChangeRequestMap
 } from '@/lib/time-tracking/types';
+import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { CalendarView } from '../calendar-container';
+import { JobEventPopover } from '../job-event-popover';
 
 // CSS for day cell hover behavior - only highlights when not hovering on entry buttons
 const dayCellStyles = `
@@ -47,10 +49,9 @@ interface WeekViewProps {
   onDateSelect: (date: Date) => void;
   onViewChange: (view: CalendarView) => void;
   onSessionClick?: (session: WorkSession) => void;
-  /** Map of entry IDs to their pending change requests */
   changeRequestMap?: EntryChangeRequestMap;
-  /** Called when clicking on a specific employee's day cell (not header) */
   onMemberDayClick?: (memberId: string, date: Date) => void;
+  jobs?: CalendarJob[];
 }
 
 const DAY_NAMES_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -90,11 +91,37 @@ export function WeekView({
   onViewChange,
   onSessionClick,
   changeRequestMap = {},
-  onMemberDayClick
+  onMemberDayClick,
+  jobs = []
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
+  const [selectedJob, setSelectedJob] = useState<{
+    job: CalendarJob;
+    position: { x: number; y: number };
+  } | null>(null);
+
+  const memberNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of members) {
+      map[m.user_id] =
+        m.first_name || m.last_name
+          ? `${m.first_name || ''} ${m.last_name || ''}`.trim()
+          : m.email;
+    }
+    return map;
+  }, [members]);
+
+  const jobsByDay = useMemo(() => {
+    const map: Record<string, CalendarJob[]> = {};
+    for (const day of weekDays) {
+      const dateStr = day.toISOString().split('T')[0];
+      map[dateStr] = jobs.filter((j) => j.plannedDate === dateStr);
+    }
+    return map;
+  }, [jobs, weekDays]);
 
   // Group entries by user
   const entriesByUser = useMemo(() => {
@@ -394,6 +421,39 @@ export function WeekView({
                               +{extraSessions} mehr
                             </span>
                           )}
+
+                          {/* Job badges */}
+                          {(() => {
+                            const dateStr = day.toISOString().split('T')[0];
+                            const dayJobsList = jobsByDay[dateStr] || [];
+                            const memberJobs = dayJobsList.filter(
+                              (j) =>
+                                j.assignedUserIds.length === 0 ||
+                                j.assignedUserIds.includes(member.user_id)
+                            );
+                            if (memberJobs.length === 0) return null;
+
+                            return memberJobs.slice(0, 2).map((job) => (
+                              <button
+                                key={job.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = (e.target as HTMLElement).getBoundingClientRect();
+                                  setSelectedJob({
+                                    job,
+                                    position: { x: rect.right + 8, y: rect.top }
+                                  });
+                                }}
+                                className="week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80 bg-brand-purple/10 border border-brand-purple/30 text-foreground"
+                              >
+                                <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+                                <span className="font-medium truncate text-[10px]">
+                                  {job.title}
+                                </span>
+                              </button>
+                            ));
+                          })()}
                         </div>
                       </div>
                     );
@@ -410,6 +470,15 @@ export function WeekView({
           </div>
         </div>
       </div>
+
+      {selectedJob && (
+        <JobEventPopover
+          job={selectedJob.job}
+          position={selectedJob.position}
+          onClose={() => setSelectedJob(null)}
+          memberNames={memberNameMap}
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,9 @@ export const CACHE_TAGS = {
   subscription: (userId: string) => `subscription-${userId}`,
   profile: (userId: string) => `profile-${userId}`,
   memberCount: (orgId: string) => `member-count-${orgId}`,
+  clients: (orgId: string) => `clients-${orgId}`,
+  jobs: (orgId: string) => `jobs-${orgId}`,
+  projects: (orgId: string) => `projects-${orgId}`,
 } as const
 
 const REVALIDATE_SECONDS = 300 // 5 minutes safety net

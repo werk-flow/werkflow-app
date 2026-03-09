@@ -1,15 +1,17 @@
 'use client';
 
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, EventContentArg } from '@fullcalendar/core';
-import { Clock, ArrowUp, ArrowDown } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type { CalendarJob } from '@/lib/jobs/types';
 import type { CalendarView } from './calendar-container';
+import { JobEventPopover } from './job-event-popover';
 
 interface CalendarMember {
   user_id: string;
@@ -29,6 +31,7 @@ interface FullCalendarViewProps {
   onEventClick: (session: WorkSession) => void;
   onDateSelect: (date: Date) => void;
   onViewChange: (view: CalendarView) => void;
+  jobs?: CalendarJob[];
 }
 
 // Map our view names to FullCalendar view names
@@ -47,9 +50,25 @@ export function FullCalendarView({
   isAdminOrManager,
   onEventClick,
   onDateSelect,
-  onViewChange
+  onViewChange,
+  jobs = []
 }: FullCalendarViewProps) {
   const calendarRef = useRef<FullCalendar>(null);
+  const [selectedJob, setSelectedJob] = useState<{
+    job: CalendarJob;
+    position: { x: number; y: number };
+  } | null>(null);
+
+  const memberNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const m of members) {
+      map[m.user_id] =
+        m.first_name || m.last_name
+          ? `${m.first_name || ''} ${m.last_name || ''}`.trim()
+          : m.email;
+    }
+    return map;
+  }, [members]);
 
   // Helper to get member name
   const getMemberName = (userId: string) => {
@@ -225,6 +244,45 @@ export function FullCalendarView({
     });
   }, [entries, currentUserId, isAdminOrManager, members]);
 
+  const jobEvents = useMemo(() => {
+    return jobs.map((job) => {
+      const isAllDay = !job.plannedTime;
+      let start: Date;
+      let end: Date | undefined;
+
+      if (job.plannedDate && job.plannedTime) {
+        start = new Date(`${job.plannedDate}T${job.plannedTime}:00`);
+        const durationMs = (job.estimatedDurationMinutes || 60) * 60 * 1000;
+        end = new Date(start.getTime() + durationMs);
+      } else if (job.plannedDate) {
+        start = new Date(`${job.plannedDate}T00:00:00`);
+      } else {
+        return null;
+      }
+
+      return {
+        id: `job-${job.id}`,
+        title: '',
+        start,
+        end: isAllDay ? undefined : end,
+        allDay: isAllDay,
+        backgroundColor: 'rgb(123 44 191 / 0.15)',
+        borderColor: 'rgb(123 44 191 / 0.4)',
+        textColor: 'inherit',
+        extendedProps: {
+          isJobEvent: true,
+          job
+        },
+        classNames: ['fc-event-job']
+      };
+    }).filter((e): e is NonNullable<typeof e> => e !== null);
+  }, [jobs]);
+
+  const allEvents = useMemo(
+    () => [...events, ...jobEvents],
+    [events, jobEvents]
+  );
+
   // Sync date with FullCalendar
   useEffect(() => {
     const calendarApi = calendarRef.current?.getApi();
@@ -368,6 +426,16 @@ export function FullCalendarView({
   }, [view]);
 
   const handleEventClick = (info: EventClickArg) => {
+    if (info.event.extendedProps.isJobEvent) {
+      const job = info.event.extendedProps.job as CalendarJob;
+      const rect = info.el.getBoundingClientRect();
+      setSelectedJob({
+        job,
+        position: { x: rect.right + 8, y: rect.top }
+      });
+      return;
+    }
+
     const session = info.event.extendedProps.session as WorkSession;
     if (session) {
       onEventClick(session);
@@ -375,6 +443,21 @@ export function FullCalendarView({
   };
 
   const renderEventContent = (eventInfo: EventContentArg) => {
+    if (eventInfo.event.extendedProps.isJobEvent) {
+      const job = eventInfo.event.extendedProps.job as CalendarJob;
+      return (
+        <div className="flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full text-foreground">
+          <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+          <span className="font-medium truncate text-xs">{job.title}</span>
+          {job.jobNumber && (
+            <span className="text-[10px] text-muted-foreground truncate">
+              {job.jobNumber}
+            </span>
+          )}
+        </div>
+      );
+    }
+
     const {
       isPending,
       isPendingDelete,
@@ -1053,6 +1136,30 @@ export function FullCalendarView({
           color: rgb(254 240 138); /* yellow-200 */
         }
 
+        /* Job events */
+        .fullcalendar-wrapper .fc-event-job {
+          background-color: rgb(123 44 191 / 0.12) !important;
+          border: 1px solid rgb(123 44 191 / 0.35) !important;
+          border-left: 3px solid rgb(123 44 191 / 0.7) !important;
+          color: var(--foreground) !important;
+        }
+
+        .fullcalendar-wrapper .fc-event-job:hover {
+          background-color: rgb(123 44 191 / 0.2) !important;
+        }
+
+        .fullcalendar-wrapper .fc-daygrid-event.fc-event-job {
+          background-color: rgb(123 44 191 / 0.12) !important;
+          border: 1px solid rgb(123 44 191 / 0.35) !important;
+          border-left: 3px solid rgb(123 44 191 / 0.7) !important;
+        }
+
+        .fullcalendar-wrapper .fc-timegrid-event.fc-event-job {
+          background-color: rgb(123 44 191 / 0.12) !important;
+          border: 1px solid rgb(123 44 191 / 0.35) !important;
+          border-left: 3px solid rgb(123 44 191 / 0.7) !important;
+        }
+
         @keyframes fc-pulse {
           0%,
           100% {
@@ -1136,7 +1243,7 @@ export function FullCalendarView({
         plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
         initialView={VIEW_MAP[view]}
         initialDate={date}
-        events={events}
+        events={allEvents}
         eventDisplay="block"
         eventClick={handleEventClick}
         eventContent={renderEventContent}
@@ -1156,7 +1263,7 @@ export function FullCalendarView({
         firstDay={1} // Monday
         headerToolbar={false} // We use our own header
         height="auto"
-        allDaySlot={false}
+        allDaySlot={jobs.length > 0}
         slotMinTime="06:00:00"
         slotMaxTime="22:00:00"
         slotDuration="00:30:00"
@@ -1186,6 +1293,15 @@ export function FullCalendarView({
         dayMaxEvents={2} // Show at most 2 entries before "+ mehr"
         moreLinkContent={(arg) => `+${arg.num} mehr`}
       />
+
+      {selectedJob && (
+        <JobEventPopover
+          job={selectedJob.job}
+          position={selectedJob.position}
+          onClose={() => setSelectedJob(null)}
+          memberNames={memberNameMap}
+        />
+      )}
     </div>
   );
 }

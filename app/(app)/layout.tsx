@@ -13,6 +13,7 @@ import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { AppShell } from '@/components/sidebar/app-shell';
 import { ClockFAB } from '@/components/clock-fab';
+import { ActiveJobsProvider } from '@/components/active-jobs-provider';
 
 export default async function AppLayout({
   children
@@ -57,8 +58,10 @@ export default async function AppLayout({
     >
       <RealtimeProvider>
         <UserProfileProvider initialProfile={userProfile}>
-          <AppShell>{children}</AppShell>
-          <ClockFAB />
+          <ActiveJobsProvider>
+            <AppShell>{children}</AppShell>
+            <ClockFAB />
+          </ActiveJobsProvider>
         </UserProfileProvider>
       </RealtimeProvider>
     </OrganizationProvider>

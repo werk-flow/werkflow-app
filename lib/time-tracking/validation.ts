@@ -116,7 +116,8 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
           clockIn: currentClockIn,
           clockOut: null,
           durationMinutes: null,
-          isOrphan: true, // Previous day's unclosed clock_in is an orphan
+          jobId: currentClockIn.jobId,
+          isOrphan: true,
           pendingState: determinePendingState(currentClockIn, null)
         });
       }
@@ -125,22 +126,22 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       if (currentClockIn) {
         const clockInTime = new Date(currentClockIn.timestamp).getTime();
         const clockOutTime = new Date(entry.timestamp).getTime();
-        // Keep fractional minutes for precision (don't round)
         const durationMinutes = (clockOutTime - clockInTime) / 60000;
 
         sessions.push({
           clockIn: currentClockIn,
           clockOut: entry,
           durationMinutes,
+          jobId: currentClockIn.jobId,
           pendingState: determinePendingState(currentClockIn, entry)
         });
         currentClockIn = null;
       } else {
-        // Orphan clock_out (no preceding clock_in)
         sessions.push({
           clockIn: null,
           clockOut: entry,
           durationMinutes: null,
+          jobId: entry.jobId,
           isOrphan: true,
           pendingState: determinePendingState(null, entry)
         });
@@ -148,7 +149,6 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
     }
   }
 
-  // If there's still an open clock_in, determine if it's an open session or orphan
   if (currentClockIn) {
     const clockInDate = new Date(currentClockIn.timestamp);
     const isOpenSession = isToday(clockInDate);
@@ -157,8 +157,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       clockIn: currentClockIn,
       clockOut: null,
       durationMinutes: null,
-      // Only today's unpaired clock_in is an "open session" (currently working)
-      // Previous days' unpaired clock_ins are orphans
+      jobId: currentClockIn.jobId,
       isOrphan: !isOpenSession,
       pendingState: determinePendingState(currentClockIn, null)
     });

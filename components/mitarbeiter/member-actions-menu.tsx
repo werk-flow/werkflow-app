@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, UserCog, UserMinus, Loader2 } from 'lucide-react';
+import { MoreHorizontal, UserCog, UserMinus, Loader2, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -189,6 +189,13 @@ export function MemberActionsMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => router.push(`/mitarbeiter/${memberId}`)}
+          >
+            <ExternalLink className="size-4" />
+            Details anzeigen
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           {availableRoles.length > 0 && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>

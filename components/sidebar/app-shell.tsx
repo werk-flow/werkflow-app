@@ -13,7 +13,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,8 @@ import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-pag
 import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfassung-page-skeleton';
+import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
+import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   getPendingSessions,
@@ -68,9 +70,20 @@ const navItems: NavItem[] = [
     icon: Clock
   },
   {
+    href: '/auftraege',
+    label: 'Aufträge',
+    icon: Briefcase
+  },
+  {
     href: '/mitarbeiter',
     label: 'Mitarbeiter',
     icon: Users,
+    managerOrAbove: true
+  },
+  {
+    href: '/kunden',
+    label: 'Kunden',
+    icon: Building2,
     managerOrAbove: true
   }
 ];
@@ -373,6 +386,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     if (pathname.startsWith('/zeiterfassung')) {
       return <ZeiterfassungPageSkeleton />;
+    }
+
+    if (pathname.startsWith('/kunden')) {
+      return <KundenPageSkeleton />;
+    }
+
+    if (pathname.startsWith('/auftraege')) {
+      return <AuftraegePageSkeleton />;
     }
 
     return null;
