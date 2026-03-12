@@ -150,9 +150,9 @@ export function MemberActionsMenu({
 
     if (result.success) {
       setShowRemoveDialog(false);
-      // Keep isRemoving true - the row will show spinner until it's removed
-      // when the table re-renders with fresh data after router.refresh()
-      router.refresh();
+      // Keep isRemoving true - component unmounts after navigation
+      // and the destination page shows the success banner.
+      router.push(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
       // Don't set isRemoving to false on success - component will unmount
     } else {
       setError(result.error || 'Fehler beim Entfernen des Mitglieds');

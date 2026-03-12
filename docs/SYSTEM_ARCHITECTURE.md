@@ -129,7 +129,7 @@ Values (in hierarchy order, highest to lowest):
 
 #### `client_type`
 - `privat` - Private/individual client
-- `geschaeftlich` - Corporate/business client
+- `gewerblich` - Corporate/business client
 
 #### `job_status`
 - `nicht_bearbeitet` - Not yet started
@@ -327,7 +327,7 @@ const ROLE_LABELS = {
   manager: 'Manager/in',
   accountant: 'Buchhalter/in',
   secretary: 'Sekretär/in',
-  employee: 'Mitarbeiter/in',
+  employee: 'Handwerker/in',
 }
 ```
 

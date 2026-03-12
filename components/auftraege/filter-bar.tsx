@@ -36,7 +36,7 @@ import {
   type EntryTypeFilter,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
-import { cn } from '@/lib/utils';
+import { cn, toLocalDateString } from '@/lib/utils';
 
 function MultiSelectPopover({
   label,
@@ -215,7 +215,7 @@ export function FilterBar({
         <Label className="text-xs">Datum von</Label>
         <DatePicker
           value={filters.dateFrom ? new Date(filters.dateFrom + 'T00:00:00') : undefined}
-          onChange={(d) => updateFilter('dateFrom', d ? d.toISOString().split('T')[0] : '')}
+          onChange={(d) => updateFilter('dateFrom', d ? toLocalDateString(d) : '')}
           placeholder="Von"
         />
       </div>
@@ -224,7 +224,7 @@ export function FilterBar({
         <Label className="text-xs">Datum bis</Label>
         <DatePicker
           value={filters.dateTo ? new Date(filters.dateTo + 'T00:00:00') : undefined}
-          onChange={(d) => updateFilter('dateTo', d ? d.toISOString().split('T')[0] : '')}
+          onChange={(d) => updateFilter('dateTo', d ? toLocalDateString(d) : '')}
           placeholder="Bis"
         />
       </div>

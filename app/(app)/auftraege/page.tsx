@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -14,6 +15,7 @@ import {
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
+import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
@@ -95,10 +97,11 @@ export default async function AuftraegePage() {
 
     jobList = (jobsResult.data ?? []).map(toJob);
     clientList = (clientsResult.data ?? []).map(toClient);
-    memberList = (membersResult.data ?? []).map((m: { user_id: string; first_name: string; last_name: string }) => ({
+    memberList = (membersResult.data ?? []).map((m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
       userId: m.user_id,
       firstName: m.first_name,
       lastName: m.last_name,
+      role: m.role,
     }));
 
     const jobIds = jobList.map((j) => j.id);
@@ -115,23 +118,25 @@ export default async function AuftraegePage() {
 
     const clientLookup = new Map(clientList.map((c) => [c.id, c]));
 
-    const projectJobCounts = new Map<string, { total: number; completed: number }>();
+    const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number }>();
     for (const job of jobList) {
       if (!job.projectId) continue;
-      const counts = projectJobCounts.get(job.projectId) ?? { total: 0, completed: 0 };
+      const counts = projectJobCounts.get(job.projectId) ?? { total: 0, completed: 0, inProgress: 0 };
       counts.total++;
       if (job.status === 'fertig') counts.completed++;
+      if (job.status === 'in_bearbeitung') counts.inProgress++;
       projectJobCounts.set(job.projectId, counts);
     }
 
     projectList = (projectsResult.data ?? []).map((row) => {
       const project = toProject(row);
-      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0 };
+      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0 };
       return {
         ...project,
         client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
+        inProgressJobCount: counts.inProgress,
       };
     });
   } else {
@@ -201,12 +206,13 @@ export default async function AuftraegePage() {
           .eq('organization_id', activeOrgId),
       ]);
 
-      const projectJobCounts = new Map<string, { total: number; completed: number }>();
+      const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number }>();
       for (const job of projectJobsResult.data ?? []) {
         if (!job.project_id) continue;
-        const counts = projectJobCounts.get(job.project_id) ?? { total: 0, completed: 0 };
+        const counts = projectJobCounts.get(job.project_id) ?? { total: 0, completed: 0, inProgress: 0 };
         counts.total++;
         if (job.status === 'fertig') counts.completed++;
+        if (job.status === 'in_bearbeitung') counts.inProgress++;
         projectJobCounts.set(job.project_id, counts);
       }
 
@@ -237,12 +243,13 @@ export default async function AuftraegePage() {
 
       projectList = (projectsResult.data ?? []).map((row) => {
         const project = toProject(row);
-        const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0 };
+        const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0 };
         return {
           ...project,
           client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
           jobCount: counts.total,
           completedJobCount: counts.completed,
+          inProgressJobCount: counts.inProgress,
         };
       });
     } else {
@@ -263,22 +270,28 @@ export default async function AuftraegePage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
-        <h1 className="text-xl font-bold sm:text-2xl">Aufträge</h1>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <AuftraegeContent
-          jobs={jobList}
-          projects={projectList}
-          clientMap={clientMap}
-          clients={clientList}
-          members={memberList}
-          jobAssignmentMap={jobAssignmentMap}
-          isAdminOrManager={isAdminOrManager}
+    <>
+      <Suspense fallback={null}>
+        <ActionBanner
+          paramKey="deleted_job"
+          messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
         />
-      </div>
-    </div>
+      </Suspense>
+      <Suspense fallback={null}>
+        <ActionBanner
+          paramKey="deleted_project"
+          messageTemplate='Projekt „{name}" wurde erfolgreich gelöscht.'
+        />
+      </Suspense>
+      <AuftraegeContent
+        jobs={jobList}
+        projects={projectList}
+        clientMap={clientMap}
+        clients={clientList}
+        members={memberList}
+        jobAssignmentMap={jobAssignmentMap}
+        isAdminOrManager={isAdminOrManager}
+      />
+    </>
   );
 }

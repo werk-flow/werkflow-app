@@ -1,6 +1,76 @@
 import type { TimeEntry, TimeEntryStatus, OrgRole, WorkSession } from './types';
 import { MANAGED_ROLES } from './types';
 
+// ── Time model constants ──────────────────────────────────────────────
+export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
+export const BREAK_THRESHOLD_MINUTES = 360;   // 6h total clocked → break applies
+export const BREAK_DURATION_MINUTES = 30;
+export const BREAK_START_MINUTES = 330;       // 5.5h mark on ring where yellow starts
+export const OVERTIME_THRESHOLD_MINUTES = 510; // 8.5h total clocked → overtime starts
+export const WORK_GOAL_MINUTES = 480;         // 8h = actual work goal
+export const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
+
+export interface TimeBreakdown {
+  workMinutes: number;
+  breakMinutes: number;
+  overtimeMinutes: number;
+}
+
+export function computeTimeBreakdown(totalMinutes: number): TimeBreakdown {
+  const breakMinutes = totalMinutes >= BREAK_THRESHOLD_MINUTES
+    ? BREAK_DURATION_MINUTES
+    : 0;
+  const overtimeMinutes = Math.max(0, totalMinutes - OVERTIME_THRESHOLD_MINUTES);
+  const workMinutes = totalMinutes - breakMinutes - overtimeMinutes;
+  return { workMinutes, breakMinutes, overtimeMinutes };
+}
+
+export interface RingSegment {
+  startFraction: number; // 0-1, position on ring
+  endFraction: number;   // 0-1, position on ring
+  type: 'work' | 'break';
+}
+
+export interface RingData {
+  segments: RingSegment[];
+  overtimeFraction: number; // 0-1, how full the outer overtime ring is
+}
+
+/**
+ * Computes multi-segment ring data from raw total minutes.
+ * Main ring: 0 → TOTAL_RING_MINUTES (510 min / 8.5h).
+ * Break window: always at 5.5h–6h mark once total >= 6h.
+ * Overtime: separate outer ring that fills over 4h.
+ */
+export function computeRingSegments(totalMinutes: number): RingData {
+  const clamped = Math.max(0, totalMinutes);
+  const mainMinutes = Math.min(clamped, TOTAL_RING_MINUTES);
+  const overtimeMinutes = Math.max(0, clamped - TOTAL_RING_MINUTES);
+  const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
+
+  const breakStart = BREAK_START_MINUTES / TOTAL_RING_MINUTES;  // 330/510
+  const breakEnd = BREAK_THRESHOLD_MINUTES / TOTAL_RING_MINUTES; // 360/510
+  const currentFraction = mainMinutes / TOTAL_RING_MINUTES;
+
+  const segments: RingSegment[] = [];
+
+  if (clamped < BREAK_THRESHOLD_MINUTES) {
+    // Haven't reached 6h yet → single green arc
+    if (currentFraction > 0) {
+      segments.push({ startFraction: 0, endFraction: currentFraction, type: 'work' });
+    }
+  } else {
+    // Past 6h → green up to 5.5h, yellow 5.5h-6h, green 6h to current
+    segments.push({ startFraction: 0, endFraction: breakStart, type: 'work' });
+    segments.push({ startFraction: breakStart, endFraction: breakEnd, type: 'break' });
+    if (currentFraction > breakEnd) {
+      segments.push({ startFraction: breakEnd, endFraction: currentFraction, type: 'work' });
+    }
+  }
+
+  return { segments, overtimeFraction };
+}
+
 /**
  * Role hierarchy for permission checks
  * Lower number = higher rank
@@ -50,10 +120,11 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
       const entryDate = new Date(e.timestamp);
       return entryDate >= todayStart && entryDate <= todayEnd;
     })
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    .sort((a, b) => {
+      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      if (diff !== 0) return diff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
   if (todayActiveEntries.length === 0) return false;
 
@@ -69,10 +140,11 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
 export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
   const activeEntries = entries
     .filter((e) => e.status !== 'rejected' && e.status !== 'pending_delete')
-    .sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    .sort((a, b) => {
+      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      if (diff !== 0) return diff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
   return activeEntries[0] || null;
 }

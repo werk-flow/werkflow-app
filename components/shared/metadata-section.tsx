@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
+import { toLocalDateString } from '@/lib/utils';
 
 export interface MetadataField {
   label: string;
@@ -146,7 +147,7 @@ function MetadataFieldRow({
                 value={editValue ? new Date(editValue) : undefined}
                 onChange={(date) =>
                   setEditValue(
-                    date ? date.toISOString().split('T')[0] : ''
+                    date ? toLocalDateString(date) : ''
                   )
                 }
                 disabled={isPending}

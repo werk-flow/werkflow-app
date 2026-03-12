@@ -8,7 +8,6 @@ import {
   Clock,
   Palmtree,
   ChevronRight,
-  Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,22 +21,18 @@ import {
 } from '@/lib/time-tracking/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { JobPickerModal } from '@/components/job-picker-modal';
-
-type PickerJob = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-  clientName: string | null;
-};
+import {
+  computeTimeBreakdown,
+  formatDuration,
+  WORK_GOAL_MINUTES,
+} from '@/lib/time-tracking/helpers';
+import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
+import { WeeklyHoursChart } from './weekly-hours-chart';
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
   userId: string;
 }
-
-const DAILY_GOAL_MINUTES = 8 * 60;
 
 function formatLiveTime(
   baseMinutes: number,
@@ -62,7 +57,7 @@ function formatLiveTime(
     .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function calculateLivePercentage(
+function calculateLiveTotalMinutes(
   baseMinutes: number,
   clockInTime: string | null,
   isClockedIn: boolean
@@ -76,8 +71,7 @@ function calculateLivePercentage(
     totalMinutes += elapsedMs / (1000 * 60);
   }
 
-  const percentage = (totalMinutes / DAILY_GOAL_MINUTES) * 100;
-  return Math.min(percentage, 100);
+  return totalMinutes;
 }
 
 export function ZeiterfassungDashboard({
@@ -89,8 +83,13 @@ export function ZeiterfassungDashboard({
     userId
   });
 
+  const { weekData, todayIndex, weekLabel } = useWeeklyTimeData({
+    organizationId,
+    userId,
+  });
+
   const [liveTime, setLiveTime] = useState('00:00:00');
-  const [livePercentage, setLivePercentage] = useState(0);
+  const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [activeJobTitle, setActiveJobTitle] = useState<string | null>(null);
@@ -153,8 +152,8 @@ export function ZeiterfassungDashboard({
           status.isClockedIn
         )
       );
-      setLivePercentage(
-        calculateLivePercentage(
+      setLiveTotalMinutes(
+        calculateLiveTotalMinutes(
           status.todayMinutes,
           status.clockInTime,
           status.isClockedIn
@@ -167,6 +166,12 @@ export function ZeiterfassungDashboard({
     const interval = setInterval(updateLiveValues, 1000);
     return () => clearInterval(interval);
   }, [status.todayMinutes, status.clockInTime, status.isClockedIn]);
+
+  const breakdown = computeTimeBreakdown(liveTotalMinutes);
+  const workPercentage = Math.min(
+    Math.round((breakdown.workMinutes / WORK_GOAL_MINUTES) * 100),
+    999
+  );
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -186,11 +191,11 @@ export function ZeiterfassungDashboard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-32">
       {/* Hero Section */}
       <div className="flex flex-col items-center py-8">
         <TimeProgressRing
-          percentage={livePercentage}
+          totalMinutes={liveTotalMinutes}
           size={260}
           strokeWidth={14}
           isActive={status.isClockedIn}
@@ -215,8 +220,35 @@ export function ZeiterfassungDashboard({
         </p>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          Tagesziel: 8 Stunden ({Math.round(livePercentage)}% erreicht)
+          Tagesziel: 8 Stunden Arbeitszeit ({workPercentage}% erreicht)
         </p>
+
+        {/* Time breakdown indicators */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-muted-foreground">Arbeitszeit</span>
+            <span className="font-medium tabular-nums">
+              {formatDuration(breakdown.workMinutes)}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
+            <span className="text-muted-foreground">Pause</span>
+            <span className="font-medium tabular-nums">
+              {breakdown.breakMinutes > 0 ? '30 Min.' : '0 Min.'}
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+            <span className="text-muted-foreground">Überstunden heute</span>
+            <span className="font-medium tabular-nums">
+              {breakdown.overtimeMinutes > 0
+                ? formatDuration(breakdown.overtimeMinutes)
+                : '0 Min.'}
+            </span>
+          </span>
+        </div>
       </div>
 
       {/* Quick Actions */}
@@ -296,14 +328,14 @@ export function ZeiterfassungDashboard({
         </Card>
       </div>
 
-      {/* Working Time Status */}
+      {/* Working Time Status + Weekly Chart */}
       <div className="space-y-3">
         <h3 className="text-sm font-medium text-muted-foreground px-1">
           Status
         </h3>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div
@@ -346,6 +378,19 @@ export function ZeiterfassungDashboard({
                 {status.isClockedIn ? 'aktiv' : 'inaktiv'}
               </span>
             </div>
+
+            {weekData.length > 0 && (
+              <>
+                <div className="border-t border-border" />
+                <WeeklyHoursChart
+                  weekData={weekData}
+                  todayIndex={todayIndex}
+                  liveTodayMinutes={liveTotalMinutes}
+                  narrowBars
+                  weekLabel={weekLabel}
+                />
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

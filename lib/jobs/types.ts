@@ -113,6 +113,7 @@ export type ProjectWithDetails = Project & {
   client: Client | null;
   jobCount: number;
   completedJobCount: number;
+  inProgressJobCount: number;
 };
 
 /**
@@ -285,7 +286,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   privat: 'Privat',
-  geschaeftlich: 'Geschäftlich',
+  gewerblich: 'Gewerblich',
 };
 
 // ============================================
@@ -373,74 +374,65 @@ export function calculateProjectProgress(
 }
 
 /**
- * Determine the traffic light color for a project based on progress vs. timeline.
- * Green: on or ahead of schedule
- * Yellow: behind by up to 20%
- * Red: behind by more than 20%
+ * Determine the traffic light color for a project based on job completions vs. planned end date.
+ * Green: all jobs done, OR no planned end date, OR still before planned end date
+ * Yellow: not all done AND on/past planned end date (within 1 week)
+ * Red: not all done AND more than 1 week past planned end date
  */
 export function calculateTrafficLight(
   project: Pick<Project, 'plannedStartDate' | 'plannedEndDate'>,
   jobs: Pick<Job, 'status'>[]
 ): 'green' | 'yellow' | 'red' {
-  if (!project.plannedStartDate || !project.plannedEndDate) return 'green';
   if (jobs.length === 0) return 'green';
 
+  const allDone = jobs.every((j) => j.status === 'fertig');
+  if (allDone) return 'green';
+  if (!project.plannedEndDate) return 'green';
+
   const now = new Date();
-  const start = new Date(project.plannedStartDate);
+  now.setHours(0, 0, 0, 0);
   const end = new Date(project.plannedEndDate);
+  end.setHours(0, 0, 0, 0);
 
-  const totalDays = Math.max(
-    1,
-    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  const elapsedDays = Math.max(
-    0,
-    (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  if (now.getTime() < end.getTime()) return 'green';
 
-  const timeElapsedPercent = Math.min(100, (elapsedDays / totalDays) * 100);
-  const progressPercent = calculateProjectProgress(jobs);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysOverdue = (now.getTime() - end.getTime()) / msPerDay;
 
-  const gap = timeElapsedPercent - progressPercent;
-
-  if (gap <= 0) return 'green';
-  if (gap <= 20) return 'yellow';
-  return 'red';
+  if (daysOverdue > 7) return 'red';
+  return 'yellow';
 }
 
 /**
  * Traffic light variant that works with aggregate counts from ProjectWithDetails,
  * avoiding the need to load the full jobs array for list views.
+ * Green: all done, OR no planned end date, OR still before planned end date
+ * Yellow: not all done AND on/past planned end date (within 1 week)
+ * Red: not all done AND more than 1 week past planned end date
  */
 export function calculateTrafficLightFromCounts(
   project: Pick<Project, 'plannedStartDate' | 'plannedEndDate'>,
   jobCount: number,
   completedJobCount: number
 ): 'green' | 'yellow' | 'red' {
-  if (!project.plannedStartDate || !project.plannedEndDate) return 'green';
   if (jobCount === 0) return 'green';
 
+  const allDone = completedJobCount >= jobCount;
+  if (allDone) return 'green';
+  if (!project.plannedEndDate) return 'green';
+
   const now = new Date();
-  const start = new Date(project.plannedStartDate);
+  now.setHours(0, 0, 0, 0);
   const end = new Date(project.plannedEndDate);
+  end.setHours(0, 0, 0, 0);
 
-  const totalDays = Math.max(
-    1,
-    (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  const elapsedDays = Math.max(
-    0,
-    (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-  );
+  if (now.getTime() < end.getTime()) return 'green';
 
-  const timeElapsedPercent = Math.min(100, (elapsedDays / totalDays) * 100);
-  const progressPercent = Math.round((completedJobCount / jobCount) * 100);
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const daysOverdue = (now.getTime() - end.getTime()) / msPerDay;
 
-  const gap = timeElapsedPercent - progressPercent;
-
-  if (gap <= 0) return 'green';
-  if (gap <= 20) return 'yellow';
-  return 'red';
+  if (daysOverdue > 7) return 'red';
+  return 'yellow';
 }
 
 /**
@@ -470,11 +462,11 @@ export function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedSta
  * Derive effective project status from aggregate counts (avoids needing the jobs array).
  */
 export function getEffectiveProjectStatusFromCounts(
-  project: Pick<ProjectWithDetails, 'jobCount' | 'completedJobCount'>
+  project: Pick<ProjectWithDetails, 'jobCount' | 'completedJobCount' | 'inProgressJobCount'>
 ): ProjectStatus {
   if (project.jobCount === 0) return 'nicht_begonnen';
   if (project.completedJobCount === project.jobCount) return 'abgeschlossen';
-  if (project.completedJobCount > 0) return 'in_bearbeitung';
+  if (project.completedJobCount > 0 || project.inProgressJobCount > 0) return 'in_bearbeitung';
   return 'nicht_begonnen';
 }
 

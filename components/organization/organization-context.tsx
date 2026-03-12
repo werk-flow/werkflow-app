@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -233,16 +234,19 @@ export function OrganizationProvider({
     }
   }, [refreshMemberships])
 
-  const value: OrgContextValue = {
-    memberships,
-    activeOrgId,
-    activeOrg,
-    setActiveOrg,
-    refreshMemberships,
-    isLoading,
-    isSubscribed,
-    isSwitchingOrg,
-  }
+  const value = useMemo<OrgContextValue>(
+    () => ({
+      memberships,
+      activeOrgId,
+      activeOrg,
+      setActiveOrg,
+      refreshMemberships,
+      isLoading,
+      isSubscribed,
+      isSwitchingOrg,
+    }),
+    [memberships, activeOrgId, activeOrg, setActiveOrg, refreshMemberships, isLoading, isSubscribed, isSwitchingOrg]
+  )
 
   return (
     <OrganizationContext.Provider value={value}>

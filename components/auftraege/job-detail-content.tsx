@@ -82,6 +82,8 @@ import {
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 
+const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'manager'];
+
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
   in_bearbeitung:
@@ -229,14 +231,14 @@ export function JobDetailContent({
     startDeleteTransition(async () => {
       const result = await deleteJob(job.id);
       if (result.success) {
+        const deletedParam = `?deleted_job=${encodeURIComponent(job.title)}`;
         if (projectInfo?.projectNumber) {
           router.push(
-            `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}`
+            `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
           );
         } else {
-          router.push('/auftraege');
+          router.push(`/auftraege${deletedParam}`);
         }
-        router.refresh();
       }
     });
   };
@@ -421,12 +423,12 @@ export function JobDetailContent({
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex items-center gap-1 overflow-visible">
             {job.title}
             {isJobActive && (
-              <span className="relative ml-1 inline-flex h-2.5 w-2.5" title="Jemand arbeitet gerade an diesem Auftrag">
+              <span className="relative ml-1 mr-1 inline-flex h-3 w-3 shrink-0" title="Jemand arbeitet gerade an diesem Auftrag">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
               </span>
             )}
           </span>
@@ -817,7 +819,7 @@ export function JobDetailContent({
           </DialogHeader>
           <div className="py-4">
             <EmployeeMultiSelect
-              members={members}
+              members={members.filter((m) => !m.role || !ASSIGNABLE_ROLES_EXCLUDED.includes(m.role))}
               selectedIds={assignSelectedIds}
               onSelectionChange={setAssignSelectedIds}
             />

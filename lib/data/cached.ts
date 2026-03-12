@@ -25,12 +25,18 @@ const REVALIDATE_SECONDS = 300 // 5 minutes safety net
 
 /**
  * Cached user fetch - deduplicates within a single request render.
- * Uses React.cache() only (not unstable_cache) because it needs
- * cookie-based auth validation on every request.
+ * Uses getSession() instead of getUser() to avoid a redundant network
+ * roundtrip to Supabase auth servers — middleware already validates
+ * the token via getUser() before any protected route is reached.
+ * Returns the same { data: { user } } shape for backward compatibility.
  */
 export const getCachedUser = cache(async () => {
   const supabase = await createSupabaseServerClient()
-  return supabase.auth.getUser()
+  const { data: { session }, error } = await supabase.auth.getSession()
+  return {
+    data: { user: session?.user ?? null },
+    error,
+  }
 })
 
 /**

@@ -400,7 +400,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   return (
-    <SidebarContext.Provider value={{ isOpen, setIsOpen }}>
+    <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
       <div className="flex h-screen flex-col bg-background md:flex-row">
         {/* Mobile header - only on small screens */}
         <MobileHeader />

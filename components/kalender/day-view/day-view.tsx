@@ -7,7 +7,7 @@ import { EmployeeTimelineRow } from './employee-timeline-row';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TIMELINE_WIDTH } from './timeline-grid';
-import { cn } from '@/lib/utils';
+import { cn, toLocalDateString } from '@/lib/utils';
 import type {
   TimeEntry,
   EntryChangeRequestMap
@@ -71,7 +71,7 @@ export function DayView({
   }, [members]);
 
   const dayJobs = useMemo(() => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateString(date);
     return jobs.filter((j) => j.plannedDate === dateStr);
   }, [jobs, date]);
   // Group entries by user

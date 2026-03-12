@@ -1,10 +1,19 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { Briefcase, ChevronRight } from 'lucide-react';
+import { Briefcase, ChevronRight, Plus, FolderKanban } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { FilterBar } from '@/components/auftraege/filter-bar';
 import { UnifiedAuftraegeTable } from '@/components/auftraege/unified-auftraege-table';
+import { CreateJobDialog } from '@/components/auftraege/create-job-dialog';
+import { CreateProjectDialog } from '@/components/auftraege/create-project-dialog';
 import {
   buildUnifiedList,
   splitActiveAndArchived,
@@ -98,6 +107,15 @@ interface EmbeddedAuftraegeSectionProps {
   lockedEmployeeLabel?: string;
   /** When set, the client filter shows a locked, read-only field with this label. */
   lockedClientLabel?: string;
+  hideClientColumn?: boolean;
+  defaultClientId?: string;
+  defaultEmployeeIds?: string[];
+  /** Makes the client field in create dialogs read-only. */
+  readOnlyClient?: boolean;
+  /** When true, project creation is hidden from the create dropdown. */
+  hideProjectCreation?: boolean;
+  /** Override projects list for create-job dialog (e.g. all active projects). */
+  allProjectsForJobCreation?: ProjectWithDetails[];
   emptyTitle?: string;
   emptyDescription?: string;
 }
@@ -112,6 +130,12 @@ export function EmbeddedAuftraegeSection({
   isAdminOrManager,
   lockedEmployeeLabel,
   lockedClientLabel,
+  hideClientColumn,
+  defaultClientId,
+  defaultEmployeeIds,
+  readOnlyClient,
+  hideProjectCreation,
+  allProjectsForJobCreation,
   emptyTitle = 'Keine Aufträge',
   emptyDescription = 'Es sind keine Aufträge vorhanden.',
 }: EmbeddedAuftraegeSectionProps) {
@@ -129,6 +153,8 @@ export function EmbeddedAuftraegeSection({
     useState<FilterState>(EMPTY_FILTER_STATE);
   const [archiveSortCol, setArchiveSortCol] = useState<SortColumn>('datum');
   const [archiveSortDir, setArchiveSortDir] = useState<'asc' | 'desc'>('desc');
+  const [createJobOpen, setCreateJobOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   const unifiedEntries = useMemo(
     () => buildUnifiedList(jobs, projects),
@@ -211,21 +237,80 @@ export function EmbeddedAuftraegeSection({
     });
   }, []);
 
+  const createButton = isAdminOrManager ? (
+    hideProjectCreation ? (
+      <Button size="sm" className="gap-1.5" onClick={() => setCreateJobOpen(true)}>
+        <Plus className="size-3.5" />
+        <span className="hidden sm:inline">Auftrag erstellen</span>
+      </Button>
+    ) : (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" className="gap-1.5">
+            <Plus className="size-3.5" />
+            <span className="hidden sm:inline">Erstellen</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setCreateJobOpen(true)}>
+            <Briefcase className="mr-2 size-4" />
+            Auftrag erstellen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
+            <FolderKanban className="mr-2 size-4" />
+            Projekt erstellen
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  ) : null;
+
+  const createDialogs = isAdminOrManager ? (
+    <>
+      <CreateJobDialog
+        clients={clients}
+        members={members}
+        projects={allProjectsForJobCreation ?? projects}
+        defaultClientId={defaultClientId}
+        defaultEmployeeIds={defaultEmployeeIds}
+        readOnlyClient={readOnlyClient}
+        open={createJobOpen}
+        onOpenChange={setCreateJobOpen}
+      />
+      {!hideProjectCreation && (
+        <CreateProjectDialog
+          clients={clients}
+          jobs={jobs}
+          defaultClientId={defaultClientId}
+          readOnlyClient={readOnlyClient}
+          open={createProjectOpen}
+          onOpenChange={setCreateProjectOpen}
+        />
+      )}
+    </>
+  ) : null;
+
   if (unifiedEntries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed bg-card p-8">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex size-10 items-center justify-center rounded-full bg-muted">
-            <Briefcase className="size-5 text-muted-foreground" />
+      <>
+        <div className="rounded-lg border border-dashed bg-card p-8">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+              <Briefcase className="size-5 text-muted-foreground" />
+            </div>
+            <h4 className="text-sm font-medium text-muted-foreground">
+              {emptyTitle}
+            </h4>
+            <p className="max-w-xs text-xs text-muted-foreground/80">
+              {emptyDescription}
+            </p>
+            {isAdminOrManager && (
+              <div className="mt-2">{createButton}</div>
+            )}
           </div>
-          <h4 className="text-sm font-medium text-muted-foreground">
-            {emptyTitle}
-          </h4>
-          <p className="max-w-xs text-xs text-muted-foreground/80">
-            {emptyDescription}
-          </p>
         </div>
-      </div>
+        {createDialogs}
+      </>
     );
   }
 
@@ -233,7 +318,8 @@ export function EmbeddedAuftraegeSection({
     <div className="space-y-4">
       {/* Active section */}
       <section>
-        <div className="mb-2 flex flex-wrap gap-1.5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {ACTIVE_FILTER_OPTIONS.map((opt) => (
             <button
               key={opt.value}
@@ -259,6 +345,8 @@ export function EmbeddedAuftraegeSection({
             </button>
           ))}
         </div>
+        {createButton}
+        </div>
 
         <FilterBar
           searchQuery={activeSearch}
@@ -279,6 +367,9 @@ export function EmbeddedAuftraegeSection({
             sortColumn={activeSortCol}
             sortDirection={activeSortDir}
             onSort={handleActiveSort}
+            jobAssignmentMap={jobAssignmentMap}
+            members={members}
+            hideClientColumn={hideClientColumn}
           />
         </div>
       </section>
@@ -324,11 +415,15 @@ export function EmbeddedAuftraegeSection({
                 sortDirection={archiveSortDir}
                 onSort={handleArchiveSort}
                 isArchive
+                jobAssignmentMap={jobAssignmentMap}
+                members={members}
+                hideClientColumn={hideClientColumn}
               />
             </div>
           )}
         </section>
       )}
+      {createDialogs}
     </div>
   );
 }

@@ -99,10 +99,11 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   // pending_delete entries are shown with hatched styling in the calendar
   const activeEntries = entries
     .filter((e) => e.status !== 'rejected')
-    .sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    .sort((a, b) => {
+      const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (diff !== 0) return diff;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
 
   const sessions: WorkSession[] = [];
   let currentClockIn: TimeEntry | null = null;

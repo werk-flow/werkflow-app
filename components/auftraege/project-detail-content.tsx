@@ -234,8 +234,7 @@ export function ProjectDetailContent({
     startDeleteTransition(async () => {
       const result = await deleteProject(project.id);
       if (result.success) {
-        router.push('/auftraege');
-        router.refresh();
+        router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
       }
     });
   };
@@ -300,6 +299,22 @@ export function ProjectDetailContent({
           {PROJECT_STATUS_LABELS[derivedStatus.status]}
         </Badge>
       ),
+      editableConfig: isAdminOrManager
+        ? {
+            type: 'select' as const,
+            currentValue: project.statusOverride ?? 'auto',
+            onSave: async (v: string) => {
+              await handleOverrideStatus(v as ProjectStatus | 'auto');
+            },
+            options: [
+              { value: 'auto', label: 'Automatisch (aus Aufträgen)' },
+              ...Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              })),
+            ],
+          }
+        : undefined,
     },
     {
       label: 'Geplanter Beginn',
@@ -607,8 +622,17 @@ export function ProjectDetailContent({
       <CreateJobDialog
         clients={clients}
         members={members}
-        projects={[]}
+        projects={[{
+          ...project,
+          client: client ?? null,
+          jobCount: jobs.length,
+          completedJobCount: completedCount,
+          inProgressJobCount: inProgressCount,
+        }]}
         defaultProjectId={project.id}
+        defaultClientId={project.clientId ?? undefined}
+        readOnlyProject
+        readOnlyClient
         open={showCreateJob}
         onOpenChange={setShowCreateJob}
       />
@@ -645,11 +669,11 @@ export function ProjectDetailContent({
 function ActiveWorkIndicator() {
   return (
     <span
-      className="relative ml-1.5 inline-flex h-2 w-2 shrink-0"
+      className="relative ml-2 inline-flex h-2.5 w-2.5 shrink-0"
       title="Jemand arbeitet gerade an diesem Auftrag"
     >
       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
     </span>
   );
 }
@@ -680,8 +704,8 @@ function ChildJobRow({
           <span className="font-mono text-xs text-muted-foreground">
             {job.jobNumber}
           </span>
-          <span className="truncate text-sm font-medium inline-flex items-center">
-            {job.title}
+          <span className="text-sm font-medium inline-flex items-center min-w-0">
+            <span className="truncate">{job.title}</span>
             {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
           </span>
         </div>

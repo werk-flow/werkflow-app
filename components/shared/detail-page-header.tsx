@@ -54,8 +54,8 @@ export function DetailPageHeader({
 
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-xl font-bold sm:text-2xl">{title}</h1>
+          <div className="flex flex-wrap items-center gap-2 overflow-visible">
+            <h1 className="text-xl font-bold sm:text-2xl min-w-0">{title}</h1>
             {badges}
           </div>
           {subtitle && (

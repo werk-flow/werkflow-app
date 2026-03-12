@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { CalendarHeader } from './calendar-header';
 import { CalendarViewTabs } from './calendar-view-tabs';
@@ -24,10 +24,10 @@ const EntryDetailsDialog = dynamic(
 import type {
   TimeEntry,
   WorkSession,
-  ChangeRequest,
   EntryChangeRequestMap
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
+import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
 
@@ -81,6 +81,7 @@ export function CalendarContainer({
   const [changeRequestMap, setChangeRequestMap] =
     useState<EntryChangeRequestMap>(initialChangeRequestMap ?? {});
   const [isLoading, setIsLoading] = useState(!initialEntries);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     members.map((m) => m.user_id)
   );
@@ -92,6 +93,13 @@ export function CalendarContainer({
     showWorkingHours: true,
     showJobs: true
   });
+
+  // Track the date range we've already fetched data for.
+  // When switching to a narrower view (e.g. week→day), the needed range
+  // is already covered so we skip the refetch entirely.
+  const fetchedRangeRef = useRef<{ start: Date; end: Date } | null>(null);
+  const hasDataRef = useRef(!!initialEntries);
+
   // Track which member to highlight when navigating from week view cell click
   // We use two states: pendingHighlight stores the ID while loading,
   // highlightMemberId is the active highlight (only set after loading completes)
@@ -136,11 +144,16 @@ export function CalendarContainer({
     return { start, end };
   }, [currentDate, view]);
 
-  // Fetch entries and their pending change requests via server actions (no API proxy).
-  // When `silent` is true (Realtime refetch), the loading skeleton is skipped so the
-  // current calendar content stays visible until fresh data arrives.
+  // Fetch entries and their pending change requests via server actions.
+  // - silent=true  → no visual indicator (used by Realtime)
+  // - silent=false → spinner in header; skeleton only when no data exists yet
+  // Change requests are fetched non-blocking so the calendar renders entries
+  // immediately and CR badges fill in shortly after.
   const fetchEntries = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
+    if (!silent) {
+      if (!hasDataRef.current) setIsLoading(true);
+      setIsRefreshing(true);
+    }
     try {
       const { start, end } = getDateRange();
 
@@ -152,24 +165,28 @@ export function CalendarContainer({
 
       if (result.success && result.entries) {
         setEntries(result.entries);
+        hasDataRef.current = true;
+        fetchedRangeRef.current = { start, end };
 
+        // Fetch change requests in background (non-blocking)
         const entryIds = result.entries.map((e) => e.id);
         if (entryIds.length > 0) {
-          try {
-            const crResult = await getChangeRequestsForEntries(entryIds);
-            if (crResult.success && crResult.requests) {
-              const crMap: EntryChangeRequestMap = {};
-              for (const cr of crResult.requests) {
-                crMap[cr.entryId] = cr;
-                if (cr.pairedEntryId) {
-                  crMap[cr.pairedEntryId] = cr;
+          getChangeRequestsForEntries(entryIds)
+            .then((crResult) => {
+              if (crResult.success && crResult.requests) {
+                const crMap: EntryChangeRequestMap = {};
+                for (const cr of crResult.requests) {
+                  crMap[cr.entryId] = cr;
+                  if (cr.pairedEntryId) {
+                    crMap[cr.pairedEntryId] = cr;
+                  }
                 }
+                setChangeRequestMap(crMap);
               }
-              setChangeRequestMap(crMap);
-            }
-          } catch (crError) {
-            console.error('Error fetching change requests:', crError);
-          }
+            })
+            .catch((crError) => {
+              console.error('Error fetching change requests:', crError);
+            });
         } else {
           setChangeRequestMap({});
         }
@@ -180,14 +197,15 @@ export function CalendarContainer({
       console.error('Error fetching entries:', error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [organizationId, getDateRange]);
 
-  const fetchJobs = useCallback(async (silent = false) => {
+  const fetchJobs = useCallback(async () => {
     try {
       const { start, end } = getDateRange();
-      const fromIso = start.toISOString().split('T')[0];
-      const toIso = end.toISOString().split('T')[0];
+      const fromIso = toLocalDateString(start);
+      const toIso = toLocalDateString(end);
 
       const result = await getJobsForCalendar(fromIso, toIso);
       if (result.success) {
@@ -198,15 +216,42 @@ export function CalendarContainer({
     }
   }, [getDateRange]);
 
+  const hasUsedInitialData = useRef(!!initialEntries);
+
   useEffect(() => {
+    if (hasUsedInitialData.current) {
+      hasUsedInitialData.current = false;
+      // Seed the fetched-range ref with the server-prefetched day range
+      fetchedRangeRef.current = getDateRange();
+      return;
+    }
+
+    const needed = getDateRange();
+    const fetched = fetchedRangeRef.current;
+
+    // Skip refetch when the needed range is within what we already have
+    if (fetched && needed.start >= fetched.start && needed.end <= fetched.end) {
+      return;
+    }
+
+    // Wider data needed — silent refetch (no skeleton) if we have existing data
+    fetchEntries(hasDataRef.current);
+    fetchJobs();
+  }, [fetchEntries, fetchJobs, getDateRange]);
+
+  // Realtime events always refetch (data changed, bypass range check)
+  useRealtimeEvent('time_entries', () => fetchEntries(true));
+  useRealtimeEvent('entry_change_requests', () => fetchEntries(true));
+  useRealtimeEvent('jobs', fetchJobs);
+  useRealtimeEvent('job_assignments', fetchJobs);
+
+  // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
+  const handleManualRefresh = useCallback(() => {
+    fetchedRangeRef.current = null;
+    setIsLoading(true);
     fetchEntries();
     fetchJobs();
   }, [fetchEntries, fetchJobs]);
-
-  useRealtimeEvent('time_entries', () => fetchEntries(true));
-  useRealtimeEvent('entry_change_requests', () => fetchEntries(true));
-  useRealtimeEvent('jobs', () => fetchJobs(true));
-  useRealtimeEvent('job_assignments', () => fetchJobs(true));
 
   // Navigation handlers
   const handlePrevious = useCallback(() => {
@@ -291,9 +336,13 @@ export function CalendarContainer({
     filters.showWorkingHours
   ]);
 
-  const filteredMembers = isAdminOrManager
-    ? members.filter((m) => selectedMembers.includes(m.user_id))
-    : members.filter((m) => m.user_id === currentUserId);
+  const filteredMembers = useMemo(
+    () =>
+      isAdminOrManager
+        ? members.filter((m) => selectedMembers.includes(m.user_id))
+        : members.filter((m) => m.user_id === currentUserId),
+    [members, selectedMembers, isAdminOrManager, currentUserId]
+  );
 
   const filteredJobs = useMemo(() => {
     if (!filters.showJobs) return [];
@@ -324,11 +373,11 @@ export function CalendarContainer({
       <CalendarHeader
         currentDate={currentDate}
         view={view}
-        isLoading={isLoading}
+        isLoading={isLoading || isRefreshing}
         onPrevious={handlePrevious}
         onNext={handleNext}
         onToday={handleToday}
-        onRefresh={fetchEntries}
+        onRefresh={handleManualRefresh}
       />
 
       <div className="border-b px-4 py-2 sm:px-6">
@@ -378,7 +427,7 @@ export function CalendarContainer({
                 currentUserRole={currentUserRole}
                 isAdminOrManager={isAdminOrManager}
                 isLoading={isLoading}
-                onRefresh={fetchEntries}
+                onRefresh={handleManualRefresh}
                 changeRequestMap={changeRequestMap}
                 highlightMemberId={highlightMemberId}
                 jobs={filteredJobs}
@@ -413,7 +462,12 @@ export function CalendarContainer({
           session={selectedSession}
           currentUserRole={currentUserRole}
           currentUserId={currentUserId}
-          onRefresh={fetchEntries}
+          onRefresh={handleManualRefresh}
+          jobName={
+            selectedSession.jobId
+              ? calendarJobs.find((j) => j.id === selectedSession.jobId)?.title ?? null
+              : null
+          }
         />
       )}
     </div>

@@ -8,7 +8,7 @@ export const ROLE_LABELS: Record<OrgRole, string> = {
   manager: 'Manager/in',
   accountant: 'Buchhalter/in',
   secretary: 'Sekretär/in',
-  employee: 'Mitarbeiter/in'
+  employee: 'Handwerker/in'
 };
 
 /**

@@ -50,7 +50,7 @@ const ROLE_LABELS: Record<string, string> = {
   manager: 'Manager',
   accountant: 'Buchhalter',
   secretary: 'Sekretär',
-  employee: 'Mitarbeiter'
+  employee: 'Handwerker'
 };
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);

@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react'
@@ -83,11 +84,14 @@ export function UserProfileProvider({
     }
   }, [])
 
-  const value: UserProfileContextValue = {
-    profile,
-    isLoading,
-    refreshProfile,
-  }
+  const value = useMemo<UserProfileContextValue>(
+    () => ({
+      profile,
+      isLoading,
+      refreshProfile,
+    }),
+    [profile, isLoading, refreshProfile]
+  )
 
   return (
     <UserProfileContext.Provider value={value}>

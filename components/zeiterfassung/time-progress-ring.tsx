@@ -2,88 +2,125 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { computeRingSegments } from '@/lib/time-tracking/helpers';
 
 interface TimeProgressRingProps {
-  /** Current progress percentage (0-100) */
-  percentage: number;
-  /** Size of the ring in pixels */
-  size?: number;
-  /** Stroke width of the ring */
-  strokeWidth?: number;
-  /** Whether the timer is currently active (pulsing animation) */
+  totalMinutes: number;
   isActive?: boolean;
-  /** Children to render in the center */
+  size?: number;
+  strokeWidth?: number;
   children?: React.ReactNode;
-  /** Custom class name */
   className?: string;
 }
 
+const SEGMENT_COLORS: Record<string, string> = {
+  work: '#22c55e',   // green-500
+  break: '#eab308',  // yellow-500
+};
+const OVERTIME_COLOR = '#3b82f6'; // blue-500
+
 export function TimeProgressRing({
-  percentage,
-  size = 240,
-  strokeWidth = 12,
+  totalMinutes,
+  size = 260,
+  strokeWidth = 14,
   isActive = false,
   children,
   className
 }: TimeProgressRingProps) {
-  const { radius, circumference, strokeDashoffset } = useMemo(() => {
-    const r = (size - strokeWidth) / 2;
-    const c = 2 * Math.PI * r;
-    const clampedPercentage = Math.min(Math.max(percentage, 0), 100);
-    const offset = c - (clampedPercentage / 100) * c;
-
-    return {
-      radius: r,
-      circumference: c,
-      strokeDashoffset: offset
-    };
-  }, [size, strokeWidth, percentage]);
-
   const center = size / 2;
+  const mainRadius = (size - strokeWidth) / 2;
+  const mainCircumference = 2 * Math.PI * mainRadius;
 
-  // Determine color based on progress
-  const getProgressColor = () => {
-    if (percentage >= 100) return 'stroke-green-500';
-    if (percentage >= 75) return 'stroke-green-500';
-    return 'stroke-brand-purple';
-  };
+  const overtimeGap = 10;
+  const overtimeStroke = 6;
+  const overtimeRadius = mainRadius + overtimeGap + overtimeStroke / 2;
+  const overtimeCircumference = 2 * Math.PI * overtimeRadius;
+  const outerSize = (overtimeRadius + overtimeStroke / 2) * 2;
+
+  const { segments, overtimeFraction } = useMemo(
+    () => computeRingSegments(totalMinutes),
+    [totalMinutes]
+  );
+
+  const viewBox = `${center - outerSize / 2} ${center - outerSize / 2} ${outerSize} ${outerSize}`;
 
   return (
-    <div className={cn('relative inline-flex', className)}>
+    <div className={cn('relative inline-flex', className)} style={{ width: size, height: size }}>
+      {/* Layer 1 (bottom): overtime empty track – sits BELOW the green glow */}
+      {overtimeFraction > 0 && (
+        <svg
+          width={size}
+          height={size}
+          viewBox={viewBox}
+          className="absolute inset-0 -rotate-90"
+        >
+          <circle
+            cx={center}
+            cy={center}
+            r={overtimeRadius}
+            fill="none"
+            strokeWidth={overtimeStroke}
+            className="stroke-muted/40"
+          />
+        </svg>
+      )}
+
+      {/* Layer 2 (middle): main ring + filled arcs + overtime progress – gets the green glow */}
       <svg
         width={size}
         height={size}
+        viewBox={viewBox}
         className={cn(
-          'transform -rotate-90',
-          isActive && 'drop-shadow-[0_0_15px_rgba(123,44,191,0.3)]'
+          'absolute inset-0 -rotate-90',
+          isActive && 'animate-green-glow'
         )}
       >
-        {/* Background circle */}
+        {/* Main ring background */}
         <circle
           cx={center}
           cy={center}
-          r={radius}
+          r={mainRadius}
           fill="none"
           strokeWidth={strokeWidth}
           className="stroke-muted"
         />
 
-        {/* Progress circle */}
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          className={cn(
-            'transition-all duration-500 ease-out',
-            getProgressColor(),
-            isActive && 'animate-pulse'
-          )}
-        />
+        {/* Main ring segments – reversed so green paints on top of yellow */}
+        {[...segments].reverse().map((seg, i) => {
+          const arcLength = (seg.endFraction - seg.startFraction) * mainCircumference;
+          const offset = seg.startFraction * mainCircumference;
+          return (
+            <circle
+              key={i}
+              cx={center}
+              cy={center}
+              r={mainRadius}
+              fill="none"
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              stroke={SEGMENT_COLORS[seg.type]}
+              strokeDasharray={`${arcLength} ${mainCircumference - arcLength}`}
+              strokeDashoffset={-offset}
+              className="transition-all duration-500 ease-out"
+            />
+          );
+        })}
+
+        {/* Filled overtime arc */}
+        {overtimeFraction > 0 && (
+          <circle
+            cx={center}
+            cy={center}
+            r={overtimeRadius}
+            fill="none"
+            strokeWidth={overtimeStroke}
+            strokeLinecap="round"
+            stroke={OVERTIME_COLOR}
+            strokeDasharray={`${overtimeFraction * overtimeCircumference} ${overtimeCircumference - overtimeFraction * overtimeCircumference}`}
+            strokeDashoffset={0}
+            className="transition-all duration-500 ease-out"
+          />
+        )}
       </svg>
 
       {/* Center content */}
@@ -93,4 +130,3 @@ export function TimeProgressRing({
     </div>
   );
 }
-

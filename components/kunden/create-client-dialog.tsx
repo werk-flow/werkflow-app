@@ -29,7 +29,7 @@ import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/typ
 
 const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
   { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-  { value: 'geschaeftlich', label: CLIENT_TYPE_LABELS.geschaeftlich }
+  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich }
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -160,7 +160,7 @@ export function CreateClientDialog({
             Erstelle einen neuen Kunden für deine Organisation.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }} noValidate>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="client-name">Name *</Label>

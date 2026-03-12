@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition, useRef, useMemo, useEffect } from 'react';
+import { useState, useTransition, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Loader2,
   Pencil,
@@ -10,7 +11,9 @@ import {
   Calendar as CalendarIcon,
   Clock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Briefcase,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Dialog,
@@ -47,6 +50,7 @@ import {
   deleteEntry,
   reviewEntry
 } from '@/lib/time-tracking/actions';
+import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import type { WorkSession } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
@@ -59,6 +63,8 @@ interface EntryDetailsDialogProps {
   onRefresh: () => void;
   /** If true, opens the dialog directly in edit mode */
   startInEditMode?: boolean;
+  /** Resolved job name for display */
+  jobName?: string | null;
 }
 
 function formatDateTime(date: Date): string {
@@ -486,12 +492,49 @@ export function EntryDetailsDialog({
   currentUserRole,
   currentUserId,
   onRefresh,
-  startInEditMode = false
+  startInEditMode = false,
+  jobName,
 }: EntryDetailsDialogProps) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(startInEditMode);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const router = useRouter();
+  const [resolvedJob, setResolvedJob] = useState<{
+    title: string;
+    jobNumber: string | null;
+    projectNumber: string | null;
+  } | null>(jobName ? { title: jobName, jobNumber: null, projectNumber: null } : null);
+
+  useEffect(() => {
+    if (!open || !session.jobId) {
+      if (!jobName) setResolvedJob(null);
+      return;
+    }
+    let cancelled = false;
+    createSupabaseBrowserClient()
+      .from('jobs')
+      .select('title, job_number, projects(project_number)')
+      .eq('id', session.jobId)
+      .single()
+      .then(({ data }: { data: { title: string; job_number: string | null; projects: { project_number: string } | null } | null }) => {
+        if (!cancelled && data) {
+          setResolvedJob({
+            title: data.title,
+            jobNumber: data.job_number,
+            projectNumber: data.projects?.project_number ?? null,
+          });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [open, session.jobId, jobName]);
+
+  const jobDetailUrl = resolvedJob?.jobNumber
+    ? resolvedJob.projectNumber
+      ? `/auftraege/projekt/${resolvedJob.projectNumber}/${resolvedJob.jobNumber}`
+      : `/auftraege/${resolvedJob.jobNumber}`
+    : null;
 
   // Handle orphan sessions (no clockIn)
   const isOrphan = session.isOrphan || !session.clockIn;
@@ -884,6 +927,28 @@ export function EntryDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Job info */}
+          {resolvedJob && !isEditing && (
+            <button
+              type="button"
+              onClick={() => {
+                if (jobDetailUrl) {
+                  onOpenChange(false);
+                  router.push(jobDetailUrl);
+                }
+              }}
+              disabled={!jobDetailUrl}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-left transition-colors',
+                jobDetailUrl && 'hover:bg-accent cursor-pointer'
+              )}
+            >
+              <Briefcase className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate font-medium flex-1">{resolvedJob.title}</span>
+              {jobDetailUrl && <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />}
+            </button>
+          )}
+
           {/* Clock In - only show if exists */}
           {session.clockIn && (
             <div className="space-y-2">

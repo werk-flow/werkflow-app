@@ -93,7 +93,8 @@ async function getUserTodayEntries(
     .lte('timestamp', end.toISOString())
     .neq('status', 'rejected')
     .neq('status', 'pending_delete')
-    .order('timestamp', { ascending: false });
+    .order('timestamp', { ascending: false })
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching user today entries:', error);
@@ -1027,7 +1028,8 @@ export async function getTimeEntries(
       .eq('organization_id', organizationId)
       .gte('timestamp', from)
       .lte('timestamp', to)
-      .order('timestamp', { ascending: true });
+      .order('timestamp', { ascending: true })
+      .order('created_at', { ascending: true });
 
     if (userId) {
       query = query.eq('user_id', userId);
@@ -1099,29 +1101,26 @@ export async function getPendingEntries(
 
     // Filter based on what the caller can review
     if (callerRole === 'admin') {
-      // Admin can review all pending entries
       return { success: true, entries: toTimeEntries(pendingEntries || []) };
     }
 
-    // Manager can only review entries for managed roles
-    const filteredEntries: TimeEntryRow[] = [];
+    // Manager: batch-fetch roles for all unique users in pending entries
+    const uniqueUserIds = [...new Set((pendingEntries || []).map((e) => e.user_id))];
+    const { data: memberRows } = await admin
+      .from('organization_members')
+      .select('user_id, role')
+      .eq('organization_id', orgId)
+      .in('user_id', uniqueUserIds);
 
-    for (const entry of pendingEntries || []) {
-      // Get the entry owner's role
-      const { data: targetMember } = await admin
-        .from('organization_members')
-        .select('role')
-        .eq('user_id', entry.user_id)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (
-        targetMember &&
-        MANAGED_ROLES.includes(targetMember.role as OrgRole)
-      ) {
-        filteredEntries.push(entry);
-      }
+    const roleMap = new Map<string, OrgRole>();
+    for (const m of memberRows || []) {
+      roleMap.set(m.user_id, m.role as OrgRole);
     }
+
+    const filteredEntries = (pendingEntries || []).filter((entry) => {
+      const targetRole = roleMap.get(entry.user_id);
+      return targetRole && MANAGED_ROLES.includes(targetRole);
+    });
 
     return { success: true, entries: toTimeEntries(filteredEntries) };
   } catch (error) {
@@ -1201,27 +1200,28 @@ export async function getPendingSessions(
     }
 
     // Filter based on what the caller can review (manager can only review managed roles)
-    const filteredEntries: TimeEntryRow[] = [];
+    let filteredEntries: TimeEntryRow[];
 
-    for (const entry of pendingEntries) {
-      if (callerRole === 'admin') {
-        filteredEntries.push(entry);
-      } else {
-        // Manager - check if target user is in managed roles
-        const { data: targetMember } = await admin
-          .from('organization_members')
-          .select('role')
-          .eq('user_id', entry.user_id)
-          .eq('organization_id', orgId)
-          .single();
+    if (callerRole === 'admin') {
+      filteredEntries = pendingEntries;
+    } else {
+      // Manager: batch-fetch roles for all unique users
+      const uniqueUserIds = [...new Set(pendingEntries.map((e) => e.user_id))];
+      const { data: memberRows } = await admin
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', orgId)
+        .in('user_id', uniqueUserIds);
 
-        if (
-          targetMember &&
-          MANAGED_ROLES.includes(targetMember.role as OrgRole)
-        ) {
-          filteredEntries.push(entry);
-        }
+      const roleMap = new Map<string, OrgRole>();
+      for (const m of memberRows || []) {
+        roleMap.set(m.user_id, m.role as OrgRole);
       }
+
+      filteredEntries = pendingEntries.filter((entry) => {
+        const targetRole = roleMap.get(entry.user_id);
+        return targetRole && MANAGED_ROLES.includes(targetRole);
+      });
     }
 
     // Group entries into sessions (pairs of clock_in/clock_out with same createdAt within 5 seconds)
@@ -1388,7 +1388,35 @@ export async function getCurrentlyClockedIn(
       );
     });
 
-    // For each visible member, check if they have an open session
+    // Batch-fetch today's entries for all visible members at once
+    // instead of one query per member (N+1 elimination).
+    const memberUserIds = visibleMembers.map((m) => m.user_id);
+    const { start, end } = getTodayBounds();
+
+    const { data: allTodayEntries, error: todayError } = await admin
+      .from('time_entries')
+      .select('*')
+      .eq('organization_id', orgId)
+      .in('user_id', memberUserIds)
+      .gte('timestamp', start.toISOString())
+      .lte('timestamp', end.toISOString())
+      .neq('status', 'rejected')
+      .neq('status', 'pending_delete')
+      .order('timestamp', { ascending: false });
+
+    if (todayError) {
+      console.error('Error fetching today entries:', todayError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    // Group entries by user
+    const entriesByUser = new Map<string, TimeEntryRow[]>();
+    for (const entry of allTodayEntries || []) {
+      const uid = entry.user_id as string;
+      if (!entriesByUser.has(uid)) entriesByUser.set(uid, []);
+      entriesByUser.get(uid)!.push(entry);
+    }
+
     const clockedInUsers: Array<{
       userId: string;
       clockInTime: string;
@@ -1397,25 +1425,17 @@ export async function getCurrentlyClockedIn(
     }> = [];
 
     for (const member of visibleMembers) {
-      const entries = await getUserEntries(admin, member.user_id, orgId);
-      const timeEntries = toTimeEntries(entries);
+      const memberEntries = entriesByUser.get(member.user_id) || [];
+      const timeEntries = toTimeEntries(memberEntries);
 
       if (hasOpenSession(timeEntries)) {
-        // Get the clock_in timestamp (include pending entries as they take immediate effect)
-        // Exclude rejected and pending_delete entries
         const lastClockIn = timeEntries
-          .filter(
-            (e) =>
-              e.status !== 'rejected' &&
-              e.status !== 'pending_delete' &&
-              e.entryType === 'clock_in'
-          )
+          .filter((e) => e.entryType === 'clock_in')
           .sort(
             (a, b) =>
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           )[0];
 
-        // Handle profiles which may be returned as array or single object from Supabase
         const profileData = member.profiles as unknown;
         const profile = Array.isArray(profileData)
           ? (profileData[0] as
@@ -1540,36 +1560,45 @@ export async function getPendingChangeRequests(
       return { success: false, error: 'fetch_failed' };
     }
 
-    // Enrich requests with entry and requester info
+    // Batch-enrich requests with entries and requester profiles
+    if (!requests || requests.length === 0) {
+      return { success: true, requests: [] };
+    }
+
+    // Collect all entry IDs and requester IDs for batch fetching
+    const allEntryIds = new Set<string>();
+    const requesterIds = new Set<string>();
+    for (const req of requests) {
+      allEntryIds.add(req.entry_id);
+      if (req.paired_entry_id) allEntryIds.add(req.paired_entry_id);
+      requesterIds.add(req.requested_by);
+    }
+
+    // Batch fetch entries and profiles in parallel
+    const [entriesResult, profilesResult] = await Promise.all([
+      admin.from('time_entries').select('*').in('id', [...allEntryIds]),
+      admin.from('profiles').select('id, first_name, last_name').in('id', [...requesterIds]),
+    ]);
+
+    const entryMap = new Map<string, TimeEntryRow>();
+    for (const e of entriesResult.data || []) {
+      entryMap.set(e.id, e);
+    }
+
+    const profileMap = new Map<string, { first_name: string | null; last_name: string | null }>();
+    for (const p of profilesResult.data || []) {
+      profileMap.set(p.id, { first_name: p.first_name, last_name: p.last_name });
+    }
+
     const enrichedRequests: ChangeRequestWithDetails[] = [];
-
-    for (const request of requests || []) {
-      // Get the entry
-      const { data: entry } = await admin
-        .from('time_entries')
-        .select('*')
-        .eq('id', request.entry_id)
-        .single();
-
+    for (const request of requests) {
+      const entry = entryMap.get(request.entry_id);
       if (!entry) continue;
 
-      // Get paired entry if exists (for paired delete requests)
-      let pairedEntry: typeof entry | null = null;
-      if (request.paired_entry_id) {
-        const { data: paired } = await admin
-          .from('time_entries')
-          .select('*')
-          .eq('id', request.paired_entry_id)
-          .single();
-        pairedEntry = paired;
-      }
-
-      // Get requester profile
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', request.requested_by)
-        .single();
+      const pairedEntry = request.paired_entry_id
+        ? entryMap.get(request.paired_entry_id) ?? null
+        : null;
+      const profile = profileMap.get(request.requested_by) ?? null;
 
       enrichedRequests.push({
         ...toChangeRequest(request),
@@ -1855,7 +1884,9 @@ export async function switchJob(
       return { success: false, error: 'not_clocked_in' };
     }
 
-    const nowIso = new Date().toISOString();
+    const now = new Date();
+    const clockOutIso = now.toISOString();
+    const clockInIso = new Date(now.getTime() + 1).toISOString();
 
     const { error: clockOutError } = await admin
       .from('time_entries')
@@ -1863,7 +1894,7 @@ export async function switchJob(
         user_id: user.id,
         organization_id: organizationId,
         entry_type: 'clock_out',
-        timestamp: nowIso,
+        timestamp: clockOutIso,
         is_manual: false,
         status: 'approved'
       });
@@ -1879,7 +1910,7 @@ export async function switchJob(
         user_id: user.id,
         organization_id: organizationId,
         entry_type: 'clock_in',
-        timestamp: nowIso,
+        timestamp: clockInIso,
         is_manual: false,
         status: 'approved',
         job_id: newJobId
@@ -1993,6 +2024,131 @@ export async function getActiveJobId(
     };
   } catch (error) {
     console.error('Unexpected error in getActiveJobId:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Combined clock status + active job in a single call.
+ * Fetches today's entries only ONCE (instead of twice for getClockStatus + getActiveJobId).
+ * Used by ClockFAB.
+ */
+export async function getClockStatusWithActiveJob(
+  organizationId: string
+): Promise<
+  | {
+      success: true;
+      isClockedIn: boolean;
+      lastEntry: TimeEntry | null;
+      activeJobId: string | null;
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const [userRole, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, organizationId),
+      getUserTodayEntries(admin, user.id, organizationId)
+    ]);
+
+    if (!userRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    const timeEntries = toTimeEntries(todayRows);
+    const isClockedIn = hasOpenSession(timeEntries);
+    const lastEntry = timeEntries.length > 0 ? timeEntries[0] : null;
+
+    let activeJobId: string | null = null;
+    if (isClockedIn) {
+      const latestClockIn = timeEntries
+        .filter((e) => e.entryType === 'clock_in')
+        .sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        )[0];
+      activeJobId = latestClockIn?.jobId ?? null;
+    }
+
+    return { success: true, isClockedIn, lastEntry, activeJobId };
+  } catch (error) {
+    console.error('Unexpected error in getClockStatusWithActiveJob:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Get minimal info for a single job by ID.
+ * Used by ClockFAB to display the active job pill without loading all org jobs.
+ */
+export async function getJobInfoById(
+  jobId: string
+): Promise<
+  | {
+      success: true;
+      job: {
+        id: string;
+        title: string;
+        jobNumber: string | null;
+        status: string;
+        projectName: string | null;
+        clientName: string | null;
+      } | null;
+    }
+  | { success: false; error: string }
+> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const { data: job, error: jobError } = await admin
+      .from('jobs')
+      .select('id, title, job_number, status, project_id, client_id')
+      .eq('id', jobId)
+      .single();
+
+    if (jobError || !job) {
+      return { success: true, job: null };
+    }
+
+    const [projectData, clientData] = await Promise.all([
+      job.project_id
+        ? admin.from('projects').select('name').eq('id', job.project_id).single()
+        : Promise.resolve({ data: null }),
+      job.client_id
+        ? admin.from('clients').select('name').eq('id', job.client_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    return {
+      success: true,
+      job: {
+        id: job.id,
+        title: job.title,
+        jobNumber: job.job_number,
+        status: job.status,
+        projectName: (projectData.data as { name: string } | null)?.name ?? null,
+        clientName: (clientData.data as { name: string } | null)?.name ?? null,
+      }
+    };
+  } catch (error) {
+    console.error('Unexpected error in getJobInfoById:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

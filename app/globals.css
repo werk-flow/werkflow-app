@@ -157,11 +157,11 @@ textarea::-moz-selection,
 }
 
 /* Animation utility classes for floating banners */
-.animate-in {
+.animate-banner-in {
   animation: banner-slide-in 0.2s ease-out forwards;
 }
 
-.animate-out {
+.animate-banner-out {
   animation: banner-fade-out 0.15s ease-in forwards;
 }
 
@@ -177,6 +177,30 @@ textarea::-moz-selection,
 
 .animate-row-highlight {
   animation: row-highlight 1.5s ease-out forwards;
+}
+
+/* Marquee animation for overflowing text in mobile cards */
+@keyframes marquee-scroll {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(var(--marquee-distance)); }
+}
+
+.animate-marquee {
+  animation: marquee-scroll var(--marquee-duration, 8s) linear infinite;
+}
+
+/* Green glow pulsation for active work ring */
+@keyframes green-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(34, 197, 94, 0.55));
+  }
+}
+
+.animate-green-glow {
+  animation: green-glow 2s ease-in-out infinite;
 }
 
 /* Hide native time picker indicators for all browsers */

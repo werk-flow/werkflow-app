@@ -87,8 +87,7 @@ export function KundenDetailContent({
     setDeleteError(null);
     const result = await deleteClient(client.id);
     if (result.success) {
-      router.push('/kunden');
-      router.refresh();
+      router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
     } else {
       setDeleteError(result.error || 'Fehler beim Löschen des Kunden');
       setIsDeleting(false);
@@ -97,7 +96,7 @@ export function KundenDetailContent({
 
   const clientTypeOptions: { value: string; label: string }[] = [
     { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-    { value: 'geschaeftlich', label: CLIENT_TYPE_LABELS.geschaeftlich },
+    { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
   ];
 
   const metadataFields: MetadataField[] = [
@@ -221,9 +220,9 @@ export function KundenDetailContent({
       />
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
+        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
           {/* Left Column: Metadata + Financial Placeholders */}
-          <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-1">
             <MetadataSection
               title="Kundendetails"
               fields={metadataFields}
@@ -286,7 +285,7 @@ export function KundenDetailContent({
           </div>
 
           {/* Right Column: Associated Jobs & Projects */}
-          <div className="space-y-4">
+          <div className="space-y-4 md:col-span-2 2xl:col-span-1">
             <div className="flex items-center gap-2">
               <Briefcase className="size-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -301,6 +300,9 @@ export function KundenDetailContent({
               clients={clients}
               members={members}
               lockedClientLabel={client.name}
+              hideClientColumn
+              defaultClientId={client.id}
+              readOnlyClient
               isAdminOrManager={isAdminOrManager}
               emptyTitle="Keine Aufträge"
               emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."

@@ -33,7 +33,26 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'manager';
 
-  const result = await getJobByNumber(decodeURIComponent(jobNumber));
+  const admin = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerClient();
+
+  // Run job fetch in parallel with supplementary data (clients/members).
+  // If job has a project number we'll redirect, but starting these early
+  // saves time on the common non-redirect path.
+  const [result, clientsResult, membersResult] = await Promise.all([
+    getJobByNumber(decodeURIComponent(jobNumber)),
+    isAdminOrManager
+      ? admin
+          .from('clients')
+          .select('*')
+          .eq('organization_id', activeOrgId)
+          .order('name', { ascending: true })
+      : Promise.resolve({ data: null }),
+    isAdminOrManager
+      ? supabase.rpc('get_org_members', { p_org_id: activeOrgId })
+      : Promise.resolve({ data: null }),
+  ]);
+
   if (!result.success) notFound();
 
   const { job } = result;
@@ -44,31 +63,15 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
     );
   }
 
-  const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
-
-  let clients: Client[] = [];
-  let members: OrgMemberOption[] = [];
-
-  if (isAdminOrManager) {
-    const [clientsResult, membersResult] = await Promise.all([
-      admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', activeOrgId)
-        .order('name', { ascending: true }),
-      supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
-    ]);
-
-    clients = (clientsResult.data ?? []).map(toClient);
-    members = (membersResult.data ?? []).map(
-      (m: { user_id: string; first_name: string; last_name: string }) => ({
-        userId: m.user_id,
-        firstName: m.first_name,
-        lastName: m.last_name,
-      })
-    );
-  }
+  const clients: Client[] = (clientsResult.data ?? []).map(toClient);
+  const members: OrgMemberOption[] = (membersResult.data ?? []).map(
+    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
+      userId: m.user_id,
+      firstName: m.first_name,
+      lastName: m.last_name,
+      role: m.role,
+    })
+  );
 
   return (
     <JobDetailContent

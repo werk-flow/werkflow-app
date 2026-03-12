@@ -212,46 +212,50 @@ export function AuftraegeContent({
   }, [archiveSortCol]);
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
+        <h1 className="text-xl font-bold sm:text-2xl">Aufträge</h1>
+        {isAdminOrManager && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="default" className="gap-2">
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">Erstellen</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setCreateJobOpen(true)}>
+                <Briefcase className="mr-2 size-4" />
+                Auftrag erstellen
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
+                <FolderKanban className="mr-2 size-4" />
+                Projekt erstellen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </header>
+
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="space-y-6 pb-20">
       {/* Active section */}
       <section>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold sm:text-lg">
             Aktuelle Aufträge und Projekte
           </h2>
-          <div className="flex items-center gap-1.5">
-            {isAdminOrManager && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="default" className="gap-2">
-                    <Plus className="size-4" />
-                    <span className="hidden sm:inline">Erstellen</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setCreateJobOpen(true)}>
-                    <Briefcase className="mr-2 size-4" />
-                    Auftrag erstellen
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
-                    <FolderKanban className="mr-2 size-4" />
-                    Projekt erstellen
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={isPending}
-              className="h-8 w-8 shrink-0"
-              title="Tabelle aktualisieren"
-            >
-              <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
-              <span className="sr-only">Aktualisieren</span>
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefresh}
+            disabled={isPending}
+            className="h-8 w-8 shrink-0"
+            title="Tabelle aktualisieren"
+          >
+            <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
+            <span className="sr-only">Aktualisieren</span>
+          </Button>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-1.5">
@@ -296,6 +300,8 @@ export function AuftraegeContent({
             sortColumn={activeSortCol}
             sortDirection={activeSortDir}
             onSort={handleActiveSort}
+            jobAssignmentMap={jobAssignmentMap}
+            members={members}
           />
         </div>
       </section>
@@ -339,6 +345,8 @@ export function AuftraegeContent({
                 sortDirection={archiveSortDir}
                 onSort={handleArchiveSort}
                 isArchive
+                jobAssignmentMap={jobAssignmentMap}
+                members={members}
               />
             </div>
           )}
@@ -362,6 +370,8 @@ export function AuftraegeContent({
           />
         </>
       )}
+    </div>
+    </div>
     </div>
   );
 }

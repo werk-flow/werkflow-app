@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowUp, ArrowUpDown, Briefcase, ChevronRight } from 'lucide-react';
 
@@ -15,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { JobActionsMenu } from './job-actions-menu';
 import { ProjectActionsMenu } from './project-actions-menu';
 import {
@@ -31,17 +32,18 @@ import {
   type UnifiedListEntry,
   type SortColumn,
 } from '@/lib/jobs/types';
+import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 function ActiveWorkIndicator() {
   return (
     <span
-      className="relative ml-1.5 inline-flex h-2 w-2 shrink-0"
+      className="relative ml-2 inline-flex h-2.5 w-2.5 shrink-0"
       title="Jemand arbeitet gerade an diesem Auftrag"
     >
       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-      <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
     </span>
   );
 }
@@ -102,6 +104,107 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+function getInitials(firstName: string, lastName: string): string {
+  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+}
+
+function buildMemberLookup(members: OrgMemberOption[]): Map<string, OrgMemberOption> {
+  const map = new Map<string, OrgMemberOption>();
+  for (const m of members) map.set(m.userId, m);
+  return map;
+}
+
+function AvatarStack({
+  userIds,
+  memberLookup,
+  max = 3,
+}: {
+  userIds: string[];
+  memberLookup: Map<string, OrgMemberOption>;
+  max?: number;
+}) {
+  if (userIds.length === 0) return <span className="text-muted-foreground/50">—</span>;
+
+  const visible = userIds.slice(0, max);
+  const overflow = userIds.length - max;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <div className="flex -space-x-1.5">
+        {visible.map((uid) => {
+          const member = memberLookup.get(uid);
+          const initials = member ? getInitials(member.firstName, member.lastName) : '?';
+          const fullName = member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
+          return (
+            <Tooltip key={uid}>
+              <TooltipTrigger asChild>
+                <span className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground">
+                  {initials}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">{fullName}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+        {overflow > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground">
+                +{overflow}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              {userIds.slice(max).map((uid) => {
+                const m = memberLookup.get(uid);
+                return m ? `${m.firstName} ${m.lastName}` : 'Unbekannt';
+              }).join(', ')}
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+function MarqueeText({ children, className }: { children: React.ReactNode; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [shouldAnimate, setShouldAnimate] = useState(false);
+
+  const check = useCallback(() => {
+    const container = containerRef.current;
+    const text = textRef.current;
+    if (!container || !text) return;
+    const overflow = text.scrollWidth - container.clientWidth;
+    if (overflow > 1) {
+      setShouldAnimate(true);
+      text.style.setProperty('--marquee-distance', `-${overflow}px`);
+      const speed = 30;
+      text.style.setProperty('--marquee-duration', `${Math.max(4, overflow / speed)}s`);
+    } else {
+      setShouldAnimate(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    check();
+    const observer = new ResizeObserver(check);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [check, children]);
+
+  return (
+    <div ref={containerRef} className={cn('overflow-hidden', className)}>
+      <span
+        ref={textRef}
+        className={cn('inline-block whitespace-nowrap', shouldAnimate && 'animate-marquee')}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
+
 // ============================================
 // Skeletons
 // ============================================
@@ -153,11 +256,17 @@ function StandaloneJobRow({
   clientName,
   isAdminOrManager,
   isActive,
+  memberLookup,
+  assignedUserIds,
+  hideClientColumn,
 }: {
   job: Job;
   clientName: string;
   isAdminOrManager: boolean;
   isActive: boolean;
+  memberLookup: Map<string, OrgMemberOption>;
+  assignedUserIds: string[];
+  hideClientColumn?: boolean;
 }) {
   const router = useRouter();
   const detailHref = `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
@@ -177,7 +286,7 @@ function StandaloneJobRow({
           {isActive && <ActiveWorkIndicator />}
         </span>
       </TableCell>
-      <TableCell>{clientName}</TableCell>
+      {!hideClientColumn && <TableCell>{clientName}</TableCell>}
       <TableCell>
         <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
           {JOB_STATUS_LABELS[job.status]}
@@ -187,6 +296,9 @@ function StandaloneJobRow({
         <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
           {JOB_PRIORITY_LABELS[job.priority]}
         </Badge>
+      </TableCell>
+      <TableCell className="hidden xl:table-cell">
+        <AvatarStack userIds={assignedUserIds} memberLookup={memberLookup} />
       </TableCell>
       <TableCell className="text-muted-foreground">
         {formatDate(job.plannedDate)}
@@ -209,6 +321,9 @@ function ProjectRow({
   onToggle,
   clientMap,
   activeJobIds,
+  memberLookup,
+  jobAssignmentMap,
+  hideClientColumn,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -218,6 +333,9 @@ function ProjectRow({
   onToggle: () => void;
   clientMap: Record<string, string>;
   activeJobIds: Set<string>;
+  memberLookup: Map<string, OrgMemberOption>;
+  jobAssignmentMap: Record<string, string[]>;
+  hideClientColumn?: boolean;
 }) {
   const router = useRouter();
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
@@ -230,6 +348,8 @@ function ProjectRow({
     project.jobCount,
     project.completedJobCount,
   );
+
+  const allProjectUserIds = [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))];
 
   return (
     <>
@@ -260,7 +380,7 @@ function ProjectRow({
             {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
           </span>
         </TableCell>
-        <TableCell>{clientName}</TableCell>
+        {!hideClientColumn && <TableCell>{clientName}</TableCell>}
         <TableCell>
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className={cn('w-[105px] justify-center', PROJECT_STATUS_CLASSES[effectiveStatus])}>
@@ -276,6 +396,11 @@ function ProjectRow({
           </div>
         </TableCell>
         <TableCell />
+        <TableCell className="hidden xl:table-cell">
+          {!isExpanded && (
+            <AvatarStack userIds={allProjectUserIds} memberLookup={memberLookup} max={4} />
+          )}
+        </TableCell>
         <TableCell className="text-muted-foreground">
           {project.plannedStartDate || project.plannedEndDate
             ? `${formatDate(project.plannedStartDate)} – ${formatDate(project.plannedEndDate)}`
@@ -291,6 +416,7 @@ function ProjectRow({
       {isExpanded &&
         childJobs.map((job) => {
           const childHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}/${encodeURIComponent(job.jobNumber!)}`;
+          const childAssigned = jobAssignmentMap[job.id] ?? [];
           return (
             <TableRow
               key={job.id}
@@ -307,9 +433,11 @@ function ProjectRow({
                   {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
                 </span>
               </TableCell>
-              <TableCell>
-                {job.clientId ? clientMap[job.clientId] || '—' : clientName}
-              </TableCell>
+              {!hideClientColumn && (
+                <TableCell>
+                  {job.clientId ? clientMap[job.clientId] || '—' : clientName}
+                </TableCell>
+              )}
               <TableCell>
                 <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
                   {JOB_STATUS_LABELS[job.status]}
@@ -319,6 +447,9 @@ function ProjectRow({
                 <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
                   {JOB_PRIORITY_LABELS[job.priority]}
                 </Badge>
+              </TableCell>
+              <TableCell className="hidden xl:table-cell">
+                <AvatarStack userIds={childAssigned} memberLookup={memberLookup} />
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {formatDate(job.plannedDate)}
@@ -346,6 +477,8 @@ function JobCard({
   indented,
   projectNumber,
   isActive,
+  memberLookup,
+  assignedUserIds,
 }: {
   job: Job;
   clientName: string;
@@ -353,6 +486,8 @@ function JobCard({
   indented?: boolean;
   projectNumber?: string;
   isActive?: boolean;
+  memberLookup: Map<string, OrgMemberOption>;
+  assignedUserIds: string[];
 }) {
   const router = useRouter();
   const detailHref = projectNumber
@@ -374,10 +509,12 @@ function JobCard({
               {job.jobNumber}
             </span>
           )}
-          <p className="truncate text-sm font-medium inline-flex items-center">
-            {job.title}
-            {isActive && <ActiveWorkIndicator />}
-          </p>
+          <MarqueeText className="flex-1 text-sm font-medium">
+            <span className="inline-flex items-center">
+              {job.title}
+              {isActive && <ActiveWorkIndicator />}
+            </span>
+          </MarqueeText>
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <span className="truncate">{clientName}</span>
@@ -388,13 +525,18 @@ function JobCard({
             </>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" className={cn('text-[10px]', JOB_STATUS_CLASSES[job.status])}>
-            {JOB_STATUS_LABELS[job.status]}
-          </Badge>
-          <Badge variant="secondary" className={cn('text-[10px]', PRIORITY_CLASSES[job.priority])}>
-            {JOB_PRIORITY_LABELS[job.priority]}
-          </Badge>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <Badge variant="secondary" className={cn('text-[10px]', JOB_STATUS_CLASSES[job.status])}>
+              {JOB_STATUS_LABELS[job.status]}
+            </Badge>
+            <Badge variant="secondary" className={cn('text-[10px]', PRIORITY_CLASSES[job.priority])}>
+              {JOB_PRIORITY_LABELS[job.priority]}
+            </Badge>
+          </div>
+          {assignedUserIds.length > 0 && (
+            <AvatarStack userIds={assignedUserIds} memberLookup={memberLookup} max={3} />
+          )}
         </div>
       </div>
       {isAdminOrManager && (
@@ -413,6 +555,8 @@ function ProjectCard({
   isAdminOrManager,
   clientMap,
   activeJobIds,
+  memberLookup,
+  jobAssignmentMap,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -420,6 +564,8 @@ function ProjectCard({
   isAdminOrManager: boolean;
   clientMap: Record<string, string>;
   activeJobIds: Set<string>;
+  memberLookup: Map<string, OrgMemberOption>;
+  jobAssignmentMap: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -433,6 +579,8 @@ function ProjectCard({
     project.jobCount,
     project.completedJobCount,
   );
+
+  const allProjectUserIds = [...new Set(childJobs.flatMap((j) => jobAssignmentMap[j.id] ?? []))];
 
   return (
     <div>
@@ -462,10 +610,12 @@ function ProjectCard({
                 {project.projectNumber}
               </span>
             )}
-            <p className="truncate text-sm font-medium inline-flex items-center">
-              {project.name}
-              {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
-            </p>
+            <MarqueeText className="flex-1 text-sm font-medium">
+              <span className="inline-flex items-center">
+                {project.name}
+                {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+              </span>
+            </MarqueeText>
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
             <span className="truncate">{clientName}</span>
@@ -478,17 +628,22 @@ function ProjectCard({
               </>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className={cn('text-[10px]', PROJECT_STATUS_CLASSES[effectiveStatus])}>
-              {PROJECT_STATUS_LABELS[effectiveStatus]}
-            </Badge>
-            <div className="flex items-center gap-1.5">
-              <Progress value={progress} className="h-1.5 w-12" />
-              <span className="text-[10px] tabular-nums text-muted-foreground">
-                {project.completedJobCount}/{project.jobCount}
-              </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className={cn('text-[10px]', PROJECT_STATUS_CLASSES[effectiveStatus])}>
+                {PROJECT_STATUS_LABELS[effectiveStatus]}
+              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Progress value={progress} className="h-1.5 w-12" />
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {project.completedJobCount}/{project.jobCount}
+                </span>
+              </div>
+              <TrafficLight status={trafficLight} />
             </div>
-            <TrafficLight status={trafficLight} />
+            {!expanded && allProjectUserIds.length > 0 && (
+              <AvatarStack userIds={allProjectUserIds} memberLookup={memberLookup} max={3} />
+            )}
           </div>
         </div>
         {isAdminOrManager && (
@@ -509,6 +664,8 @@ function ProjectCard({
               indented
               projectNumber={project.projectNumber!}
               isActive={activeJobIds.has(job.id)}
+              memberLookup={memberLookup}
+              assignedUserIds={jobAssignmentMap[job.id] ?? []}
             />
           ))}
         </div>
@@ -564,6 +721,9 @@ interface UnifiedAuftraegeTableProps {
   sortDirection: 'asc' | 'desc';
   onSort: (column: SortColumn) => void;
   isArchive?: boolean;
+  jobAssignmentMap?: Record<string, string[]>;
+  members?: OrgMemberOption[];
+  hideClientColumn?: boolean;
 }
 
 export function UnifiedAuftraegeTable({
@@ -576,9 +736,13 @@ export function UnifiedAuftraegeTable({
   sortDirection,
   onSort,
   isArchive = false,
+  jobAssignmentMap = {},
+  members = [],
+  hideClientColumn = false,
 }: UnifiedAuftraegeTableProps) {
   const { activeJobIds } = useActiveJobs();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const memberLookup = buildMemberLookup(members);
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((prev) => {
@@ -604,13 +768,16 @@ export function UnifiedAuftraegeTable({
                 <TableHead className="w-[36px]" />
                 <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
                 <SortableHeader label="Bezeichnung" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-                <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
+                {!hideClientColumn && (
+                  <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
+                )}
                 {isArchive ? (
                   <TableHead className="min-w-[280px]">Status</TableHead>
                 ) : (
                   <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
                 )}
                 <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
+                <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
                 <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
                 {isAdminOrManager && <TableHead className="w-[50px]" />}
               </TableRow>
@@ -655,6 +822,8 @@ export function UnifiedAuftraegeTable({
                 clientName={entry.job.clientId ? clientMap[entry.job.clientId] || '—' : '—'}
                 isAdminOrManager={isAdminOrManager}
                 isActive={activeJobIds.has(entry.job.id)}
+                memberLookup={memberLookup}
+                assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
               />
             );
           }
@@ -667,6 +836,8 @@ export function UnifiedAuftraegeTable({
               isAdminOrManager={isAdminOrManager}
               clientMap={clientMap}
               activeJobIds={activeJobIds}
+              memberLookup={memberLookup}
+              jobAssignmentMap={jobAssignmentMap}
             />
           );
         })}
@@ -680,13 +851,16 @@ export function UnifiedAuftraegeTable({
               <TableHead className="w-[36px]" />
               <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
               <SortableHeader label="Bezeichnung" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-              <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
+              {!hideClientColumn && (
+                <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
+              )}
               {isArchive ? (
                 <TableHead className="min-w-[280px]">Status</TableHead>
               ) : (
                 <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
               )}
               <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
+              <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
               <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
               {isAdminOrManager && <TableHead className="w-[50px]" />}
             </TableRow>
@@ -701,6 +875,9 @@ export function UnifiedAuftraegeTable({
                     clientName={entry.job.clientId ? clientMap[entry.job.clientId] || '—' : '—'}
                     isAdminOrManager={isAdminOrManager}
                     isActive={activeJobIds.has(entry.job.id)}
+                    memberLookup={memberLookup}
+                    assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
+                    hideClientColumn={hideClientColumn}
                   />
                 );
               }
@@ -715,6 +892,9 @@ export function UnifiedAuftraegeTable({
                   onToggle={() => toggleProject(entry.project.id)}
                   clientMap={clientMap}
                   activeJobIds={activeJobIds}
+                  memberLookup={memberLookup}
+                  jobAssignmentMap={jobAssignmentMap}
+                  hideClientColumn={hideClientColumn}
                 />
               );
             })}

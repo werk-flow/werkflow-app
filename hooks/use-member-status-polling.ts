@@ -92,11 +92,11 @@ export function useMemberStatusPolling({
                 e.status !== 'rejected' &&
                 e.status !== 'pending_delete'
             )
-            .sort(
-              (a, b) =>
-                new Date(b.timestamp).getTime() -
-                new Date(a.timestamp).getTime()
-            )[0];
+            .sort((a, b) => {
+              const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+              if (diff !== 0) return diff;
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            })[0];
 
           clockInTime = clockInEntry?.timestamp || null;
           isPending = clockInEntry?.status === 'pending';

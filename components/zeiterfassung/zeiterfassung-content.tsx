@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -90,7 +90,15 @@ export function ZeiterfassungContent({
     }
   }, [organizationId, isAdmin]);
 
+  // Skip the initial fetch if the server already provided the count.
+  // Only refetch on realtime events or when dependencies genuinely change.
+  const hasUsedInitialCount = useRef(initialPendingCount > 0);
+
   useEffect(() => {
+    if (hasUsedInitialCount.current) {
+      hasUsedInitialCount.current = false;
+      return;
+    }
     fetchPendingCount();
   }, [fetchPendingCount]);
 

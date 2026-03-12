@@ -361,16 +361,18 @@ export async function getOrgProjects(): Promise<
 
     const jobCountMap = new Map<
       string,
-      { total: number; completed: number }
+      { total: number; completed: number; inProgress: number }
     >();
     for (const job of allJobs ?? []) {
       if (!job.project_id) continue;
       const current = jobCountMap.get(job.project_id) ?? {
         total: 0,
         completed: 0,
+        inProgress: 0,
       };
       current.total++;
       if (job.status === 'fertig') current.completed++;
+      if (job.status === 'in_bearbeitung') current.inProgress++;
       jobCountMap.set(job.project_id, current);
     }
 
@@ -395,12 +397,13 @@ export async function getOrgProjects(): Promise<
     }
 
     const projects: ProjectWithDetails[] = projectRows.map((row) => {
-      const counts = jobCountMap.get(row.id) ?? { total: 0, completed: 0 };
+      const counts = jobCountMap.get(row.id) ?? { total: 0, completed: 0, inProgress: 0 };
       return {
         ...toProject(row),
         client: row.client_id ? clientMap.get(row.client_id) ?? null : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
+        inProgressJobCount: counts.inProgress,
       };
     });
 

@@ -72,7 +72,7 @@ export function ProjectActionsMenu({
 
     if (result.success) {
       setShowDeleteDialog(false);
-      router.refresh();
+      router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
     } else {
       setError(result.error || 'Fehler beim Löschen des Projekts');
       setIsDeleting(false);

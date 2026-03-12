@@ -638,7 +638,7 @@ export type Database = {
     };
     Enums: {
       change_request_status: 'pending' | 'approved' | 'rejected';
-      client_type: 'privat' | 'geschaeftlich';
+      client_type: 'privat' | 'gewerblich';
       entry_change_type: 'edit' | 'delete';
       invite_status: 'pending' | 'accepted' | 'expired' | 'cancelled';
       job_priority: 'niedrig' | 'mittel' | 'hoch';
@@ -778,7 +778,7 @@ export const Constants = {
   public: {
     Enums: {
       change_request_status: ['pending', 'approved', 'rejected'],
-      client_type: ['privat', 'geschaeftlich'],
+      client_type: ['privat', 'gewerblich'],
       entry_change_type: ['edit', 'delete'],
       invite_status: ['pending', 'accepted', 'expired', 'cancelled'],
       job_priority: ['niedrig', 'mittel', 'hoch'],

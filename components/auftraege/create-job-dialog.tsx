@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Loader2 } from 'lucide-react';
 
@@ -26,11 +26,15 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
+
+const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'manager'];
 import { ClientSelectWithCreate } from './client-select-with-create';
 import { createJob, getNextJobNumber, type CreateJobInput } from '@/lib/jobs/actions';
 import { assignEmployee } from '@/lib/jobs/actions';
 import { JOB_PRIORITY_LABELS, type Client, type JobPriority, type ProjectWithDetails } from '@/lib/jobs/types';
+import { toLocalDateString } from '@/lib/utils';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'niedrig', label: JOB_PRIORITY_LABELS.niedrig },
@@ -57,11 +61,15 @@ interface CreateJobDialogProps {
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
   defaultProjectId?: string;
+  defaultClientId?: string;
+  defaultEmployeeIds?: string[];
+  readOnlyClient?: boolean;
+  readOnlyProject?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
-export function CreateJobDialog({ clients, members, projects = [], defaultProjectId, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreateJobDialogProps) {
+export function CreateJobDialog({ clients, members, projects = [], defaultProjectId, defaultClientId, defaultEmployeeIds, readOnlyClient, readOnlyProject, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreateJobDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -69,14 +77,14 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
   const [jobNumber, setJobNumber] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [clientId, setClientId] = useState<string>('');
+  const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
   const [priority, setPriority] = useState<JobPriority>('mittel');
   const [plannedDate, setPlannedDate] = useState<Date | undefined>();
   const [plannedTime, setPlannedTime] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
   const [location, setLocation] = useState('');
-  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>(defaultEmployeeIds ?? []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -126,7 +134,7 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
         jobNumber: jobNumber.trim() || undefined,
         priority,
         plannedDate: plannedDate
-          ? plannedDate.toISOString().split('T')[0]
+          ? toLocalDateString(plannedDate)
           : undefined,
         plannedTime: plannedTime || undefined,
         estimatedDurationMinutes: durationMinutes,
@@ -178,14 +186,14 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
     setJobNumber('');
     setTitle('');
     setDescription('');
-    setClientId('');
-    setProjectId('');
+    setClientId(defaultClientId ?? '');
+    setProjectId(defaultProjectId ?? '');
     setPriority('mittel');
     setPlannedDate(undefined);
     setPlannedTime('');
     setEstimatedHours('');
     setLocation('');
-    setSelectedEmployees([]);
+    setSelectedEmployees(defaultEmployeeIds ?? []);
     setHasAttemptedSubmit(false);
     setTitleError(null);
     setJobNumberError(null);
@@ -203,6 +211,79 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
   const showTitleError = hasAttemptedSubmit && titleError;
   const showJobNumberError = hasAttemptedSubmit && jobNumberError;
   const formDisabled = isLoading || success;
+
+  const activeProjects = useMemo(
+    () =>
+      projects.filter((p) => {
+        const status = p.statusOverride ?? (p.completedJobCount === p.jobCount && p.jobCount > 0 ? 'abgeschlossen' : 'nicht_begonnen');
+        return status !== 'abgeschlossen';
+      }),
+    [projects]
+  );
+
+  const filteredProjects = useMemo(
+    () => {
+      if (!clientId) return activeProjects;
+      return activeProjects.filter((p) => p.clientId === clientId || !p.clientId);
+    },
+    [activeProjects, clientId]
+  );
+
+  const projectOptions = useMemo(
+    () =>
+      filteredProjects.map((p) => ({
+        value: p.id,
+        label: p.projectNumber ? `${p.projectNumber} – ${p.name}` : p.name
+      })),
+    [filteredProjects]
+  );
+
+  const isClientLocked = useMemo(() => {
+    if (readOnlyClient) return true;
+    if (!projectId) return false;
+    const selected = activeProjects.find((p) => p.id === projectId);
+    return !!selected;
+  }, [readOnlyClient, projectId, activeProjects]);
+
+  const lockedClientLabel = useMemo(() => {
+    if (readOnlyClient && !projectId) {
+      if (!clientId) return 'Kein Kunde';
+      const c = clients.find((cl) => cl.id === clientId);
+      return c?.name;
+    }
+    if (!projectId) return undefined;
+    const selected = activeProjects.find((p) => p.id === projectId);
+    if (!selected) return undefined;
+    if (!selected.clientId) return 'Kein Kunde';
+    const c = clients.find((cl) => cl.id === selected.clientId);
+    return c?.name ?? 'Kein Kunde';
+  }, [readOnlyClient, projectId, clientId, activeProjects, clients]);
+
+  const handleClientChange = (newClientId: string) => {
+    setClientId(newClientId);
+    if (projectId) {
+      const selectedProject = activeProjects.find((p) => p.id === projectId);
+      if (selectedProject && newClientId && selectedProject.clientId !== newClientId && selectedProject.clientId !== null) {
+        setProjectId('');
+      }
+    }
+  };
+
+  const handleProjectChange = (newProjectId: string) => {
+    setProjectId(newProjectId);
+    if (newProjectId && !readOnlyClient) {
+      const selected = activeProjects.find((p) => p.id === newProjectId);
+      if (selected) {
+        if (selected.clientId) {
+          setClientId(selected.clientId);
+        } else {
+          setClientId('');
+        }
+      }
+    }
+  };
+
+  const noProjectsForClient = clientId && filteredProjects.length === 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -283,31 +364,33 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
-                onValueChange={setClientId}
+                onValueChange={handleClientChange}
                 disabled={formDisabled}
                 id="job-client"
+                readOnly={isClientLocked}
+                readOnlyLabel={lockedClientLabel}
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="job-project">Projekt</Label>
-              <Select
-                value={projectId || 'none'}
-                onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}
+              <SearchableSelect
+                options={projectOptions}
+                value={projectId}
+                onChange={handleProjectChange}
+                placeholder="Kein Projekt"
+                searchPlaceholder="Projekt suchen..."
+                emptyMessage={noProjectsForClient ? 'Kein Projekt für diesen Kunden vorhanden' : 'Kein Projekt gefunden'}
                 disabled={formDisabled}
-              >
-                <SelectTrigger id="job-project">
-                  <SelectValue placeholder="Kein Projekt" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Kein Projekt</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.projectNumber ? `${p.projectNumber} – ` : ''}{p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                allowNone
+                noneLabel="Kein Projekt"
+                readOnly={readOnlyProject}
+              />
+              {noProjectsForClient && (
+                <p className="text-xs text-muted-foreground">
+                  Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.
+                </p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -382,7 +465,7 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
             <div className="grid gap-2">
               <Label>Mitarbeiter</Label>
               <EmployeeMultiSelect
-                members={members}
+                members={members.filter((m) => !m.role || !ASSIGNABLE_ROLES_EXCLUDED.includes(m.role))}
                 selectedIds={selectedEmployees}
                 onSelectionChange={setSelectedEmployees}
                 disabled={formDisabled}

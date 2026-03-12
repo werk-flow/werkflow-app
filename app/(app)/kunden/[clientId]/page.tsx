@@ -40,9 +40,19 @@ export default async function KundenDetailPage({
     redirect('/dashboard');
   }
 
-  const [clientResult, jobsResult] = await Promise.all([
+  const admin = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerClient();
+
+  // Run ALL data fetches in parallel — entity data + supplementary lists
+  const [clientResult, jobsResult, clientsResult, membersResult] = await Promise.all([
     getClientDetail(clientId),
     getJobsForClient(clientId),
+    admin
+      .from('clients')
+      .select('*')
+      .eq('organization_id', activeOrgId)
+      .order('name', { ascending: true }),
+    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
   ]);
 
   if (!clientResult.success) notFound();
@@ -58,24 +68,13 @@ export default async function KundenDetailPage({
       }
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
-  const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
-
-  const [clientsResult, membersResult] = await Promise.all([
-    admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
-    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
-  ]);
-
   const allClients: Client[] = (clientsResult.data ?? []).map(toClient);
   const members: OrgMemberOption[] = (membersResult.data ?? []).map(
-    (m: { user_id: string; first_name: string; last_name: string }) => ({
+    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
       userId: m.user_id,
       firstName: m.first_name,
       lastName: m.last_name,
+      role: m.role,
     })
   );
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { getActiveJobIdsForOrg } from '@/lib/time-tracking/actions';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
@@ -49,5 +49,5 @@ export function useActiveJobsProvider() {
 
   useRealtimeEvent('time_entries', fetchActiveJobs);
 
-  return { activeJobIds, isLoading };
+  return useMemo(() => ({ activeJobIds, isLoading }), [activeJobIds, isLoading]);
 }

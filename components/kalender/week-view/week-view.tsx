@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, toLocalDateString } from '@/lib/utils';
 import type {
   TimeEntry,
   WorkSession,
@@ -117,7 +117,7 @@ export function WeekView({
   const jobsByDay = useMemo(() => {
     const map: Record<string, CalendarJob[]> = {};
     for (const day of weekDays) {
-      const dateStr = day.toISOString().split('T')[0];
+      const dateStr = toLocalDateString(day);
       map[dateStr] = jobs.filter((j) => j.plannedDate === dateStr);
     }
     return map;
@@ -134,6 +134,26 @@ export function WeekView({
     }
     return grouped;
   }, [entries]);
+
+  // Pre-compute sessions for all member×day combinations in a single pass.
+  // Avoids calling calculateWorkSessions per-cell inside the render loop.
+  const sessionsByMemberDay = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof calculateWorkSessions>>();
+    for (const [userId, userEntries] of Object.entries(entriesByUser)) {
+      for (const day of weekDays) {
+        const dayTime = day.getTime();
+        const dayEntries = userEntries.filter((e) => {
+          const d = new Date(e.timestamp);
+          d.setHours(0, 0, 0, 0);
+          return d.getTime() === dayTime;
+        });
+        if (dayEntries.length > 0) {
+          map.set(`${userId}-${day.toDateString()}`, calculateWorkSessions(dayEntries));
+        }
+      }
+    }
+    return map;
+  }, [entriesByUser, weekDays]);
 
   if (isLoading) {
     return (
@@ -210,15 +230,7 @@ export function WeekView({
                     const dayStr = day.toDateString();
                     const isToday = dayStr === today.toDateString();
 
-                    // Filter entries for this day
-                    const dayEntries = memberEntries.filter((e) => {
-                      const d = new Date(e.timestamp);
-                      d.setHours(0, 0, 0, 0);
-                      return d.getTime() === day.getTime();
-                    });
-
-                    // Calculate sessions
-                    const sessions = calculateWorkSessions(dayEntries);
+                    const sessions = sessionsByMemberDay.get(`${member.user_id}-${dayStr}`) || [];
 
                     const visibleSessions = sessions.slice(
                       0,
@@ -424,7 +436,7 @@ export function WeekView({
 
                           {/* Job badges */}
                           {(() => {
-                            const dateStr = day.toISOString().split('T')[0];
+                            const dateStr = toLocalDateString(day);
                             const dayJobsList = jobsByDay[dateStr] || [];
                             const memberJobs = dayJobsList.filter(
                               (j) =>

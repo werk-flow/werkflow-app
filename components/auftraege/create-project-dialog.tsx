@@ -30,6 +30,7 @@ import { ClientSelectWithCreate } from './client-select-with-create';
 import { createProject, getNextProjectNumber, type CreateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import { type Client, type Job } from '@/lib/jobs/types';
+import { toLocalDateString } from '@/lib/utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -46,18 +47,20 @@ const ERROR_MESSAGES: Record<string, string> = {
 interface CreateProjectDialogProps {
   clients: Client[];
   jobs: Job[];
+  defaultClientId?: string;
+  readOnlyClient?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
-export function CreateProjectDialog({ clients, jobs, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreateProjectDialogProps) {
+export function CreateProjectDialog({ clients, jobs, defaultClientId, readOnlyClient, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreateProjectDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [clientId, setClientId] = useState<string>('');
+  const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectNumber, setProjectNumber] = useState('');
   const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
   const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
@@ -78,9 +81,32 @@ export function CreateProjectDialog({ clients, jobs, open: controlledOpen, onOpe
   }, [open]);
 
   const unlinkedJobs = useMemo(
-    () => jobs.filter((j) => !j.projectId),
-    [jobs]
+    () => {
+      const baseJobs = jobs.filter((j) => !j.projectId && j.status !== 'fertig');
+      if (!clientId) return baseJobs;
+      return baseJobs.filter((j) => j.clientId === clientId || !j.clientId);
+    },
+    [jobs, clientId]
   );
+
+  const handleClientChange = (newClientId: string) => {
+    setClientId(newClientId);
+    if (selectedJobIds.length > 0) {
+      const validJobIds = new Set(
+        jobs
+          .filter((j) => !j.projectId && j.status !== 'fertig' && (!newClientId || j.clientId === newClientId || !j.clientId))
+          .map((j) => j.id)
+      );
+      setSelectedJobIds((prev) => prev.filter((id) => validJobIds.has(id)));
+    }
+  };
+
+  const readOnlyClientLabel = useMemo(() => {
+    if (!readOnlyClient) return undefined;
+    if (!clientId) return 'Kein Kunde';
+    const c = clients.find((cl) => cl.id === clientId);
+    return c?.name;
+  }, [readOnlyClient, clientId, clients]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,10 +136,10 @@ export function CreateProjectDialog({ clients, jobs, open: controlledOpen, onOpe
         clientId: clientId || undefined,
         projectNumber: projectNumber.trim() || undefined,
         plannedStartDate: plannedStartDate
-          ? plannedStartDate.toISOString().split('T')[0]
+          ? toLocalDateString(plannedStartDate)
           : undefined,
         plannedEndDate: plannedEndDate
-          ? plannedEndDate.toISOString().split('T')[0]
+          ? toLocalDateString(plannedEndDate)
           : undefined,
       };
 
@@ -161,7 +187,7 @@ export function CreateProjectDialog({ clients, jobs, open: controlledOpen, onOpe
   const resetForm = () => {
     setName('');
     setDescription('');
-    setClientId('');
+    setClientId(defaultClientId ?? '');
     setProjectNumber('');
     setPlannedStartDate(undefined);
     setPlannedEndDate(undefined);
@@ -259,9 +285,11 @@ export function CreateProjectDialog({ clients, jobs, open: controlledOpen, onOpe
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
-                onValueChange={setClientId}
+                onValueChange={handleClientChange}
                 disabled={formDisabled}
                 id="create-project-client"
+                readOnly={readOnlyClient}
+                readOnlyLabel={readOnlyClientLabel}
               />
             </div>
 

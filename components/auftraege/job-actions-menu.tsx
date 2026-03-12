@@ -69,7 +69,7 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
 
     if (result.success) {
       setShowDeleteDialog(false);
-      router.refresh();
+      router.push(`/auftraege?deleted_job=${encodeURIComponent(job.title)}`);
     } else {
       setError(result.error || 'Fehler beim Löschen des Auftrags');
       setIsDeleting(false);

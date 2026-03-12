@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Popover,
   PopoverContent,
@@ -51,6 +52,7 @@ import type {
   TimeEntry
 } from '@/lib/time-tracking/types';
 import { useUserProfile } from '@/components/user/user-profile-context';
+import { toLocalDateString } from '@/lib/utils';
 type EntryMode = 'clock_in' | 'clock_out' | 'both';
 
 type OrgMember = {
@@ -93,8 +95,7 @@ export function ManualEntryDialog({
 
   // Form state
   const initialIso =
-    preselectedDate?.toISOString().split('T')[0] ||
-    new Date().toISOString().split('T')[0];
+    preselectedDate ? toLocalDateString(preselectedDate) : toLocalDateString(new Date());
   const [entryMode, setEntryMode] = useState<EntryMode>('both');
   const [dateIso, setDateIso] = useState(initialIso);
   const [dateDisplay, setDateDisplay] = useState(formatDisplayDate(initialIso));
@@ -186,8 +187,7 @@ export function ManualEntryDialog({
       // Reset to default values
       setEntryMode('both');
       const resetIso =
-        preselectedDate?.toISOString().split('T')[0] ||
-        new Date().toISOString().split('T')[0];
+        preselectedDate ? toLocalDateString(preselectedDate) : toLocalDateString(new Date());
       setDateIso(resetIso);
       setDateDisplay(formatDisplayDate(resetIso));
       setVisibleMonth(preselectedDate || new Date());
@@ -382,6 +382,30 @@ export function ManualEntryDialog({
   ];
   const pendingSelectionRef = useRef<[number, number] | null>(null);
 
+  const memberOptions = useMemo(
+    () =>
+      members.map((m) => ({
+        value: m.user_id,
+        label:
+          m.first_name || m.last_name
+            ? `${m.first_name || ''} ${m.last_name || ''}`.trim()
+            : m.email,
+        description: m.email
+      })),
+    [members]
+  );
+
+  const jobOpts = useMemo(
+    () =>
+      jobOptions.map((j) => ({
+        value: j.id,
+        label: j.title,
+        description:
+          [j.jobNumber, j.projectName].filter(Boolean).join(' · ') || undefined
+      })),
+    [jobOptions]
+  );
+
   const normalizeDisplayForEdit = (raw: string) => {
     if (!raw) return DATE_MASK;
     if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) return raw;
@@ -572,61 +596,36 @@ export function ManualEntryDialog({
             {isAdminOrManager && (
               <div className="space-y-2">
                 <Label>Mitarbeiter</Label>
-                <Select
+                <SearchableSelect
+                  options={memberOptions}
                   value={selectedUserId}
-                  onValueChange={setSelectedUserId}
+                  onChange={setSelectedUserId}
+                  placeholder={
+                    isLoadingMembers ? 'Lädt...' : 'Mitarbeiter auswählen'
+                  }
+                  searchPlaceholder="Mitarbeiter suchen..."
+                  emptyMessage="Kein Mitarbeiter gefunden"
                   disabled={isLoadingMembers}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        isLoadingMembers ? 'Lädt...' : 'Mitarbeiter auswählen'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {members.map((member) => (
-                      <SelectItem key={member.user_id} value={member.user_id}>
-                        {member.first_name || member.last_name
-                          ? `${member.first_name || ''} ${
-                              member.last_name || ''
-                            }`
-                          : member.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
             )}
 
             {/* Job Selection */}
             <div className="space-y-2">
               <Label>Auftrag (optional)</Label>
-              <Select
+              <SearchableSelect
+                options={jobOpts}
                 value={selectedJobId}
-                onValueChange={(v) =>
-                  setSelectedJobId(v === 'none' ? '' : v)
+                onChange={(v) => setSelectedJobId(v)}
+                placeholder={
+                  isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
                 }
+                searchPlaceholder="Auftrag suchen..."
+                emptyMessage="Kein Auftrag gefunden"
                 disabled={isLoadingJobs}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Kein Auftrag</SelectItem>
-                  {jobOptions.map((job) => (
-                    <SelectItem key={job.id} value={job.id}>
-                      {job.title}
-                      {job.jobNumber ? ` (${job.jobNumber})` : ''}
-                      {job.projectName ? ` · ${job.projectName}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                allowNone
+                noneLabel="Kein Auftrag"
+              />
             </div>
 
             {/* Date Selection */}

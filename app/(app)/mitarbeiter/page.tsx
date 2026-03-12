@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -6,6 +7,7 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
+import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import type { OrgRole } from '@/lib/members/actions';
@@ -80,6 +82,12 @@ export default async function MitarbeiterPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <Suspense fallback={null}>
+        <ActionBanner
+          paramKey="removed_member"
+          messageTemplate='„{name}" wurde aus der Organisation entfernt.'
+        />
+      </Suspense>
       <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Mitarbeiter</h1>
         <InviteDialog />

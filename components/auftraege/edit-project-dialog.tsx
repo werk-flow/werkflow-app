@@ -22,6 +22,7 @@ import { ClientSelectWithCreate } from './client-select-with-create';
 import { updateProject, getProjectDetails, type UpdateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import { type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
+import { toLocalDateString } from '@/lib/utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -67,10 +68,24 @@ export function EditProjectDialog({
   const router = useRouter();
 
   const availableJobs = useMemo(() => {
-    return jobs.filter(
+    const base = jobs.filter(
       (j) => !j.projectId || j.projectId === project.id
     );
-  }, [jobs, project.id]);
+    if (!clientId) return base;
+    return base.filter((j) => j.clientId === clientId || !j.clientId);
+  }, [jobs, project.id, clientId]);
+
+  const handleClientChange = (newClientId: string) => {
+    setClientId(newClientId);
+    if (selectedJobIds.length > 0) {
+      const validJobIds = new Set(
+        jobs
+          .filter((j) => (!j.projectId || j.projectId === project.id) && (!newClientId || j.clientId === newClientId || !j.clientId))
+          .map((j) => j.id)
+      );
+      setSelectedJobIds((prev) => prev.filter((id) => validJobIds.has(id)));
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -126,10 +141,10 @@ export function EditProjectDialog({
         clientId: clientId && clientId !== 'none' ? clientId : undefined,
         projectNumber: projectNumber.trim() || undefined,
         plannedStartDate: plannedStartDate
-          ? plannedStartDate.toISOString().split('T')[0]
+          ? toLocalDateString(plannedStartDate)
           : undefined,
         plannedEndDate: plannedEndDate
-          ? plannedEndDate.toISOString().split('T')[0]
+          ? toLocalDateString(plannedEndDate)
           : undefined,
       };
 
@@ -233,7 +248,7 @@ export function EditProjectDialog({
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
-                onValueChange={setClientId}
+                onValueChange={handleClientChange}
                 disabled={formDisabled}
                 id="edit-project-client"
               />

@@ -45,6 +45,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     ])
   );
 
+  const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(new Map());
+
   useEffect(() => {
     if (!activeOrgId) return;
 
@@ -57,8 +59,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     ) {
       const listeners = listenersRef.current.get(table);
       const count = listeners?.size ?? 0;
-      console.log(`[Realtime] ${payload.eventType} on ${table} → ${count} listener(s)`);
-
       if (count === 0) return;
 
       const event: RealtimeChangeEvent = {
@@ -67,7 +67,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         new: (payload.new as Record<string, unknown>) ?? null,
         old: (payload.old as Record<string, unknown>) ?? null
       };
-      listeners!.forEach((cb) => cb(event));
+
+      // Debounce: coalesce rapid-fire events on the same table into a single dispatch.
+      // This prevents the thundering herd when e.g. switchJob inserts 2 time_entries
+      // in quick succession, which would otherwise trigger 10+ parallel refetches twice.
+      const existing = debounceTimersRef.current.get(table);
+      if (existing) clearTimeout(existing);
+
+      debounceTimersRef.current.set(
+        table,
+        setTimeout(() => {
+          debounceTimersRef.current.delete(table);
+          listeners!.forEach((cb) => cb(event));
+        }, 150)
+      );
     }
 
     async function setup() {
@@ -131,11 +144,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             schema: 'public',
             table: 'job_assignments'
           },
-          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-            dispatch('job_assignments', p)
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+            // job_assignments has no organization_id column, so we can't filter server-side.
+            // Consumers should be resilient to stale events; debouncing limits the impact.
+            dispatch('job_assignments', p);
+          }
         )
-        .subscribe((status: string, err?: Error) => {
-          console.log(`[Realtime] channel status: ${status}`);
+        .subscribe((_status: string, err?: Error) => {
           if (err) {
             console.error('[Realtime] subscription error:', err);
           }
@@ -161,6 +176,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      // Clear all pending debounce timers
+      for (const timer of debounceTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      debounceTimersRef.current.clear();
     };
   }, [activeOrgId]);
 

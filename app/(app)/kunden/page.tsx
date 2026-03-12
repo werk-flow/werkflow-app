@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
@@ -7,6 +8,7 @@ import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { toClient } from '@/lib/jobs/types';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import { KundenContent } from '@/components/kunden/kunden-content';
+import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 
 export default async function KundenPage() {
@@ -68,6 +70,12 @@ export default async function KundenPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <Suspense fallback={null}>
+        <ActionBanner
+          paramKey="deleted_client"
+          messageTemplate='Kunde „{name}" wurde erfolgreich gelöscht.'
+        />
+      </Suspense>
       <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Kunden</h1>
         <CreateClientDialog />

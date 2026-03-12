@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Play,
   ArrowLeftRight,
@@ -49,6 +50,9 @@ export function JobPickerModal({
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const openRef = useRef(open);
+  openRef.current = open;
+
   const fetchJobs = useCallback(async () => {
     if (!organizationId) return;
     setIsLoading(true);
@@ -64,8 +68,13 @@ export function JobPickerModal({
     }
   }, [organizationId]);
 
-  useRealtimeEvent('jobs', fetchJobs);
-  useRealtimeEvent('job_assignments', fetchJobs);
+  // Only refetch on realtime events when the modal is actually open
+  const realtimeFetchJobs = useCallback(() => {
+    if (openRef.current) fetchJobs();
+  }, [fetchJobs]);
+
+  useRealtimeEvent('jobs', realtimeFetchJobs);
+  useRealtimeEvent('job_assignments', realtimeFetchJobs);
 
   useEffect(() => {
     if (open) {
@@ -90,10 +99,17 @@ export function JobPickerModal({
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative z-10 flex w-full max-w-md flex-col rounded-2xl bg-background shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-200">
+  const modalContent = (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      {/* Centering wrapper */}
+      <div className="fixed inset-0 z-[101] flex items-center justify-center pointer-events-none p-4">
+      {/* Modal card */}
+      <div className="pointer-events-auto w-full max-w-md flex-col rounded-2xl bg-background shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-200 flex">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -223,7 +239,7 @@ export function JobPickerModal({
           <Button
             className="flex-1"
             onClick={() => onConfirm(selectedJobId)}
-            disabled={isPending}
+            disabled={isPending || (mode === 'switch' && selectedJobId === currentJobId)}
           >
             {isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -236,6 +252,12 @@ export function JobPickerModal({
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+  return modalContent;
 }

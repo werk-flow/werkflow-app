@@ -31,7 +31,7 @@ const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
   { value: 'manager', label: 'Manager/in' },
   { value: 'accountant', label: 'Buchhalter/in' },
   { value: 'secretary', label: 'Sekretär/in' },
-  { value: 'employee', label: 'Mitarbeiter/in' }
+  { value: 'employee', label: 'Handwerker/in' }
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {

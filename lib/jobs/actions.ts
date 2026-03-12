@@ -613,35 +613,20 @@ export async function getJobDetails(
       }
     }
 
-    let client = null;
-    if (jobData.client_id) {
-      const { data: clientData } = await admin
-        .from('clients')
-        .select('*')
-        .eq('id', jobData.client_id)
-        .single();
+    // Fetch client and project in parallel (they're independent)
+    const [clientResult, projectResult] = await Promise.all([
+      jobData.client_id
+        ? admin.from('clients').select('*').eq('id', jobData.client_id).single()
+        : Promise.resolve({ data: null }),
+      jobData.project_id
+        ? admin.from('projects').select('id, name, project_number').eq('id', jobData.project_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
 
-      if (clientData) {
-        client = toClient(clientData);
-      }
-    }
-
-    let project = null;
-    if (jobData.project_id) {
-      const { data: projectData } = await admin
-        .from('projects')
-        .select('id, name, project_number')
-        .eq('id', jobData.project_id)
-        .single();
-
-      if (projectData) {
-        project = {
-          id: projectData.id,
-          name: projectData.name,
-          projectNumber: projectData.project_number,
-        };
-      }
-    }
+    const client = clientResult.data ? toClient(clientResult.data) : null;
+    const project = projectResult.data
+      ? { id: projectResult.data.id, name: projectResult.data.name, projectNumber: projectResult.data.project_number }
+      : null;
 
     const job: JobWithDetails = {
       ...toJob(jobData),
@@ -693,11 +678,18 @@ export async function getJobByNumber(
       }
     }
 
-    const { data: assignmentRows } = await admin
-      .from('job_assignments')
-      .select('*')
-      .eq('job_id', jobData.id);
+    // Fetch assignments, client, and project in parallel
+    const [assignmentResult, clientResult, projectResult] = await Promise.all([
+      admin.from('job_assignments').select('*').eq('job_id', jobData.id),
+      jobData.client_id
+        ? admin.from('clients').select('*').eq('id', jobData.client_id).single()
+        : Promise.resolve({ data: null }),
+      jobData.project_id
+        ? admin.from('projects').select('id, name, project_number').eq('id', jobData.project_id).single()
+        : Promise.resolve({ data: null }),
+    ]);
 
+    const assignmentRows = assignmentResult.data;
     const assignments: JobAssignmentWithProfile[] = [];
     if (assignmentRows && assignmentRows.length > 0) {
       const userIds = assignmentRows.map((a) => a.user_id);
@@ -721,35 +713,10 @@ export async function getJobByNumber(
       }
     }
 
-    let client = null;
-    if (jobData.client_id) {
-      const { data: clientData } = await admin
-        .from('clients')
-        .select('*')
-        .eq('id', jobData.client_id)
-        .single();
-
-      if (clientData) {
-        client = toClient(clientData);
-      }
-    }
-
-    let project = null;
-    if (jobData.project_id) {
-      const { data: projectData } = await admin
-        .from('projects')
-        .select('id, name, project_number')
-        .eq('id', jobData.project_id)
-        .single();
-
-      if (projectData) {
-        project = {
-          id: projectData.id,
-          name: projectData.name,
-          projectNumber: projectData.project_number,
-        };
-      }
-    }
+    const client = clientResult.data ? toClient(clientResult.data) : null;
+    const project = projectResult.data
+      ? { id: projectResult.data.id, name: projectResult.data.name, projectNumber: projectResult.data.project_number }
+      : null;
 
     const job: JobWithDetails = {
       ...toJob(jobData),
@@ -892,11 +859,12 @@ export async function getJobsForClient(
         .eq('organization_id', orgId)
         .in('project_id', allProjectIds);
 
-      const jobsByProject = new Map<string, { total: number; completed: number }>();
+      const jobsByProject = new Map<string, { total: number; completed: number; inProgress: number }>();
       for (const j of allProjectJobs ?? []) {
-        const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0 };
+        const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0, inProgress: 0 };
         entry.total++;
         if (j.status === 'fertig') entry.completed++;
+        if (j.status === 'in_bearbeitung') entry.inProgress++;
         jobsByProject.set(j.project_id!, entry);
       }
 
@@ -921,12 +889,13 @@ export async function getJobsForClient(
       for (const id of allProjectIds) {
         const row = knownProjectMap.get(id);
         if (!row) continue;
-        const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0 };
+        const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0 };
         projects.push({
           ...toProject(row),
           client: row.client_id ? (projectClients[row.client_id] ?? null) : null,
           jobCount: counts.total,
           completedJobCount: counts.completed,
+          inProgressJobCount: counts.inProgress,
         });
       }
     }
@@ -1058,11 +1027,12 @@ export async function getJobsForMember(
           .eq('organization_id', orgId)
           .in('project_id', projectIds);
 
-        const jobsByProject = new Map<string, { total: number; completed: number }>();
+        const jobsByProject = new Map<string, { total: number; completed: number; inProgress: number }>();
         for (const j of allProjectJobs ?? []) {
-          const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0 };
+          const entry = jobsByProject.get(j.project_id!) ?? { total: 0, completed: 0, inProgress: 0 };
           entry.total++;
           if (j.status === 'fertig') entry.completed++;
+          if (j.status === 'in_bearbeitung') entry.inProgress++;
           jobsByProject.set(j.project_id!, entry);
         }
 
@@ -1083,12 +1053,13 @@ export async function getJobsForMember(
         }
 
         projects = projectRows.map((row) => {
-          const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0 };
+          const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0 };
           return {
             ...toProject(row),
             client: row.client_id ? (projectClients[row.client_id] ?? null) : null,
             jobCount: counts.total,
             completedJobCount: counts.completed,
+            inProgressJobCount: counts.inProgress,
           };
         });
       }

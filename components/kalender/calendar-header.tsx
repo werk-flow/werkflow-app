@@ -45,6 +45,13 @@ const DAY_NAMES = [
   'Samstag'
 ];
 
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 function formatDateDisplay(date: Date, view: CalendarView): string {
   if (view === 'day') {
     return `${DAY_NAMES[date.getDay()]}, ${date.getDate()}. ${
@@ -53,24 +60,22 @@ function formatDateDisplay(date: Date, view: CalendarView): string {
   }
 
   if (view === 'week') {
-    // Get start and end of week
     const startOfWeek = getStartOfWeek(date);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const kw = getISOWeekNumber(startOfWeek);
 
-    // Same month
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
       return `${startOfWeek.getDate()}. - ${endOfWeek.getDate()}. ${
         MONTH_NAMES[startOfWeek.getMonth()]
-      } ${startOfWeek.getFullYear()}`;
+      } ${startOfWeek.getFullYear()} · KW ${kw}`;
     }
 
-    // Different months
     return `${startOfWeek.getDate()}. ${
       MONTH_NAMES[startOfWeek.getMonth()]
     } - ${endOfWeek.getDate()}. ${
       MONTH_NAMES[endOfWeek.getMonth()]
-    } ${endOfWeek.getFullYear()}`;
+    } ${endOfWeek.getFullYear()} · KW ${kw}`;
   }
 
   // Month view
@@ -132,7 +137,7 @@ export function CalendarHeader({
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={onRefresh}
+            onClick={() => onRefresh()}
             disabled={isLoading}
             title="Aktualisieren"
             className="ml-2"
@@ -141,6 +146,9 @@ export function CalendarHeader({
               className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
             />
           </Button>
+          <span className="ml-2 text-sm font-medium text-muted-foreground sm:text-base whitespace-nowrap">
+            {formatDateDisplay(currentDate, view)}
+          </span>
           {!isCurrentPeriod && (
             <Button
               variant="outline"
@@ -155,9 +163,6 @@ export function CalendarHeader({
       </div>
 
       <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground sm:text-base">
-          {formatDateDisplay(currentDate, view)}
-        </span>
         <ManualEntryDialog
           preselectedDate={currentDate}
           onSuccess={onRefresh}

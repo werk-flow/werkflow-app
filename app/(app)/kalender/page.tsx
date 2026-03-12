@@ -12,6 +12,7 @@ import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import type { OrgRole } from '@/lib/members/actions';
 import type { EntryChangeRequestMap } from '@/lib/time-tracking/types';
+import { toLocalDateString } from '@/lib/utils';
 
 export default async function KalenderPage() {
   const [{ data: { user } }, cookieStore] = await Promise.all([
@@ -78,8 +79,8 @@ export default async function KalenderPage() {
     return data;
   }
 
-  const fromIso = dayStart.toISOString().split('T')[0];
-  const toIso = dayEnd.toISOString().split('T')[0];
+  const fromIso = toLocalDateString(dayStart);
+  const toIso = toLocalDateString(dayEnd);
 
   const [entriesResult, members, jobsResult] = await Promise.all([
     getTimeEntries({

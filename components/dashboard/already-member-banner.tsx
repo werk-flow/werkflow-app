@@ -73,7 +73,7 @@ export function AlreadyMemberBanner() {
   }
 
   return (
-    <div className={`fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${isExiting ? 'animate-out' : 'animate-in'}`}>
+    <div className={`fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${isExiting ? 'animate-banner-out' : 'animate-banner-in'}`}>
       <div className="flex items-center gap-3 rounded-lg bg-blue-50 p-4 text-blue-800 shadow-lg ring-1 ring-blue-200/50 dark:bg-blue-950 dark:text-blue-200 dark:ring-blue-800/50">
         <Info className="size-5 shrink-0" />
         <p className="flex-1 text-sm font-medium">

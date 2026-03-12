@@ -44,7 +44,7 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
 
     if (result.success) {
       setShowDeleteDialog(false);
-      router.refresh();
+      router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
     } else {
       setError(result.error || 'Fehler beim Löschen des Kunden');
       setIsDeleting(false);
