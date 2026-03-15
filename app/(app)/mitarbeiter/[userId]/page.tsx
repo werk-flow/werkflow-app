@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
@@ -10,15 +11,17 @@ import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
+import MitarbeiterDetailLoading from './loading';
 
 interface MitarbeiterDetailPageProps {
   params: Promise<{ userId: string }>;
 }
 
-export default async function MitarbeiterDetailPage({
-  params,
-}: MitarbeiterDetailPageProps) {
-  const { userId } = await params;
+async function MitarbeiterDetailData({
+  targetUserId,
+}: {
+  targetUserId: string;
+}) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies(),
@@ -42,10 +45,9 @@ export default async function MitarbeiterDetailPage({
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
-  // Run ALL data fetches in parallel — entity data + supplementary lists
   const [memberResult, jobsResult, clientsResult, membersResult, allProjectsResult, allJobsResult] = await Promise.all([
-    getMemberDetail(userId),
-    getJobsForMember(userId),
+    getMemberDetail(targetUserId),
+    getJobsForMember(targetUserId),
     admin
       .from('clients')
       .select('*')
@@ -124,5 +126,17 @@ export default async function MitarbeiterDetailPage({
       currentUserRole={currentUserRole!}
       isAdminOrManager={isAdminOrManager}
     />
+  );
+}
+
+export default async function MitarbeiterDetailPage({
+  params,
+}: MitarbeiterDetailPageProps) {
+  const { userId: targetUserId } = await params;
+
+  return (
+    <Suspense fallback={<MitarbeiterDetailLoading />}>
+      <MitarbeiterDetailData targetUserId={targetUserId} />
+    </Suspense>
   );
 }

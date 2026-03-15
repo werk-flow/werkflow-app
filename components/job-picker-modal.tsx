@@ -103,7 +103,7 @@ export function JobPickerModal({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-[2px]"
+        className="fixed inset-0 z-[100] bg-black/60"
         onClick={onClose}
       />
       {/* Centering wrapper */}

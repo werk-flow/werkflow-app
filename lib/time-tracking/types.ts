@@ -83,8 +83,17 @@ export type GetTimeEntriesParams = {
 /**
  * Result types for server actions
  */
+export type ClockJobInfo = {
+  id: string;
+  title: string;
+  jobNumber: string | null;
+  status: string;
+  projectName: string | null;
+  clientName: string | null;
+};
+
 export type ClockResult =
-  | { success: true; entry: TimeEntry }
+  | { success: true; entry: TimeEntry; jobInfo?: ClockJobInfo | null }
   | {
       success: false;
       error: 'working_in_other_org';

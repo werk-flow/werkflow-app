@@ -12,15 +12,17 @@ import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
+import ProjectDetailLoading from './loading';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
 }
 
-export default async function ProjectDetailPage({
-  params,
-}: ProjectDetailPageProps) {
-  const { projectNumber } = await params;
+async function ProjectDetailData({
+  projectNumber,
+}: {
+  projectNumber: string;
+}) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies(),
@@ -40,7 +42,6 @@ export default async function ProjectDetailPage({
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
-  // Run project fetch in parallel with supplementary data
   const [result, clientsResult, membersResult] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     isAdminOrManager
@@ -87,5 +88,17 @@ export default async function ProjectDetailPage({
         isAdminOrManager={isAdminOrManager}
       />
     </>
+  );
+}
+
+export default async function ProjectDetailPage({
+  params,
+}: ProjectDetailPageProps) {
+  const { projectNumber } = await params;
+
+  return (
+    <Suspense fallback={<ProjectDetailLoading />}>
+      <ProjectDetailData projectNumber={projectNumber} />
+    </Suspense>
   );
 }

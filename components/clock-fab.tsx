@@ -55,6 +55,7 @@ export function ClockFAB() {
   const [showJobPopover, setShowJobPopover] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const skipNextRealtimeRef = useRef(false);
 
   const dismissBanner = useCallback(() => {
     setIsBannerExiting(true);
@@ -93,7 +94,13 @@ export function ClockFAB() {
     fetchClockStatus();
   }, [fetchClockStatus]);
 
-  useRealtimeEvent('time_entries', fetchClockStatus);
+  useRealtimeEvent('time_entries', () => {
+    if (skipNextRealtimeRef.current) {
+      skipNextRealtimeRef.current = false;
+      return;
+    }
+    fetchClockStatus();
+  });
 
   // Fetch active job info only when we have a job ID — uses a lightweight
   // single-job lookup instead of loading all org jobs.
@@ -156,8 +163,12 @@ export function ClockFAB() {
           try {
             const result = await clockIn(activeOrgId, jobId);
             if (result.success) {
+              skipNextRealtimeRef.current = true;
               setIsClockedIn(true);
               setActiveJobId(jobId);
+              if (result.jobInfo) {
+                setActiveJobInfo(result.jobInfo);
+              }
               setStatusError(null);
               setShowJobPicker(false);
             } else {
@@ -188,7 +199,11 @@ export function ClockFAB() {
           try {
             const result = await switchJob(activeOrgId, jobId);
             if (result.success) {
+              skipNextRealtimeRef.current = true;
               setActiveJobId(jobId);
+              if (result.jobInfo) {
+                setActiveJobInfo(result.jobInfo);
+              }
               setShowJobPicker(false);
             } else {
               setStatusError(result.error);
@@ -210,6 +225,7 @@ export function ClockFAB() {
       try {
         const result = await clockOut(activeOrgId);
         if (result.success) {
+          skipNextRealtimeRef.current = true;
           setIsClockedIn(false);
           setActiveJobId(null);
           setStatusError(null);
@@ -237,7 +253,7 @@ export function ClockFAB() {
 
   if (isLoading) {
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-50 will-change-transform" style={{ contain: 'layout style' }}>
         <Button
           size="icon"
           className="h-14 w-14 rounded-full shadow-lg"
@@ -285,7 +301,7 @@ export function ClockFAB() {
         isPending={isPending}
       />
 
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 will-change-transform" style={{ contain: 'layout style' }}>
         {isClockedIn && (
           <div className="relative flex items-center gap-1.5">
             {activeJobInfo && (
@@ -294,7 +310,7 @@ export function ClockFAB() {
                   ref={pillRef}
                   type="button"
                   onClick={() => setShowJobPopover((v) => !v)}
-                  className="max-w-[180px] rounded-full bg-background/90 px-3 py-1 text-xs font-medium shadow-md ring-1 ring-border backdrop-blur-sm truncate cursor-pointer hover:bg-accent/80 transition-colors"
+                  className="max-w-[180px] rounded-full bg-background/95 px-3 py-1 text-xs font-medium shadow-md ring-1 ring-border truncate cursor-pointer hover:bg-accent/80 transition-colors"
                 >
                   <Briefcase className="mr-1 inline-block h-3 w-3 text-muted-foreground" />
                   {activeJobInfo.title}

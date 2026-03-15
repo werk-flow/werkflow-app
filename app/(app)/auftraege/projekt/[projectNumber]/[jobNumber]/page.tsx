@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
@@ -11,15 +12,19 @@ import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
   params: Promise<{ projectNumber: string; jobNumber: string }>;
 }
 
-export default async function NestedJobDetailPage({
-  params,
-}: NestedJobDetailPageProps) {
-  const { projectNumber, jobNumber } = await params;
+async function NestedJobDetailData({
+  projectNumber,
+  jobNumber,
+}: {
+  projectNumber: string;
+  jobNumber: string;
+}) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies(),
@@ -39,7 +44,6 @@ export default async function NestedJobDetailPage({
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
-  // Run ALL data fetches in parallel — entity data + supplementary lists
   const [projectResult, jobResult, clientsResult, membersResult] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     getJobByNumber(decodeURIComponent(jobNumber)),
@@ -84,5 +88,20 @@ export default async function NestedJobDetailPage({
       members={members}
       isAdminOrManager={isAdminOrManager}
     />
+  );
+}
+
+export default async function NestedJobDetailPage({
+  params,
+}: NestedJobDetailPageProps) {
+  const { projectNumber, jobNumber } = await params;
+
+  return (
+    <Suspense fallback={<NestedJobDetailLoading />}>
+      <NestedJobDetailData
+        projectNumber={projectNumber}
+        jobNumber={jobNumber}
+      />
+    </Suspense>
   );
 }

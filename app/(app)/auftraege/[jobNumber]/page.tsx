@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
@@ -6,17 +7,17 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
-import { toClient, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
+import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
   params: Promise<{ jobNumber: string }>;
 }
 
-export default async function JobDetailPage({ params }: JobDetailPageProps) {
-  const { jobNumber } = await params;
+async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies(),
@@ -36,9 +37,6 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
-  // Run job fetch in parallel with supplementary data (clients/members).
-  // If job has a project number we'll redirect, but starting these early
-  // saves time on the common non-redirect path.
   const [result, clientsResult, membersResult] = await Promise.all([
     getJobByNumber(decodeURIComponent(jobNumber)),
     isAdminOrManager
@@ -80,5 +78,15 @@ export default async function JobDetailPage({ params }: JobDetailPageProps) {
       members={members}
       isAdminOrManager={isAdminOrManager}
     />
+  );
+}
+
+export default async function JobDetailPage({ params }: JobDetailPageProps) {
+  const { jobNumber } = await params;
+
+  return (
+    <Suspense fallback={<JobDetailLoading />}>
+      <JobDetailData jobNumber={jobNumber} />
+    </Suspense>
   );
 }

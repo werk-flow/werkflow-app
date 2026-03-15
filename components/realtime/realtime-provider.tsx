@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useMemo,
+  useCallback,
   type ReactNode
 } from 'react';
 import type {
@@ -30,22 +31,38 @@ type RealtimeContextValue = {
   subscribe: (table: RealtimeTable, cb: RealtimeCallback) => () => void;
 };
 
+const TABLES: RealtimeTable[] = [
+  'time_entries',
+  'entry_change_requests',
+  'organization_invites',
+  'jobs',
+  'job_assignments'
+];
+
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { activeOrgId } = useOrganization();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const listenersRef = useRef<Map<RealtimeTable, Set<RealtimeCallback>>>(
-    new Map([
-      ['time_entries', new Set()],
-      ['entry_change_requests', new Set()],
-      ['organization_invites', new Set()],
-      ['jobs', new Set()],
-      ['job_assignments', new Set()]
-    ])
+    new Map(TABLES.map((t) => [t, new Set<RealtimeCallback>()]))
   );
 
   const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(new Map());
+
+  const dispatchAll = useCallback(() => {
+    for (const table of TABLES) {
+      const listeners = listenersRef.current.get(table);
+      if (!listeners || listeners.size === 0) continue;
+      const syntheticEvent: RealtimeChangeEvent = {
+        table,
+        eventType: 'UPDATE',
+        new: null,
+        old: null,
+      };
+      listeners.forEach((cb) => cb(syntheticEvent));
+    }
+  }, []);
 
   useEffect(() => {
     if (!activeOrgId) return;
@@ -150,9 +167,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             dispatch('job_assignments', p);
           }
         )
-        .subscribe((_status: string, err?: Error) => {
+        .subscribe((status: string, err?: Error) => {
           if (err) {
             console.error('[Realtime] subscription error:', err);
+          }
+          if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+            console.warn(`[Realtime] ${status} — will reconnect automatically`);
           }
         });
 
@@ -169,23 +189,31 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }
     );
 
+    // Refresh all listeners when the tab becomes visible again.
+    // Browsers (especially Edge) may throttle or drop WebSocket connections
+    // for background tabs; this ensures data is fresh when the user returns.
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        dispatchAll();
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       cancelled = true;
       authListener.unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      // Clear all pending debounce timers
       for (const timer of debounceTimersRef.current.values()) {
         clearTimeout(timer);
       }
       debounceTimersRef.current.clear();
     };
-  }, [activeOrgId]);
+  }, [activeOrgId, dispatchAll]);
 
-  // subscribe is a plain function stored in a ref — it never changes,
-  // so the context value is created once and stays stable across renders.
   const subscribeRef = useRef((table: RealtimeTable, cb: RealtimeCallback) => {
     listenersRef.current.get(table)?.add(cb);
     return () => {
@@ -229,3 +257,4 @@ export function useRealtimeEvent(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, table]);
 }
+

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound, redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
@@ -11,15 +12,13 @@ import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
+import KundenDetailLoading from './loading';
 
 interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
 }
 
-export default async function KundenDetailPage({
-  params,
-}: KundenDetailPageProps) {
-  const { clientId } = await params;
+async function KundenDetailData({ clientId }: { clientId: string }) {
   const [{ data: { user } }, cookieStore] = await Promise.all([
     getCachedUser(),
     cookies(),
@@ -43,7 +42,6 @@ export default async function KundenDetailPage({
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
-  // Run ALL data fetches in parallel — entity data + supplementary lists
   const [clientResult, jobsResult, clientsResult, membersResult] = await Promise.all([
     getClientDetail(clientId),
     getJobsForClient(clientId),
@@ -89,5 +87,17 @@ export default async function KundenDetailPage({
       members={members}
       isAdminOrManager={isAdminOrManager}
     />
+  );
+}
+
+export default async function KundenDetailPage({
+  params,
+}: KundenDetailPageProps) {
+  const { clientId } = await params;
+
+  return (
+    <Suspense fallback={<KundenDetailLoading />}>
+      <KundenDetailData clientId={clientId} />
+    </Suspense>
   );
 }

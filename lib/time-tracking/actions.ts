@@ -263,22 +263,44 @@ export async function clockIn(organizationId?: string, jobId?: string | null): P
       return { success: false, error: 'insert_failed' };
     }
 
+    let jobInfo: import('./types').ClockJobInfo | null = null;
+
     if (resolvedJobId) {
       const { data: job } = await admin
         .from('jobs')
-        .select('status')
+        .select('id, title, job_number, status, project_id, client_id')
         .eq('id', resolvedJobId)
         .single();
 
-      if (job && job.status === 'nicht_bearbeitet') {
-        await admin
-          .from('jobs')
-          .update({ status: 'in_bearbeitung' })
-          .eq('id', resolvedJobId);
+      if (job) {
+        if (job.status === 'nicht_bearbeitet') {
+          await admin
+            .from('jobs')
+            .update({ status: 'in_bearbeitung' })
+            .eq('id', resolvedJobId);
+        }
+
+        const [projectData, clientData] = await Promise.all([
+          job.project_id
+            ? admin.from('projects').select('name').eq('id', job.project_id).single()
+            : Promise.resolve({ data: null }),
+          job.client_id
+            ? admin.from('clients').select('name').eq('id', job.client_id).single()
+            : Promise.resolve({ data: null }),
+        ]);
+
+        jobInfo = {
+          id: job.id,
+          title: job.title,
+          jobNumber: job.job_number,
+          status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+          projectName: (projectData.data as { name: string } | null)?.name ?? null,
+          clientName: (clientData.data as { name: string } | null)?.name ?? null,
+        };
       }
     }
 
-    return { success: true, entry: toTimeEntry(newEntry) };
+    return { success: true, entry: toTimeEntry(newEntry), jobInfo };
   } catch (error) {
     console.error('Unexpected error in clockIn:', error);
     return { success: false, error: 'unexpected_error' };
@@ -1904,22 +1926,44 @@ export async function switchJob(
       return { success: false, error: 'insert_failed' };
     }
 
+    let jobInfo: import('./types').ClockJobInfo | null = null;
+
     if (newJobId) {
       const { data: job } = await admin
         .from('jobs')
-        .select('status')
+        .select('id, title, job_number, status, project_id, client_id')
         .eq('id', newJobId)
         .single();
 
-      if (job && job.status === 'nicht_bearbeitet') {
-        await admin
-          .from('jobs')
-          .update({ status: 'in_bearbeitung' })
-          .eq('id', newJobId);
+      if (job) {
+        if (job.status === 'nicht_bearbeitet') {
+          await admin
+            .from('jobs')
+            .update({ status: 'in_bearbeitung' })
+            .eq('id', newJobId);
+        }
+
+        const [projectData, clientData] = await Promise.all([
+          job.project_id
+            ? admin.from('projects').select('name').eq('id', job.project_id).single()
+            : Promise.resolve({ data: null }),
+          job.client_id
+            ? admin.from('clients').select('name').eq('id', job.client_id).single()
+            : Promise.resolve({ data: null }),
+        ]);
+
+        jobInfo = {
+          id: job.id,
+          title: job.title,
+          jobNumber: job.job_number,
+          status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+          projectName: (projectData.data as { name: string } | null)?.name ?? null,
+          clientName: (clientData.data as { name: string } | null)?.name ?? null,
+        };
       }
     }
 
-    return { success: true, entry: toTimeEntry(newEntry) };
+    return { success: true, entry: toTimeEntry(newEntry), jobInfo };
   } catch (error) {
     console.error('Unexpected error in switchJob:', error);
     return { success: false, error: 'unexpected_error' };
