@@ -29,7 +29,11 @@ export default async function ZeiterfassungPage({
     redirect('/login');
   }
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  // Parallel: org resolution + memberships (both React.cache() deduped from layout)
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id)
+  ]);
 
   if (!activeOrgId) {
     return (
@@ -42,7 +46,6 @@ export default async function ZeiterfassungPage({
     );
   }
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
   if (!currentMembership) {

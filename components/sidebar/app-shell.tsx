@@ -26,10 +26,7 @@ import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfas
 import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
-import {
-  getPendingSessions,
-  getPendingChangeRequests
-} from '@/lib/time-tracking/actions';
+import { getPendingApprovalCount } from '@/lib/time-tracking/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 const OrganizationSwitcher = dynamic(
@@ -104,18 +101,74 @@ export function useSidebar() {
   return context;
 }
 
+// Sidebar skeleton shown while providers are hydrating
+function SidebarSkeleton() {
+  return (
+    <>
+      <div className="flex items-center justify-center px-4 py-5">
+        <Image
+          src="/logo-text-light.svg"
+          alt="WerkFlow"
+          width={160}
+          height={35}
+          className="h-9 w-auto dark:hidden"
+          priority
+        />
+        <Image
+          src="/logo-text-dark.svg"
+          alt="WerkFlow"
+          width={160}
+          height={35}
+          className="hidden h-9 w-auto dark:block"
+          priority
+        />
+      </div>
+      <Separator />
+      <div className="p-4">
+        <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />
+      </div>
+      <Separator />
+      <nav className="flex-1 p-4">
+        <ul className="space-y-1">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <li key={i}>
+              <div className="flex items-center gap-3 rounded-md px-3 py-2">
+                <div className="size-4 rounded bg-muted animate-pulse" />
+                <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <div className="mt-auto border-t">
+        <div className="flex items-center gap-3 p-3">
+          <div className="size-9 rounded-full bg-muted animate-pulse" />
+          <div className="flex-1 min-w-0">
+            <div className="h-4 w-24 mb-1 rounded bg-muted animate-pulse" />
+            <div className="h-3 w-32 rounded bg-muted animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Sidebar content component (shared between desktop and mobile)
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { activeOrg, activeOrgId } = useOrganization();
   const [pendingCount, setPendingCount] = useState(0);
+  const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
 
-  // Check if user is admin or manager of the active organization
+  // Reset optimistic path once the real pathname catches up
+  useEffect(() => {
+    setOptimisticPath(null);
+  }, [pathname]);
+
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'manager';
   const isAdmin = activeOrg?.role === 'admin';
 
-  // Fetch pending approvals count for the badge
   const fetchPendingCount = useCallback(async () => {
     if (!activeOrgId || !isAdminOrManager) {
       setPendingCount(0);
@@ -123,36 +176,31 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     }
 
     try {
-      const sessionsResult = await getPendingSessions(activeOrgId);
-      let count = sessionsResult.success ? sessionsResult.sessions.length : 0;
-
-      // Admins also see change requests
-      if (isAdmin) {
-        const changeRequestsResult = await getPendingChangeRequests();
-        if (changeRequestsResult.success) {
-          count += changeRequestsResult.requests.length;
-        }
-      }
-
+      const count = await getPendingApprovalCount(activeOrgId, isAdmin);
       setPendingCount(count);
     } catch (err) {
       console.error('Error fetching pending count:', err);
     }
   }, [activeOrgId, isAdminOrManager, isAdmin]);
 
-  // Fetch on mount and when org/role changes
   useEffect(() => {
     fetchPendingCount();
   }, [fetchPendingCount]);
 
-  // Realtime: refetch when time entries or change requests change
   useRealtimeEvent('time_entries', fetchPendingCount);
   useRealtimeEvent('entry_change_requests', fetchPendingCount);
 
-  // Filter nav items based on role
   const visibleNavItems = navItems.filter(
     (item) => !item.managerOrAbove || isAdminOrManager
   );
+
+  // Use optimistic path for instant visual feedback; fall back to real pathname
+  const activePath = optimisticPath ?? pathname;
+
+  function handleNavClick(href: string) {
+    setOptimisticPath(href);
+    onNavigate?.();
+  }
 
   return (
     <>
@@ -161,9 +209,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href="/dashboard"
           className="flex items-center"
-          onClick={onNavigate}
+          onClick={() => handleNavClick('/dashboard')}
         >
-          {/* Light mode logo */}
           <Image
             src="/logo-text-light.svg"
             alt="WerkFlow"
@@ -172,7 +219,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             className="h-9 w-auto dark:hidden"
             priority
           />
-          {/* Dark mode logo */}
           <Image
             src="/logo-text-dark.svg"
             alt="WerkFlow"
@@ -198,7 +244,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <ul className="space-y-1">
           {visibleNavItems.map((item) => {
             const isActive =
-              pathname === item.href || pathname.startsWith(item.href + '/');
+              activePath === item.href || activePath.startsWith(item.href + '/');
             const Icon = item.icon;
             const showBadge =
               item.href === '/zeiterfassung' &&
@@ -209,7 +255,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={onNavigate}
+                  onClick={() => handleNavClick(item.href)}
                   className={cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     isActive
@@ -239,11 +285,22 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+// Wraps SidebarContent with a loading check for provider hydration
+function DynamicSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { isLoading } = useOrganization();
+
+  if (isLoading) {
+    return <SidebarSkeleton />;
+  }
+
+  return <SidebarContent onNavigate={onNavigate} />;
+}
+
 // Desktop sidebar
 function DesktopSidebar() {
   return (
     <aside className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card">
-      <SidebarContent />
+      <DynamicSidebarContent />
     </aside>
   );
 }
@@ -309,7 +366,7 @@ function MobileDrawer({
               </Button>
             </div>
 
-            <SidebarContent onNavigate={onClose} />
+            <DynamicSidebarContent onNavigate={onClose} />
           </motion.aside>
         </>
       )}
@@ -360,65 +417,48 @@ function MobileHeader() {
   );
 }
 
-// Main app shell component
+// Org-switching skeleton overlay (isolated so AppShell stays data-free)
+function OrgSwitchOverlay() {
+  const { isSwitchingOrg } = useOrganization();
+  const pathname = usePathname();
+
+  const currentSkeleton = useMemo(() => {
+    if (pathname.startsWith('/mitarbeiter')) return <MitarbeiterPageSkeleton />;
+    if (pathname.startsWith('/dashboard')) return <DashboardPageSkeleton />;
+    if (pathname.startsWith('/kalender')) return <KalenderPageSkeleton />;
+    if (pathname.startsWith('/zeiterfassung')) return <ZeiterfassungPageSkeleton />;
+    if (pathname.startsWith('/kunden')) return <KundenPageSkeleton />;
+    if (pathname.startsWith('/auftraege')) return <AuftraegePageSkeleton />;
+    return null;
+  }, [pathname]);
+
+  if (!isSwitchingOrg || !currentSkeleton) return null;
+
+  return (
+    <div className="absolute inset-0 z-10 overflow-auto bg-background">
+      {currentSkeleton}
+    </div>
+  );
+}
+
+// Main app shell component — static frame with no direct data dependencies
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  const { isSwitchingOrg } = useOrganization();
 
-  // Close drawer on route change
   useEffect(() => {
     setIsOpen(false);
-  }, [pathname]);
-
-  const currentSkeleton = useMemo(() => {
-    if (pathname.startsWith('/mitarbeiter')) {
-      return <MitarbeiterPageSkeleton />;
-    }
-
-    if (pathname.startsWith('/dashboard')) {
-      return <DashboardPageSkeleton />;
-    }
-
-    if (pathname.startsWith('/kalender')) {
-      return <KalenderPageSkeleton />;
-    }
-
-    if (pathname.startsWith('/zeiterfassung')) {
-      return <ZeiterfassungPageSkeleton />;
-    }
-
-    if (pathname.startsWith('/kunden')) {
-      return <KundenPageSkeleton />;
-    }
-
-    if (pathname.startsWith('/auftraege')) {
-      return <AuftraegePageSkeleton />;
-    }
-
-    return null;
   }, [pathname]);
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
       <div className="flex h-screen flex-col bg-background md:flex-row">
-        {/* Mobile header - only on small screens */}
         <MobileHeader />
-
-        {/* Desktop sidebar */}
         <DesktopSidebar />
-
-        {/* Mobile drawer */}
         <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
-
-        {/* Main content */}
         <div className="relative flex-1 overflow-hidden">
           <main className="h-full overflow-auto">{children}</main>
-          {isSwitchingOrg && currentSkeleton && (
-            <div className="absolute inset-0 z-10 overflow-auto bg-background">
-              {currentSkeleton}
-            </div>
-          )}
+          <OrgSwitchOverlay />
         </div>
       </div>
     </SidebarContext.Provider>

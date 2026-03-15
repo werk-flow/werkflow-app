@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
@@ -51,24 +51,23 @@ export async function updateMemberRole(
   newRole: OrgRole
 ): Promise<UpdateRoleResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const [user, cookieStore] = await Promise.all([
+      getAuthenticatedUser(),
+      cookies()
+    ]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const cookieStore = await cookies();
     const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Get the caller's membership in this org
-    const { data: callerMembership, error: callerError } = await supabase
+    const admin = createSupabaseAdminClient();
+
+    const { data: callerMembership, error: callerError } = await admin
       .from('organization_members')
       .select('role')
       .eq('organization_id', orgId)
@@ -86,8 +85,6 @@ export async function updateMemberRole(
       return { success: false, error: 'not_authorized' };
     }
 
-    // Get the target member's current role using admin client to bypass RLS
-    const admin = createSupabaseAdminClient();
     const { data: targetMember, error: targetError } = await admin
       .from('organization_members')
       .select('user_id, role')
@@ -101,7 +98,6 @@ export async function updateMemberRole(
 
     const targetRole = targetMember.role as OrgRole;
 
-    // Cannot change own role
     if (targetMember.user_id === user.id) {
       return { success: false, error: 'cannot_change_own_role' };
     }
@@ -162,24 +158,23 @@ export async function removeMember(
   memberId: string
 ): Promise<RemoveMemberResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const [user, cookieStore] = await Promise.all([
+      getAuthenticatedUser(),
+      cookies()
+    ]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const cookieStore = await cookies();
     const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Get the caller's membership in this org
-    const { data: callerMembership, error: callerError } = await supabase
+    const admin = createSupabaseAdminClient();
+
+    const { data: callerMembership, error: callerError } = await admin
       .from('organization_members')
       .select('role')
       .eq('organization_id', orgId)
@@ -197,8 +192,6 @@ export async function removeMember(
       return { success: false, error: 'not_authorized' };
     }
 
-    // Get the target member's current role using admin client to bypass RLS
-    const admin = createSupabaseAdminClient();
     const { data: targetMember, error: targetError } = await admin
       .from('organization_members')
       .select('user_id, role')
@@ -341,21 +334,13 @@ export async function getOrgMembersAction(
   organizationId: string
 ): Promise<{ success: true; members: OrgMemberInfo[] } | { success: false; error: string }> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('role')
-      .eq('organization_id', organizationId)
-      .eq('user_id', user.id)
-      .single();
+    const memberships = await getCachedMemberships(user.id);
+    const membership = memberships.find((m) => m.orgId === organizationId);
 
     if (!membership) {
       return { success: false, error: 'not_a_member' };
@@ -366,6 +351,7 @@ export async function getOrgMembersAction(
       return { success: false, error: 'not_authorized' };
     }
 
+    const supabase = await createSupabaseServerClient();
     const { data: members, error } = await supabase.rpc('get_org_members', {
       p_org_id: organizationId
     });

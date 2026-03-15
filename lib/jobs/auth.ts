@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 import type { OrgRole } from './types';
 import { MANAGER_ROLES } from './types';
 
@@ -17,33 +17,28 @@ type AuthResult =
 
 /**
  * Shared auth + org + role resolution for all jobs/projects/clients actions.
- * Returns the caller's identity, active org, and role in one call.
+ * Uses cached helpers to avoid redundant network roundtrips.
  */
 export async function authenticateAndAuthorize(): Promise<AuthResult> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [user, cookieStore] = await Promise.all([
+    getAuthenticatedUser(),
+    cookies()
+  ]);
 
   if (!user) {
     return { success: false, error: 'not_authenticated' };
   }
 
-  const cookieStore = await cookies();
   const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
   if (!orgId) {
     return { success: false, error: 'no_active_org' };
   }
 
-  const { data: membership, error: membershipError } = await supabase
-    .from('organization_members')
-    .select('role')
-    .eq('organization_id', orgId)
-    .eq('user_id', user.id)
-    .single();
+  const memberships = await getCachedMemberships(user.id);
+  const membership = memberships.find((m) => m.orgId === orgId);
 
-  if (membershipError || !membership) {
+  if (!membership) {
     return { success: false, error: 'not_a_member' };
   }
 

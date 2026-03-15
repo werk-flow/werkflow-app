@@ -2,10 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { updateTag } from 'next/cache';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { userHasOrganizations } from './helpers';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 
 export type SimulatePaymentResult = {
   success: boolean;
@@ -17,12 +16,7 @@ export type SimulatePaymentResult = {
  * This is a placeholder for actual Stripe integration.
  */
 export async function simulatePayment(): Promise<SimulatePaymentResult> {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedUser();
   if (!user) {
     return { success: false, error: 'not_authenticated' };
   }

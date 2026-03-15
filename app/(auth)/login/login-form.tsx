@@ -52,131 +52,119 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
     setFormError(null);
     setIsSubmitting(true);
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: values.email,
-        password: values.password
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password
+    });
 
-      if (error) {
-        console.error('Failed to sign in', error);
+    if (error) {
+      console.error('Failed to sign in', error);
 
-        // Check if the error is due to unverified email
-        // Supabase returns "Email not confirmed" for unverified users
-        const errorMessage = error.message?.toLowerCase() ?? '';
-        if (
-          errorMessage.includes('email not confirmed') ||
-          errorMessage.includes('email_not_confirmed')
-        ) {
-          // Resend OTP to the user's email
-          const { error: resendError } = await supabase.auth.resend({
-            type: 'signup',
-            email: values.email
-          });
+      const errorMessage = error.message?.toLowerCase() ?? '';
+      if (
+        errorMessage.includes('email not confirmed') ||
+        errorMessage.includes('email_not_confirmed')
+      ) {
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email: values.email
+        });
 
-          if (resendError) {
-            console.error('Failed to resend OTP:', resendError);
-            setFormError(
-              'E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.'
-            );
-            return;
-          }
-
-          // Redirect to verify page with the email
-          // Include invite code if present
-          const verifyUrl = inviteCode
-            ? `/verify?email=${encodeURIComponent(
-                values.email
-              )}&invite_code=${inviteCode}`
-            : `/verify?email=${encodeURIComponent(values.email)}`;
-          router.replace(verifyUrl);
-          router.refresh();
+        if (resendError) {
+          console.error('Failed to resend OTP:', resendError);
+          setFormError(
+            'E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.'
+          );
+          setIsSubmitting(false);
           return;
         }
 
-        setFormError(
-          'Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.'
-        );
+        const verifyUrl = inviteCode
+          ? `/verify?email=${encodeURIComponent(
+              values.email
+            )}&invite_code=${inviteCode}`
+          : `/verify?email=${encodeURIComponent(values.email)}`;
+        router.replace(verifyUrl);
+        router.refresh();
         return;
       }
 
-      if (data.session) {
-        await fetch('/auth/callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            event: 'SIGNED_IN',
-            session: data.session
-          })
-        });
+      setFormError(
+        'Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.'
+      );
+      setIsSubmitting(false);
+      return;
+    }
 
-        // If there's an invite code, redeem it via server API
-        if (inviteCode) {
-          try {
-            const response = await fetch('/api/redeem-invite', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ inviteCode })
-            });
+    if (data.session) {
+      await fetch('/auth/callback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          event: 'SIGNED_IN',
+          session: data.session
+        })
+      });
 
-            const result = await response.json();
+      if (inviteCode) {
+        try {
+          const response = await fetch('/api/redeem-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inviteCode })
+          });
 
-            if (!response.ok) {
-              console.error('Failed to redeem invite:', result);
-              if (result.error === 'email_mismatch') {
-                const invitedEmail = result.invitedEmail || '';
-                window.location.href = `/invite-error?error=email_mismatch&email=${encodeURIComponent(
-                  invitedEmail
-                )}&invite_code=${inviteCode}`;
-                return;
-              }
-              if (result.error === 'admin_mismatch') {
-                window.location.href = '/invite-error?error=admin_mismatch';
-                return;
-              }
-              if (result.error === 'invite_expired') {
-                window.location.href = '/invite-error?error=invite_expired';
-                return;
-              }
-              if (result.error === 'invite_cancelled') {
-                window.location.href = '/invite-error?error=invite_cancelled';
-                return;
-              }
-              if (result.error === 'invite_already_used') {
-                window.location.href =
-                  '/invite-error?error=invite_already_used';
-                return;
-              }
-              if (result.error === 'invalid_invite') {
-                window.location.href = '/invite-error?error=invalid_invite';
-                return;
-              }
-              // For other errors, continue to dashboard
-            } else if (result.success && result.organizationId) {
-              // Successfully redeemed - cookie is already set by the API
-              // Use hard navigation to ensure the cookie is read correctly
-              if (result.alreadyMember) {
-                window.location.href = `/dashboard?already_member=${result.organizationId}`;
-              } else {
-                window.location.href = `/dashboard?joined=${result.organizationId}`;
-              }
+          const result = await response.json();
+
+          if (!response.ok) {
+            console.error('Failed to redeem invite:', result);
+            if (result.error === 'email_mismatch') {
+              const invitedEmail = result.invitedEmail || '';
+              window.location.href = `/invite-error?error=email_mismatch&email=${encodeURIComponent(
+                invitedEmail
+              )}&invite_code=${inviteCode}`;
               return;
             }
-          } catch (err) {
-            console.error('Error redeeming invite:', err);
-            // Continue to dashboard on error
+            if (result.error === 'admin_mismatch') {
+              window.location.href = '/invite-error?error=admin_mismatch';
+              return;
+            }
+            if (result.error === 'invite_expired') {
+              window.location.href = '/invite-error?error=invite_expired';
+              return;
+            }
+            if (result.error === 'invite_cancelled') {
+              window.location.href = '/invite-error?error=invite_cancelled';
+              return;
+            }
+            if (result.error === 'invite_already_used') {
+              window.location.href =
+                '/invite-error?error=invite_already_used';
+              return;
+            }
+            if (result.error === 'invalid_invite') {
+              window.location.href = '/invite-error?error=invalid_invite';
+              return;
+            }
+          } else if (result.success && result.organizationId) {
+            if (result.alreadyMember) {
+              window.location.href = `/dashboard?already_member=${result.organizationId}`;
+            } else {
+              window.location.href = `/dashboard?joined=${result.organizationId}`;
+            }
+            return;
           }
+        } catch (err) {
+          console.error('Error redeeming invite:', err);
         }
       }
-
-      router.replace('/dashboard');
-      router.refresh();
-    } finally {
-      // Reset submitting state in case redirect fails or is delayed
-      setIsSubmitting(false);
     }
+
+    // Keep isSubmitting=true — the component unmounts on navigation
+    router.replace('/dashboard');
+    router.refresh();
   });
 
   return (

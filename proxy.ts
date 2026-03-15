@@ -21,7 +21,7 @@ function isStaticAsset(pathname: string) {
   );
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (isStaticAsset(pathname)) {
@@ -80,24 +80,6 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // Handle potential auth errors gracefully (e.g., invalid refresh tokens)
-  // Use getUser() instead of getSession() for reliable auth checks
-  // getSession() only reads from cookies without validation
-  // getUser() actually validates the session with Supabase
-  let user = null;
-  try {
-    const { data, error } = await supabase.auth.getUser();
-    if (!error) {
-      user = data.user;
-    }
-  } catch (error) {
-    // Silently handle auth errors - treat as no session
-    console.error('Auth error in middleware:', error);
-  }
-
-  // For backward compatibility, treat user presence as "has session"
-  const session = user ? { user } : null;
-
   const normalizedPath =
     pathname !== '/' && pathname.endsWith('/')
       ? pathname.slice(0, -1)
@@ -107,6 +89,22 @@ export async function middleware(req: NextRequest) {
     (prefix) =>
       normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)
   );
+
+  // Use getSession() (cookie-only, no network roundtrip) for ALL routes.
+  // This keeps the proxy fast (~1ms) so loading skeletons can appear
+  // instantly. This only checks whether a session cookie exists — it does
+  // NOT validate the JWT with Supabase Auth servers. Full validation
+  // happens in server actions via getAuthenticatedUser() (which calls
+  // getUser()), and page data queries are protected by RLS.
+  let user = null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    user = session?.user ?? null;
+  } catch (error) {
+    console.error('Auth error in proxy:', error);
+  }
+
+  const session = user ? { user } : null;
 
   const isVerifyRoute = normalizedPath === '/verify';
 

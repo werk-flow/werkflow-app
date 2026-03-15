@@ -21,7 +21,10 @@ export default async function KundenPage() {
     redirect('/login');
   }
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id)
+  ]);
 
   if (!activeOrgId) {
     return (
@@ -34,7 +37,6 @@ export default async function KundenPage() {
     );
   }
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
   const currentUserRole = currentMembership?.role as OrgRole | undefined;

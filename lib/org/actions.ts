@@ -2,12 +2,11 @@
 
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isUserSubscribed } from '@/lib/subscription/helpers';
 import { generateUniqueOrgCode } from './generate-code';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from './cookies';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 
 /**
  * Sets the active organization cookie
@@ -22,6 +21,16 @@ export async function setActiveOrgCookie(orgId: string): Promise<void> {
   });
 }
 
+/**
+ * Reads the active organization ID from the httpOnly cookie.
+ * Used by client-side self-hydration since document.cookie cannot
+ * access httpOnly cookies.
+ */
+export async function getActiveOrgCookie(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(CURRENT_ORG_COOKIE)?.value ?? null;
+}
+
 export type CreateOrganizationResult = {
   success: boolean;
   organizationId?: string;
@@ -34,7 +43,6 @@ export type CreateOrganizationResult = {
 export async function createOrganization(
   name: string
 ): Promise<CreateOrganizationResult> {
-  // Validate input
   const trimmedName = name.trim();
   if (!trimmedName) {
     return { success: false, error: 'name_required' };
@@ -48,13 +56,7 @@ export async function createOrganization(
     return { success: false, error: 'name_too_long' };
   }
 
-  const supabase = await createSupabaseServerClient();
-
-  // Get current user
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedUser();
   if (!user) {
     return { success: false, error: 'not_authenticated' };
   }
@@ -140,18 +142,11 @@ export async function joinOrganization(
     return { success: false, error: 'code_required' };
   }
 
-  const supabase = await createSupabaseServerClient();
-
-  // Get current user
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
+  const user = await getAuthenticatedUser();
   if (!user) {
     return { success: false, error: 'not_authenticated' };
   }
 
-  // Use admin client for database operations (bypasses RLS)
   const admin = createSupabaseAdminClient();
 
   try {

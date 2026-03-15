@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberCount } from '@/lib/data/cached';
@@ -16,13 +17,14 @@ export default async function DashboardPage() {
     cookies()
   ]);
 
-  const activeOrgId = user
-    ? await resolveActiveOrgId(cookieStore, user.id)
-    : null;
+  if (!user) {
+    redirect('/login');
+  }
 
-  const memberCount = activeOrgId
-    ? await getCachedMemberCount(activeOrgId)
-    : null;
+  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+
+  // getCachedMemberCount is independent — no need to wait for sequential call
+  const memberCount = activeOrgId ? await getCachedMemberCount(activeOrgId) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

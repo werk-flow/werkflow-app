@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -31,20 +32,31 @@ const UserProfileContext = createContext<UserProfileContextValue | null>(null)
 // Provider props
 type UserProfileProviderProps = {
   children: ReactNode
-  initialProfile: UserProfile | null
+  initialProfile?: UserProfile | null
 }
 
 export function UserProfileProvider({
   children,
-  initialProfile,
+  initialProfile = null,
 }: UserProfileProviderProps) {
   const [profile, setProfile] = useState<UserProfile | null>(initialProfile)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(initialProfile === null)
+  const hydratedRef = useRef(false)
 
-  // Sync state when initial props change (e.g., after router.refresh())
+  // Sync state when server-provided props change
   useEffect(() => {
-    setProfile(initialProfile)
+    if (initialProfile !== null) {
+      setProfile(initialProfile)
+    }
   }, [initialProfile])
+
+  // Self-hydration: fetch profile client-side when no server data was provided
+  useEffect(() => {
+    if (hydratedRef.current || initialProfile !== null) return
+    hydratedRef.current = true
+    refreshProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Fetch profile from Supabase (client-side)
   const refreshProfile = useCallback(async () => {

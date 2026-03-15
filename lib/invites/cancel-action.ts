@@ -1,60 +1,44 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 
 export type CancelInviteResult = {
   success: boolean;
   error?: string;
 };
 
-/**
- * Cancel a pending invitation.
- * 
- * Rules:
- * - Only admins and managers can cancel invites
- * - Only pending invites can be cancelled
- */
 export async function cancelInvite(
   inviteId: string
 ): Promise<CancelInviteResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const [user, cookieStore] = await Promise.all([
+      getAuthenticatedUser(),
+      cookies()
+    ]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const cookieStore = await cookies();
     const orgId = await resolveActiveOrgId(cookieStore, user.id);
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Check user's role in this organization
-    const { data: membership, error: membershipErr } = await supabase
-      .from('organization_members')
-      .select('role')
-      .eq('organization_id', orgId)
-      .eq('user_id', user.id)
-      .single();
+    const memberships = await getCachedMemberships(user.id);
+    const membership = memberships.find((m) => m.orgId === orgId);
 
-    if (membershipErr || !membership) {
+    if (!membership) {
       return { success: false, error: 'not_a_member' };
     }
 
-    // Only admins and managers can cancel invites
     if (membership.role !== 'admin' && membership.role !== 'manager') {
       return { success: false, error: 'not_authorized' };
     }
 
-    // Use admin client for database operations that need to bypass RLS
     const admin = createSupabaseAdminClient();
 
     // Verify the invite belongs to this organization

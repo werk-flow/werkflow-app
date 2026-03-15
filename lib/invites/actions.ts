@@ -3,9 +3,9 @@
 import { cookies, headers } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 
 // Email validation schema
 const emailSchema = z.string().email();
@@ -36,43 +36,36 @@ export async function sendOrgInvite(
       return { success: false, error: 'invalid_role' };
     }
 
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const [user, cookieStore] = await Promise.all([
+      getAuthenticatedUser(),
+      cookies()
+    ]);
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    const cookieStore = await cookies();
     const orgId = cookieStore.get(CURRENT_ORG_COOKIE)?.value;
 
     if (!orgId) {
       return { success: false, error: 'no_active_org' };
     }
 
-    // Get the caller's membership to check their role
-    const { data: callerMembership, error: membershipErr } = await supabase
-      .from('organization_members')
-      .select('role')
-      .eq('organization_id', orgId)
-      .eq('user_id', user.id)
-      .single();
+    const memberships = await getCachedMemberships(user.id);
+    const callerMembership = memberships.find((m) => m.orgId === orgId);
 
-    if (membershipErr || !callerMembership) {
+    if (!callerMembership) {
       return { success: false, error: 'not_a_member' };
     }
 
     const callerRole = callerMembership.role;
 
-    // Only admins and managers can invite users
     if (callerRole !== 'admin' && callerRole !== 'manager') {
       return { success: false, error: 'not_authorized' };
     }
 
-    // Get org details
-    const { data: org, error: orgErr } = await supabase
+    const admin = createSupabaseAdminClient();
+
+    const { data: org, error: orgErr } = await admin
       .from('organizations')
       .select('id, admin_id, name')
       .eq('id', orgId)
@@ -82,11 +75,7 @@ export async function sendOrgInvite(
       return { success: false, error: 'org_not_found' };
     }
 
-    // Use admin client for database operations that need to bypass RLS
-    const admin = createSupabaseAdminClient();
-
-    // Check if user exists by email using RPC function that can access auth.users
-    const { data: userCheckResult, error: userCheckError } = await supabase.rpc(
+    const { data: userCheckResult, error: userCheckError } = await admin.rpc(
       'check_user_exists_by_email',
       { p_email: trimmedEmail }
     );
@@ -154,7 +143,7 @@ export async function sendOrgInvite(
       process.env.NEXT_PUBLIC_SITE_URL || headersList.get('origin') || '';
 
     // Get inviter's profile for the email
-    const { data: inviterProfile } = await supabase
+    const { data: inviterProfile } = await admin
       .from('profiles')
       .select('first_name, last_name')
       .eq('id', user.id)

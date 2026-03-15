@@ -29,7 +29,10 @@ export default async function AuftraegePage() {
     redirect('/login');
   }
 
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id)
+  ]);
 
   if (!activeOrgId) {
     return (
@@ -42,7 +45,6 @@ export default async function AuftraegePage() {
     );
   }
 
-  const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
@@ -140,6 +142,7 @@ export default async function AuftraegePage() {
       };
     });
   } else {
+    // Employee path: fetch assignments first, then everything else in parallel batches
     const { data: assignments, error: assignError } = await admin
       .from('job_assignments')
       .select('job_id, user_id')
@@ -157,7 +160,8 @@ export default async function AuftraegePage() {
     }
 
     if (assignedJobIds.length > 0) {
-      const [jobsResult2, allAssignResult] = await Promise.all([
+      // Batch 1: jobs + all assignments + org clients (all independent)
+      const [jobsResult2, allAssignResult, clientsResult] = await Promise.all([
         admin
           .from('jobs')
           .select('*')
@@ -169,6 +173,11 @@ export default async function AuftraegePage() {
           .from('job_assignments')
           .select('job_id, user_id')
           .in('job_id', assignedJobIds),
+        admin
+          .from('clients')
+          .select('*')
+          .eq('organization_id', activeOrgId)
+          .order('name', { ascending: true }),
       ]);
 
       if (jobsResult2.error) {
@@ -177,6 +186,8 @@ export default async function AuftraegePage() {
         jobList = (jobsResult2.data ?? []).map(toJob);
       }
 
+      clientList = (clientsResult.data ?? []).map(toClient);
+
       jobAssignmentMap = {};
       for (const a of allAssignResult.data ?? []) {
         if (!jobAssignmentMap[a.job_id]) jobAssignmentMap[a.job_id] = [];
@@ -184,6 +195,7 @@ export default async function AuftraegePage() {
       }
     }
 
+    // Batch 2: projects + project jobs (depends on job IDs from batch 1)
     const assignedProjectIds = [
       ...new Set(
         jobList
@@ -216,29 +228,6 @@ export default async function AuftraegePage() {
         projectJobCounts.set(job.project_id, counts);
       }
 
-      const projectClientIds = [
-        ...new Set(
-          (projectsResult.data ?? [])
-            .map((p) => p.client_id)
-            .filter((id): id is string => id !== null)
-        ),
-      ];
-
-      const allNeededClientIds = [
-        ...new Set([
-          ...jobList.filter((j) => j.clientId).map((j) => j.clientId!),
-          ...projectClientIds,
-        ]),
-      ];
-
-      if (allNeededClientIds.length > 0) {
-        const { data: clientsData } = await admin
-          .from('clients')
-          .select('*')
-          .in('id', allNeededClientIds);
-        clientList = (clientsData ?? []).map(toClient);
-      }
-
       const clientLookup = new Map(clientList.map((c) => [c.id, c]));
 
       projectList = (projectsResult.data ?? []).map((row) => {
@@ -252,15 +241,6 @@ export default async function AuftraegePage() {
           inProgressJobCount: counts.inProgress,
         };
       });
-    } else {
-      const uniqueClientIds = [...new Set(jobList.filter((j) => j.clientId).map((j) => j.clientId!))];
-      if (uniqueClientIds.length > 0) {
-        const { data: clientsData } = await admin
-          .from('clients')
-          .select('*')
-          .in('id', uniqueClientIds);
-        clientList = (clientsData ?? []).map(toClient);
-      }
     }
   }
 

@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedMemberships } from '@/lib/data/cached';
+import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 import {
   type TimeEntry,
   type TimeEntryRow,
@@ -204,11 +204,7 @@ async function getOpenSessionOrgsForUserToday(
  */
 export async function clockIn(organizationId?: string, jobId?: string | null): Promise<ClockResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -294,11 +290,7 @@ export async function clockIn(organizationId?: string, jobId?: string | null): P
  */
 export async function clockOut(organizationId?: string): Promise<ClockResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -359,11 +351,7 @@ export async function clockOutBeforeSignOut(): Promise<
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: true, clockedOutOrgIds: [] };
     }
@@ -419,11 +407,7 @@ export async function addManualEntry(
   params: AddManualEntryParams
 ): Promise<AddManualEntryResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -555,11 +539,7 @@ export async function reviewEntry(
   decision: 'approved' | 'rejected'
 ): Promise<ReviewEntryResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -664,11 +644,7 @@ export async function updateEntry(
   fields: { timestamp?: string }
 ): Promise<UpdateEntryResult | RequestChangeResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -827,11 +803,7 @@ export async function deleteEntry(
   pairedEntryId?: string
 ): Promise<DeleteEntryResult | RequestChangeResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1004,24 +976,19 @@ export async function getTimeEntries(
   params: GetTimeEntriesParams
 ): Promise<GetTimeEntriesResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
     const { organizationId, from, to, userId, status } = params;
 
-    // Verify caller is member of org (cache hit for repeated calls)
     const callerRole = await verifyMembershipFromCache(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
 
-    // Build query - RLS will handle visibility
+    const supabase = await createSupabaseServerClient();
     let query = supabase
       .from('time_entries')
       .select('*')
@@ -1060,11 +1027,7 @@ export async function getPendingEntries(
   organizationId?: string
 ): Promise<GetPendingEntriesResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1130,17 +1093,59 @@ export async function getPendingEntries(
 }
 
 /**
+ * Lightweight pending approval count for the sidebar badge.
+ * Accepts orgId directly to avoid re-resolving the active org.
+ * Returns just the count — no full objects, no profiles, no grouping.
+ */
+export async function getPendingApprovalCount(
+  orgId: string,
+  isAdmin: boolean
+): Promise<number> {
+  try {
+    const user = await getAuthenticatedUser();
+    if (!user) return 0;
+
+    const callerRole = await verifyMembershipFromCache(user.id, orgId);
+    if (!callerRole || (callerRole !== 'admin' && callerRole !== 'manager')) {
+      return 0;
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const pendingEntriesQuery = admin
+      .from('time_entries')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('status', 'pending');
+
+    if (isAdmin && callerRole === 'admin') {
+      const [entriesResult, changeRequestsResult] = await Promise.all([
+        pendingEntriesQuery,
+        admin
+          .from('entry_change_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', orgId)
+          .eq('status', 'pending')
+      ]);
+
+      return (entriesResult.count ?? 0) + (changeRequestsResult.count ?? 0);
+    }
+
+    const { count } = await pendingEntriesQuery;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Get pending sessions (entries grouped as pairs with user profile info)
  */
 export async function getPendingSessions(
   organizationId?: string
 ): Promise<GetPendingSessionsResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1331,11 +1336,7 @@ export async function getCurrentlyClockedIn(
   organizationId?: string
 ): Promise<GetCurrentlyClockedInResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1474,11 +1475,7 @@ export async function getClockStatus(organizationId?: string): Promise<
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1522,11 +1519,7 @@ export async function getPendingChangeRequests(
   organizationId?: string
 ): Promise<GetChangeRequestsResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1636,11 +1629,7 @@ export async function reviewChangeRequest(
   action: 'approve' | 'reject'
 ): Promise<ReviewChangeRequestResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1813,11 +1802,7 @@ export async function getChangeRequestsForEntries(
   }
 
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1859,11 +1844,7 @@ export async function switchJob(
   newJobId: string | null
 ): Promise<ClockResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1952,11 +1933,7 @@ export async function getTimeEntriesForJob(
   jobId: string
 ): Promise<GetTimeEntriesResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -1992,11 +1969,7 @@ export async function getActiveJobId(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2045,11 +2018,7 @@ export async function getClockStatusWithActiveJob(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2107,11 +2076,7 @@ export async function getJobInfoById(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2174,11 +2139,7 @@ export async function getAssignedJobs(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2266,11 +2227,7 @@ export async function getAllOrgJobs(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2342,11 +2299,7 @@ export async function getJobsForPicker(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
@@ -2451,11 +2404,7 @@ export async function getActiveJobIdsForOrg(
   | { success: false; error: string }
 > {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }

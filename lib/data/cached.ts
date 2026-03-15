@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import type { User } from '@supabase/supabase-js'
 import type { UserOrg } from '@/components/organization/organization-context'
 
 type OrganizationData = {
@@ -24,11 +25,11 @@ export const CACHE_TAGS = {
 const REVALIDATE_SECONDS = 300 // 5 minutes safety net
 
 /**
- * Cached user fetch - deduplicates within a single request render.
- * Uses getSession() instead of getUser() to avoid a redundant network
- * roundtrip to Supabase auth servers — middleware already validates
- * the token via getUser() before any protected route is reached.
- * Returns the same { data: { user } } shape for backward compatibility.
+ * Cached user fetch for page rendering — deduplicates within a single
+ * request. Uses getSession() (cookie-only, no network roundtrip) for
+ * speed. Safe for pages because their data queries use RLS-protected
+ * clients. Server actions that bypass RLS via the admin client must
+ * use getAuthenticatedUser() instead, which validates via getUser().
  */
 export const getCachedUser = cache(async () => {
   const supabase = await createSupabaseServerClient()
@@ -37,6 +38,25 @@ export const getCachedUser = cache(async () => {
     data: { user: session?.user ?? null },
     error,
   }
+})
+
+/**
+ * Validates the JWT against Supabase Auth servers and returns the
+ * authenticated User, or null if the token is invalid/expired/revoked.
+ *
+ * This MUST use getUser() (network roundtrip) rather than getSession()
+ * because server actions use the returned user ID with the admin client
+ * (which bypasses RLS). Without server-side validation, a revoked or
+ * banned user with an unexpired JWT could still execute privileged
+ * operations.
+ *
+ * Deduplicates within a single request via React cache().
+ */
+export const getAuthenticatedUser = cache(async (): Promise<User | null> => {
+  const supabase = await createSupabaseServerClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) return null
+  return user
 })
 
 /**

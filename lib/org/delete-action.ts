@@ -2,10 +2,9 @@
 
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
-import { CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 
 export type DeleteOrgResult = {
   success: boolean;
@@ -29,17 +28,14 @@ export async function deleteOrganization(
   confirmationName: string
 ): Promise<DeleteOrgResult> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser();
     if (!user) {
       return { success: false, error: 'not_authenticated' };
     }
 
-    // Verify the org exists and get its details
-    const { data: org, error: orgError } = await supabase
+    const admin = createSupabaseAdminClient();
+
+    const { data: org, error: orgError } = await admin
       .from('organizations')
       .select('id, name, admin_id')
       .eq('id', orgId)
@@ -58,8 +54,6 @@ export async function deleteOrganization(
     if (confirmationName.trim() !== org.name) {
       return { success: false, error: 'name_mismatch' };
     }
-
-    const admin = createSupabaseAdminClient();
 
     // Fetch all member user IDs before deletion so we can invalidate their caches
     const { data: allMembers } = await admin
