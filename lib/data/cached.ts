@@ -26,16 +26,14 @@ const REVALIDATE_SECONDS = 300 // 5 minutes safety net
 
 /**
  * Cached user fetch for page rendering — deduplicates within a single
- * request. Uses getSession() (cookie-only, no network roundtrip) for
- * speed. Safe for pages because their data queries use RLS-protected
- * clients. Server actions that bypass RLS via the admin client must
- * use getAuthenticatedUser() instead, which validates via getUser().
+ * request via React cache(). Uses getUser() which validates the JWT
+ * against Supabase Auth servers (one network roundtrip per request).
  */
 export const getCachedUser = cache(async () => {
   const supabase = await createSupabaseServerClient()
-  const { data: { session }, error } = await supabase.auth.getSession()
+  const { data: { user }, error } = await supabase.auth.getUser()
   return {
-    data: { user: session?.user ?? null },
+    data: { user: user ?? null },
     error,
   }
 })

@@ -90,32 +90,32 @@ export async function proxy(req: NextRequest) {
       normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)
   );
 
-  // Use getSession() (cookie-only, no network roundtrip) for ALL routes.
-  // This keeps the proxy fast (~1ms) so loading skeletons can appear
-  // instantly. This only checks whether a session cookie exists — it does
-  // NOT validate the JWT with Supabase Auth servers. Full validation
-  // happens in server actions via getAuthenticatedUser() (which calls
-  // getUser()), and page data queries are protected by RLS.
-  let user = null;
+  // Cookie-only session check (no network roundtrip) to keep the proxy
+  // fast (~1ms). Only checks whether a session cookie exists — does NOT
+  // validate the JWT. Full validation happens in server actions via
+  // getAuthenticatedUser(), and page data queries are protected by RLS.
+  //
+  // We intentionally avoid accessing session.user to prevent the
+  // Supabase "insecure user object" console warning. The proxy only
+  // needs to know whether a session exists for routing decisions.
+  let hasSession = false;
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    user = session?.user ?? null;
+    hasSession = !!session;
   } catch (error) {
     console.error('Auth error in proxy:', error);
   }
 
-  const session = user ? { user } : null;
-
   const isVerifyRoute = normalizedPath === '/verify';
 
-  if (isVerifyRoute && session) {
+  if (isVerifyRoute && hasSession) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     redirectUrl.search = '';
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (isVerifyRoute && !session) {
+  if (isVerifyRoute && !hasSession) {
     const emailParam = req.nextUrl.searchParams.get('email');
     if (!emailParam) {
       const redirectUrl = req.nextUrl.clone();
@@ -125,7 +125,7 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  const shouldRedirectToLogin = !session && (isProtectedRoute || isRoot);
+  const shouldRedirectToLogin = !hasSession && (isProtectedRoute || isRoot);
 
   if (shouldRedirectToLogin) {
     const redirectUrl = req.nextUrl.clone();
@@ -133,7 +133,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (session && isRoot) {
+  if (hasSession && isRoot) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);

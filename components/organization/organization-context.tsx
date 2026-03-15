@@ -90,7 +90,6 @@ export function OrganizationProvider({
   )
   const [isSubscribed, setIsSubscribed] = useState(initialIsSubscribed)
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false)
-  const pendingOrgIdRef = useRef<string | null>(null)
   const hydratedRef = useRef(false)
 
   // Sync state when server-provided props change (only when actually provided)
@@ -264,46 +263,32 @@ export function OrganizationProvider({
     }
   }, [activeOrgId])
 
-  // Set active organization and persist to cookie
+  // Set active organization and persist to cookie.
+  // Uses a hard window.location navigation to guarantee the server
+  // re-renders everything with the new cookie and all client components
+  // re-mount from scratch (no stale data from the previous org).
   const setActiveOrg = useCallback(
     async (orgId: string) => {
       if (orgId === activeOrgId) {
         return
       }
 
-      pendingOrgIdRef.current = orgId
       setIsSwitchingOrg(true)
       setActiveOrgId(orgId)
 
       try {
         await setActiveOrgCookie(orgId)
 
-        const parentPath = getParentListPath(pathname)
-        if (parentPath) {
-          router.push(parentPath)
-        } else {
-          router.refresh()
-          // Same-page refresh: reset immediately since page content updates transparently
-          pendingOrgIdRef.current = null
-          setIsSwitchingOrg(false)
-        }
+        const destination = getParentListPath(pathname) ?? pathname
+        window.location.href = destination
       } catch (error) {
         console.error('Failed to switch organization', error)
-        pendingOrgIdRef.current = null
         setIsSwitchingOrg(false)
         throw error
       }
     },
-    [activeOrgId, router, pathname],
+    [activeOrgId, pathname],
   )
-
-  // Reset switching overlay when navigation completes (pathname changes after router.push)
-  useEffect(() => {
-    if (pendingOrgIdRef.current) {
-      pendingOrgIdRef.current = null
-      setIsSwitchingOrg(false)
-    }
-  }, [pathname])
 
   // Re-fetch memberships when tab becomes visible, but only if it's been
   // hidden for at least 5 minutes to avoid unnecessary fetches on quick

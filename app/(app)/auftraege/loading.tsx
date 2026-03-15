@@ -1,5 +1,5 @@
-import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
+import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
 
 export default function AuftraegeLoading() {
-  return <AuftraegePageSkeleton />;
+  return <AuftraegeContentSkeleton />;
 }

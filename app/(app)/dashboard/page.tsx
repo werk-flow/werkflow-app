@@ -10,6 +10,13 @@ import { CreatedOrgBanner } from '@/components/dashboard/created-org-banner';
 import { AlreadyMemberBanner } from '@/components/dashboard/already-member-banner';
 import { OrgDeletedBanner } from '@/components/dashboard/org-deleted-banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
+import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
+
+async function DashboardData({ activeOrgId }: { activeOrgId: string | null }) {
+  const memberCount = activeOrgId ? await getCachedMemberCount(activeOrgId) : null;
+
+  return <OrgInfoCard initialMemberCount={memberCount} />;
+}
 
 export default async function DashboardPage() {
   const [{ data: { user } }, cookieStore] = await Promise.all([
@@ -22,9 +29,6 @@ export default async function DashboardPage() {
   }
 
   const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-
-  // getCachedMemberCount is independent — no need to wait for sequential call
-  const memberCount = activeOrgId ? await getCachedMemberCount(activeOrgId) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -50,9 +54,9 @@ export default async function DashboardPage() {
       </Suspense>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <div className="mx-auto max-w-2xl">
-          <OrgInfoCard initialMemberCount={memberCount} />
-        </div>
+        <Suspense fallback={<DashboardContentSkeleton />}>
+          <DashboardData activeOrgId={activeOrgId} />
+        </Suspense>
       </div>
     </div>
   );

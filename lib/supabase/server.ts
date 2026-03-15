@@ -55,12 +55,13 @@ export async function createSupabaseServerClient() {
 }
 
 /**
- * Lightweight session check for pages/components. Uses getSession()
- * (cookie read only, no network roundtrip). Suitable for page-level
- * auth guards that only need to know if a session cookie exists;
- * the actual data queries on those pages go through RLS-protected
- * clients. Server actions that use the admin client (bypassing RLS)
- * must use getAuthenticatedUser() which validates via getUser().
+ * Lightweight session check for auth pages. Uses getSession()
+ * (cookie read only, no network roundtrip). Returns only a boolean
+ * to prevent accidental access to the unverified user object.
+ *
+ * For pages that need the actual User, use getCachedUser() (which
+ * validates via getUser()). For server actions that bypass RLS,
+ * use getAuthenticatedUser().
  */
 export async function getSupabaseServerSession() {
   const supabase = await createSupabaseServerClient();
@@ -70,9 +71,5 @@ export async function getSupabaseServerSession() {
     error
   } = await supabase.auth.getSession();
 
-  if (error || !session) {
-    return { supabase, session: null };
-  }
-
-  return { supabase, session };
+  return { supabase, session: !error && !!session };
 }

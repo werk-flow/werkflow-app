@@ -15,41 +15,22 @@ import {
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
+import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
-export default async function AuftraegePage() {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies()
-  ]);
-
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id)
-  ]);
-
-  if (!activeOrgId) {
-    return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Aufträge</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
-    );
-  }
-
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
-
+async function AuftraegeData({
+  activeOrgId,
+  userId,
+  isAdminOrManager,
+  currentUserRole,
+}: {
+  activeOrgId: string;
+  userId: string;
+  isAdminOrManager: boolean;
+  currentUserRole: OrgRole | undefined;
+}) {
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();
 
@@ -142,11 +123,10 @@ export default async function AuftraegePage() {
       };
     });
   } else {
-    // Employee path: fetch assignments first, then everything else in parallel batches
     const { data: assignments, error: assignError } = await admin
       .from('job_assignments')
       .select('job_id, user_id')
-      .eq('user_id', user.id);
+      .eq('user_id', userId);
 
     if (assignError) {
       console.error('Error fetching assignments:', assignError);
@@ -160,7 +140,6 @@ export default async function AuftraegePage() {
     }
 
     if (assignedJobIds.length > 0) {
-      // Batch 1: jobs + all assignments + org clients (all independent)
       const [jobsResult2, allAssignResult, clientsResult] = await Promise.all([
         admin
           .from('jobs')
@@ -195,7 +174,6 @@ export default async function AuftraegePage() {
       }
     }
 
-    // Batch 2: projects + project jobs (depends on job IDs from batch 1)
     const assignedProjectIds = [
       ...new Set(
         jobList
@@ -250,6 +228,50 @@ export default async function AuftraegePage() {
   }
 
   return (
+    <AuftraegeContent
+      jobs={jobList}
+      projects={projectList}
+      clientMap={clientMap}
+      clients={clientList}
+      members={memberList}
+      jobAssignmentMap={jobAssignmentMap}
+      isAdminOrManager={isAdminOrManager}
+    />
+  );
+}
+
+export default async function AuftraegePage() {
+  const [{ data: { user } }, cookieStore] = await Promise.all([
+    getCachedUser(),
+    cookies()
+  ]);
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const [activeOrgId, memberships] = await Promise.all([
+    resolveActiveOrgId(cookieStore, user.id),
+    getCachedMemberships(user.id)
+  ]);
+
+  if (!activeOrgId) {
+    return (
+      <div className="flex h-full flex-col p-6">
+        <h1 className="text-2xl font-bold">Aufträge</h1>
+        <p className="mt-4 text-muted-foreground">
+          Bitte wähle zuerst eine Organisation aus.
+        </p>
+      </div>
+    );
+  }
+
+  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
+  const currentUserRole = currentMembership?.role as OrgRole | undefined;
+  const isAdminOrManager =
+    currentUserRole === 'admin' || currentUserRole === 'manager';
+
+  return (
     <>
       <Suspense fallback={null}>
         <ActionBanner
@@ -263,15 +285,14 @@ export default async function AuftraegePage() {
           messageTemplate='Projekt „{name}" wurde erfolgreich gelöscht.'
         />
       </Suspense>
-      <AuftraegeContent
-        jobs={jobList}
-        projects={projectList}
-        clientMap={clientMap}
-        clients={clientList}
-        members={memberList}
-        jobAssignmentMap={jobAssignmentMap}
-        isAdminOrManager={isAdminOrManager}
-      />
+      <Suspense fallback={<AuftraegeContentSkeleton />}>
+        <AuftraegeData
+          activeOrgId={activeOrgId}
+          userId={user.id}
+          isAdminOrManager={isAdminOrManager}
+          currentUserRole={currentUserRole}
+        />
+      </Suspense>
     </>
   );
 }

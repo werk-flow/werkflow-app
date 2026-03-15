@@ -7,10 +7,61 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
+import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton';
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import type { OrgRole } from '@/lib/members/actions';
+
+async function MitarbeiterData({
+  activeOrgId,
+  userId,
+  currentUserRole,
+}: {
+  activeOrgId: string;
+  userId: string;
+  currentUserRole: OrgRole;
+}) {
+  const supabase = await createSupabaseServerClient();
+
+  const [membersResult, invitesResult] = await Promise.all([
+    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
+    supabase
+      .from('organization_invites')
+      .select(
+        'id, email, status, created_at, expires_at, accepted_at, invited_role'
+      )
+      .eq('organization_id', activeOrgId)
+      .order('created_at', { ascending: false })
+  ]);
+
+  if (membersResult.error) {
+    console.error('Error fetching members:', membersResult.error);
+    return (
+      <p className="text-destructive">
+        Fehler beim Laden der Mitarbeiter:{' '}
+        {membersResult.error.message || 'Unbekannter Fehler'}
+      </p>
+    );
+  }
+
+  if (invitesResult.error) {
+    console.error('Error fetching invites:', invitesResult.error);
+  }
+
+  const memberList = (membersResult.data as OrgMember[]) || [];
+  const inviteList = (invitesResult.data as Invite[]) || [];
+
+  return (
+    <MitarbeiterTabs
+      members={memberList}
+      invites={inviteList}
+      currentUserId={userId}
+      currentUserRole={currentUserRole}
+      organizationId={activeOrgId}
+    />
+  );
+}
 
 export default async function MitarbeiterPage() {
   const [{ data: { user } }, cookieStore] = await Promise.all([
@@ -48,40 +99,6 @@ export default async function MitarbeiterPage() {
     redirect('/dashboard');
   }
 
-  // Fetch members and invites in parallel
-  const supabase = await createSupabaseServerClient();
-
-  const [membersResult, invitesResult] = await Promise.all([
-    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
-    supabase
-      .from('organization_invites')
-      .select(
-        'id, email, status, created_at, expires_at, accepted_at, invited_role'
-      )
-      .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false })
-  ]);
-
-  if (membersResult.error) {
-    console.error('Error fetching members:', membersResult.error);
-    return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Mitarbeiter</h1>
-        <p className="mt-4 text-destructive">
-          Fehler beim Laden der Mitarbeiter:{' '}
-          {membersResult.error.message || 'Unbekannter Fehler'}
-        </p>
-      </div>
-    );
-  }
-
-  if (invitesResult.error) {
-    console.error('Error fetching invites:', invitesResult.error);
-  }
-
-  const memberList = (membersResult.data as OrgMember[]) || [];
-  const inviteList = (invitesResult.data as Invite[]) || [];
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Suspense fallback={null}>
@@ -96,13 +113,13 @@ export default async function MitarbeiterPage() {
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <MitarbeiterTabs
-          members={memberList}
-          invites={inviteList}
-          currentUserId={user.id}
-          currentUserRole={currentUserRole!}
-          organizationId={activeOrgId}
-        />
+        <Suspense fallback={<MitarbeiterContentSkeleton />}>
+          <MitarbeiterData
+            activeOrgId={activeOrgId}
+            userId={user.id}
+            currentUserRole={currentUserRole!}
+          />
+        </Suspense>
       </div>
     </div>
   );
