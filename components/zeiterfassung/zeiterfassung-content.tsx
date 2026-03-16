@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
 import {
-  getPendingSessions,
-  getPendingChangeRequests
+  getPendingApprovalCount
 } from '@/lib/time-tracking/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
+import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 
 const PendingApprovals = dynamic(
   () => import('./pending-approvals').then((mod) => mod.PendingApprovals),
@@ -56,6 +56,7 @@ interface ZeiterfassungContentProps {
   initialPendingCount?: number;
   /** Members for the history filter (admin/manager only) */
   members?: MemberInfo[];
+  initialOverview: ZeiterfassungOverview;
 }
 
 export function ZeiterfassungContent({
@@ -66,7 +67,8 @@ export function ZeiterfassungContent({
   currentUserRole,
   initialTab = 'overview',
   initialPendingCount = 0,
-  members = []
+  members = [],
+  initialOverview
 }: ZeiterfassungContentProps) {
   const [pendingCount, setPendingCount] = useState(initialPendingCount);
 
@@ -78,29 +80,12 @@ export function ZeiterfassungContent({
   // PendingApprovals is unmounted (Radix TabsContent unmounts inactive tabs).
   const fetchPendingCount = useCallback(async () => {
     try {
-      const sessionsResult = await getPendingSessions(organizationId);
-      let count = sessionsResult.success ? sessionsResult.sessions.length : 0;
-      if (isAdmin) {
-        const crResult = await getPendingChangeRequests(organizationId);
-        if (crResult.success) count += crResult.requests.length;
-      }
+      const count = await getPendingApprovalCount(organizationId, isAdmin);
       setPendingCount(count);
     } catch {
       // keep current count on error
     }
   }, [organizationId, isAdmin]);
-
-  // Skip the initial fetch if the server already provided the count.
-  // Only refetch on realtime events or when dependencies genuinely change.
-  const hasUsedInitialCount = useRef(initialPendingCount > 0);
-
-  useEffect(() => {
-    if (hasUsedInitialCount.current) {
-      hasUsedInitialCount.current = false;
-      return;
-    }
-    fetchPendingCount();
-  }, [fetchPendingCount]);
 
   useRealtimeEvent('time_entries', fetchPendingCount);
   useRealtimeEvent('entry_change_requests', fetchPendingCount);
@@ -108,7 +93,11 @@ export function ZeiterfassungContent({
   // For regular employees, just show the dashboard
   if (!isAdminOrManager) {
     return (
-      <ZeiterfassungDashboard organizationId={organizationId} userId={userId} />
+      <ZeiterfassungDashboard
+        organizationId={organizationId}
+        userId={userId}
+        initialOverview={initialOverview}
+      />
     );
   }
 
@@ -132,6 +121,7 @@ export function ZeiterfassungContent({
         <ZeiterfassungDashboard
           organizationId={organizationId}
           userId={userId}
+          initialOverview={initialOverview}
         />
       </TabsContent>
 

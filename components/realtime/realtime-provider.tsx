@@ -40,6 +40,7 @@ const TABLES: RealtimeTable[] = [
 ];
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
+const isDev = process.env.NODE_ENV === 'development';
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { activeOrgId } = useOrganization();
@@ -84,6 +85,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         new: (payload.new as Record<string, unknown>) ?? null,
         old: (payload.old as Record<string, unknown>) ?? null
       };
+
+      if (isDev) {
+        console.info('[Realtime] event received', {
+          channel: `org-${activeOrgId}`,
+          table,
+          eventType: event.eventType
+        });
+      }
 
       // Debounce: coalesce rapid-fire events on the same table into a single dispatch.
       // This prevents the thundering herd when e.g. switchJob inserts 2 time_entries
@@ -168,8 +177,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           }
         )
         .subscribe((status: string, err?: Error) => {
+          if (isDev) {
+            console.info('[Realtime] channel status', {
+              channel: `org-${activeOrgId}`,
+              status
+            });
+          }
           if (err) {
             console.error('[Realtime] subscription error:', err);
+          }
+          if (status === 'SUBSCRIBED') {
+            console.info(`[Realtime] subscribed to org-${activeOrgId}`);
           }
           if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
             console.warn(`[Realtime] ${status} — will reconnect automatically`);
@@ -198,6 +216,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    const debounceTimers = debounceTimersRef.current;
 
     return () => {
       cancelled = true;
@@ -207,23 +226,23 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      for (const timer of debounceTimersRef.current.values()) {
+      for (const timer of debounceTimers.values()) {
         clearTimeout(timer);
       }
-      debounceTimersRef.current.clear();
+      debounceTimers.clear();
     };
   }, [activeOrgId, dispatchAll]);
 
-  const subscribeRef = useRef((table: RealtimeTable, cb: RealtimeCallback) => {
+  const subscribe = useCallback((table: RealtimeTable, cb: RealtimeCallback) => {
     listenersRef.current.get(table)?.add(cb);
     return () => {
       listenersRef.current.get(table)?.delete(cb);
     };
-  });
+  }, []);
 
   const ctxValue = useMemo<RealtimeContextValue>(
-    () => ({ subscribe: subscribeRef.current }),
-    []
+    () => ({ subscribe }),
+    [subscribe]
   );
 
   return (
@@ -243,7 +262,10 @@ export function useRealtimeEvent(
 ) {
   const ctx = useContext(RealtimeContext);
   const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (!ctx) return;
@@ -253,8 +275,6 @@ export function useRealtimeEvent(
     };
 
     return ctx.subscribe(table, stableCallback);
-    // ctx is now stable (memoized), so this effect runs only on mount/unmount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ctx, table]);
 }
 

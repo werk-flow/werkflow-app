@@ -1,5 +1,4 @@
-import { Suspense } from 'react';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -11,6 +10,7 @@ import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import { RouteRedirect } from '@/components/shared/route-redirect';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -51,7 +51,13 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       : Promise.resolve({ data: null }),
   ]);
 
-  if (!result.success) notFound();
+  if (!result.success) {
+    return (
+      <RouteRedirect href="/auftraege">
+        <JobDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const { job } = result;
 
@@ -84,9 +90,5 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
 export default async function JobDetailPage({ params }: JobDetailPageProps) {
   const { jobNumber } = await params;
 
-  return (
-    <Suspense fallback={<JobDetailLoading />}>
-      <JobDetailData jobNumber={jobNumber} />
-    </Suspense>
-  );
+  return <JobDetailData jobNumber={jobNumber} />;
 }

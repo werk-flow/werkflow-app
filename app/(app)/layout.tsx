@@ -8,6 +8,7 @@ import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { AppShell } from '@/components/sidebar/app-shell';
 import { ClockFAB } from '@/components/clock-fab';
 import { ActiveJobsProvider } from '@/components/active-jobs-provider';
+import { ClockStateProvider } from '@/components/clock-state-provider';
 import { AppShellSkeleton } from '@/components/sidebar/app-shell-skeleton';
 import {
   getCachedUser,
@@ -41,8 +42,10 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
       <RealtimeProvider>
         <UserProfileProvider initialProfile={profile}>
           <ActiveJobsProvider>
-            <AppShell>{children}</AppShell>
-            <ClockFAB />
+            <ClockStateProvider>
+              <AppShell>{children}</AppShell>
+              <ClockFAB />
+            </ClockStateProvider>
           </ActiveJobsProvider>
         </UserProfileProvider>
       </RealtimeProvider>

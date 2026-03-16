@@ -1,5 +1,4 @@
-import { Suspense } from 'react';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -11,6 +10,7 @@ import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
+import { RouteRedirect } from '@/components/shared/route-redirect';
 import MitarbeiterDetailLoading from './loading';
 
 interface MitarbeiterDetailPageProps {
@@ -65,7 +65,13 @@ async function MitarbeiterDetailData({
       .eq('organization_id', activeOrgId),
   ]);
 
-  if (!memberResult.success) notFound();
+  if (!memberResult.success) {
+    return (
+      <RouteRedirect href="/mitarbeiter">
+        <MitarbeiterDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const { member } = memberResult;
 
@@ -134,9 +140,5 @@ export default async function MitarbeiterDetailPage({
 }: MitarbeiterDetailPageProps) {
   const { userId: targetUserId } = await params;
 
-  return (
-    <Suspense fallback={<MitarbeiterDetailLoading />}>
-      <MitarbeiterDetailData targetUserId={targetUserId} />
-    </Suspense>
-  );
+  return <MitarbeiterDetailData targetUserId={targetUserId} />;
 }

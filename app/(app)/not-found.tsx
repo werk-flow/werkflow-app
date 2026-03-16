@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-export default function NotFoundPage() {
+export default function AppNotFoundPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+    <main className="flex h-full items-center justify-center p-6">
       <div className="w-full max-w-lg rounded-xl border bg-card p-8 text-center shadow-sm">
         <h1 className="text-3xl font-semibold tracking-tight">
-        Seite nicht gefunden
+          Seite nicht gefunden
         </h1>
         <p className="mt-3 text-muted-foreground">
           Die angeforderte Seite existiert nicht oder wurde verschoben.

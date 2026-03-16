@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -12,6 +12,7 @@ import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
+import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
 
 interface ProjectDetailPageProps {
@@ -56,7 +57,13 @@ async function ProjectDetailData({
       : Promise.resolve({ data: null }),
   ]);
 
-  if (!result.success) notFound();
+  if (!result.success) {
+    return (
+      <RouteRedirect href="/auftraege">
+        <ProjectDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const { project, client, jobs, derivedStatus } = result.details;
 
@@ -96,9 +103,5 @@ export default async function ProjectDetailPage({
 }: ProjectDetailPageProps) {
   const { projectNumber } = await params;
 
-  return (
-    <Suspense fallback={<ProjectDetailLoading />}>
-      <ProjectDetailData projectNumber={projectNumber} />
-    </Suspense>
-  );
+  return <ProjectDetailData projectNumber={projectNumber} />;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Briefcase,
   Coffee,
@@ -10,16 +10,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
-import { useCurrentUserStatus } from '@/hooks/use-current-user-status';
-import {
-  getActiveJobId,
-  switchJob,
-  getJobsForPicker,
-} from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { JobPickerModal } from '@/components/job-picker-modal';
 import {
   computeTimeBreakdown,
@@ -28,10 +20,14 @@ import {
 } from '@/lib/time-tracking/helpers';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
+import { useClockState } from '@/components/clock-state-provider';
+import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
+import { ZeiterfassungDashboardSkeleton } from '@/components/loading-states/zeiterfassung-dashboard-skeleton';
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
   userId: string;
+  initialOverview: ZeiterfassungOverview;
 }
 
 function formatLiveTime(
@@ -76,69 +72,42 @@ function calculateLiveTotalMinutes(
 
 export function ZeiterfassungDashboard({
   organizationId,
-  userId
+  userId,
+  initialOverview
 }: ZeiterfassungDashboardProps) {
-  const { status, isLoading, error } = useCurrentUserStatus({
-    organizationId,
-    userId
-  });
+  const { state, isLoading, isPending, statusError, switchJob } = useClockState();
+  const effectiveState =
+    state && state.organizationId === organizationId
+      ? state
+      : initialOverview.clockState;
 
-  const { weekData, todayIndex, weekLabel } = useWeeklyTimeData({
+  const {
+    weekData,
+    todayIndex,
+    weekLabel,
+  } = useWeeklyTimeData({
     organizationId,
     userId,
+    initialWeekData: initialOverview.weekData,
+    initialTodayIndex: initialOverview.todayIndex,
+    initialWeekLabel: initialOverview.weekLabel,
   });
 
   const [liveTime, setLiveTime] = useState('00:00:00');
   const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
-
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeJobTitle, setActiveJobTitle] = useState<string | null>(null);
   const [showJobPicker, setShowJobPicker] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
-
-  const fetchActiveJob = useCallback(async () => {
-    try {
-      const [activeResult, jobsResult] = await Promise.all([
-        getActiveJobId(organizationId),
-        getJobsForPicker(organizationId),
-      ]);
-      if (activeResult.success) {
-        setActiveJobId(activeResult.jobId);
-        if (activeResult.jobId && jobsResult.success) {
-          const job = jobsResult.jobs.find((j) => j.id === activeResult.jobId);
-          setActiveJobTitle(job?.title ?? null);
-        } else {
-          setActiveJobTitle(null);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching active job:', err);
-    }
-  }, [organizationId]);
-
-  useEffect(() => {
-    fetchActiveJob();
-  }, [fetchActiveJob]);
-
-  useRealtimeEvent('jobs', fetchActiveJob);
-  useRealtimeEvent('job_assignments', fetchActiveJob);
-  useRealtimeEvent('time_entries', fetchActiveJob);
 
   const handlePickerConfirm = async (jobId: string | null) => {
-    if (!status.isClockedIn) {
+    if (!effectiveState.isClockedIn) {
       setShowJobPicker(false);
       return;
     }
-    setIsSwitching(true);
+
     try {
-      const result = await switchJob(organizationId, jobId);
-      if (result.success) {
-        setActiveJobId(jobId);
-      }
+      await switchJob(jobId);
     } catch (err) {
       console.error('Error switching job:', err);
     } finally {
-      setIsSwitching(false);
       setShowJobPicker(false);
     }
   };
@@ -147,16 +116,16 @@ export function ZeiterfassungDashboard({
     const updateLiveValues = () => {
       setLiveTime(
         formatLiveTime(
-          status.todayMinutes,
-          status.clockInTime,
-          status.isClockedIn
+          effectiveState.todayMinutes,
+          effectiveState.clockInTime,
+          effectiveState.isClockedIn
         )
       );
       setLiveTotalMinutes(
         calculateLiveTotalMinutes(
-          status.todayMinutes,
-          status.clockInTime,
-          status.isClockedIn
+          effectiveState.todayMinutes,
+          effectiveState.clockInTime,
+          effectiveState.isClockedIn
         )
       );
     };
@@ -165,7 +134,11 @@ export function ZeiterfassungDashboard({
 
     const interval = setInterval(updateLiveValues, 1000);
     return () => clearInterval(interval);
-  }, [status.todayMinutes, status.clockInTime, status.isClockedIn]);
+  }, [
+    effectiveState.todayMinutes,
+    effectiveState.clockInTime,
+    effectiveState.isClockedIn,
+  ]);
 
   const breakdown = computeTimeBreakdown(liveTotalMinutes);
   const workPercentage = Math.min(
@@ -173,11 +146,11 @@ export function ZeiterfassungDashboard({
     999
   );
 
-  if (isLoading) {
-    return <DashboardSkeleton />;
+  if (isLoading && !effectiveState) {
+    return <ZeiterfassungDashboardSkeleton />;
   }
 
-  if (error) {
+  if (!effectiveState) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
@@ -198,7 +171,7 @@ export function ZeiterfassungDashboard({
           totalMinutes={liveTotalMinutes}
           size={260}
           strokeWidth={14}
-          isActive={status.isClockedIn}
+          isActive={effectiveState.isClockedIn}
         >
           <span className="text-4xl font-bold tabular-nums tracking-tight">
             {liveTime}
@@ -209,12 +182,12 @@ export function ZeiterfassungDashboard({
         <p
           className={cn(
             'mt-6 text-lg font-medium',
-            status.isClockedIn
+            effectiveState.isClockedIn
               ? 'text-green-600 dark:text-green-400'
               : 'text-muted-foreground'
           )}
         >
-          {status.isClockedIn
+          {effectiveState.isClockedIn
             ? 'Du arbeitest gerade.'
             : 'Du bist nicht eingestempelt.'}
         </p>
@@ -261,15 +234,15 @@ export function ZeiterfassungDashboard({
           icon={Briefcase}
           title="Auftrag auswählen"
           subtitle={
-            activeJobTitle
-              ? activeJobTitle
-              : status.isClockedIn
+            effectiveState.activeJobInfo?.title
+              ? effectiveState.activeJobInfo.title
+              : effectiveState.isClockedIn
                 ? 'Kein Auftrag gewählt'
                 : 'Auftrag für nächste Schicht'
           }
           onClick={() => setShowJobPicker(true)}
-          active={!!activeJobTitle && status.isClockedIn}
-          disabled={!status.isClockedIn}
+          active={!!effectiveState.activeJobId && effectiveState.isClockedIn}
+          disabled={!effectiveState.isClockedIn}
           disabledHint="Stemple zuerst ein"
         />
 
@@ -341,13 +314,13 @@ export function ZeiterfassungDashboard({
                 <div
                   className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-full',
-                    status.isClockedIn ? 'bg-green-500/10' : 'bg-muted'
+                    effectiveState.isClockedIn ? 'bg-green-500/10' : 'bg-muted'
                   )}
                 >
                   <Clock
                     className={cn(
                       'h-5 w-5',
-                      status.isClockedIn
+                      effectiveState.isClockedIn
                         ? 'text-green-600 dark:text-green-400'
                         : 'text-muted-foreground'
                     )}
@@ -356,9 +329,9 @@ export function ZeiterfassungDashboard({
                 <div>
                   <p className="font-medium">Arbeitszeit</p>
                   <p className="text-xs text-muted-foreground">
-                    {status.isClockedIn
+                    {effectiveState.isClockedIn
                       ? `Seit ${new Date(
-                          status.clockInTime!
+                          effectiveState.clockInTime!
                         ).toLocaleTimeString('de-DE', {
                           hour: '2-digit',
                           minute: '2-digit'
@@ -370,12 +343,12 @@ export function ZeiterfassungDashboard({
               <span
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-medium',
-                  status.isClockedIn
+                  effectiveState.isClockedIn
                     ? 'bg-green-500/10 text-green-600 dark:text-green-400'
                     : 'bg-muted text-muted-foreground'
                 )}
               >
-                {status.isClockedIn ? 'aktiv' : 'inaktiv'}
+                {effectiveState.isClockedIn ? 'aktiv' : 'inaktiv'}
               </span>
             </div>
 
@@ -401,9 +374,13 @@ export function ZeiterfassungDashboard({
         onConfirm={handlePickerConfirm}
         organizationId={organizationId}
         mode="switch"
-        currentJobId={activeJobId}
-        isPending={isSwitching}
+        currentJobId={effectiveState.activeJobId}
+        isPending={isPending}
       />
+
+      {statusError && (
+        <p className="text-center text-xs text-destructive">{statusError}</p>
+      )}
     </div>
   );
 }
@@ -466,26 +443,3 @@ function MenuCard({
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col items-center py-8">
-        <Skeleton className="h-[260px] w-[260px] rounded-full" />
-        <Skeleton className="mt-6 h-6 w-48" />
-        <Skeleton className="mt-2 h-4 w-32" />
-      </div>
-
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-24" />
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-[72px] w-full rounded-lg" />
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-[100px] w-full rounded-lg" />
-      </div>
-    </div>
-  );
-}

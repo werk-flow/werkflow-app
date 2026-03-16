@@ -10,6 +10,7 @@ import {
   type TimeEntryRow,
   type OrgRole,
   type ClockResult,
+  type LiveClockState,
   type AddManualEntryParams,
   type AddManualEntryResult,
   type ReviewEntryResult,
@@ -26,7 +27,6 @@ import {
   type RequestChangeResult,
   type ReviewChangeRequestResult,
   type GetChangeRequestsResult,
-  type EntryChangeRequestMap,
   toTimeEntry,
   toTimeEntries,
   toChangeRequest,
@@ -34,6 +34,9 @@ import {
 } from './types';
 import {
   hasOpenSession,
+  getLastEntry,
+  calculateTotalMinutes,
+  calculateWorkSessions,
   determineApprovalStatus,
   canManageEntries,
   canApproveEntries,
@@ -115,6 +118,58 @@ async function verifyMembershipFromCache(
   const memberships = await getCachedMemberships(userId);
   const membership = memberships.find((m) => m.orgId === orgId);
   return (membership?.role as OrgRole) ?? null;
+}
+
+async function getClockJobInfo(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  jobId: string,
+  options?: { includeRelations?: boolean; touchStatus?: boolean }
+): Promise<import('./types').ClockJobInfo | null> {
+  const includeRelations = options?.includeRelations ?? true;
+  const touchStatus = options?.touchStatus ?? false;
+
+  const { data: job } = await admin
+    .from('jobs')
+    .select('id, title, job_number, status, project_id, client_id')
+    .eq('id', jobId)
+    .single();
+
+  if (!job) {
+    return null;
+  }
+
+  if (touchStatus && job.status === 'nicht_bearbeitet') {
+    await admin.from('jobs').update({ status: 'in_bearbeitung' }).eq('id', jobId);
+  }
+
+  if (!includeRelations) {
+    return {
+      id: job.id,
+      title: job.title,
+      jobNumber: job.job_number,
+      status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+      projectName: null,
+      clientName: null,
+    };
+  }
+
+  const [projectData, clientData] = await Promise.all([
+    job.project_id
+      ? admin.from('projects').select('name').eq('id', job.project_id).single()
+      : Promise.resolve({ data: null }),
+    job.client_id
+      ? admin.from('clients').select('name').eq('id', job.client_id).single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    id: job.id,
+    title: job.title,
+    jobNumber: job.job_number,
+    status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
+    projectName: (projectData.data as { name: string } | null)?.name ?? null,
+    clientName: (clientData.data as { name: string } | null)?.name ?? null,
+  };
 }
 
 type TodayBounds = {
@@ -266,38 +321,10 @@ export async function clockIn(organizationId?: string, jobId?: string | null): P
     let jobInfo: import('./types').ClockJobInfo | null = null;
 
     if (resolvedJobId) {
-      const { data: job } = await admin
-        .from('jobs')
-        .select('id, title, job_number, status, project_id, client_id')
-        .eq('id', resolvedJobId)
-        .single();
-
-      if (job) {
-        if (job.status === 'nicht_bearbeitet') {
-          await admin
-            .from('jobs')
-            .update({ status: 'in_bearbeitung' })
-            .eq('id', resolvedJobId);
-        }
-
-        const [projectData, clientData] = await Promise.all([
-          job.project_id
-            ? admin.from('projects').select('name').eq('id', job.project_id).single()
-            : Promise.resolve({ data: null }),
-          job.client_id
-            ? admin.from('clients').select('name').eq('id', job.client_id).single()
-            : Promise.resolve({ data: null }),
-        ]);
-
-        jobInfo = {
-          id: job.id,
-          title: job.title,
-          jobNumber: job.job_number,
-          status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-          projectName: (projectData.data as { name: string } | null)?.name ?? null,
-          clientName: (clientData.data as { name: string } | null)?.name ?? null,
-        };
-      }
+      jobInfo = await getClockJobInfo(admin, resolvedJobId, {
+        includeRelations: false,
+        touchStatus: true,
+      });
     }
 
     return { success: true, entry: toTimeEntry(newEntry), jobInfo };
@@ -1153,6 +1180,34 @@ export async function getPendingApprovalCount(
       return (entriesResult.count ?? 0) + (changeRequestsResult.count ?? 0);
     }
 
+    if (callerRole === 'manager') {
+      const { data: pendingEntries } = await admin
+        .from('time_entries')
+        .select('user_id')
+        .eq('organization_id', orgId)
+        .eq('status', 'pending');
+
+      if (!pendingEntries || pendingEntries.length === 0) {
+        return 0;
+      }
+
+      const uniqueUserIds = [...new Set(pendingEntries.map((entry) => entry.user_id))];
+      const { data: memberRows } = await admin
+        .from('organization_members')
+        .select('user_id, role')
+        .eq('organization_id', orgId)
+        .in('user_id', uniqueUserIds);
+
+      const managedUserIds = new Set(
+        (memberRows || [])
+          .filter((member) => MANAGED_ROLES.includes(member.role as OrgRole))
+          .map((member) => member.user_id)
+      );
+
+      return pendingEntries.filter((entry) => managedUserIds.has(entry.user_id))
+        .length;
+    }
+
     const { count } = await pendingEntriesQuery;
     return count ?? 0;
   } catch {
@@ -1929,38 +1984,10 @@ export async function switchJob(
     let jobInfo: import('./types').ClockJobInfo | null = null;
 
     if (newJobId) {
-      const { data: job } = await admin
-        .from('jobs')
-        .select('id, title, job_number, status, project_id, client_id')
-        .eq('id', newJobId)
-        .single();
-
-      if (job) {
-        if (job.status === 'nicht_bearbeitet') {
-          await admin
-            .from('jobs')
-            .update({ status: 'in_bearbeitung' })
-            .eq('id', newJobId);
-        }
-
-        const [projectData, clientData] = await Promise.all([
-          job.project_id
-            ? admin.from('projects').select('name').eq('id', job.project_id).single()
-            : Promise.resolve({ data: null }),
-          job.client_id
-            ? admin.from('clients').select('name').eq('id', job.client_id).single()
-            : Promise.resolve({ data: null }),
-        ]);
-
-        jobInfo = {
-          id: job.id,
-          title: job.title,
-          jobNumber: job.job_number,
-          status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-          projectName: (projectData.data as { name: string } | null)?.name ?? null,
-          clientName: (clientData.data as { name: string } | null)?.name ?? null,
-        };
-      }
+      jobInfo = await getClockJobInfo(admin, newJobId, {
+        includeRelations: false,
+        touchStatus: true,
+      });
     }
 
     return { success: true, entry: toTimeEntry(newEntry), jobInfo };
@@ -2100,6 +2127,81 @@ export async function getClockStatusWithActiveJob(
 }
 
 /**
+ * Get the caller's current clock state together with active job info.
+ * Used by the shared client clock state and Zeiterfassung overview prefetch.
+ */
+export async function getCurrentClockState(
+  organizationId: string
+): Promise<
+  | { success: true; state: LiveClockState }
+  | { success: false; error: string }
+> {
+  try {
+    const user = await getAuthenticatedUser();
+    if (!user) {
+      return { success: false, error: 'not_authenticated' };
+    }
+
+    const admin = createSupabaseAdminClient();
+    const [userRole, todayRows] = await Promise.all([
+      verifyMembershipFromCache(user.id, organizationId),
+      getUserTodayEntries(admin, user.id, organizationId),
+    ]);
+
+    if (!userRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    const timeEntries = toTimeEntries(todayRows);
+    const isClockedIn = hasOpenSession(timeEntries);
+    const lastEntry = getLastEntry(timeEntries);
+    const sessions = calculateWorkSessions(timeEntries);
+    const todayMinutes = calculateTotalMinutes(sessions);
+
+    let clockInTime: string | null = null;
+    let activeJobId: string | null = null;
+
+    if (isClockedIn && lastEntry) {
+      const latestClockIn = timeEntries
+        .filter(
+          (entry) =>
+            entry.entryType === 'clock_in' &&
+            (entry.status === 'approved' || entry.status === 'pending')
+        )
+        .sort((a, b) => {
+          const diff =
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+          if (diff !== 0) return diff;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        })[0];
+
+      clockInTime = latestClockIn?.timestamp ?? null;
+      activeJobId = latestClockIn?.jobId ?? null;
+    }
+
+    const activeJobInfo = activeJobId
+      ? await getClockJobInfo(admin, activeJobId)
+      : null;
+
+    return {
+      success: true,
+      state: {
+        organizationId,
+        isClockedIn,
+        clockInTime,
+        todayMinutes,
+        activeJobId,
+        activeJobInfo,
+        fetchedAt: new Date().toISOString(),
+      },
+    };
+  } catch (error) {
+    console.error('Unexpected error in getCurrentClockState:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
  * Get minimal info for a single job by ID.
  * Used by ClockFAB to display the active job pill without loading all org jobs.
  */
@@ -2126,35 +2228,14 @@ export async function getJobInfoById(
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: job, error: jobError } = await admin
-      .from('jobs')
-      .select('id, title, job_number, status, project_id, client_id')
-      .eq('id', jobId)
-      .single();
-
-    if (jobError || !job) {
+    const job = await getClockJobInfo(admin, jobId);
+    if (!job) {
       return { success: true, job: null };
     }
 
-    const [projectData, clientData] = await Promise.all([
-      job.project_id
-        ? admin.from('projects').select('name').eq('id', job.project_id).single()
-        : Promise.resolve({ data: null }),
-      job.client_id
-        ? admin.from('clients').select('name').eq('id', job.client_id).single()
-        : Promise.resolve({ data: null }),
-    ]);
-
     return {
       success: true,
-      job: {
-        id: job.id,
-        title: job.title,
-        jobNumber: job.job_number,
-        status: job.status,
-        projectName: (projectData.data as { name: string } | null)?.name ?? null,
-        clientName: (clientData.data as { name: string } | null)?.name ?? null,
-      }
+      job
     };
   } catch (error) {
     console.error('Unexpected error in getJobInfoById:', error);

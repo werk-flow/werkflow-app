@@ -92,6 +92,37 @@ export type ClockJobInfo = {
   clientName: string | null;
 };
 
+export type WeeklyTimeDataPoint = {
+  date: string;
+  label: string;
+  totalMinutes: number;
+  workMinutes: number;
+  breakMinutes: number;
+  overtimeMinutes: number;
+};
+
+export type WeeklyTimeLabel = {
+  dateRange: string;
+  kw: string;
+};
+
+export type LiveClockState = {
+  organizationId: string;
+  isClockedIn: boolean;
+  clockInTime: string | null;
+  todayMinutes: number;
+  activeJobId: string | null;
+  activeJobInfo: ClockJobInfo | null;
+  fetchedAt: string;
+};
+
+export type ZeiterfassungOverview = {
+  clockState: LiveClockState;
+  weekData: WeeklyTimeDataPoint[];
+  todayIndex: number;
+  weekLabel: WeeklyTimeLabel;
+};
+
 export type ClockResult =
   | { success: true; entry: TimeEntry; jobInfo?: ClockJobInfo | null }
   | {

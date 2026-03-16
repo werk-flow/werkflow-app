@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Play,
@@ -14,33 +14,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import {
-  clockIn,
-  clockOut,
-  switchJob,
-  getClockStatusWithActiveJob,
-  getJobInfoById,
-} from '@/lib/time-tracking/actions';
 import { useOrganization } from '@/components/organization/organization-context';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { JobPickerModal } from '@/components/job-picker-modal';
-
-type ActiveJobInfo = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-  clientName: string | null;
-};
+import { useClockState } from '@/components/clock-state-provider';
 
 export function ClockFAB() {
   const router = useRouter();
   const { activeOrgId, activeOrg } = useOrganization();
-  const [isPending, startTransition] = useTransition();
-  const [isClockedIn, setIsClockedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [statusError, setStatusError] = useState<string | null>(null);
+  const { state, isLoading, isPending, statusError, clockIn, clockOut, switchJob } =
+    useClockState();
   const [banner, setBanner] = useState<null | {
     title: string;
     message: string;
@@ -50,12 +32,15 @@ export function ClockFAB() {
 
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'clock_in' | 'switch'>('clock_in');
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeJobInfo, setActiveJobInfo] = useState<ActiveJobInfo | null>(null);
   const [showJobPopover, setShowJobPopover] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const skipNextRealtimeRef = useRef(false);
+
+  const activeClockState =
+    state && state.organizationId === activeOrgId ? state : null;
+  const isClockedIn = activeClockState?.isClockedIn ?? false;
+  const activeJobId = activeClockState?.activeJobId ?? null;
+  const activeJobInfo = activeClockState?.activeJobInfo ?? null;
 
   const dismissBanner = useCallback(() => {
     setIsBannerExiting(true);
@@ -64,64 +49,6 @@ export function ClockFAB() {
       setBanner(null);
     }, 150);
   }, []);
-
-  const fetchClockStatus = useCallback(async () => {
-    if (!activeOrgId) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const result = await getClockStatusWithActiveJob(activeOrgId);
-
-      if (result.success) {
-        setIsClockedIn(result.isClockedIn);
-        setActiveJobId(result.activeJobId);
-        setStatusError(null);
-      } else {
-        setStatusError(result.error);
-      }
-    } catch (err) {
-      console.error('Error fetching clock status:', err);
-      setStatusError('fetch_failed');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeOrgId]);
-
-  useEffect(() => {
-    setIsLoading(true);
-    fetchClockStatus();
-  }, [fetchClockStatus]);
-
-  useRealtimeEvent('time_entries', () => {
-    if (skipNextRealtimeRef.current) {
-      skipNextRealtimeRef.current = false;
-      return;
-    }
-    fetchClockStatus();
-  });
-
-  // Fetch active job info only when we have a job ID — uses a lightweight
-  // single-job lookup instead of loading all org jobs.
-  useEffect(() => {
-    if (!activeJobId) {
-      setActiveJobInfo(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await getJobInfoById(activeJobId);
-        if (!cancelled && result.success) {
-          setActiveJobInfo(result.job ?? null);
-        }
-      } catch {
-        if (!cancelled) setActiveJobInfo(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [activeJobId]);
 
   useEffect(() => {
     if (!showJobPopover) return;
@@ -155,89 +82,49 @@ export function ClockFAB() {
   );
 
   const handlePickerConfirm = useCallback(
-    (jobId: string | null) => {
+    async (jobId: string | null) => {
       if (!activeOrgId) return;
 
       if (pickerMode === 'clock_in') {
-        startTransition(async () => {
-          try {
-            const result = await clockIn(activeOrgId, jobId);
-            if (result.success) {
-              skipNextRealtimeRef.current = true;
-              setIsClockedIn(true);
-              setActiveJobId(jobId);
-              if (result.jobInfo) {
-                setActiveJobInfo(result.jobInfo);
-              }
-              setStatusError(null);
-              setShowJobPicker(false);
-            } else {
-              if (
-                result.error === 'working_in_other_org' &&
-                'otherOrgName' in result &&
-                typeof result.otherOrgName === 'string'
-              ) {
-                setBanner({
-                  title: 'Bereits in anderer Organisation eingestempelt',
-                  message: `Du bist aktuell in „${result.otherOrgName}" eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
-                });
-                if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-                bannerTimerRef.current = setTimeout(dismissBanner, 6000);
-                setStatusError(null);
-                setShowJobPicker(false);
-              } else {
-                setStatusError(result.error);
-              }
-            }
-          } catch (err) {
-            console.error('Error clocking in:', err);
-            setStatusError('unexpected_error');
+        try {
+          const result = await clockIn(jobId);
+          if (result.success) {
+            setShowJobPicker(false);
+          } else if (
+            result.error === 'working_in_other_org' &&
+            'otherOrgName' in result &&
+            typeof result.otherOrgName === 'string'
+          ) {
+            setBanner({
+              title: 'Bereits in anderer Organisation eingestempelt',
+              message: `Du bist aktuell in „${result.otherOrgName}" eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+            });
+            if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+            bannerTimerRef.current = setTimeout(dismissBanner, 6000);
+            setShowJobPicker(false);
           }
-        });
+        } catch (err) {
+          console.error('Error clocking in:', err);
+        }
       } else {
-        startTransition(async () => {
-          try {
-            const result = await switchJob(activeOrgId, jobId);
-            if (result.success) {
-              skipNextRealtimeRef.current = true;
-              setActiveJobId(jobId);
-              if (result.jobInfo) {
-                setActiveJobInfo(result.jobInfo);
-              }
-              setShowJobPicker(false);
-            } else {
-              setStatusError(result.error);
-            }
-          } catch (err) {
-            console.error('Error switching job:', err);
-            setStatusError('unexpected_error');
+        try {
+          const result = await switchJob(jobId);
+          if (result.success) {
+            setShowJobPicker(false);
           }
-        });
+        } catch (err) {
+          console.error('Error switching job:', err);
+        }
       }
     },
-    [activeOrgId, pickerMode, dismissBanner]
+    [activeOrgId, pickerMode, dismissBanner, clockIn, switchJob]
   );
 
   const handleClockOut = useCallback(() => {
     if (!activeOrgId) return;
 
-    startTransition(async () => {
-      try {
-        const result = await clockOut(activeOrgId);
-        if (result.success) {
-          skipNextRealtimeRef.current = true;
-          setIsClockedIn(false);
-          setActiveJobId(null);
-          setStatusError(null);
-        } else {
-          setStatusError(result.error);
-        }
-      } catch (err) {
-        console.error('Error clocking out:', err);
-        setStatusError('unexpected_error');
-      }
-    });
-  }, [activeOrgId]);
+    void clockOut();
+  }, [activeOrgId, clockOut]);
 
   const handleFABClick = useCallback(() => {
     if (isClockedIn) {
@@ -251,7 +138,7 @@ export function ClockFAB() {
     return null;
   }
 
-  if (isLoading) {
+  if (isLoading && !activeClockState) {
     return (
       <div className="fixed bottom-6 right-6 z-50 will-change-transform" style={{ contain: 'layout style' }}>
         <Button
@@ -269,12 +156,16 @@ export function ClockFAB() {
     <>
       {banner && (
         <div
-          className={cn(
-            'fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg',
-            isBannerExiting ? 'animate-banner-out' : 'animate-banner-in'
-          )}
+          className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4"
         >
-          <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50">
+          <div
+            className={cn(
+              'pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 transition-all duration-200 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50',
+              isBannerExiting
+                ? '-translate-y-1 opacity-0'
+                : 'translate-y-0 opacity-100'
+            )}
+          >
             <AlertCircle className="size-5 shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-semibold">{banner.title}</p>

@@ -22,7 +22,6 @@ export function OrganizationSwitcher() {
     activeOrgId,
     setActiveOrg,
     isLoading,
-    isSubscribed,
     isSwitchingOrg
   } = useOrganization();
   const { setIsOpen: setSidebarOpen } = useSidebar();
@@ -30,6 +29,7 @@ export function OrganizationSwitcher() {
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [shouldBlurOnClose, setShouldBlurOnClose] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const hasAdminMembership = memberships.some((membership) => membership.role === 'admin');
 
   const handleValueChange = async (value: string) => {
     if (value === activeOrgId) {
@@ -83,8 +83,8 @@ export function OrganizationSwitcher() {
         </SelectContent>
       </Select>
 
-      {/* Only show create org button for subscribed users (admins) */}
-      {isSubscribed && (
+      {/* Admin users create organizations; they do not join via org code */}
+      {hasAdminMembership && (
         <Button
           variant="ghost"
           size="sm"
@@ -96,9 +96,8 @@ export function OrganizationSwitcher() {
         </Button>
       )}
 
-      {/* Join org button only visible to non-subscribed users (employees) */}
-      {/* Admins (subscribed users) create organizations, they don't join via code */}
-      {!isSubscribed && (
+      {/* Non-admin users join organizations via org code */}
+      {!hasAdminMembership && (
         <Button
           variant="ghost"
           size="sm"

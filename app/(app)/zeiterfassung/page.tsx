@@ -9,10 +9,57 @@ import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-he
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
 import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
 import {
-  getPendingSessions,
-  getPendingChangeRequests
+  getCurrentClockState,
+  getPendingApprovalCount,
+  getTimeEntries,
 } from '@/lib/time-tracking/actions';
 import type { OrgRole } from '@/lib/members/actions';
+import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
+import {
+  buildWeeklyTimeData,
+  computeWeekLabel,
+  getTodayIndex,
+  getWeekBounds,
+} from '@/lib/time-tracking/weekly';
+
+async function getInitialOverview(
+  activeOrgId: string,
+  userId: string
+): Promise<ZeiterfassungOverview> {
+  const { monday, sunday } = getWeekBounds();
+  const weekLabel = computeWeekLabel(monday);
+  const todayIndex = getTodayIndex();
+
+  const [clockStateResult, weekEntriesResult] = await Promise.all([
+    getCurrentClockState(activeOrgId),
+    getTimeEntries({
+      organizationId: activeOrgId,
+      from: monday.toISOString(),
+      to: sunday.toISOString(),
+      userId,
+    }),
+  ]);
+
+  return {
+    clockState: clockStateResult.success
+      ? clockStateResult.state
+      : {
+          organizationId: activeOrgId,
+          isClockedIn: false,
+          clockInTime: null,
+          todayMinutes: 0,
+          activeJobId: null,
+          activeJobInfo: null,
+          fetchedAt: new Date().toISOString(),
+        },
+    weekData:
+      weekEntriesResult.success && weekEntriesResult.entries
+        ? buildWeeklyTimeData(weekEntriesResult.entries, monday)
+        : [],
+    todayIndex,
+    weekLabel,
+  };
+}
 
 async function ZeiterfassungData({
   activeOrgId,
@@ -37,23 +84,17 @@ async function ZeiterfassungData({
     email: string;
     role: string;
   }> = [];
+  const initialOverview = await getInitialOverview(activeOrgId, userId);
 
   if (isAdminOrManager) {
     const supabase = await createSupabaseServerClient();
 
-    const [sessionsResult, changeRequestsResult, { data: membersData }] =
-      await Promise.all([
-        getPendingSessions(activeOrgId),
-        isAdmin ? getPendingChangeRequests(activeOrgId) : null,
-        supabase.rpc('get_org_members', { p_org_id: activeOrgId })
-      ]);
+    const [pendingCount, { data: membersData }] = await Promise.all([
+      getPendingApprovalCount(activeOrgId, isAdmin),
+      supabase.rpc('get_org_members', { p_org_id: activeOrgId })
+    ]);
 
-    if (sessionsResult.success) {
-      initialPendingCount += sessionsResult.sessions.length;
-    }
-    if (changeRequestsResult?.success) {
-      initialPendingCount += changeRequestsResult.requests.length;
-    }
+    initialPendingCount = pendingCount;
 
     if (membersData) {
       if (currentUserRole === 'manager') {
@@ -78,6 +119,7 @@ async function ZeiterfassungData({
       initialTab={tab === 'approvals' ? 'approvals' : 'overview'}
       initialPendingCount={initialPendingCount}
       members={members}
+      initialOverview={initialOverview}
     />
   );
 }

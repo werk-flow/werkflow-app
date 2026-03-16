@@ -1,5 +1,4 @@
-import { Suspense } from 'react';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -12,6 +11,7 @@ import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
+import { RouteRedirect } from '@/components/shared/route-redirect';
 import KundenDetailLoading from './loading';
 
 interface KundenDetailPageProps {
@@ -53,7 +53,13 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
   ]);
 
-  if (!clientResult.success) notFound();
+  if (!clientResult.success) {
+    return (
+      <RouteRedirect href="/kunden">
+        <KundenDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const { client } = clientResult;
 
@@ -95,9 +101,5 @@ export default async function KundenDetailPage({
 }: KundenDetailPageProps) {
   const { clientId } = await params;
 
-  return (
-    <Suspense fallback={<KundenDetailLoading />}>
-      <KundenDetailData clientId={clientId} />
-    </Suspense>
-  );
+  return <KundenDetailData clientId={clientId} />;
 }

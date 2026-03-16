@@ -1,5 +1,4 @@
-import { Suspense } from 'react';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -12,6 +11,7 @@ import { toClient, type Client } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import { RouteRedirect } from '@/components/shared/route-redirect';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -59,12 +59,24 @@ async function NestedJobDetailData({
       : Promise.resolve({ data: null }),
   ]);
 
-  if (!projectResult.success || !jobResult.success) notFound();
+  if (!projectResult.success || !jobResult.success) {
+    return (
+      <RouteRedirect href="/auftraege">
+        <NestedJobDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const { project } = projectResult.details;
   const { job } = jobResult;
 
-  if (job.project?.id !== project.id) notFound();
+  if (job.project?.id !== project.id) {
+    return (
+      <RouteRedirect href="/auftraege">
+        <NestedJobDetailLoading />
+      </RouteRedirect>
+    );
+  }
 
   const clients: Client[] = (clientsResult.data ?? []).map(toClient);
   const members: OrgMemberOption[] = (membersResult.data ?? []).map(
@@ -97,11 +109,9 @@ export default async function NestedJobDetailPage({
   const { projectNumber, jobNumber } = await params;
 
   return (
-    <Suspense fallback={<NestedJobDetailLoading />}>
-      <NestedJobDetailData
-        projectNumber={projectNumber}
-        jobNumber={jobNumber}
-      />
-    </Suspense>
+    <NestedJobDetailData
+      projectNumber={projectNumber}
+      jobNumber={jobNumber}
+    />
   );
 }

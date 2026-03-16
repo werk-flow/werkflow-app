@@ -45,14 +45,16 @@ type OrganizationData = {
 }
 
 function getParentListPath(pathname: string): string | null {
-  const detailPrefixes = [
-    { prefix: '/auftraege/', parent: '/auftraege' },
-    { prefix: '/mitarbeiter/', parent: '/mitarbeiter' },
-    { prefix: '/kunden/', parent: '/kunden' },
+  const detailRoutePatterns = [
+    { pattern: /^\/auftraege\/[^/]+$/, parent: '/auftraege' },
+    { pattern: /^\/auftraege\/projekt\/[^/]+$/, parent: '/auftraege' },
+    { pattern: /^\/auftraege\/projekt\/[^/]+\/[^/]+$/, parent: '/auftraege' },
+    { pattern: /^\/mitarbeiter\/[^/]+$/, parent: '/mitarbeiter' },
+    { pattern: /^\/kunden\/[^/]+$/, parent: '/kunden' },
   ]
 
-  for (const { prefix, parent } of detailPrefixes) {
-    if (pathname.startsWith(prefix) && pathname !== parent) {
+  for (const { pattern, parent } of detailRoutePatterns) {
+    if (pattern.test(pathname)) {
       return parent
     }
   }
