@@ -28,6 +28,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { toLocalDateString } from '@/lib/utils';
 
 const EntryDetailsDialog = dynamic(
   () =>
@@ -696,7 +697,7 @@ function ChangeRequestCard({
   // Extract date from clock_in timestamp for paired deletes
   const dateStr =
     isPairedDelete && clockInEntry
-      ? new Date(clockInEntry.timestamp).toISOString().split('T')[0]
+      ? toLocalDateString(new Date(clockInEntry.timestamp))
       : '';
 
   return (

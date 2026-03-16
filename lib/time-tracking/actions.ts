@@ -43,6 +43,12 @@ import {
   canAddEntriesFor,
   needsChangeRequest
 } from './helpers';
+import {
+  getLocalDayEnd,
+  getLocalDayKey,
+  getLocalDayStart,
+  isSameLocalDay
+} from './day-utils';
 import { validateManualEntries, validateTimestampUpdate } from './validation';
 
 /**
@@ -61,6 +67,8 @@ async function getUserEntries(
   userId: string,
   orgId: string
 ): Promise<TimeEntryRow[]> {
+  await closeStaleOpenSessionsForUser(admin, userId, orgId);
+
   const { data, error } = await admin
     .from('time_entries')
     .select('*')
@@ -77,15 +85,16 @@ async function getUserEntries(
 }
 
 /**
- * Get only today's entries for the user in an org.
- * Much faster than getUserEntries for clock status checks.
+ * Get entries for a specific local day for the user in an org.
  */
-async function getUserTodayEntries(
+async function getUserEntriesForDay(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
-  orgId: string
+  orgId: string,
+  date: Date
 ): Promise<TimeEntryRow[]> {
-  const { start, end } = getTodayBounds();
+  await closeStaleOpenSessionsForUser(admin, userId, orgId, date);
+  const { start, end } = getDayBounds(date);
 
   const { data, error } = await admin
     .from('time_entries')
@@ -100,11 +109,23 @@ async function getUserTodayEntries(
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching user today entries:', error);
+    console.error('Error fetching user day entries:', error);
     return [];
   }
 
   return data || [];
+}
+
+/**
+ * Get only today's entries for the user in an org.
+ * Much faster than getUserEntries for clock status checks.
+ */
+async function getUserTodayEntries(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  orgId: string
+): Promise<TimeEntryRow[]> {
+  return getUserEntriesForDay(admin, userId, orgId, new Date());
 }
 
 /**
@@ -177,19 +198,151 @@ type TodayBounds = {
   end: Date;
 };
 
+function getDayBounds(date: Date): TodayBounds {
+  return {
+    start: getLocalDayStart(date),
+    end: getLocalDayEnd(date)
+  };
+}
+
 function getTodayBounds(): TodayBounds {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const end = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999
+  return getDayBounds(new Date());
+}
+
+function buildAutoCloseInsert(entry: TimeEntry): TimeEntryInsert {
+  const autoCloseAt = getLocalDayEnd(new Date(entry.timestamp)).toISOString();
+
+  return {
+    user_id: entry.userId,
+    organization_id: entry.organizationId,
+    entry_type: 'clock_out',
+    timestamp: autoCloseAt,
+    is_manual: false,
+    status: entry.status === 'pending' ? 'pending' : 'approved',
+    reviewed_by: entry.status === 'approved' ? entry.reviewedBy : null,
+    reviewed_at: entry.status === 'approved' ? entry.reviewedAt : null,
+    job_id: null
+  };
+}
+
+async function closeStaleOpenSessionsForUser(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  orgId: string,
+  referenceDate = new Date()
+): Promise<void> {
+  const staleCutoff = getLocalDayStart(referenceDate).toISOString();
+
+  const { data, error } = await admin
+    .from('time_entries')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('organization_id', orgId)
+    .lt('timestamp', staleCutoff)
+    .neq('status', 'rejected')
+    .neq('status', 'pending_delete')
+    .order('timestamp', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    if (error) {
+      console.error('Error loading stale time entries:', error);
+    }
+    return;
+  }
+
+  const entries = toTimeEntries(data);
+  const inserts: TimeEntryInsert[] = [];
+  let currentClockIn: TimeEntry | null = null;
+
+  for (const entry of entries) {
+    if (
+      currentClockIn &&
+      !isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
+    ) {
+      inserts.push(buildAutoCloseInsert(currentClockIn));
+      currentClockIn = null;
+    }
+
+    if (entry.entryType === 'clock_in') {
+      currentClockIn = entry;
+      continue;
+    }
+
+    if (
+      currentClockIn &&
+      isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
+    ) {
+      currentClockIn = null;
+    }
+  }
+
+  if (currentClockIn) {
+    inserts.push(buildAutoCloseInsert(currentClockIn));
+  }
+
+  if (inserts.length === 0) {
+    return;
+  }
+
+  const autoCloseTimestamps = [...new Set(inserts.map((entry) => entry.timestamp))];
+  const { data: existingClosures, error: existingError } = await admin
+    .from('time_entries')
+    .select('timestamp')
+    .eq('user_id', userId)
+    .eq('organization_id', orgId)
+    .eq('entry_type', 'clock_out')
+    .in('timestamp', autoCloseTimestamps);
+
+  if (existingError) {
+    console.error('Error checking existing auto-close entries:', existingError);
+    return;
+  }
+
+  const existingTimestampSet = new Set(
+    (existingClosures || []).map((entry) => entry.timestamp)
   );
-  return { start, end };
+  const missingInserts = inserts.filter(
+    (entry) => !existingTimestampSet.has(entry.timestamp)
+  );
+
+  if (missingInserts.length === 0) {
+    return;
+  }
+
+  const { error: insertError } = await admin.from('time_entries').insert(missingInserts);
+
+  if (insertError) {
+    console.error('Error auto-closing stale sessions:', insertError);
+  }
+}
+
+async function closeStaleOpenSessionsForOrg(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  orgId: string,
+  userIds?: string[]
+): Promise<void> {
+  let resolvedUserIds = userIds;
+
+  if (!resolvedUserIds) {
+    const { data: members, error } = await admin
+      .from('organization_members')
+      .select('user_id')
+      .eq('organization_id', orgId);
+
+    if (error) {
+      console.error('Error loading org members for stale-session cleanup:', error);
+      return;
+    }
+
+    resolvedUserIds = [...new Set((members || []).map((member) => member.user_id))];
+  }
+
+  await Promise.all(
+    (resolvedUserIds || []).map((userId) =>
+      closeStaleOpenSessionsForUser(admin, userId, orgId)
+    )
+  );
 }
 
 type OpenSessionOrg = { organizationId: string; organizationName: string };
@@ -463,6 +616,10 @@ export async function addManualEntry(
 
     const { organizationId, targetUserId, entries } = params;
 
+    if (entries.length === 0) {
+      return { success: false, error: 'validation_failed' };
+    }
+
     const callerRole = await verifyMembershipFromCache(user.id, organizationId);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
@@ -489,11 +646,12 @@ export async function addManualEntry(
       return { success: false, error: 'not_authorized' };
     }
 
-    // Get target user's existing entries
-    const existingEntries = await getUserEntries(
+    const targetDay = new Date(entries[0]?.timestamp);
+    const existingEntries = await getUserEntriesForDay(
       admin,
       targetUserId,
-      organizationId
+      organizationId,
+      targetDay
     );
     const timeEntries = toTimeEntries(existingEntries);
 
@@ -1037,6 +1195,13 @@ export async function getTimeEntries(
       return { success: false, error: 'not_a_member' };
     }
 
+    const admin = createSupabaseAdminClient();
+    if (userId) {
+      await closeStaleOpenSessionsForUser(admin, userId, organizationId, new Date(to));
+    } else {
+      await closeStaleOpenSessionsForOrg(admin, organizationId);
+    }
+
     const supabase = await createSupabaseServerClient();
     let query = supabase
       .from('time_entries')
@@ -1348,7 +1513,7 @@ export async function getPendingSessions(
           lastName: profile?.last_name || null,
           clockIn,
           clockOut,
-          date: clockIn.timestamp.split('T')[0],
+          date: getLocalDayKey(new Date(clockIn.timestamp)),
           createdAt: entry.created_at
         });
       } else {
@@ -1363,7 +1528,7 @@ export async function getPendingSessions(
           lastName: profile?.last_name || null,
           clockIn: entry.entry_type === 'clock_in' ? timeEntry : null,
           clockOut: entry.entry_type === 'clock_out' ? timeEntry : null,
-          date: entry.timestamp.split('T')[0],
+          date: getLocalDayKey(new Date(entry.timestamp)),
           createdAt: entry.created_at
         });
       }

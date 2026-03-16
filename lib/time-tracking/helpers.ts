@@ -1,5 +1,10 @@
 import type { TimeEntry, TimeEntryStatus, OrgRole, WorkSession } from './types';
 import { MANAGED_ROLES } from './types';
+import {
+  getLocalDayEnd,
+  getLocalDayKey,
+  getLocalDayStart
+} from './day-utils';
 
 // ── Time model constants ──────────────────────────────────────────────
 export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
@@ -98,18 +103,9 @@ export const ROLE_HIERARCHY: Record<OrgRole, number> = {
 export function hasOpenSession(entries: TimeEntry[]): boolean {
   if (entries.length === 0) return false;
 
-  // Get today's date boundaries (local time)
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999
-  );
+  const todayStart = getLocalDayStart(now);
+  const todayEnd = getLocalDayEnd(now);
 
   // Filter to approved OR pending entries from today and sort by timestamp descending
   // (Rejected and pending_delete entries are excluded as they should not affect state)
@@ -351,7 +347,7 @@ export function groupEntriesByDate(
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
-    const date = new Date(entry.timestamp).toISOString().split('T')[0];
+    const date = getLocalDayKey(new Date(entry.timestamp));
     if (!grouped[date]) {
       grouped[date] = [];
     }

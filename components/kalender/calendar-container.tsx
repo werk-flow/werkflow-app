@@ -99,6 +99,9 @@ export function CalendarContainer({
   // is already covered so we skip the refetch entirely.
   const fetchedRangeRef = useRef<{ start: Date; end: Date } | null>(null);
   const hasDataRef = useRef(!!initialEntries);
+  const previousOrgIdRef = useRef(organizationId);
+  const entriesRequestIdRef = useRef(0);
+  const jobsRequestIdRef = useRef(0);
 
   // Track which member to highlight when navigating from week view cell click
   // We use two states: pendingHighlight stores the ID while loading,
@@ -150,6 +153,9 @@ export function CalendarContainer({
   // Change requests are fetched non-blocking so the calendar renders entries
   // immediately and CR badges fill in shortly after.
   const fetchEntries = useCallback(async (silent = false) => {
+    const requestId = ++entriesRequestIdRef.current;
+    const requestOrgId = organizationId;
+
     if (!silent) {
       if (!hasDataRef.current) setIsLoading(true);
       setIsRefreshing(true);
@@ -164,6 +170,13 @@ export function CalendarContainer({
       });
 
       if (result.success && result.entries) {
+        if (
+          entriesRequestIdRef.current !== requestId ||
+          previousOrgIdRef.current !== requestOrgId
+        ) {
+          return;
+        }
+
         setEntries(result.entries);
         hasDataRef.current = true;
         fetchedRangeRef.current = { start, end };
@@ -173,6 +186,13 @@ export function CalendarContainer({
         if (entryIds.length > 0) {
           getChangeRequestsForEntries(entryIds)
             .then((crResult) => {
+              if (
+                entriesRequestIdRef.current !== requestId ||
+                previousOrgIdRef.current !== requestOrgId
+              ) {
+                return;
+              }
+
               if (crResult.success && crResult.requests) {
                 const crMap: EntryChangeRequestMap = {};
                 for (const cr of crResult.requests) {
@@ -185,9 +205,22 @@ export function CalendarContainer({
               }
             })
             .catch((crError) => {
+              if (
+                entriesRequestIdRef.current !== requestId ||
+                previousOrgIdRef.current !== requestOrgId
+              ) {
+                return;
+              }
+
               console.error('Error fetching change requests:', crError);
             });
         } else {
+          if (
+            entriesRequestIdRef.current !== requestId ||
+            previousOrgIdRef.current !== requestOrgId
+          ) {
+            return;
+          }
           setChangeRequestMap({});
         }
       } else if (!result.success) {
@@ -196,12 +229,21 @@ export function CalendarContainer({
     } catch (error) {
       console.error('Error fetching entries:', error);
     } finally {
+      if (
+        entriesRequestIdRef.current !== requestId ||
+        previousOrgIdRef.current !== requestOrgId
+      ) {
+        return;
+      }
       setIsLoading(false);
       setIsRefreshing(false);
     }
   }, [organizationId, getDateRange]);
 
   const fetchJobs = useCallback(async () => {
+    const requestId = ++jobsRequestIdRef.current;
+    const requestOrgId = organizationId;
+
     try {
       const { start, end } = getDateRange();
       const fromIso = toLocalDateString(start);
@@ -209,14 +251,43 @@ export function CalendarContainer({
 
       const result = await getJobsForCalendar(fromIso, toIso);
       if (result.success) {
+        if (
+          jobsRequestIdRef.current !== requestId ||
+          previousOrgIdRef.current !== requestOrgId
+        ) {
+          return;
+        }
         setCalendarJobs(result.jobs);
       }
     } catch (error) {
       console.error('Error fetching calendar jobs:', error);
     }
-  }, [getDateRange]);
+  }, [organizationId, getDateRange]);
 
   const hasUsedInitialData = useRef(!!initialEntries);
+
+  useEffect(() => {
+    if (previousOrgIdRef.current === organizationId) {
+      return;
+    }
+
+    previousOrgIdRef.current = organizationId;
+    entriesRequestIdRef.current += 1;
+    jobsRequestIdRef.current += 1;
+    fetchedRangeRef.current = null;
+    hasDataRef.current = false;
+    hasUsedInitialData.current = false;
+
+    setEntries([]);
+    setChangeRequestMap({});
+    setCalendarJobs([]);
+    setSelectedMembers(members.map((member) => member.user_id));
+    setSelectedSession(null);
+    setPendingHighlightMemberId(null);
+    setHighlightMemberId(null);
+    setIsRefreshing(false);
+    setIsLoading(true);
+  }, [organizationId, members]);
 
   useEffect(() => {
     if (hasUsedInitialData.current) {
@@ -368,12 +439,15 @@ export function CalendarContainer({
     setSelectedSession(session);
   }, []);
 
+  const isSwitchingCalendarOrg = previousOrgIdRef.current !== organizationId;
+  const showLoadingSkeleton = isLoading || isSwitchingCalendarOrg;
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <CalendarHeader
         currentDate={currentDate}
         view={view}
-        isLoading={isLoading || isRefreshing}
+        isLoading={showLoadingSkeleton || isRefreshing}
         onPrevious={handlePrevious}
         onNext={handleNext}
         onToday={handleToday}
@@ -394,7 +468,7 @@ export function CalendarContainer({
       </div>
 
       <div className="flex-1 overflow-auto">
-        {isLoading ? (
+        {showLoadingSkeleton ? (
           // Show appropriate skeleton based on view and user role
           useFullCalendar ? (
             <FullCalendarSkeleton view={view} />

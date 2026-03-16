@@ -1,10 +1,13 @@
 import type {
   TimeEntry,
-  TimeEntryType,
   ManualEntryInput,
   ValidationResult,
   WorkSession
 } from './types';
+import {
+  getLocalDayEnd,
+  isSameLocalDay
+} from './day-utils';
 
 /**
  * Check if two timestamps are in the same minute (minute-level overlap)
@@ -32,7 +35,10 @@ export function validateSingleEntryNoOverlap(
 ): ValidationResult {
   // Filter to only active entries (approved or pending, not rejected or pending_delete)
   const activeEntries = existingEntries.filter(
-    (e) => e.status !== 'rejected' && e.status !== 'pending_delete'
+    (e) =>
+      e.status !== 'rejected' &&
+      e.status !== 'pending_delete' &&
+      isSameLocalDay(new Date(e.timestamp), newTimestamp)
   );
 
   for (const entry of activeEntries) {
@@ -109,6 +115,21 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   let currentClockIn: TimeEntry | null = null;
 
   for (const entry of activeEntries) {
+    if (
+      currentClockIn &&
+      !isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
+    ) {
+      sessions.push({
+        clockIn: currentClockIn,
+        clockOut: null,
+        durationMinutes: null,
+        jobId: currentClockIn.jobId,
+        isOrphan: true,
+        pendingState: determinePendingState(currentClockIn, null)
+      });
+      currentClockIn = null;
+    }
+
     if (entry.entryType === 'clock_in') {
       // If we already have an open clock_in, it means there's a missing clock_out
       // Mark it as orphan since we're moving to a new clock_in
@@ -184,10 +205,14 @@ export function checkWindowOverlap(
     if (!session.clockIn) continue;
 
     const sessionStart = new Date(session.clockIn.timestamp).getTime();
-    // For open sessions, treat them as extending to "now" for overlap purposes
+    // Current-day open sessions extend to now.
+    // Older unclosed sessions are clamped to the end of their own day so they
+    // cannot spill into later dates.
     const sessionEnd = session.clockOut
       ? new Date(session.clockOut.timestamp).getTime()
-      : Date.now();
+      : isToday(new Date(session.clockIn.timestamp))
+      ? Date.now()
+      : getLocalDayEnd(new Date(session.clockIn.timestamp)).getTime();
 
     // Check for any overlap between [newStart, newEnd] and [sessionStart, sessionEnd]
     // Two intervals [a, b] and [c, d] overlap if a < d AND c < b
@@ -303,6 +328,22 @@ export function validateManualEntries(
     }
   }
 
+  const firstEntryDate = new Date(newEntries[0].timestamp);
+  const allOnSameDay = newEntries.every((entry) =>
+    isSameLocalDay(new Date(entry.timestamp), firstEntryDate)
+  );
+
+  if (!allOnSameDay) {
+    return {
+      valid: false,
+      error: 'Manuelle Einträge müssen innerhalb desselben Tages liegen.'
+    };
+  }
+
+  const dayEntries = existingEntries.filter((entry) =>
+    isSameLocalDay(new Date(entry.timestamp), firstEntryDate)
+  );
+
   // Check if it's a pair (clock_in + clock_out)
   if (newEntries.length === 2) {
     const clockIn = newEntries.find((e) => e.entryType === 'clock_in');
@@ -310,7 +351,7 @@ export function validateManualEntries(
 
     if (clockIn && clockOut) {
       return validateManualPair(
-        existingEntries,
+        dayEntries,
         new Date(clockIn.timestamp),
         new Date(clockOut.timestamp)
       );
@@ -320,7 +361,7 @@ export function validateManualEntries(
   // For single entries - just check minute-level overlap
   for (const entry of newEntries) {
     const ts = new Date(entry.timestamp);
-    const overlapResult = validateSingleEntryNoOverlap(existingEntries, ts);
+    const overlapResult = validateSingleEntryNoOverlap(dayEntries, ts);
     if (!overlapResult.valid) {
       return overlapResult;
     }
@@ -362,10 +403,13 @@ export function validateTimestampUpdate(
   const otherEntries = existingEntries.filter(
     (e) => e.id !== entryId && e.id !== pairedEntryId
   );
+  const relevantEntries = otherEntries.filter((entry) =>
+    isSameLocalDay(new Date(entry.timestamp), newTimestamp)
+  );
 
   // Check minute-level overlap with other entries (excluding the current session)
   const overlapResult = validateSingleEntryNoOverlap(
-    otherEntries,
+    relevantEntries,
     newTimestamp
   );
   if (!overlapResult.valid) {
@@ -381,7 +425,7 @@ export function validateTimestampUpdate(
   }
 
   // Calculate sessions from other entries (excluding the current session) to check window overlap
-  const otherSessions = calculateWorkSessions(otherEntries);
+  const otherSessions = calculateWorkSessions(relevantEntries);
 
   if (currentSession) {
     // Check if this update creates an invalid session (clock_out before clock_in)
