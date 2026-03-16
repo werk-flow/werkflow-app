@@ -8,6 +8,7 @@ import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 import {
   type TimeEntry,
   type TimeEntryRow,
+  type TimeEntryInsert,
   type OrgRole,
   type ClockResult,
   type LiveClockState,
@@ -160,7 +161,10 @@ async function getClockJobInfo(
   }
 
   if (touchStatus && job.status === 'nicht_bearbeitet') {
-    await admin.from('jobs').update({ status: 'in_bearbeitung' }).eq('id', jobId);
+    await admin
+      .from('jobs')
+      .update({ status: 'in_bearbeitung' })
+      .eq('id', jobId);
   }
 
   if (!includeRelations) {
@@ -170,7 +174,7 @@ async function getClockJobInfo(
       jobNumber: job.job_number,
       status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
       projectName: null,
-      clientName: null,
+      clientName: null
     };
   }
 
@@ -180,7 +184,7 @@ async function getClockJobInfo(
       : Promise.resolve({ data: null }),
     job.client_id
       ? admin.from('clients').select('name').eq('id', job.client_id).single()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null })
   ]);
 
   return {
@@ -189,7 +193,7 @@ async function getClockJobInfo(
     jobNumber: job.job_number,
     status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
     projectName: (projectData.data as { name: string } | null)?.name ?? null,
-    clientName: (clientData.data as { name: string } | null)?.name ?? null,
+    clientName: (clientData.data as { name: string } | null)?.name ?? null
   };
 }
 
@@ -258,7 +262,10 @@ async function closeStaleOpenSessionsForUser(
   for (const entry of entries) {
     if (
       currentClockIn &&
-      !isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
+      !isSameLocalDay(
+        new Date(currentClockIn.timestamp),
+        new Date(entry.timestamp)
+      )
     ) {
       inserts.push(buildAutoCloseInsert(currentClockIn));
       currentClockIn = null;
@@ -271,7 +278,10 @@ async function closeStaleOpenSessionsForUser(
 
     if (
       currentClockIn &&
-      isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
+      isSameLocalDay(
+        new Date(currentClockIn.timestamp),
+        new Date(entry.timestamp)
+      )
     ) {
       currentClockIn = null;
     }
@@ -285,7 +295,9 @@ async function closeStaleOpenSessionsForUser(
     return;
   }
 
-  const autoCloseTimestamps = [...new Set(inserts.map((entry) => entry.timestamp))];
+  const autoCloseTimestamps = [
+    ...new Set(inserts.map((entry) => entry.timestamp))
+  ];
   const { data: existingClosures, error: existingError } = await admin
     .from('time_entries')
     .select('timestamp')
@@ -310,7 +322,9 @@ async function closeStaleOpenSessionsForUser(
     return;
   }
 
-  const { error: insertError } = await admin.from('time_entries').insert(missingInserts);
+  const { error: insertError } = await admin
+    .from('time_entries')
+    .insert(missingInserts);
 
   if (insertError) {
     console.error('Error auto-closing stale sessions:', insertError);
@@ -331,11 +345,16 @@ async function closeStaleOpenSessionsForOrg(
       .eq('organization_id', orgId);
 
     if (error) {
-      console.error('Error loading org members for stale-session cleanup:', error);
+      console.error(
+        'Error loading org members for stale-session cleanup:',
+        error
+      );
       return;
     }
 
-    resolvedUserIds = [...new Set((members || []).map((member) => member.user_id))];
+    resolvedUserIds = [
+      ...new Set((members || []).map((member) => member.user_id))
+    ];
   }
 
   await Promise.all(
@@ -410,7 +429,10 @@ async function getOpenSessionOrgsForUserToday(
 /**
  * Clock in for the current user (real-time)
  */
-export async function clockIn(organizationId?: string, jobId?: string | null): Promise<ClockResult> {
+export async function clockIn(
+  organizationId?: string,
+  jobId?: string | null
+): Promise<ClockResult> {
   try {
     const user = await getAuthenticatedUser();
     if (!user) {
@@ -476,7 +498,7 @@ export async function clockIn(organizationId?: string, jobId?: string | null): P
     if (resolvedJobId) {
       jobInfo = await getClockJobInfo(admin, resolvedJobId, {
         includeRelations: false,
-        touchStatus: true,
+        touchStatus: true
       });
     }
 
@@ -769,7 +791,10 @@ export async function reviewEntry(
       return { success: false, error: 'entry_not_pending' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
+    const callerRole = await verifyMembershipFromCache(
+      user.id,
+      entry.organization_id
+    );
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -869,7 +894,10 @@ export async function updateEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
+    const callerRole = await verifyMembershipFromCache(
+      user.id,
+      entry.organization_id
+    );
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1028,7 +1056,10 @@ export async function deleteEntry(
       return { success: false, error: 'entry_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, entry.organization_id);
+    const callerRole = await verifyMembershipFromCache(
+      user.id,
+      entry.organization_id
+    );
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -1197,7 +1228,12 @@ export async function getTimeEntries(
 
     const admin = createSupabaseAdminClient();
     if (userId) {
-      await closeStaleOpenSessionsForUser(admin, userId, organizationId, new Date(to));
+      await closeStaleOpenSessionsForUser(
+        admin,
+        userId,
+        organizationId,
+        new Date(to)
+      );
     } else {
       await closeStaleOpenSessionsForOrg(admin, organizationId);
     }
@@ -1282,7 +1318,9 @@ export async function getPendingEntries(
     }
 
     // Manager: batch-fetch roles for all unique users in pending entries
-    const uniqueUserIds = [...new Set((pendingEntries || []).map((e) => e.user_id))];
+    const uniqueUserIds = [
+      ...new Set((pendingEntries || []).map((e) => e.user_id))
+    ];
     const { data: memberRows } = await admin
       .from('organization_members')
       .select('user_id, role')
@@ -1356,7 +1394,9 @@ export async function getPendingApprovalCount(
         return 0;
       }
 
-      const uniqueUserIds = [...new Set(pendingEntries.map((entry) => entry.user_id))];
+      const uniqueUserIds = [
+        ...new Set(pendingEntries.map((entry) => entry.user_id))
+      ];
       const { data: memberRows } = await admin
         .from('organization_members')
         .select('user_id, role')
@@ -1811,8 +1851,14 @@ export async function getPendingChangeRequests(
 
     // Batch fetch entries and profiles in parallel
     const [entriesResult, profilesResult] = await Promise.all([
-      admin.from('time_entries').select('*').in('id', [...allEntryIds]),
-      admin.from('profiles').select('id, first_name, last_name').in('id', [...requesterIds]),
+      admin
+        .from('time_entries')
+        .select('*')
+        .in('id', [...allEntryIds]),
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', [...requesterIds])
     ]);
 
     const entryMap = new Map<string, TimeEntryRow>();
@@ -1820,9 +1866,15 @@ export async function getPendingChangeRequests(
       entryMap.set(e.id, e);
     }
 
-    const profileMap = new Map<string, { first_name: string | null; last_name: string | null }>();
+    const profileMap = new Map<
+      string,
+      { first_name: string | null; last_name: string | null }
+    >();
     for (const p of profilesResult.data || []) {
-      profileMap.set(p.id, { first_name: p.first_name, last_name: p.last_name });
+      profileMap.set(p.id, {
+        first_name: p.first_name,
+        last_name: p.last_name
+      });
     }
 
     const enrichedRequests: ChangeRequestWithDetails[] = [];
@@ -1831,7 +1883,7 @@ export async function getPendingChangeRequests(
       if (!entry) continue;
 
       const pairedEntry = request.paired_entry_id
-        ? entryMap.get(request.paired_entry_id) ?? null
+        ? (entryMap.get(request.paired_entry_id) ?? null)
         : null;
       const profile = profileMap.get(request.requested_by) ?? null;
 
@@ -1889,7 +1941,10 @@ export async function reviewChangeRequest(
       return { success: false, error: 'request_not_found' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, request.organization_id);
+    const callerRole = await verifyMembershipFromCache(
+      user.id,
+      request.organization_id
+    );
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
     }
@@ -2111,19 +2166,20 @@ export async function switchJob(
     const clockOutIso = now.toISOString();
     const clockInIso = new Date(now.getTime() + 1).toISOString();
 
-    const { error: clockOutError } = await admin
-      .from('time_entries')
-      .insert({
-        user_id: user.id,
-        organization_id: organizationId,
-        entry_type: 'clock_out',
-        timestamp: clockOutIso,
-        is_manual: false,
-        status: 'approved'
-      });
+    const { error: clockOutError } = await admin.from('time_entries').insert({
+      user_id: user.id,
+      organization_id: organizationId,
+      entry_type: 'clock_out',
+      timestamp: clockOutIso,
+      is_manual: false,
+      status: 'approved'
+    });
 
     if (clockOutError) {
-      console.error('Error inserting clock_out during switchJob:', clockOutError);
+      console.error(
+        'Error inserting clock_out during switchJob:',
+        clockOutError
+      );
       return { success: false, error: 'insert_failed' };
     }
 
@@ -2151,7 +2207,7 @@ export async function switchJob(
     if (newJobId) {
       jobInfo = await getClockJobInfo(admin, newJobId, {
         includeRelations: false,
-        touchStatus: true,
+        touchStatus: true
       });
     }
 
@@ -2298,8 +2354,7 @@ export async function getClockStatusWithActiveJob(
 export async function getCurrentClockState(
   organizationId: string
 ): Promise<
-  | { success: true; state: LiveClockState }
-  | { success: false; error: string }
+  { success: true; state: LiveClockState } | { success: false; error: string }
 > {
   try {
     const user = await getAuthenticatedUser();
@@ -2310,7 +2365,7 @@ export async function getCurrentClockState(
     const admin = createSupabaseAdminClient();
     const [userRole, todayRows] = await Promise.all([
       verifyMembershipFromCache(user.id, organizationId),
-      getUserTodayEntries(admin, user.id, organizationId),
+      getUserTodayEntries(admin, user.id, organizationId)
     ]);
 
     if (!userRole) {
@@ -2337,7 +2392,9 @@ export async function getCurrentClockState(
           const diff =
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
           if (diff !== 0) return diff;
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
         })[0];
 
       clockInTime = latestClockIn?.timestamp ?? null;
@@ -2357,8 +2414,8 @@ export async function getCurrentClockState(
         todayMinutes,
         activeJobId,
         activeJobInfo,
-        fetchedAt: new Date().toISOString(),
-      },
+        fetchedAt: new Date().toISOString()
+      }
     };
   } catch (error) {
     console.error('Unexpected error in getCurrentClockState:', error);
@@ -2370,9 +2427,7 @@ export async function getCurrentClockState(
  * Get minimal info for a single job by ID.
  * Used by ClockFAB to display the active job pill without loading all org jobs.
  */
-export async function getJobInfoById(
-  jobId: string
-): Promise<
+export async function getJobInfoById(jobId: string): Promise<
   | {
       success: true;
       job: {
@@ -2501,9 +2556,7 @@ export async function getAssignedJobs(
 /**
  * Get ALL org jobs (for admin/manager use in manual entry dialog).
  */
-export async function getAllOrgJobs(
-  organizationId: string
-): Promise<
+export async function getAllOrgJobs(organizationId: string): Promise<
   | {
       success: true;
       jobs: Array<{
@@ -2585,8 +2638,7 @@ type PickerJob = {
 export async function getJobsForPicker(
   organizationId: string
 ): Promise<
-  | { success: true; jobs: PickerJob[] }
-  | { success: false; error: string }
+  { success: true; jobs: PickerJob[] } | { success: false; error: string }
 > {
   try {
     const user = await getAuthenticatedUser();
@@ -2652,18 +2704,28 @@ export async function getJobsForPicker(
 
     const [projectsData, clientsData] = await Promise.all([
       projectIds.length > 0
-        ? admin.from('projects').select('id, name').in('id', [...new Set(projectIds)])
+        ? admin
+            .from('projects')
+            .select('id, name')
+            .in('id', [...new Set(projectIds)])
         : null,
       clientIds.length > 0
-        ? admin.from('clients').select('id, name').in('id', [...new Set(clientIds)])
-        : null,
+        ? admin
+            .from('clients')
+            .select('id, name')
+            .in('id', [...new Set(clientIds)])
+        : null
     ]);
 
     if (projectsData?.data) {
-      projectMap = Object.fromEntries(projectsData.data.map((p) => [p.id, p.name]));
+      projectMap = Object.fromEntries(
+        projectsData.data.map((p) => [p.id, p.name])
+      );
     }
     if (clientsData?.data) {
-      clientMap = Object.fromEntries(clientsData.data.map((c) => [c.id, c.name]));
+      clientMap = Object.fromEntries(
+        clientsData.data.map((c) => [c.id, c.name])
+      );
     }
 
     return {
@@ -2674,7 +2736,7 @@ export async function getJobsForPicker(
         jobNumber: j.job_number,
         status: j.status,
         projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null,
-        clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,
+        clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null
       }))
     };
   } catch (error) {
@@ -2690,8 +2752,7 @@ export async function getJobsForPicker(
 export async function getActiveJobIdsForOrg(
   organizationId: string
 ): Promise<
-  | { success: true; activeJobIds: string[] }
-  | { success: false; error: string }
+  { success: true; activeJobIds: string[] } | { success: false; error: string }
 > {
   try {
     const user = await getAuthenticatedUser();
