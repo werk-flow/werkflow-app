@@ -643,7 +643,7 @@ export type Database = {
       invite_status: 'pending' | 'accepted' | 'expired' | 'cancelled';
       job_priority: 'niedrig' | 'mittel' | 'hoch';
       job_status: 'nicht_bearbeitet' | 'in_bearbeitung' | 'fertig';
-      org_role: 'admin' | 'employee' | 'accountant' | 'manager' | 'secretary';
+      org_role: 'admin' | 'buero' | 'employee';
       project_status: 'nicht_begonnen' | 'in_bearbeitung' | 'abgeschlossen';
       subscription_status: 'active' | 'inactive' | 'canceled' | 'trialing';
       time_entry_status: 'pending' | 'approved' | 'rejected' | 'pending_delete';
@@ -783,7 +783,7 @@ export const Constants = {
       invite_status: ['pending', 'accepted', 'expired', 'cancelled'],
       job_priority: ['niedrig', 'mittel', 'hoch'],
       job_status: ['nicht_bearbeitet', 'in_bearbeitung', 'fertig'],
-      org_role: ['admin', 'employee', 'accountant', 'manager', 'secretary'],
+      org_role: ['admin', 'buero', 'employee'],
       project_status: ['nicht_begonnen', 'in_bearbeitung', 'abgeschlossen'],
       subscription_status: ['active', 'inactive', 'canceled', 'trialing'],
       time_entry_status: ['pending', 'approved', 'rejected', 'pending_delete']

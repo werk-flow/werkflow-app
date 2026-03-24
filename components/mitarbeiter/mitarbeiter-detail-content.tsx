@@ -69,22 +69,16 @@ import { cn } from '@/lib/utils';
 
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
-  manager: 2,
-  accountant: 3,
-  secretary: 4,
-  employee: 5,
+  buero: 2,
+  employee: 3,
 };
 
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = [
-  'manager',
-  'accountant',
-  'secretary',
+  'buero',
   'employee',
 ];
 
-const MANAGER_ASSIGNABLE_ROLES: OrgRole[] = [
-  'accountant',
-  'secretary',
+const BUERO_ASSIGNABLE_ROLES: OrgRole[] = [
   'employee',
 ];
 
@@ -165,14 +159,14 @@ export function MitarbeiterDetailContent({
     !isOwnRow &&
     member.role !== 'admin' &&
     (currentUserRole === 'admin' ||
-      (currentUserRole === 'manager' &&
-        ROLE_HIERARCHY[member.role] > ROLE_HIERARCHY['manager']));
+      (currentUserRole === 'buero' &&
+        ROLE_HIERARCHY[member.role] > ROLE_HIERARCHY['buero']));
 
   const availableRoles = useMemo(() => {
     const assignable =
       currentUserRole === 'admin'
         ? ADMIN_ASSIGNABLE_ROLES
-        : MANAGER_ASSIGNABLE_ROLES;
+        : BUERO_ASSIGNABLE_ROLES;
     return assignable.filter((r) => r !== member.role);
   }, [currentUserRole, member.role]);
 
@@ -181,7 +175,7 @@ export function MitarbeiterDetailContent({
     const assignable =
       currentUserRole === 'admin'
         ? ADMIN_ASSIGNABLE_ROLES
-        : MANAGER_ASSIGNABLE_ROLES;
+        : BUERO_ASSIGNABLE_ROLES;
     return assignable.map((r) => ({ value: r, label: ROLE_LABELS[r] }));
   }, [canManage, currentUserRole]);
 

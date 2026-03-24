@@ -269,7 +269,7 @@ export default async function AuftraegePage() {
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   return (
     <>

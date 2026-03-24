@@ -498,7 +498,7 @@ function JobCard({
     <div
       className={cn(
         'flex cursor-pointer items-start justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50',
-        indented && 'ml-6 border-l-2 border-l-muted-foreground/20'
+        indented && 'ml-6'
       )}
       onClick={() => router.push(detailHref)}
     >

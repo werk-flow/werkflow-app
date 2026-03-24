@@ -73,7 +73,7 @@ type JobOption = {
 
 interface ManualEntryDialogProps {
   /** Optional callback when entries are successfully added */
-  onSuccess?: () => void;
+  onSuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   /** Preselect a specific employee (for admins/managers) */
   preselectedUserId?: string;
   /** Pre-fill date */
@@ -131,7 +131,7 @@ export function ManualEntryDialog({
 
   // Check if user is admin or manager
   const isAdminOrManager =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'manager';
+    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const currentUserId = profile?.id || null;
 
   // Fetch members when dialog opens (for admin/manager)
@@ -299,7 +299,7 @@ export function ManualEntryDialog({
           } else {
             setSuccessMessage('Eintrag erfolgreich erstellt!');
           }
-          onSuccess?.();
+          await onSuccess?.(result.entries);
           setTimeout(() => {
             setOpen(false);
           }, 1500);

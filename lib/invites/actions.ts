@@ -11,8 +11,8 @@ import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 const emailSchema = z.string().email();
 
 // Valid roles for invitations (admin cannot be assigned via invite)
-export type InviteRole = 'manager' | 'accountant' | 'secretary' | 'employee';
-const VALID_INVITE_ROLES: InviteRole[] = ['manager', 'accountant', 'secretary', 'employee'];
+export type InviteRole = 'buero' | 'employee';
+const VALID_INVITE_ROLES: InviteRole[] = ['buero', 'employee'];
 
 export type SendInviteResult = {
   success: boolean;
@@ -59,7 +59,7 @@ export async function sendOrgInvite(
 
     const callerRole = callerMembership.role;
 
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 

@@ -47,9 +47,7 @@ interface EmployeeTimelineRowProps {
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
-  manager: 'Manager',
-  accountant: 'Buchhalter',
-  secretary: 'Sekretär',
+  buero: 'Büro',
   employee: 'Handwerker'
 };
 

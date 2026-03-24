@@ -12,17 +12,13 @@ import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/da
 // Lower number = higher rank
 const ROLE_HIERARCHY: Record<string, number> = {
   admin: 1,
-  manager: 2,
-  accountant: 3,
-  secretary: 4,
-  employee: 5
+  buero: 2,
+  employee: 3
 };
 
 export type OrgRole =
   | 'admin'
-  | 'manager'
-  | 'accountant'
-  | 'secretary'
+  | 'buero'
   | 'employee';
 
 export type UpdateRoleResult = {
@@ -81,7 +77,7 @@ export async function updateMemberRole(
     const callerRole = callerMembership.role as OrgRole;
 
     // Only admins and managers can change roles
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -112,15 +108,13 @@ export async function updateMemberRole(
       return { success: false, error: 'cannot_change_admin_role' };
     }
 
-    // Managers have additional restrictions
-    if (callerRole === 'manager') {
-      // Manager cannot change another manager's role (or anyone at/above manager level)
-      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['manager']) {
+    // Büro users have additional restrictions
+    if (callerRole === 'buero') {
+      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['buero']) {
         return { success: false, error: 'insufficient_permissions' };
       }
-      // Manager can only assign roles below manager level (not manager itself)
-      if (ROLE_HIERARCHY[newRole] <= ROLE_HIERARCHY['manager']) {
-        return { success: false, error: 'cannot_assign_manager_role' };
+      if (ROLE_HIERARCHY[newRole] <= ROLE_HIERARCHY['buero']) {
+        return { success: false, error: 'cannot_assign_buero_role' };
       }
     }
 
@@ -188,7 +182,7 @@ export async function removeMember(
     const callerRole = callerMembership.role as OrgRole;
 
     // Only admins and managers can remove members
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -215,10 +209,9 @@ export async function removeMember(
       return { success: false, error: 'cannot_remove_admin' };
     }
 
-    // Managers can only remove users below manager level
-    if (callerRole === 'manager') {
-      // Manager cannot remove another manager
-      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['manager']) {
+    // Büro users can only remove users below their level
+    if (callerRole === 'buero') {
+      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['buero']) {
         return { success: false, error: 'insufficient_permissions' };
       }
     }
@@ -347,7 +340,7 @@ export async function getOrgMembersAction(
     }
 
     const userRole = membership.role as OrgRole;
-    if (userRole !== 'admin' && userRole !== 'manager') {
+    if (userRole !== 'admin' && userRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -362,10 +355,9 @@ export async function getOrgMembersAction(
 
     let filtered = (members ?? []) as OrgMemberInfo[];
 
-    if (userRole === 'manager') {
-      const MANAGED_ROLES: OrgRole[] = ['accountant', 'secretary', 'employee'];
+    if (userRole === 'buero') {
       filtered = filtered.filter(
-        (m) => MANAGED_ROLES.includes(m.role as OrgRole) || m.role === 'manager'
+        (m) => m.role === 'employee' || m.role === 'buero'
       );
     }
 

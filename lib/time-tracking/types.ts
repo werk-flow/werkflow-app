@@ -206,12 +206,12 @@ export type ValidationResult = {
 /**
  * Roles that a manager can manage (roles below manager)
  */
-export const MANAGED_ROLES: OrgRole[] = ['accountant', 'secretary', 'employee'];
+export const MANAGED_ROLES: OrgRole[] = ['employee'];
 
 /**
  * Roles that can approve entries for others
  */
-export const APPROVER_ROLES: OrgRole[] = ['admin', 'manager'];
+export const APPROVER_ROLES: OrgRole[] = ['admin', 'buero'];
 
 /**
  * Convert database row to application type

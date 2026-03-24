@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     }
 
     const userRole = membership.role as OrgRole;
-    const isAdminOrManager = userRole === 'admin' || userRole === 'manager';
+    const isAdminOrManager = userRole === 'admin' || userRole === 'buero';
 
     if (!isAdminOrManager) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
@@ -59,11 +59,10 @@ export async function POST(request: Request) {
     // Filter members based on role (managers can only see managed roles)
     let filteredMembers = members || [];
 
-    if (userRole === 'manager') {
-      const MANAGED_ROLES: OrgRole[] = ['accountant', 'secretary', 'employee'];
+    if (userRole === 'buero') {
       filteredMembers = filteredMembers.filter(
         (m: { role: OrgRole }) =>
-          MANAGED_ROLES.includes(m.role) || m.role === 'manager'
+          m.role === 'employee' || m.role === 'buero'
       );
     }
 

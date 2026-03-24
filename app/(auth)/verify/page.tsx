@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 
 import { OTPForm } from '@/components/otp-form';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
+import { getCachedUser } from '@/lib/data/cached';
+import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 
 type SearchParamsInput =
   | Promise<Record<string, string | string[] | undefined>>
@@ -31,7 +33,10 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
   const { session } = await getSupabaseServerSession();
 
   if (session) {
-    redirect('/dashboard');
+    const { data: { user } } = await getCachedUser();
+    if (user) {
+      redirect(await getAuthenticatedRedirectPath(user.id));
+    }
   }
 
   const resolvedSearchParams =

@@ -47,11 +47,10 @@ async function KalenderData({
     const supabase = await createSupabaseServerClient();
     const { data } = await supabase.rpc('get_org_members', { p_org_id: activeOrgId });
     if (!data) return [];
-    if (currentUserRole === 'manager') {
-      const MANAGED_ROLES = ['accountant', 'secretary', 'employee'];
+    if (currentUserRole === 'buero') {
       return data.filter(
         (m: { role: string; user_id: string }) =>
-          MANAGED_ROLES.includes(m.role) || m.user_id === userId
+          m.role === 'employee' || m.user_id === userId
       );
     }
     return data;
@@ -132,7 +131,7 @@ export default async function KalenderPage() {
 
   const currentUserRole = currentMembership.role as OrgRole;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   return (
     <Suspense fallback={<KalenderContentSkeleton />}>

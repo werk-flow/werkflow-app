@@ -93,7 +93,7 @@ export default async function MitarbeiterPage() {
 
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');

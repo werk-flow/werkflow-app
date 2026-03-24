@@ -65,6 +65,16 @@ interface CalendarContainerProps {
   initialJobs?: CalendarJob[];
 }
 
+function sortEntriesByTimestamp(entries: TimeEntry[]): TimeEntry[] {
+  return [...entries].sort((a, b) => {
+    const timestampDiff =
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (timestampDiff !== 0) return timestampDiff;
+
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+}
+
 export function CalendarContainer({
   organizationId,
   currentUserId,
@@ -324,6 +334,30 @@ export function CalendarContainer({
     fetchJobs();
   }, [fetchEntries, fetchJobs]);
 
+  const handleManualEntrySuccess = useCallback(
+    async (newEntries: TimeEntry[]) => {
+      const { start, end } = getDateRange();
+      const visibleNewEntries = newEntries.filter((entry) => {
+        const timestamp = new Date(entry.timestamp).getTime();
+        return timestamp >= start.getTime() && timestamp <= end.getTime();
+      });
+
+      if (visibleNewEntries.length > 0) {
+        setEntries((prev) => {
+          const merged = new Map(prev.map((entry) => [entry.id, entry]));
+          for (const entry of visibleNewEntries) {
+            merged.set(entry.id, entry);
+          }
+          return sortEntriesByTimestamp(Array.from(merged.values()));
+        });
+        hasDataRef.current = true;
+      }
+
+      await Promise.all([fetchEntries(true), fetchJobs()]);
+    },
+    [fetchEntries, fetchJobs, getDateRange]
+  );
+
   // Navigation handlers
   const handlePrevious = useCallback(() => {
     setCurrentDate((prev) => {
@@ -452,6 +486,7 @@ export function CalendarContainer({
         onNext={handleNext}
         onToday={handleToday}
         onRefresh={handleManualRefresh}
+        onManualEntrySuccess={handleManualEntrySuccess}
       />
 
       <div className="border-b px-4 py-2 sm:px-6">

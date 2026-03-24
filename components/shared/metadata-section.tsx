@@ -192,8 +192,10 @@ function MetadataFieldRow({
         <span className="min-w-0 text-sm">{field.value ?? '—'}</span>
         {canEdit && (
           <button
+            type="button"
             onClick={startEditing}
-            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+            aria-label={`${field.label} bearbeiten`}
+            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-100 transition-opacity hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [@media(hover:hover)_and_(pointer:fine)]:opacity-0 [@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100"
           >
             <Pencil className="size-3" />
           </button>
