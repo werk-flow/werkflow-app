@@ -35,7 +35,7 @@ export async function cancelInvite(
       return { success: false, error: 'not_a_member' };
     }
 
-    if (membership.role !== 'admin' && membership.role !== 'manager') {
+    if (membership.role !== 'admin' && membership.role !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 

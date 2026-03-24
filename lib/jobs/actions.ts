@@ -17,6 +17,7 @@ import {
   type DeleteJobResult,
   type AssignEmployeeResult,
   type UnassignEmployeeResult,
+  normalizeJobPlannedTime,
   toJob,
   toClient,
   toProject,
@@ -119,7 +120,7 @@ export async function createJob(
         description: input.description?.trim() || null,
         priority: input.priority ?? 'mittel',
         planned_date: input.plannedDate || null,
-        planned_time: input.plannedTime || null,
+        planned_time: normalizeJobPlannedTime(input.plannedTime),
         estimated_duration_minutes: input.estimatedDurationMinutes ?? null,
         location: input.location?.trim() || null,
         created_by: userId,
@@ -224,7 +225,7 @@ export async function updateJob(
     if (input.plannedDate !== undefined)
       updateData.planned_date = input.plannedDate || null;
     if (input.plannedTime !== undefined)
-      updateData.planned_time = input.plannedTime || null;
+      updateData.planned_time = normalizeJobPlannedTime(input.plannedTime);
     if (input.estimatedDurationMinutes !== undefined)
       updateData.estimated_duration_minutes =
         input.estimatedDurationMinutes ?? null;
@@ -839,7 +840,7 @@ export async function getJobsForClient(
       ]),
     ];
 
-    let projects: ProjectWithDetails[] = [];
+    const projects: ProjectWithDetails[] = [];
     if (allProjectIds.length > 0) {
       const knownProjectMap = new Map(projectRows.map((p) => [p.id, p]));
 
@@ -1039,7 +1040,7 @@ export async function getJobsForMember(
         const clientIds = [...new Set(
           projectRows.filter((p) => p.client_id).map((p) => p.client_id!)
         )];
-        let projectClients: Record<string, ReturnType<typeof toClient>> = {};
+        const projectClients: Record<string, ReturnType<typeof toClient>> = {};
         if (clientIds.length > 0) {
           const { data: clientRows } = await admin
             .from('clients')
@@ -1199,7 +1200,7 @@ export async function getJobsForCalendar(
       status: j.status as JobStatus,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,
-      plannedTime: j.planned_time,
+      plannedTime: normalizeJobPlannedTime(j.planned_time),
       estimatedDurationMinutes: j.estimated_duration_minutes,
       location: j.location,
       clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,

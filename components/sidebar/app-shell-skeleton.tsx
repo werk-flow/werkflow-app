@@ -41,8 +41,8 @@ export function AppShellSkeleton() {
           </div>
         </div>
       </aside>
-      <div className="flex-1 overflow-hidden">
-        <main className="h-full overflow-auto p-4 sm:p-6">
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <main className="h-full overflow-hidden p-4 sm:p-6">
           <div className="space-y-4">
             <div className="h-8 w-48 rounded bg-muted animate-pulse" />
             <div className="h-64 w-full rounded-lg bg-muted animate-pulse" />

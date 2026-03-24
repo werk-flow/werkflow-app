@@ -1,5 +1,6 @@
 import type { TimeEntry, TimeEntryStatus, OrgRole, WorkSession } from './types';
 import { MANAGED_ROLES } from './types';
+import { toLocalDateString } from '@/lib/utils';
 
 // ── Time model constants ──────────────────────────────────────────────
 export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
@@ -77,11 +78,17 @@ export function computeRingSegments(totalMinutes: number): RingData {
  */
 export const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
-  manager: 2,
-  accountant: 3,
-  secretary: 4,
-  employee: 5
+  buero: 2,
+  employee: 3
 };
+
+function isSameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 /**
  * Check if a user has an open session (currently working)
@@ -98,27 +105,16 @@ export const ROLE_HIERARCHY: Record<OrgRole, number> = {
 export function hasOpenSession(entries: TimeEntry[]): boolean {
   if (entries.length === 0) return false;
 
-  // Get today's date boundaries (local time)
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    23,
-    59,
-    59,
-    999
-  );
 
-  // Filter to approved OR pending entries from today and sort by timestamp descending
-  // (Rejected and pending_delete entries are excluded as they should not affect state)
+  // Ignore future-dated entries when determining the current working state.
+  // This keeps buggy synthetic day-end rows from overriding a real open session.
   const todayActiveEntries = entries
     .filter((e) => {
       if (e.status === 'rejected' || e.status === 'pending_delete')
         return false;
       const entryDate = new Date(e.timestamp);
-      return entryDate >= todayStart && entryDate <= todayEnd;
+      return entryDate.getTime() <= now.getTime() && isSameLocalDay(entryDate, now);
     })
     .sort((a, b) => {
       const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -138,8 +134,12 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
  * Entries marked for deletion (pending_delete) are excluded.
  */
 export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
+  const now = new Date();
   const activeEntries = entries
-    .filter((e) => e.status !== 'rejected' && e.status !== 'pending_delete')
+    .filter((e) => {
+      if (e.status === 'rejected' || e.status === 'pending_delete') return false;
+      return new Date(e.timestamp).getTime() <= now.getTime();
+    })
     .sort((a, b) => {
       const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       if (diff !== 0) return diff;
@@ -171,7 +171,7 @@ export function determineApprovalStatus(
   }
 
   // Manager adding entry
-  if (callerRole === 'manager') {
+  if (callerRole === 'buero') {
     // For self → needs admin approval
     if (isForSelf) {
       return 'pending';
@@ -204,7 +204,7 @@ export function canManageEntries(
   }
 
   // Manager can manage entries for managed roles
-  if (callerRole === 'manager') {
+  if (callerRole === 'buero') {
     // Managers can manage their own entries (with approval required)
     if (isOwnEntry) {
       return true;
@@ -226,7 +226,7 @@ export function needsChangeRequest(
   isOwnEntry: boolean
 ): boolean {
   // Manager editing their own entry needs admin approval
-  if (callerRole === 'manager' && isOwnEntry) {
+  if (callerRole === 'buero' && isOwnEntry) {
     return true;
   }
 
@@ -250,7 +250,7 @@ export function canApproveEntries(
   }
 
   // Manager can approve entries for managed roles only
-  if (callerRole === 'manager') {
+  if (callerRole === 'buero') {
     return MANAGED_ROLES.includes(targetRole);
   }
 
@@ -282,7 +282,7 @@ export function canViewEntries(
   }
 
   // Manager can see entries for managed roles
-  if (callerRole === 'manager' && targetRole) {
+  if (callerRole === 'buero' && targetRole) {
     return MANAGED_ROLES.includes(targetRole);
   }
 
@@ -351,7 +351,7 @@ export function groupEntriesByDate(
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
-    const date = new Date(entry.timestamp).toISOString().split('T')[0];
+    const date = toLocalDateString(new Date(entry.timestamp));
     if (!grouped[date]) {
       grouped[date] = [];
     }
@@ -394,7 +394,7 @@ export function canAddEntriesFor(
   }
 
   // Manager can add entries for managed roles
-  if (callerRole === 'manager') {
+  if (callerRole === 'buero') {
     return MANAGED_ROLES.includes(targetRole);
   }
 

@@ -116,16 +116,14 @@ WerkFlow is a Next.js 15 application with Supabase for authentication and databa
 #### `org_role`
 Values (in hierarchy order, highest to lowest):
 1. `admin` - Organization owner, full permissions
-2. `manager` - Can manage members and invites (up to manager role)
-3. `accountant` - Standard member
-4. `secretary` - Standard member
-5. `employee` - Lowest role, basic access
+2. `buero` - Can manage members and invites (up to buero role)
+3. `employee` - Lowest role, basic access
 
 #### `invite_status`
 - `pending` - Awaiting acceptance
 - `accepted` - User joined the organization
 - `expired` - Invite expired (by date)
-- `cancelled` - Admin/manager revoked the invite
+- `cancelled` - Admin/Büro revoked the invite
 
 #### `client_type`
 - `privat` - Private/individual client
@@ -164,8 +162,8 @@ get_user_org_ids(p_user_id uuid) RETURNS uuid[]
 -- Checks if a user is a member of a specific org
 is_member_of_org(p_org_id uuid, p_user_id uuid) RETURNS boolean
 
--- Returns org IDs where user is admin or manager
-get_user_manager_or_admin_org_ids(p_user_id uuid) RETURNS uuid[]
+-- Returns org IDs where user is admin or buero
+get_user_admin_or_manager_org_ids(p_user_id uuid) RETURNS uuid[]
 
 -- Checks if email exists in auth.users (for invite validation)
 check_user_exists_by_email(p_email text) RETURNS {user_id, user_exists}
@@ -184,14 +182,14 @@ generate_job_number(p_org_id uuid) RETURNS text
 - **profiles**: Users can SELECT/UPDATE their own profile only
 - **organizations**: Users can SELECT orgs they're members of
 - **organization_members**: Users can SELECT members of orgs they belong to
-- **organization_invites**: Only admins/managers can SELECT invites for their orgs
+- **organization_invites**: Only admins/Büro can SELECT invites for their orgs
 - **subscriptions**: Users can SELECT their own subscription only
 - **clients**: Users can SELECT clients in orgs they belong to
 - **projects**: Users can SELECT projects in orgs they belong to
 - **jobs**: Users can SELECT jobs in orgs they belong to
 - **job_assignments**: Users can SELECT assignments for jobs in their orgs
 
-**Note**: Non-admin/manager filtering (e.g., employees only see their assigned jobs) is enforced at the query level in server actions, not via RLS policies.
+**Note**: Non-admin/buero filtering (e.g., employees only see their assigned jobs) is enforced at the query level in server actions, not via RLS policies.
 
 ---
 
@@ -283,7 +281,7 @@ generate_job_number(p_org_id uuid) RETURNS text
 
 ### Organization Info Card (Dashboard)
 - Shows org name, member count
-- Shows unique code with copy button (admins/managers only)
+- Shows unique code with copy button (admins/Büro only)
 - "Organisation löschen" button (admins only)
 
 ### Organization Deletion
@@ -302,7 +300,7 @@ generate_job_number(p_org_id uuid) RETURNS text
 ## Role Management
 
 ### Role Hierarchy
-`admin` > `manager` > `accountant` > `secretary` > `employee`
+`admin` > `buero` > `employee`
 
 ### Permissions Matrix
 
@@ -310,9 +308,9 @@ generate_job_number(p_org_id uuid) RETURNS text
 |--------|-------|---------|--------|
 | View Mitarbeiter tab | ✅ | ✅ | ❌ |
 | Invite users | ✅ | ✅ | ❌ |
-| Max invitable role | manager | manager | - |
-| Change roles | Up to manager | Below manager | ❌ |
-| Remove members | All roles | Below manager | ❌ |
+| Max invitable role | buero | buero | - |
+| Change roles | Up to buero | Below buero | ❌ |
+| Remove members | All roles | Below buero | ❌ |
 | Delete organization | ✅ | ❌ | ❌ |
 | Create/edit/delete jobs | ✅ | ✅ | ❌ |
 | Create/edit/delete projects | ✅ | ✅ | ❌ |
@@ -324,9 +322,7 @@ generate_job_number(p_org_id uuid) RETURNS text
 ```typescript
 const ROLE_LABELS = {
   admin: 'Admin',
-  manager: 'Manager/in',
-  accountant: 'Buchhalter/in',
-  secretary: 'Sekretär/in',
+  buero: 'Büro',
   employee: 'Handwerker/in',
 }
 ```
@@ -336,8 +332,8 @@ const ROLE_LABELS = {
 ## Invitation System
 
 ### Sending Invites
-1. Admin/manager opens invite dialog in Mitarbeiter page
-2. Enters email and selects role (manager, accountant, secretary, employee)
+1. Admin/Büro opens invite dialog in Mitarbeiter page
+2. Enters email and selects role (buero, employee)
 3. Server action `sendOrgInvite`:
    - Validates email format
    - Checks if user is already a member → error
@@ -361,7 +357,7 @@ const ROLE_LABELS = {
 3. Returns organization ID for redirect
 
 ### Invite Cancellation
-- Admin/manager can cancel pending invites
+- Admin/Büro can cancel pending invites
 - Sets status to 'cancelled'
 - Cancelled invites remain in list with status badge
 - Same email can be invited again after cancellation
@@ -375,7 +371,7 @@ const ROLE_LABELS = {
 ## Mitarbeiter (Employees) Page
 
 ### Access Control
-- Only admins and managers can access
+- Only admins and Büro can access
 - Others redirected to `/dashboard`
 
 ### Tabbed Interface
@@ -629,6 +625,6 @@ lib/
 
 ### Role Changes
 - Users cannot change their own role
-- Managers cannot assign manager role (only admins can promote to manager via invite)
-- Managers can only remove users below manager level
+- Büro cannot assign buero role (only admins can promote to buero via invite)
+- Büro can only remove users below buero level
 

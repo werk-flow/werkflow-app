@@ -230,6 +230,22 @@ export function toProject(row: ProjectRow): Project {
   };
 }
 
+export function normalizeJobPlannedTime(
+  plannedTime: string | null | undefined
+): string | null {
+  if (!plannedTime) return null;
+
+  const trimmed = plannedTime.trim();
+  if (!trimmed) return null;
+
+  const [hours = '', minutes = ''] = trimmed.split(':');
+  if (!hours || !minutes) {
+    return trimmed;
+  }
+
+  return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+}
+
 export function toJob(row: JobRow): Job {
   return {
     id: row.id,
@@ -242,7 +258,7 @@ export function toJob(row: JobRow): Job {
     status: row.status,
     priority: row.priority,
     plannedDate: row.planned_date,
-    plannedTime: row.planned_time,
+    plannedTime: normalizeJobPlannedTime(row.planned_time),
     estimatedDurationMinutes: row.estimated_duration_minutes,
     actualCompletionDate: row.actual_completion_date,
     location: row.location,
@@ -309,7 +325,7 @@ export const UNIFIED_STATUS_LABELS: Record<UnifiedStatus, string> = {
 // Constants
 // ============================================
 
-export const MANAGER_ROLES: OrgRole[] = ['admin', 'manager'];
+export const MANAGER_ROLES: OrgRole[] = ['admin', 'buero'];
 
 export const JOB_STATUS_ORDER: JobStatus[] = [
   'nicht_bearbeitet',

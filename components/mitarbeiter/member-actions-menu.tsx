@@ -35,24 +35,16 @@ import { ROLE_LABELS } from '@/lib/roles';
 // Role hierarchy - lower number = higher rank
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
-  manager: 2,
-  accountant: 3,
-  secretary: 4,
-  employee: 5
+  buero: 2,
+  employee: 3
 };
 
-// Roles that admins can assign (admin cannot be assigned)
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = [
-  'manager',
-  'accountant',
-  'secretary',
+  'buero',
   'employee'
 ];
 
-// Roles that managers can assign (only roles below manager)
-const MANAGER_ASSIGNABLE_ROLES: OrgRole[] = [
-  'accountant',
-  'secretary',
+const BUERO_ASSIGNABLE_ROLES: OrgRole[] = [
   'employee'
 ];
 
@@ -93,30 +85,27 @@ export function MemberActionsMenu({
 
   // Check if current user can manage this member
   const canManage =
-    (currentUserRole === 'admin' || currentUserRole === 'manager') &&
+    (currentUserRole === 'admin' || currentUserRole === 'buero') &&
     !isOwnRow &&
     memberRole !== 'admin';
 
-  // Managers can only manage users below their level
-  const canManagerManage =
-    currentUserRole === 'manager' &&
-    ROLE_HIERARCHY[memberRole] > ROLE_HIERARCHY['manager'];
+  const canBueroManage =
+    currentUserRole === 'buero' &&
+    ROLE_HIERARCHY[memberRole] > ROLE_HIERARCHY['buero'];
 
   // Admins can manage anyone except themselves
   const canAdminManage =
     currentUserRole === 'admin' && !isOwnRow && memberRole !== 'admin';
 
   // Determine if current user can actually manage this member
-  const canActuallyManage = canAdminManage || canManagerManage;
+  const canActuallyManage = canAdminManage || canBueroManage;
 
-  // Get available roles for assignment based on current user's role
   const getAvailableRoles = (): OrgRole[] => {
-    // Admins can assign up to manager, managers can only assign below manager
+    if (!canActuallyManage) return [];
     const assignableRoles =
       currentUserRole === 'admin'
         ? ADMIN_ASSIGNABLE_ROLES
-        : MANAGER_ASSIGNABLE_ROLES;
-    // Filter out the current role (no point in assigning the same role)
+        : BUERO_ASSIGNABLE_ROLES;
     return assignableRoles.filter((role) => role !== memberRole);
   };
 

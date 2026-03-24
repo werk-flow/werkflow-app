@@ -26,7 +26,6 @@ import {
   type RequestChangeResult,
   type ReviewChangeRequestResult,
   type GetChangeRequestsResult,
-  type EntryChangeRequestMap,
   toTimeEntry,
   toTimeEntries,
   toChangeRequest,
@@ -83,6 +82,7 @@ async function getUserTodayEntries(
   orgId: string
 ): Promise<TimeEntryRow[]> {
   const { start, end } = getTodayBounds();
+  const nowIso = new Date().toISOString();
 
   const { data, error } = await admin
     .from('time_entries')
@@ -90,7 +90,7 @@ async function getUserTodayEntries(
     .eq('user_id', userId)
     .eq('organization_id', orgId)
     .gte('timestamp', start.toISOString())
-    .lte('timestamp', end.toISOString())
+    .lte('timestamp', nowIso < end.toISOString() ? nowIso : end.toISOString())
     .neq('status', 'rejected')
     .neq('status', 'pending_delete')
     .order('timestamp', { ascending: false })
@@ -144,13 +144,14 @@ async function getOpenSessionOrgsForUserToday(
   userId: string
 ): Promise<OpenSessionOrg[]> {
   const { start, end } = getTodayBounds();
+  const nowIso = new Date().toISOString();
 
   const { data: rows, error } = await admin
     .from('time_entries')
     .select('organization_id, entry_type, timestamp, status')
     .eq('user_id', userId)
     .gte('timestamp', start.toISOString())
-    .lte('timestamp', end.toISOString())
+    .lte('timestamp', nowIso < end.toISOString() ? nowIso : end.toISOString())
     .neq('status', 'rejected')
     .neq('status', 'pending_delete')
     .order('timestamp', { ascending: false });
@@ -1065,7 +1066,7 @@ export async function getPendingEntries(
     }
 
     // Only admin and manager can see pending entries
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: true, entries: [] };
     }
 
@@ -1128,7 +1129,7 @@ export async function getPendingApprovalCount(
     if (!user) return 0;
 
     const callerRole = await verifyMembershipFromCache(user.id, orgId);
-    if (!callerRole || (callerRole !== 'admin' && callerRole !== 'manager')) {
+    if (!callerRole || (callerRole !== 'admin' && callerRole !== 'buero')) {
       return 0;
     }
 
@@ -1183,7 +1184,7 @@ export async function getPendingSessions(
     }
 
     // Only admin and manager can see pending entries
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: true, sessions: [] };
     }
 
@@ -1373,7 +1374,7 @@ export async function getCurrentlyClockedIn(
       return { success: false, error: 'not_a_member' };
     }
 
-    if (callerRole !== 'admin' && callerRole !== 'manager') {
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
       return { success: false, error: 'not_authorized' };
     }
 
@@ -1414,7 +1415,7 @@ export async function getCurrentlyClockedIn(
     // Batch-fetch today's entries for all visible members at once
     // instead of one query per member (N+1 elimination).
     const memberUserIds = visibleMembers.map((m) => m.user_id);
-    const { start, end } = getTodayBounds();
+    const { start } = getTodayBounds();
 
     const { data: allTodayEntries, error: todayError } = await admin
       .from('time_entries')
@@ -1422,7 +1423,7 @@ export async function getCurrentlyClockedIn(
       .eq('organization_id', orgId)
       .in('user_id', memberUserIds)
       .gte('timestamp', start.toISOString())
-      .lte('timestamp', end.toISOString())
+      .lte('timestamp', new Date().toISOString())
       .neq('status', 'rejected')
       .neq('status', 'pending_delete')
       .order('timestamp', { ascending: false });
@@ -2354,7 +2355,7 @@ export async function getJobsForPicker(
     }
 
     const admin = createSupabaseAdminClient();
-    const isManagerOrAbove = role === 'admin' || role === 'manager';
+    const isManagerOrAbove = role === 'admin' || role === 'buero';
 
     let jobIds: string[] | null = null;
 
@@ -2454,14 +2455,14 @@ export async function getActiveJobIdsForOrg(
     }
 
     const admin = createSupabaseAdminClient();
-    const { start, end } = getTodayBounds();
+    const { start } = getTodayBounds();
 
     const { data: todayEntries, error } = await admin
       .from('time_entries')
       .select('user_id, entry_type, timestamp, job_id')
       .eq('organization_id', organizationId)
       .gte('timestamp', start.toISOString())
-      .lte('timestamp', end.toISOString())
+      .lte('timestamp', new Date().toISOString())
       .neq('status', 'rejected')
       .neq('status', 'pending_delete')
       .order('timestamp', { ascending: false });

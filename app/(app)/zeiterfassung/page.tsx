@@ -56,11 +56,10 @@ async function ZeiterfassungData({
     }
 
     if (membersData) {
-      if (currentUserRole === 'manager') {
-        const MANAGED_ROLES = ['accountant', 'secretary', 'employee'];
+      if (currentUserRole === 'buero') {
         members = membersData.filter(
           (m: { role: string; user_id: string }) =>
-            MANAGED_ROLES.includes(m.role) || m.user_id === userId
+            m.role === 'employee' || m.user_id === userId
         );
       } else {
         members = membersData;
@@ -123,7 +122,7 @@ export default async function ZeiterfassungPage({
 
   const currentUserRole = currentMembership.role as OrgRole;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
   const isAdmin = currentUserRole === 'admin';
 
   return (

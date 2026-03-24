@@ -15,6 +15,7 @@ import {
   getCachedSubscriptionStatus,
   getCachedUserProfile,
 } from '@/lib/data/cached';
+import { ONBOARDING_START_PATH } from '@/lib/auth/redirects';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 
 async function AppProviders({ children }: { children: React.ReactNode }) {
@@ -31,6 +32,10 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
     resolveActiveOrgId(cookieStore, user.id),
     getCachedUserProfile(user.id, user.email!),
   ]);
+
+  if (memberships.length === 0) {
+    redirect(ONBOARDING_START_PATH);
+  }
 
   return (
     <OrganizationProvider

@@ -26,12 +26,13 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
 
   // Use the server-provided member count
   const memberCount = initialMemberCount;
+  const organizationCode = activeOrg?.uniqueCode.trim();
 
   const handleCopyCode = async () => {
-    if (!activeOrg?.uniqueCode) return;
+    if (!organizationCode) return;
 
     try {
-      await navigator.clipboard.writeText(activeOrg.uniqueCode);
+      await navigator.clipboard.writeText(organizationCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
@@ -72,15 +73,13 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
         </div>
 
         {/* Organization code - visible to admins and managers */}
-        {(activeOrg.role === 'admin' || activeOrg.role === 'manager') && (
+        {(activeOrg.role === 'admin' || activeOrg.role === 'buero') && (
           <div className="rounded-lg border bg-muted/50 p-3">
             <p className="mb-1 text-xs text-muted-foreground">
               Organisationscode
             </p>
             <div className="flex items-center justify-between gap-2">
-              <code className="text-lg font-mono font-semibold tracking-wider">
-                {activeOrg.uniqueCode}
-              </code>
+              <code className="text-lg font-mono font-semibold tracking-wider">{organizationCode}</code>
               <Button
                 variant="ghost"
                 size="sm"

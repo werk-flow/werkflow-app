@@ -1,7 +1,9 @@
-import { Suspense } from "react";
-import { redirect } from "next/navigation";
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 
-import { getSupabaseServerSession } from "@/lib/supabase/server";
+import { getSupabaseServerSession } from '@/lib/supabase/server';
+import { getCachedUser } from '@/lib/data/cached';
+import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 
 export default function Home() {
   return (
@@ -13,6 +15,16 @@ export default function Home() {
 
 async function HomeRedirect() {
   const { session } = await getSupabaseServerSession();
-  redirect(session ? "/dashboard" : "/login");
+
+  if (!session) {
+    redirect('/login');
+  }
+
+  const { data: { user } } = await getCachedUser();
+  if (!user) {
+    redirect('/login');
+  }
+
+  redirect(await getAuthenticatedRedirectPath(user.id));
   return null;
 }

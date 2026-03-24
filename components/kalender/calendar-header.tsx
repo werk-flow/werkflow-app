@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ManualEntryDialog } from '@/components/manual-entry-dialog';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarView } from './calendar-container';
 
 interface CalendarHeaderProps {
@@ -18,6 +19,7 @@ interface CalendarHeaderProps {
   onNext: () => void;
   onToday: () => void;
   onRefresh: () => void;
+  onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
 }
 
 const MONTH_NAMES = [
@@ -98,7 +100,8 @@ export function CalendarHeader({
   onPrevious,
   onNext,
   onToday,
-  onRefresh
+  onRefresh,
+  onManualEntrySuccess
 }: CalendarHeaderProps) {
   const now = new Date();
   const isCurrentPeriod =
@@ -165,7 +168,7 @@ export function CalendarHeader({
       <div className="flex items-center gap-3">
         <ManualEntryDialog
           preselectedDate={currentDate}
-          onSuccess={onRefresh}
+          onSuccess={onManualEntrySuccess}
           trigger={
             <Button size="default" className="gap-2">
               <CalendarPlus className="size-4" />

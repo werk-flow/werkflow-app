@@ -14,6 +14,8 @@ import {
   getSupabaseServerSession,
   createSupabaseServerClient
 } from '@/lib/supabase/server';
+import { getCachedUser } from '@/lib/data/cached';
+import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 
 import { LoginForm } from './login-form';
 
@@ -44,9 +46,11 @@ export default async function LoginPage({
     redirect(`/auth/callback?invite_code=${inviteCode}`);
   }
 
-  // If user is logged in without invite code, just go to dashboard
   if (session) {
-    redirect('/dashboard');
+    const { data: { user } } = await getCachedUser();
+    if (user) {
+      redirect(await getAuthenticatedRedirectPath(user.id));
+    }
   }
 
   const successMessage = params.message

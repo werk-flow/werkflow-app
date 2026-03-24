@@ -20,9 +20,7 @@ import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status-polling';
 
 // Roles that managers can view status for (same as MANAGED_ROLES in time-tracking/types.ts)
-const MANAGER_VIEWABLE_ROLES: OrgRole[] = [
-  'accountant',
-  'secretary',
+const BUERO_VIEWABLE_ROLES: OrgRole[] = [
   'employee'
 ];
 
@@ -44,8 +42,8 @@ function canViewMemberStatus(
   if (currentUserId === memberId) return true;
 
   // Managers can only view managed roles
-  if (currentUserRole === 'manager') {
-    return MANAGER_VIEWABLE_ROLES.includes(memberRole);
+  if (currentUserRole === 'buero') {
+    return BUERO_VIEWABLE_ROLES.includes(memberRole);
   }
 
   // Default: can't view
@@ -229,7 +227,7 @@ export function MembersTable({
 }: MembersTableProps) {
   const router = useRouter();
   const canManageMembers =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   // Show skeleton loading state
   if (isLoading && skeletonCount > 0) {

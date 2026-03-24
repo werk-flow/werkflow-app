@@ -37,7 +37,7 @@ async function ProjectDetailData({
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   const admin = createSupabaseAdminClient();
   const supabase = await createSupabaseServerClient();

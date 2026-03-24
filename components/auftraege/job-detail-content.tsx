@@ -20,7 +20,6 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,22 +66,22 @@ import {
 } from '@/lib/jobs/actions';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import {
   type JobWithDetails,
-  type Client,
   type JobStatus,
   type JobPriority,
   type Project,
   JOB_STATUS_LABELS,
   JOB_PRIORITY_LABELS,
   CLIENT_TYPE_LABELS,
+  normalizeJobPlannedTime,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 
-const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'manager'];
+const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'buero'];
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
@@ -117,6 +116,10 @@ function formatDateTime(dateStr: string): string {
   });
 }
 
+function formatPlannedTime(plannedTime: string | null): string {
+  return normalizeJobPlannedTime(plannedTime) ?? '—';
+}
+
 function formatDuration(minutes: number | null): string {
   if (!minutes) return '—';
   const h = Math.floor(minutes / 60);
@@ -135,7 +138,6 @@ function getInitials(firstName: string | null, lastName: string | null): string 
 interface JobDetailContentProps {
   job: JobWithDetails;
   parentProject?: Pick<Project, 'id' | 'name' | 'projectNumber'>;
-  clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
 }
@@ -143,7 +145,6 @@ interface JobDetailContentProps {
 export function JobDetailContent({
   job,
   parentProject,
-  clients,
   members,
   isAdminOrManager,
 }: JobDetailContentProps) {
@@ -374,11 +375,11 @@ export function JobDetailContent({
     },
     {
       label: 'Geplante Uhrzeit',
-      value: job.plannedTime || '—',
+      value: formatPlannedTime(job.plannedTime),
       editableConfig: isAdminOrManager
         ? {
             type: 'text',
-            currentValue: job.plannedTime ?? '',
+            currentValue: normalizeJobPlannedTime(job.plannedTime) ?? '',
             onSave: async (v) => {
               await updateJob(job.id, { plannedTime: v || undefined });
             },

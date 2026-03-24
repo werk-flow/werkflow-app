@@ -5,9 +5,7 @@ import type { OrgRole } from '@/lib/members/actions';
  */
 export const ROLE_LABELS: Record<OrgRole, string> = {
   admin: 'Admin',
-  manager: 'Manager/in',
-  accountant: 'Buchhalter/in',
-  secretary: 'Sekretär/in',
+  buero: 'Büro',
   employee: 'Handwerker/in'
 };
 

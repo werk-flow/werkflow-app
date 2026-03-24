@@ -138,29 +138,29 @@ export function OTPForm({
             console.error('Failed to redeem invite:', result);
             if (result.error === 'email_mismatch') {
               const invitedEmail = result.invitedEmail || '';
-              window.location.href = `/invite-error?error=email_mismatch&email=${encodeURIComponent(
+              window.location.assign(`/invite-error?error=email_mismatch&email=${encodeURIComponent(
                 invitedEmail
-              )}&invite_code=${effectiveInviteCode}`;
+              )}&invite_code=${effectiveInviteCode}`);
               return;
             }
             if (result.error === 'admin_mismatch') {
-              window.location.href = '/invite-error?error=admin_mismatch';
+              window.location.assign('/invite-error?error=admin_mismatch');
               return;
             }
             if (result.error === 'invite_expired') {
-              window.location.href = '/invite-error?error=invite_expired';
+              window.location.assign('/invite-error?error=invite_expired');
               return;
             }
             if (result.error === 'invite_cancelled') {
-              window.location.href = '/invite-error?error=invite_cancelled';
+              window.location.assign('/invite-error?error=invite_cancelled');
               return;
             }
             if (result.error === 'invite_already_used') {
-              window.location.href = '/invite-error?error=invite_already_used';
+              window.location.assign('/invite-error?error=invite_already_used');
               return;
             }
             if (result.error === 'invalid_invite') {
-              window.location.href = '/invite-error?error=invalid_invite';
+              window.location.assign('/invite-error?error=invalid_invite');
               return;
             }
             // For other errors, continue to dashboard
@@ -172,9 +172,11 @@ export function OTPForm({
             });
             // Use hard navigation to ensure the cookie is read correctly
             if (result.alreadyMember) {
-              window.location.href = `/dashboard?already_member=${result.organizationId}`;
+              window.location.assign(
+                `/dashboard?already_member=${result.organizationId}`
+              );
             } else {
-              window.location.href = `/dashboard?joined=${result.organizationId}`;
+              window.location.assign(`/dashboard?joined=${result.organizationId}`);
             }
             return;
           }
@@ -184,7 +186,7 @@ export function OTPForm({
         }
       }
 
-      router.replace('/dashboard');
+      router.replace('/');
       router.refresh();
     } catch (error) {
       console.error('Unexpected error verifying OTP', error);

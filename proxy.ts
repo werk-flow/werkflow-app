@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+
 const PROTECTED_PREFIXES = [
   '/dashboard',
   '/kalender',
@@ -39,42 +40,21 @@ export async function proxy(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value;
+        getAll() {
+          return req.cookies.getAll();
         },
-        set(name: string, value: string, options: any) {
-          req.cookies.set({
-            name,
-            value,
-            ...options
-          });
+        setAll(cookiesToSet: { name: string; value: string; options: Parameters<typeof response.cookies.set>[2] }[]) {
+          cookiesToSet.forEach(({ name, value }) =>
+            req.cookies.set(name, value)
+          );
           response = NextResponse.next({
             request: {
               headers: req.headers
             }
           });
-          response.cookies.set({
-            name,
-            value,
-            ...options
-          });
-        },
-        remove(name: string, options: any) {
-          req.cookies.set({
-            name,
-            value: '',
-            ...options
-          });
-          response = NextResponse.next({
-            request: {
-              headers: req.headers
-            }
-          });
-          response.cookies.set({
-            name,
-            value: '',
-            ...options
-          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
         }
       }
     }
@@ -108,13 +88,6 @@ export async function proxy(req: NextRequest) {
 
   const isVerifyRoute = normalizedPath === '/verify';
 
-  if (isVerifyRoute && hasSession) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = '/dashboard';
-    redirectUrl.search = '';
-    return NextResponse.redirect(redirectUrl);
-  }
-
   if (isVerifyRoute && !hasSession) {
     const emailParam = req.nextUrl.searchParams.get('email');
     if (!emailParam) {
@@ -130,12 +103,6 @@ export async function proxy(req: NextRequest) {
   if (shouldRedirectToLogin) {
     const redirectUrl = req.nextUrl.clone();
     redirectUrl.pathname = '/login';
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (hasSession && isRoot) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = '/dashboard';
     return NextResponse.redirect(redirectUrl);
   }
 

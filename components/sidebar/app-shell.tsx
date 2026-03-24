@@ -166,7 +166,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }, [pathname]);
 
   const isAdminOrManager =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'manager';
+    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const isAdmin = activeOrg?.role === 'admin';
 
   const fetchPendingCount = useCallback(async () => {
@@ -456,8 +456,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <MobileHeader />
         <DesktopSidebar />
         <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
-        <div className="relative flex-1 overflow-hidden">
-          <main className="h-full overflow-auto">{children}</main>
+        <div className="relative min-h-0 flex-1 overflow-hidden">
+          <main className="h-full overflow-hidden">{children}</main>
           <OrgSwitchOverlay />
         </div>
       </div>

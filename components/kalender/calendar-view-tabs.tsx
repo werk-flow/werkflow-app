@@ -50,6 +50,7 @@ export function CalendarViewTabs({
   onFiltersChange
 }: CalendarViewTabsProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isMemberFilterOpen, setIsMemberFilterOpen] = useState(false);
 
   const filteredMembers = members.filter((member) => {
     const name = getMemberDisplayName(member).toLowerCase();
@@ -74,6 +75,14 @@ export function CalendarViewTabs({
     onSelectedMembersChange([]);
   };
 
+  const handleMemberFilterOpenChange = (open: boolean) => {
+    setIsMemberFilterOpen(open);
+
+    if (!open) {
+      setSearchQuery('');
+    }
+  };
+
   const handleToggleWorkingHours = () => {
     onFiltersChange({
       ...filters,
@@ -87,6 +96,78 @@ export function CalendarViewTabs({
       showJobs: !filters.showJobs
     });
   };
+
+  const memberFilterContent = (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Mitarbeiter suchen..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-8"
+        />
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSelectAll}
+          className="flex-1 text-xs"
+        >
+          Alle auswählen
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSelectNone}
+          className="flex-1 text-xs"
+        >
+          Keine auswählen
+        </Button>
+      </div>
+
+      <div className="max-h-60 overflow-auto">
+        {filteredMembers.length === 0 ? (
+          <p className="py-2 text-center text-sm text-muted-foreground">
+            Keine Mitarbeiter gefunden
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {filteredMembers.map((member) => (
+              <button
+                key={member.user_id}
+                type="button"
+                onClick={() => handleToggleMember(member.user_id)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                  'hover:bg-accent',
+                  selectedMembers.includes(member.user_id) && 'bg-accent/50'
+                )}
+              >
+                <div
+                  className={cn(
+                    'flex h-4 w-4 items-center justify-center rounded-sm border',
+                    selectedMembers.includes(member.user_id)
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-muted-foreground'
+                  )}
+                >
+                  {selectedMembers.includes(member.user_id) && (
+                    <Check className="h-3 w-3" />
+                  )}
+                </div>
+                <span className="flex-1 truncate text-left">
+                  {getMemberDisplayName(member)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -158,83 +239,24 @@ export function CalendarViewTabs({
       </div>
 
       {isAdminOrManager && members.length > 0 && (
-        <Popover>
+        <Popover
+          open={isMemberFilterOpen}
+          onOpenChange={handleMemberFilterOpenChange}
+        >
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm">
               <Filter className="mr-2 h-4 w-4" />
               Mitarbeiter ({selectedMembers.length})
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-72" align="end">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Mitarbeiter suchen..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectAll}
-                  className="flex-1 text-xs"
-                >
-                  Alle auswählen
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSelectNone}
-                  className="flex-1 text-xs"
-                >
-                  Keine auswählen
-                </Button>
-              </div>
-
-              <div className="max-h-60 overflow-auto">
-                {filteredMembers.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-2">
-                    Keine Mitarbeiter gefunden
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {filteredMembers.map((member) => (
-                      <button
-                        key={member.user_id}
-                        onClick={() => handleToggleMember(member.user_id)}
-                        className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-                          'hover:bg-accent',
-                          selectedMembers.includes(member.user_id) &&
-                            'bg-accent/50'
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'flex h-4 w-4 items-center justify-center rounded-sm border',
-                            selectedMembers.includes(member.user_id)
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-muted-foreground'
-                          )}
-                        >
-                          {selectedMembers.includes(member.user_id) && (
-                            <Check className="h-3 w-3" />
-                          )}
-                        </div>
-                        <span className="flex-1 truncate text-left">
-                          {getMemberDisplayName(member)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+          <PopoverContent
+            className="w-[min(20rem,calc(100vw-1rem))] p-3 sm:w-72 sm:p-4"
+            align="center"
+            side="bottom"
+            collisionPadding={8}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+          >
+            {memberFilterContent}
           </PopoverContent>
         </Popover>
       )}

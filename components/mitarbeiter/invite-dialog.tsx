@@ -28,9 +28,7 @@ import { cn } from '@/lib/utils';
 
 // Role labels for the dropdown (using gender-inclusive German format)
 const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
-  { value: 'manager', label: 'Manager/in' },
-  { value: 'accountant', label: 'Buchhalter/in' },
-  { value: 'secretary', label: 'Sekretär/in' },
+  { value: 'buero', label: 'Büro' },
   { value: 'employee', label: 'Handwerker/in' }
 ];
 

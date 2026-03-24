@@ -33,7 +33,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'manager';
+    currentUserRole === 'admin' || currentUserRole === 'buero';
 
   if (!isAdminOrManager) {
     redirect('/dashboard');

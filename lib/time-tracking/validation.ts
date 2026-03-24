@@ -1,10 +1,17 @@
 import type {
   TimeEntry,
-  TimeEntryType,
   ManualEntryInput,
   ValidationResult,
   WorkSession
 } from './types';
+
+function isSameLocalDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 /**
  * Check if two timestamps are in the same minute (minute-level overlap)
@@ -95,10 +102,16 @@ function determinePendingState(
  * - Unpaired clock_in from TODAY → open session (user is currently working)
  */
 export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
-  // Filter to approved, pending, or pending_delete entries (exclude only rejected) and sort by timestamp
-  // pending_delete entries are shown with hatched styling in the calendar
+  const now = new Date();
+
+  // Future entries are invalid for time tracking and can break "currently working"
+  // state if they slip into the database. Ignore them while deriving sessions.
   const activeEntries = entries
-    .filter((e) => e.status !== 'rejected')
+    .filter(
+      (e) =>
+        e.status !== 'rejected' &&
+        new Date(e.timestamp).getTime() <= now.getTime()
+    )
     .sort((a, b) => {
       const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
       if (diff !== 0) return diff;
@@ -108,23 +121,34 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   const sessions: WorkSession[] = [];
   let currentClockIn: TimeEntry | null = null;
 
+  const pushUnpairedClockIn = (clockIn: TimeEntry) => {
+    const clockInDate = new Date(clockIn.timestamp);
+    const isOpenSession = isToday(clockInDate);
+
+    sessions.push({
+      clockIn,
+      clockOut: null,
+      durationMinutes: null,
+      jobId: clockIn.jobId,
+      isOrphan: !isOpenSession,
+      pendingState: determinePendingState(clockIn, null)
+    });
+  };
+
   for (const entry of activeEntries) {
     if (entry.entryType === 'clock_in') {
-      // If we already have an open clock_in, it means there's a missing clock_out
-      // Mark it as orphan since we're moving to a new clock_in
       if (currentClockIn) {
-        sessions.push({
-          clockIn: currentClockIn,
-          clockOut: null,
-          durationMinutes: null,
-          jobId: currentClockIn.jobId,
-          isOrphan: true,
-          pendingState: determinePendingState(currentClockIn, null)
-        });
+        pushUnpairedClockIn(currentClockIn);
       }
       currentClockIn = entry;
     } else if (entry.entryType === 'clock_out') {
-      if (currentClockIn) {
+      if (
+        currentClockIn &&
+        isSameLocalDay(
+          new Date(currentClockIn.timestamp),
+          new Date(entry.timestamp)
+        )
+      ) {
         const clockInTime = new Date(currentClockIn.timestamp).getTime();
         const clockOutTime = new Date(entry.timestamp).getTime();
         const durationMinutes = (clockOutTime - clockInTime) / 60000;
@@ -138,6 +162,11 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
         });
         currentClockIn = null;
       } else {
+        if (currentClockIn) {
+          pushUnpairedClockIn(currentClockIn);
+          currentClockIn = null;
+        }
+
         sessions.push({
           clockIn: null,
           clockOut: entry,
@@ -151,17 +180,7 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
   }
 
   if (currentClockIn) {
-    const clockInDate = new Date(currentClockIn.timestamp);
-    const isOpenSession = isToday(clockInDate);
-
-    sessions.push({
-      clockIn: currentClockIn,
-      clockOut: null,
-      durationMinutes: null,
-      jobId: currentClockIn.jobId,
-      isOrphan: !isOpenSession,
-      pendingState: determinePendingState(currentClockIn, null)
-    });
+    pushUnpairedClockIn(currentClockIn);
   }
 
   return sessions;

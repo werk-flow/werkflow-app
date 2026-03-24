@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get('code');
   const tokenHash = searchParams.get('token_hash');
-  const next = searchParams.get('next') ?? '/dashboard';
+  const next = searchParams.get('next') ?? '/';
   const type = searchParams.get('type') as EmailOtpType | null;
   const inviteCode = searchParams.get('invite_code');
 

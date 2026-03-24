@@ -575,7 +575,7 @@ export function EntryDetailsDialog({
   const entryUserId = session.clockIn?.userId || session.clockOut?.userId;
   const isOwnEntry = currentUserId && entryUserId === currentUserId;
 
-  const canEdit = currentUserRole === 'admin' || currentUserRole === 'manager';
+  const canEdit = currentUserRole === 'admin' || currentUserRole === 'buero';
 
   // Managers can only approve/reject entries from other users (not their own)
   // Admins can approve/reject anyone's entries including their own
@@ -585,7 +585,7 @@ export function EntryDetailsDialog({
   const canApprove =
     hasPendingEntry &&
     (currentUserRole === 'admin' ||
-      (currentUserRole === 'manager' && !isOwnEntry));
+      (currentUserRole === 'buero' && !isOwnEntry));
 
   const handleStartEdit = () => {
     setIsEditing(true);
