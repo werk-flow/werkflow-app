@@ -2,17 +2,72 @@
 
 import { useEffect, useState } from 'react';
 
-interface TimelineGridProps {
-  /** Show the hour labels header */
-  showHeader?: boolean;
-  /** Children to render inside the timeline (e.g., work session blocks) */
-  children?: React.ReactNode;
+// Base timeline configuration
+export const BASE_HOUR_WIDTH = 60;
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+export const HOUR_WIDTH = BASE_HOUR_WIDTH;
+export const TIMELINE_WIDTH = HOURS.length * HOUR_WIDTH;
+
+export function getEffectiveHourWidth(zoom: number) {
+  return BASE_HOUR_WIDTH * zoom;
 }
 
-// Timeline configuration
-const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0-23
-const HOUR_WIDTH = 60; // minimum pixels per hour (used for positioning calculations)
-const TIMELINE_WIDTH = HOURS.length * HOUR_WIDTH; // minimum width before horizontal scroll kicks in
+export function getTimelineWidth(zoom: number) {
+  return 24 * getEffectiveHourWidth(zoom);
+}
+
+/**
+ * Calculate the position and width for a time block.
+ * When `hourWidth` is provided, returns pixel positions using that scale.
+ */
+export function calculateBlockPosition(
+  startTime: Date,
+  endTime: Date | null,
+  hourWidth: number = HOUR_WIDTH
+): { left: number; width: number } {
+  const startHours = startTime.getHours() + startTime.getMinutes() / 60;
+  const left = startHours * hourWidth;
+
+  if (!endTime) {
+    const now = new Date();
+    const isToday = startTime.toDateString() === now.toDateString();
+    const endHours = isToday ? now.getHours() + now.getMinutes() / 60 : 24;
+    const width = Math.max((endHours - startHours) * hourWidth, 10);
+    return { left, width };
+  }
+
+  const endHours = endTime.getHours() + endTime.getMinutes() / 60;
+  const width = Math.max((endHours - startHours) * hourWidth, 10);
+
+  return { left, width };
+}
+
+export function snapToGrid(px: number, hourWidth: number): number {
+  const snapMinutes = hourWidth >= 200 ? 15 : 30;
+  const snapPx = (snapMinutes / 60) * hourWidth;
+  return Math.round(px / snapPx) * snapPx;
+}
+
+export function pixelToTimeStr(px: number, hourWidth: number, baseDate: Date): string {
+  const totalMinutes = Math.max(0, Math.min(24 * 60, Math.round((px / hourWidth) * 60)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const d = new Date(baseDate);
+  d.setHours(Math.min(23, hours), Math.min(59, minutes), 0, 0);
+  return d.toISOString();
+}
+
+export function formatTimeFromPx(px: number, hourWidth: number): string {
+  const totalMinutes = Math.max(0, Math.min(24 * 60, Math.round((px / hourWidth) * 60)));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+interface TimelineGridProps {
+  showHeader?: boolean;
+  children?: React.ReactNode;
+}
 
 export function TimelineGrid({
   showHeader = false,
@@ -22,7 +77,6 @@ export function TimelineGrid({
     null
   );
 
-  // Calculate current time indicator position
   useEffect(() => {
     const updateCurrentTime = () => {
       const now = new Date();
@@ -33,15 +87,13 @@ export function TimelineGrid({
     };
 
     updateCurrentTime();
-    const interval = setInterval(updateCurrentTime, 60000); // Update every minute
-
+    const interval = setInterval(updateCurrentTime, 60000);
     return () => clearInterval(interval);
   }, []);
 
   if (showHeader) {
     return (
       <div className="relative h-8" style={{ minWidth: TIMELINE_WIDTH }}>
-        {/* Hour markers */}
         {HOURS.map((hour) => (
           <div
             key={hour}
@@ -53,7 +105,6 @@ export function TimelineGrid({
             </span>
           </div>
         ))}
-        {/* End marker */}
         <div
           className="absolute top-0 h-full border-l border-border"
           style={{ left: 24 * HOUR_WIDTH }}
@@ -64,7 +115,6 @@ export function TimelineGrid({
 
   return (
     <div className="relative h-16" style={{ minWidth: TIMELINE_WIDTH }}>
-      {/* Hour grid lines */}
       {HOURS.map((hour) => (
         <div
           key={hour}
@@ -73,7 +123,6 @@ export function TimelineGrid({
         />
       ))}
 
-      {/* Current time indicator */}
       {currentTimePosition !== null && (
         <div
           className="absolute top-0 h-full w-0.5 bg-destructive z-10"
@@ -83,35 +132,7 @@ export function TimelineGrid({
         </div>
       )}
 
-      {/* Children (work session blocks) */}
       {children}
     </div>
   );
 }
-
-/**
- * Calculate the position and width for a time block
- */
-export function calculateBlockPosition(
-  startTime: Date,
-  endTime: Date | null
-): { left: number; width: number } {
-  const startHours = startTime.getHours() + startTime.getMinutes() / 60;
-  const left = startHours * HOUR_WIDTH;
-
-  if (!endTime) {
-    // Open session - extend to current time or end of day
-    const now = new Date();
-    const isToday = startTime.toDateString() === now.toDateString();
-    const endHours = isToday ? now.getHours() + now.getMinutes() / 60 : 24;
-    const width = Math.max((endHours - startHours) * HOUR_WIDTH, 10);
-    return { left, width };
-  }
-
-  const endHours = endTime.getHours() + endTime.getMinutes() / 60;
-  const width = Math.max((endHours - startHours) * HOUR_WIDTH, 10);
-
-  return { left, width };
-}
-
-export { HOUR_WIDTH, TIMELINE_WIDTH };

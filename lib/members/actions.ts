@@ -357,7 +357,7 @@ export async function getOrgMembersAction(
 
     if (userRole === 'buero') {
       filtered = filtered.filter(
-        (m) => m.role === 'employee' || m.role === 'buero'
+        (m) => m.role === 'employee' || m.user_id === user.id
       );
     }
 

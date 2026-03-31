@@ -173,6 +173,8 @@ export type PendingSession = {
   /** Entry date for display */
   date: string;
   createdAt: string;
+  /** Resolved job title (if a job is linked to this session) */
+  jobTitle: string | null;
 };
 
 export type GetPendingEntriesResult =

@@ -361,7 +361,7 @@ export async function getOrgProjects(): Promise<
 
     const jobCountMap = new Map<
       string,
-      { total: number; completed: number; inProgress: number }
+      { total: number; completed: number; inProgress: number; parked: number }
     >();
     for (const job of allJobs ?? []) {
       if (!job.project_id) continue;
@@ -369,10 +369,12 @@ export async function getOrgProjects(): Promise<
         total: 0,
         completed: 0,
         inProgress: 0,
+        parked: 0,
       };
       current.total++;
       if (job.status === 'fertig') current.completed++;
       if (job.status === 'in_bearbeitung') current.inProgress++;
+      if (job.status === 'geparkt') current.parked++;
       jobCountMap.set(job.project_id, current);
     }
 
@@ -397,13 +399,14 @@ export async function getOrgProjects(): Promise<
     }
 
     const projects: ProjectWithDetails[] = projectRows.map((row) => {
-      const counts = jobCountMap.get(row.id) ?? { total: 0, completed: 0, inProgress: 0 };
+      const counts = jobCountMap.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
       return {
         ...toProject(row),
         client: row.client_id ? clientMap.get(row.client_id) ?? null : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
         inProgressJobCount: counts.inProgress,
+        parkedJobCount: counts.parked,
       };
     });
 
@@ -603,6 +606,72 @@ export async function getNextProjectNumber(): Promise<
     return { success: true, projectNumber: data as string };
   } catch (error) {
     console.error('Unexpected error in getNextProjectNumber:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+/**
+ * Park an entire project: sets statusOverride to 'geparkt' and
+ * bulk-updates all child jobs to status='geparkt' with cleared dates.
+ */
+export async function parkProject(
+  projectId: string
+): Promise<UpdateProjectResult> {
+  try {
+    const auth = await authenticateAndAuthorize();
+    if (!auth.success) return auth;
+    const { orgId, isManagerOrAbove } = auth.context;
+
+    if (!isManagerOrAbove) {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    const admin = createSupabaseAdminClient();
+
+    const { data: project, error: fetchError } = await admin
+      .from('projects')
+      .select('*')
+      .eq('id', projectId)
+      .eq('organization_id', orgId)
+      .single();
+
+    if (fetchError || !project) {
+      return { success: false, error: 'project_not_found' };
+    }
+
+    const { error: updateError } = await admin
+      .from('projects')
+      .update({ status_override: 'geparkt' })
+      .eq('id', projectId)
+      .eq('organization_id', orgId);
+
+    if (updateError) {
+      console.error('Error parking project:', updateError);
+      return { success: false, error: 'update_failed' };
+    }
+
+    const { error: jobsError } = await admin
+      .from('jobs')
+      .update({
+        status: 'geparkt',
+        planned_date: null,
+        planned_time: null,
+        actual_completion_date: null,
+      })
+      .eq('project_id', projectId)
+      .eq('organization_id', orgId)
+      .neq('status', 'fertig');
+
+    if (jobsError) {
+      console.error('Error parking project jobs:', jobsError);
+    }
+
+    updateTag(CACHE_TAGS.projects(orgId));
+    updateTag(CACHE_TAGS.jobs(orgId));
+
+    return { success: true, project: toProject({ ...project, status_override: 'geparkt' }) };
+  } catch (error) {
+    console.error('Unexpected error in parkProject:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

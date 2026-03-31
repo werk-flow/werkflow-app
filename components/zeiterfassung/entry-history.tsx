@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   RefreshCw,
   Clock,
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -26,13 +22,9 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, toLocalDateString } from '@/lib/utils';
+import { DatePicker } from '@/components/ui/date-picker';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
@@ -88,363 +80,6 @@ function formatDateTime(timestamp: string): string {
   });
 }
 
-// Date picker helper functions
-function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(`${iso}T00:00:00`);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-function parseDisplayDate(value: string): Date | null {
-  if (!value) return null;
-  const dotMatch = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (dotMatch) {
-    const [, dd, mm, yyyy] = dotMatch;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-    if (!isNaN(d.getTime())) return d;
-  }
-  return null;
-}
-
-function buildCalendarDays(month: Date): Array<Date | null> {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const days: Array<Date | null> = [];
-  const startDay = (first.getDay() + 6) % 7;
-  for (let i = 0; i < startDay; i++) {
-    days.push(null);
-  }
-  const lastDay = new Date(
-    month.getFullYear(),
-    month.getMonth() + 1,
-    0
-  ).getDate();
-  for (let d = 1; d <= lastDay; d++) {
-    days.push(new Date(month.getFullYear(), month.getMonth(), d));
-  }
-  while (days.length % 7 !== 0) {
-    days.push(null);
-  }
-  return days;
-}
-
-// DatePicker Component
-interface DatePickerProps {
-  value: string; // ISO date string YYYY-MM-DD
-  onChange: (value: string) => void;
-  label: string;
-}
-
-function DatePicker({ value, onChange, label }: DatePickerProps) {
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(
-    value ? new Date(`${value}T00:00:00`) : new Date()
-  );
-  const dateInputRef = useRef<HTMLInputElement>(null);
-  const DATE_MASK = '__.__.____';
-  const [dateDisplay, setDateDisplay] = useState(
-    value ? formatDisplayDate(value) : DATE_MASK
-  );
-  const SEGMENT_RANGES: Record<'day' | 'month' | 'year', [number, number]> = {
-    day: [0, 2],
-    month: [3, 5],
-    year: [6, 10]
-  };
-  const SEGMENT_ORDER: Array<'day' | 'month' | 'year'> = [
-    'day',
-    'month',
-    'year'
-  ];
-  const pendingSelectionRef = useRef<[number, number] | null>(null);
-
-  // Update display when value changes externally
-  useEffect(() => {
-    setDateDisplay(value ? formatDisplayDate(value) : DATE_MASK);
-  }, [value]);
-
-  const normalizeDisplayForEdit = (raw: string) => {
-    if (!raw) return DATE_MASK;
-    if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) return raw;
-    const digits = raw.replace(/\D/g, '').slice(0, 8);
-    const padded = digits.padEnd(8, '_');
-    return `${padded.slice(0, 2)}.${padded.slice(2, 4)}.${padded.slice(4)}`;
-  };
-
-  const isCompleteDisplay = (display: string) =>
-    /^\d{2}\.\d{2}\.\d{4}$/.test(display);
-
-  const selectSegment = (segment: 'day' | 'month' | 'year') => {
-    const input = dateInputRef.current;
-    if (!input) return;
-    const ranges: Record<typeof segment, [number, number]> = {
-      day: [0, 2],
-      month: [3, 5],
-      year: [6, 10]
-    };
-    const [start, end] = ranges[segment];
-    input.setSelectionRange(start, end);
-  };
-
-  const getSegmentFromPosition = (
-    pos: number | null
-  ): 'day' | 'month' | 'year' => {
-    if (pos === null || pos <= 2) return 'day';
-    if (pos <= 5) return 'month';
-    return 'year';
-  };
-
-  const scheduleSegmentSelect = (segment: 'day' | 'month' | 'year') => {
-    requestAnimationFrame(() => selectSegment(segment));
-  };
-
-  useEffect(() => {
-    const pending = pendingSelectionRef.current;
-    const input = dateInputRef.current;
-    if (!pending || !input) return;
-    pendingSelectionRef.current = null;
-    requestAnimationFrame(() => {
-      try {
-        input.setSelectionRange(pending[0], pending[1]);
-      } catch {
-        // noop
-      }
-    });
-  }, [dateDisplay]);
-
-  const handleDateFocus = () => {
-    const input = dateInputRef.current;
-    const pos = input?.selectionStart ?? 0;
-    scheduleSegmentSelect(getSegmentFromPosition(pos));
-  };
-
-  const handleDateClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    const input = e.currentTarget;
-    setTimeout(() => {
-      const pos = input.selectionStart ?? 0;
-      scheduleSegmentSelect(getSegmentFromPosition(pos));
-    }, 0);
-  };
-
-  const handleDateKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const allowed = [
-      'Backspace',
-      'Delete',
-      'ArrowLeft',
-      'ArrowRight',
-      'Tab',
-      'Home',
-      'End'
-    ];
-    if (allowed.includes(e.key)) return;
-    if (!/^\d$/.test(e.key)) {
-      e.preventDefault();
-      return;
-    }
-
-    e.preventDefault();
-    const input = dateInputRef.current;
-    if (!input) return;
-
-    const current = normalizeDisplayForEdit(dateDisplay);
-    const selectionStart = input.selectionStart ?? 0;
-    const selectionEnd = input.selectionEnd ?? selectionStart;
-    const segment = getSegmentFromPosition(selectionStart);
-    const [segStart, segEnd] = SEGMENT_RANGES[segment];
-
-    let writePos = Math.min(Math.max(selectionStart, segStart), segEnd - 1);
-    if (selectionEnd - selectionStart > 0 && selectionStart === segStart) {
-      writePos = segStart;
-    }
-
-    const next = `${current.slice(0, writePos)}${e.key}${current.slice(
-      writePos + 1
-    )}`;
-    setDateDisplay(next);
-    if (isCompleteDisplay(next)) {
-      const parsed = parseDisplayDate(next);
-      if (parsed) {
-        onChange(toISODate(parsed));
-      }
-    }
-
-    const nextPos = writePos + 1;
-    if (nextPos < segEnd) {
-      pendingSelectionRef.current = [nextPos, nextPos];
-      return;
-    }
-    const nextSegment =
-      SEGMENT_ORDER[SEGMENT_ORDER.indexOf(segment) + 1] ?? segment;
-    const [nStart, nEnd] = SEGMENT_RANGES[nextSegment];
-    pendingSelectionRef.current = [nStart, nEnd];
-  };
-
-  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Fallback for non-keyboard input (paste/mobile).
-    const normalized = normalizeDisplayForEdit(e.target.value);
-    setDateDisplay(normalized);
-    if (isCompleteDisplay(normalized)) {
-      const parsed = parseDisplayDate(normalized);
-      if (parsed) {
-        onChange(toISODate(parsed));
-      }
-    }
-
-    const pos = e.target.selectionStart ?? 0;
-    const segment = getSegmentFromPosition(pos);
-    const [s, en] = SEGMENT_RANGES[segment];
-    pendingSelectionRef.current = [s, en];
-  };
-
-  const handleDateSelect = (selectedDate: Date) => {
-    const iso = toISODate(selectedDate);
-    onChange(iso);
-    setDateDisplay(formatDisplayDate(iso));
-    setShowCalendar(false);
-  };
-
-  const days = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-  const monthLabel = visibleMonth.toLocaleDateString('de-DE', {
-    month: 'long',
-    year: 'numeric'
-  });
-
-  const selectedDate = value ? new Date(`${value}T00:00:00`) : null;
-
-  return (
-    <div className="space-y-1">
-      <label className="text-sm font-medium text-muted-foreground">
-        {label}
-      </label>
-      <div className="relative">
-        <Popover open={showCalendar} onOpenChange={setShowCalendar}>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="Datum auswählen"
-              className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 hover:text-foreground"
-              onClick={() => setShowCalendar(true)}
-            >
-              <CalendarIcon className="h-4 w-4" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[280px] p-3" align="start">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setVisibleMonth(
-                      new Date(
-                        visibleMonth.getFullYear(),
-                        visibleMonth.getMonth() - 1,
-                        1
-                      )
-                    )
-                  }
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="font-medium capitalize">{monthLabel}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    setVisibleMonth(
-                      new Date(
-                        visibleMonth.getFullYear(),
-                        visibleMonth.getMonth() + 1,
-                        1
-                      )
-                    )
-                  }
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-7 text-center text-xs font-medium text-muted-foreground">
-                {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                  <div key={d} className="py-1">
-                    {d}
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-7 gap-1">
-                {days.map((day, idx) => {
-                  if (!day) {
-                    return <div key={idx} />;
-                  }
-                  const isSelected =
-                    selectedDate &&
-                    day.toDateString() === selectedDate.toDateString();
-                  const isToday =
-                    new Date().toDateString() === day.toDateString();
-
-                  return (
-                    <button
-                      key={day.toISOString()}
-                      type="button"
-                      onClick={() => handleDateSelect(day)}
-                      className={cn(
-                        'rounded-md py-2 text-sm transition-colors',
-                        isSelected
-                          ? 'bg-brand-purple text-white'
-                          : isToday
-                          ? 'bg-brand-purple/10 text-foreground'
-                          : 'bg-card text-foreground hover:bg-accent'
-                      )}
-                    >
-                      {day.getDate()}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDateSelect(new Date())}
-                >
-                  Heute
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-        <Input
-          ref={dateInputRef}
-          type="text"
-          inputMode="numeric"
-          value={dateDisplay}
-          placeholder="TT.MM.JJJJ"
-          onFocus={handleDateFocus}
-          onClick={handleDateClick}
-          onKeyDown={handleDateKeyDown}
-          onChange={handleDateInputChange}
-          className="pl-10 pr-3"
-        />
-      </div>
-    </div>
-  );
-}
-
 export function EntryHistory({
   organizationId,
   members = []
@@ -456,16 +91,15 @@ export function EntryHistory({
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => {
     const date = new Date();
-    date.setDate(date.getDate() - 30); // Last 30 days
-    return toISODate(date);
+    date.setDate(date.getDate() - 30);
+    return date;
   });
-  const [dateTo, setDateTo] = useState(() => {
-    // Include future dates to show pending entries with future timestamps
+  const [dateTo, setDateTo] = useState<Date | undefined>(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 14); // 2 weeks into the future
-    return toISODate(date);
+    date.setDate(date.getDate() + 14);
+    return date;
   });
 
   // Helper to get member display name
@@ -477,6 +111,7 @@ export function EntryHistory({
   };
 
   const fetchEntries = useCallback(async () => {
+    if (!dateFrom || !dateTo) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -550,11 +185,13 @@ export function EntryHistory({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-        <div className="flex-1 min-w-[140px]">
-          <DatePicker value={dateFrom} onChange={setDateFrom} label="Von" />
+        <div className="flex-1 min-w-[140px] space-y-1">
+          <Label className="text-muted-foreground">Von</Label>
+          <DatePicker value={dateFrom} onChange={setDateFrom} placeholder="Von" />
         </div>
-        <div className="flex-1 min-w-[140px]">
-          <DatePicker value={dateTo} onChange={setDateTo} label="Bis" />
+        <div className="flex-1 min-w-[140px] space-y-1">
+          <Label className="text-muted-foreground">Bis</Label>
+          <DatePicker value={dateTo} onChange={setDateTo} placeholder="Bis" />
         </div>
         {members.length > 0 && (
           <div className="flex-1 min-w-[180px] space-y-1">

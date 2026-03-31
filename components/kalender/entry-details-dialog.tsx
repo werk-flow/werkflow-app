@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef, useMemo, useEffect, useCallback } from 'react';
+import { useState, useTransition, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -8,10 +8,7 @@ import {
   Trash2,
   Check,
   X,
-  Calendar as CalendarIcon,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   Briefcase,
   ExternalLink,
 } from 'lucide-react';
@@ -24,9 +21,9 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,11 +35,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import {
@@ -65,6 +57,8 @@ interface EntryDetailsDialogProps {
   startInEditMode?: boolean;
   /** Resolved job name for display */
   jobName?: string | null;
+  /** Role of the user who owns the entry (used for permission checks) */
+  entryUserRole?: OrgRole;
 }
 
 function formatDateTime(date: Date): string {
@@ -93,35 +87,6 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   }
 };
 
-// Helper functions for date/time formatting
-function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(`${iso}T00:00:00`);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-function parseDisplayDate(value: string): Date | null {
-  if (!value) return null;
-  const dotMatch = value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (dotMatch) {
-    const [, dd, mm, yyyy] = dotMatch;
-    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
-    if (!isNaN(d.getTime())) return d;
-  }
-  return null;
-}
 
 function formatTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(
@@ -129,28 +94,6 @@ function formatTime(date: Date): string {
   ).padStart(2, '0')}`;
 }
 
-function buildCalendarDays(month: Date): Array<Date | null> {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const days: Array<Date | null> = [];
-  const startDay = (first.getDay() + 6) % 7;
-  for (let i = 0; i < startDay; i++) {
-    days.push(null);
-  }
-  const lastDay = new Date(
-    month.getFullYear(),
-    month.getMonth() + 1,
-    0
-  ).getDate();
-  for (let d = 1; d <= lastDay; d++) {
-    days.push(new Date(month.getFullYear(), month.getMonth(), d));
-  }
-  while (days.length % 7 !== 0) {
-    days.push(null);
-  }
-  return days;
-}
-
-// DateTime Picker Component
 interface DateTimePickerProps {
   value: Date;
   onChange: (date: Date) => void;
@@ -158,170 +101,15 @@ interface DateTimePickerProps {
 }
 
 function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(value);
-  const dateInputRef = useRef<HTMLInputElement>(null);
-
-  // State for display values
-  const [dateDisplay, setDateDisplay] = useState(
-    formatDisplayDate(toISODate(value))
-  );
   const [timeValue, setTimeValue] = useState(formatTime(value));
 
-  const DATE_MASK = '__.__.____';
-  const SEGMENT_RANGES: Record<'day' | 'month' | 'year', [number, number]> = {
-    day: [0, 2],
-    month: [3, 5],
-    year: [6, 10]
-  };
-  const SEGMENT_ORDER: Array<'day' | 'month' | 'year'> = [
-    'day',
-    'month',
-    'year'
-  ];
-  const pendingSelectionRef = useRef<[number, number] | null>(null);
-
-  const normalizeDisplayForEdit = (raw: string) => {
-    if (!raw) return DATE_MASK;
-    if (/^\d{2}\.\d{2}\.\d{4}$/.test(raw)) return raw;
-    const digits = raw.replace(/\D/g, '').slice(0, 8);
-    const padded = digits.padEnd(8, '_');
-    return `${padded.slice(0, 2)}.${padded.slice(2, 4)}.${padded.slice(4)}`;
-  };
-
-  const isCompleteDisplay = (display: string) =>
-    /^\d{2}\.\d{2}\.\d{4}$/.test(display);
-
-  const selectSegment = (segment: 'day' | 'month' | 'year') => {
-    const input = dateInputRef.current;
-    if (!input) return;
-    const ranges: Record<typeof segment, [number, number]> = {
-      day: [0, 2],
-      month: [3, 5],
-      year: [6, 10]
-    };
-    const [start, end] = ranges[segment];
-    input.setSelectionRange(start, end);
-  };
-
-  const getSegmentFromPosition = (
-    pos: number | null
-  ): 'day' | 'month' | 'year' => {
-    if (pos === null || pos <= 2) return 'day';
-    if (pos <= 5) return 'month';
-    return 'year';
-  };
-
-  const scheduleSegmentSelect = (segment: 'day' | 'month' | 'year') => {
-    requestAnimationFrame(() => selectSegment(segment));
-  };
-
-  useEffect(() => {
-    const pending = pendingSelectionRef.current;
-    const input = dateInputRef.current;
-    if (!pending || !input) return;
-    pendingSelectionRef.current = null;
-    requestAnimationFrame(() => {
-      try {
-        input.setSelectionRange(pending[0], pending[1]);
-      } catch {
-        // noop
-      }
-    });
-  }, [dateDisplay]);
-
-  const handleDateFocus = () => {
-    const input = dateInputRef.current;
-    const pos = input?.selectionStart ?? 0;
-    scheduleSegmentSelect(getSegmentFromPosition(pos));
-  };
-
-  const handleDateClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    const input = e.currentTarget;
-    setTimeout(() => {
-      const pos = input.selectionStart ?? 0;
-      scheduleSegmentSelect(getSegmentFromPosition(pos));
-    }, 0);
-  };
-
-  const handleDateKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const allowed = [
-      'Backspace',
-      'Delete',
-      'ArrowLeft',
-      'ArrowRight',
-      'Tab',
-      'Home',
-      'End'
-    ];
-    if (allowed.includes(e.key)) return;
-    if (!/^\d$/.test(e.key)) {
-      e.preventDefault();
-      return;
-    }
-
-    // Segment-aware digit editing: keep caret inside the segment and never jump to end.
-    e.preventDefault();
-    const input = dateInputRef.current;
-    if (!input) return;
-
-    const current = normalizeDisplayForEdit(dateDisplay);
-    const selectionStart = input.selectionStart ?? 0;
-    const selectionEnd = input.selectionEnd ?? selectionStart;
-    const segment = getSegmentFromPosition(selectionStart);
-    const [segStart, segEnd] = SEGMENT_RANGES[segment];
-
-    let writePos = Math.min(Math.max(selectionStart, segStart), segEnd - 1);
-    if (selectionEnd - selectionStart > 0 && selectionStart === segStart) {
-      writePos = segStart;
-    }
-
-    const next = `${current.slice(0, writePos)}${e.key}${current.slice(
-      writePos + 1
-    )}`;
-    setDateDisplay(next);
-    if (isCompleteDisplay(next)) {
-      const parsed = parseDisplayDate(next);
-      if (parsed) {
-        const newDate = new Date(value);
-        newDate.setFullYear(parsed.getFullYear());
-        newDate.setMonth(parsed.getMonth());
-        newDate.setDate(parsed.getDate());
-        onChange(newDate);
-      }
-    }
-
-    const nextPos = writePos + 1;
-    if (nextPos < segEnd) {
-      pendingSelectionRef.current = [nextPos, nextPos];
-      return;
-    }
-
-    const nextSegment =
-      SEGMENT_ORDER[SEGMENT_ORDER.indexOf(segment) + 1] ?? segment;
-    const [nStart, nEnd] = SEGMENT_RANGES[nextSegment];
-    pendingSelectionRef.current = [nStart, nEnd];
-  };
-
-  const handleDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Fallback for non-keyboard input (paste/mobile).
-    const normalized = normalizeDisplayForEdit(e.target.value);
-    setDateDisplay(normalized);
-    if (isCompleteDisplay(normalized)) {
-      const parsed = parseDisplayDate(normalized);
-      if (parsed) {
-        const newDate = new Date(value);
-        newDate.setFullYear(parsed.getFullYear());
-        newDate.setMonth(parsed.getMonth());
-        newDate.setDate(parsed.getDate());
-        onChange(newDate);
-      }
-    }
-
-    const pos = e.target.selectionStart ?? 0;
-    const segment = getSegmentFromPosition(pos);
-    const [s, en] = SEGMENT_RANGES[segment];
-    pendingSelectionRef.current = [s, en];
+  const handleDateChange = (newDate: Date | undefined) => {
+    if (!newDate) return;
+    const updated = new Date(value);
+    updated.setFullYear(newDate.getFullYear());
+    updated.setMonth(newDate.getMonth());
+    updated.setDate(newDate.getDate());
+    onChange(updated);
   };
 
   const handleTimeChange = (newTime: string) => {
@@ -335,143 +123,13 @@ function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
     }
   };
 
-  const handleDateSelect = (selectedDate: Date) => {
-    const newDate = new Date(value);
-    newDate.setFullYear(selectedDate.getFullYear());
-    newDate.setMonth(selectedDate.getMonth());
-    newDate.setDate(selectedDate.getDate());
-    onChange(newDate);
-    setDateDisplay(formatDisplayDate(toISODate(selectedDate)));
-    setShowCalendar(false);
-  };
-
-  const days = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-  const monthLabel = visibleMonth.toLocaleDateString('de-DE', {
-    month: 'long',
-    year: 'numeric'
-  });
-
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex gap-2">
-        {/* Date Input */}
-        <div className="relative flex-1">
-          <Popover open={showCalendar} onOpenChange={setShowCalendar}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                aria-label="Datum auswählen"
-                className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/80 hover:text-foreground"
-                onClick={() => setShowCalendar(true)}
-              >
-                <CalendarIcon className="h-4 w-4" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[280px] p-3" align="start">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setVisibleMonth(
-                        new Date(
-                          visibleMonth.getFullYear(),
-                          visibleMonth.getMonth() - 1,
-                          1
-                        )
-                      )
-                    }
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <span className="font-medium capitalize">{monthLabel}</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setVisibleMonth(
-                        new Date(
-                          visibleMonth.getFullYear(),
-                          visibleMonth.getMonth() + 1,
-                          1
-                        )
-                      )
-                    }
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-7 text-center text-xs font-medium text-muted-foreground">
-                  {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
-                    <div key={d} className="py-1">
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1">
-                  {days.map((day, idx) => {
-                    if (!day) {
-                      return <div key={idx} />;
-                    }
-                    const isSelected =
-                      day.toDateString() === value.toDateString();
-                    const isToday =
-                      new Date().toDateString() === day.toDateString();
-
-                    return (
-                      <button
-                        key={day.toISOString()}
-                        type="button"
-                        onClick={() => handleDateSelect(day)}
-                        className={cn(
-                          'rounded-md py-2 text-sm transition-colors',
-                          isSelected
-                            ? 'bg-brand-purple text-white'
-                            : isToday
-                            ? 'bg-brand-purple/10 text-foreground'
-                            : 'bg-card text-foreground hover:bg-accent'
-                        )}
-                      >
-                        {day.getDate()}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDateSelect(new Date())}
-                  >
-                    Heute
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Input
-            ref={dateInputRef}
-            type="text"
-            inputMode="numeric"
-            value={dateDisplay}
-            placeholder="TT.MM.JJJJ"
-            onFocus={handleDateFocus}
-            onClick={handleDateClick}
-            onKeyDown={handleDateKeyDown}
-            onChange={handleDateInputChange}
-            className="pl-10 pr-3"
-          />
+        <div className="flex-1">
+          <DatePicker value={value} onChange={handleDateChange} />
         </div>
-
-        {/* Time Input */}
         <div className="relative w-28">
           <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
           <TimeInput
@@ -494,6 +152,7 @@ export function EntryDetailsDialog({
   onRefresh,
   startInEditMode = false,
   jobName,
+  entryUserRole,
 }: EntryDetailsDialogProps) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(startInEditMode);
@@ -575,17 +234,23 @@ export function EntryDetailsDialog({
   const entryUserId = session.clockIn?.userId || session.clockOut?.userId;
   const isOwnEntry = currentUserId && entryUserId === currentUserId;
 
-  const canEdit = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const canEdit = (() => {
+    if (currentUserRole === 'admin') return true;
+    if (currentUserRole === 'buero') {
+      if (isOwnEntry) return true;
+      if (entryUserRole && entryUserRole !== 'employee') return false;
+      return true;
+    }
+    return false;
+  })();
 
-  // Managers can only approve/reject entries from other users (not their own)
-  // Admins can approve/reject anyone's entries including their own
   const hasPendingEntry =
     session.clockIn?.status === 'pending' ||
     session.clockOut?.status === 'pending';
   const canApprove =
     hasPendingEntry &&
     (currentUserRole === 'admin' ||
-      (currentUserRole === 'buero' && !isOwnEntry));
+      (currentUserRole === 'buero' && !isOwnEntry && canEdit));
 
   const handleStartEdit = () => {
     setIsEditing(true);

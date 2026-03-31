@@ -19,7 +19,7 @@ import {
   UNIFIED_STATUS_LABELS,
   EMPTY_FILTER_STATE,
   buildUnifiedList,
-  splitActiveAndArchived,
+  splitEntries,
   matchesSearch,
   sortUnifiedEntries,
   getEntryUnifiedStatus,
@@ -125,6 +125,13 @@ export function AuftraegeContent({
   const [activeSortCol, setActiveSortCol] = useState<SortColumn>('datum');
   const [activeSortDir, setActiveSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // Parkplatz section state
+  const [parkplatzExpanded, setParkplatzExpanded] = useState(true);
+  const [parkplatzSearch, setParkplatzSearch] = useState('');
+  const [parkplatzFilters, setParkplatzFilters] = useState<FilterState>(EMPTY_FILTER_STATE);
+  const [parkplatzSortCol, setParkplatzSortCol] = useState<SortColumn>('datum');
+  const [parkplatzSortDir, setParkplatzSortDir] = useState<'asc' | 'desc'>('desc');
+
   // Archive section state
   const [archiveExpanded, setArchiveExpanded] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState('');
@@ -147,8 +154,8 @@ export function AuftraegeContent({
     setPrevEntryCount(unifiedEntries.length);
   }, [unifiedEntries.length]);
 
-  const { active: rawActive, archived: rawArchived } = useMemo(
-    () => splitActiveAndArchived(unifiedEntries),
+  const { active: rawActive, parked: rawParked, archived: rawArchived } = useMemo(
+    () => splitEntries(unifiedEntries),
     [unifiedEntries]
   );
 
@@ -177,6 +184,17 @@ export function AuftraegeContent({
     return result;
   }, [rawActive, activeStatusFilter, activeSearch, activeFilters, activeSortCol, activeSortDir, clientMap, jobAssignmentMap]);
 
+  // Parkplatz section pipeline: search -> dropdown filters -> sort
+  const filteredParked = useMemo(() => {
+    let result = rawParked;
+    if (parkplatzSearch) {
+      result = result.filter((e) => matchesSearch(e, parkplatzSearch, clientMap));
+    }
+    result = applyDropdownFilters(result, parkplatzFilters, jobAssignmentMap);
+    result = sortUnifiedEntries(result, parkplatzSortCol, parkplatzSortDir, clientMap);
+    return result;
+  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap]);
+
   // Archive section pipeline: search -> dropdown filters -> sort
   const filteredArchived = useMemo(() => {
     let result = rawArchived;
@@ -187,6 +205,15 @@ export function AuftraegeContent({
     result = sortUnifiedEntries(result, archiveSortCol, archiveSortDir, clientMap);
     return result;
   }, [rawArchived, archiveSearch, archiveFilters, archiveSortCol, archiveSortDir, clientMap, jobAssignmentMap]);
+
+  const handleParkplatzSort = useCallback((col: SortColumn) => {
+    if (col === parkplatzSortCol) {
+      setParkplatzSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setParkplatzSortCol(col);
+      setParkplatzSortDir('desc');
+    }
+  }, [parkplatzSortCol]);
 
   const handleRefresh = useCallback(() => {
     setPrevEntryCount(unifiedEntries.length);
@@ -305,6 +332,52 @@ export function AuftraegeContent({
           />
         </div>
       </section>
+
+      {/* Parkplatz section */}
+      {rawParked.length > 0 && (
+        <section>
+          <button
+            onClick={() => setParkplatzExpanded((v) => !v)}
+            className="flex items-center gap-2 mb-3 group"
+          >
+            <ChevronRight
+              className={cn(
+                'size-5 text-muted-foreground transition-transform duration-200',
+                parkplatzExpanded && 'rotate-90'
+              )}
+            />
+            <h2 className="text-base font-semibold sm:text-lg text-muted-foreground group-hover:text-foreground transition-colors">
+              Parkplatz
+            </h2>
+            <span className="text-xs tabular-nums text-muted-foreground/70">
+              ({rawParked.length})
+            </span>
+          </button>
+
+          {parkplatzExpanded && (
+            <div className="space-y-3">
+              <FilterBar
+                searchQuery={parkplatzSearch}
+                onSearchChange={setParkplatzSearch}
+                filters={parkplatzFilters}
+                onFiltersChange={setParkplatzFilters}
+                clients={clients}
+                members={members}
+              />
+              <UnifiedAuftraegeTable
+                entries={filteredParked}
+                clientMap={clientMap}
+                isAdminOrManager={isAdminOrManager}
+                sortColumn={parkplatzSortCol}
+                sortDirection={parkplatzSortDir}
+                onSort={handleParkplatzSort}
+                jobAssignmentMap={jobAssignmentMap}
+                members={members}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Archive section */}
       {rawArchived.length > 0 && (

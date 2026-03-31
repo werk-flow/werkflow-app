@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
+  Building2,
   MapPin,
   Users,
   ExternalLink,
@@ -148,7 +149,7 @@ export function JobEventPopover({
       <div className="space-y-2 text-sm">
         {job.clientName && (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <Briefcase className="size-3.5 shrink-0" />
+            <Building2 className="size-3.5 shrink-0" />
             <span className="truncate">{job.clientName}</span>
           </div>
         )}

@@ -10,7 +10,8 @@ import {
   RefreshCw,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  Briefcase
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -588,6 +589,12 @@ function SessionRequestCard({
                 {session.clockIn
                   ? `Einstempeln: ${formatTime(session.clockIn.timestamp)}`
                   : `Ausstempeln: ${formatTime(session.clockOut!.timestamp)}`}
+              </p>
+            )}
+            {session.jobTitle && (
+              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                <Briefcase className="h-3 w-3 shrink-0" />
+                <span className="truncate">{session.jobTitle}</span>
               </p>
             )}
           </div>

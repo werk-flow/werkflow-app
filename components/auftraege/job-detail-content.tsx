@@ -55,6 +55,7 @@ import {
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { PlaceholderSection } from '@/components/shared/placeholder-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
+import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import {
@@ -81,14 +82,14 @@ import {
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 
-const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'buero'];
-
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
   in_bearbeitung:
     'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   fertig:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  geparkt:
+    'bg-purple-500/15 text-purple-700 dark:text-purple-300',
 };
 
 const PRIORITY_CLASSES: Record<JobPriority, string> = {
@@ -154,6 +155,7 @@ export function JobDetailContent({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showParkDialog, setShowParkDialog] = useState(false);
   const [unassigningUserId, setUnassigningUserId] = useState<string | null>(
     null
   );
@@ -245,7 +247,16 @@ export function JobDetailContent({
   };
 
   const handleStatusChange = async (newStatus: JobStatus) => {
+    if (newStatus === 'geparkt') {
+      setShowParkDialog(true);
+      return;
+    }
     await updateJobStatus(job.id, newStatus);
+    router.refresh();
+  };
+
+  const handleParkConfirm = async () => {
+    await updateJobStatus(job.id, 'geparkt');
     router.refresh();
   };
 
@@ -331,6 +342,10 @@ export function JobDetailContent({
             type: 'select',
             currentValue: job.status,
             onSave: async (v) => {
+              if (v === 'geparkt') {
+                setShowParkDialog(true);
+                return;
+              }
               await updateJobStatus(job.id, v as JobStatus);
             },
             options: Object.entries(JOB_STATUS_LABELS).map(([value, label]) => ({
@@ -820,7 +835,7 @@ export function JobDetailContent({
           </DialogHeader>
           <div className="py-4">
             <EmployeeMultiSelect
-              members={members.filter((m) => !m.role || !ASSIGNABLE_ROLES_EXCLUDED.includes(m.role))}
+              members={members}
               selectedIds={assignSelectedIds}
               onSelectionChange={setAssignSelectedIds}
             />
@@ -842,6 +857,15 @@ export function JobDetailContent({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ParkConfirmationDialog
+        open={showParkDialog}
+        onOpenChange={setShowParkDialog}
+        variant="job"
+        title={job.title}
+        identifier={job.jobNumber ?? undefined}
+        onConfirm={handleParkConfirm}
+      />
     </div>
   );
 }

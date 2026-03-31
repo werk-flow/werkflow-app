@@ -97,14 +97,7 @@ async function ZeiterfassungData({
     initialPendingCount = pendingCount;
 
     if (membersData) {
-      if (currentUserRole === 'buero') {
-        members = membersData.filter(
-          (m: { role: string; user_id: string }) =>
-            m.role === 'employee' || m.user_id === userId
-        );
-      } else {
-        members = membersData;
-      }
+      members = membersData;
     }
   }
 

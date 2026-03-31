@@ -48,10 +48,7 @@ async function KalenderData({
     const { data } = await supabase.rpc('get_org_members', { p_org_id: activeOrgId });
     if (!data) return [];
     if (currentUserRole === 'buero') {
-      return data.filter(
-        (m: { role: string; user_id: string }) =>
-          m.role === 'employee' || m.user_id === userId
-      );
+      return data;
     }
     return data;
   }

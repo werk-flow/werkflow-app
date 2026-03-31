@@ -25,7 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { updateProject, deleteProject } from '@/lib/projects/actions';
+import { ParkConfirmationDialog } from './park-confirmation-dialog';
+import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_ORDER,
@@ -44,11 +45,16 @@ export function ProjectActionsMenu({
 }: ProjectActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showParkDialog, setShowParkDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStatusOverride = async (newStatus: ProjectStatus | null) => {
+    if (newStatus === 'geparkt') {
+      setShowParkDialog(true);
+      return;
+    }
     if (isChangingStatus) return;
     setIsChangingStatus(true);
 
@@ -60,6 +66,17 @@ export function ProjectActionsMenu({
       console.error('Status override failed:', result.error);
     }
 
+    setIsChangingStatus(false);
+  };
+
+  const handleParkConfirm = async () => {
+    setIsChangingStatus(true);
+    const result = await parkProject(project.id);
+    if (result.success) {
+      router.refresh();
+    } else {
+      console.error('Park project failed:', result.error);
+    }
     setIsChangingStatus(false);
   };
 
@@ -179,6 +196,15 @@ export function ProjectActionsMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ParkConfirmationDialog
+        open={showParkDialog}
+        onOpenChange={setShowParkDialog}
+        variant="project"
+        title={project.name}
+        identifier={project.projectNumber ?? undefined}
+        onConfirm={handleParkConfirm}
+      />
     </>
   );
 }

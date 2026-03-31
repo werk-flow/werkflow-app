@@ -107,6 +107,7 @@ export function DatePicker({
 
   const handleBlur = (e: React.FocusEvent) => {
     if (containerRef.current?.contains(e.relatedTarget as Node)) return;
+    if (open) return;
     setIsFocused(false);
     setActiveSegment(null);
     clearBuffer();
@@ -236,6 +237,7 @@ export function DatePicker({
   const handleCalendarSelect = (date: Date | undefined) => {
     onChange(date);
     setOpen(false);
+    containerRef.current?.focus();
   };
 
   const segmentBaseClass =

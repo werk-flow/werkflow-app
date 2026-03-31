@@ -152,7 +152,7 @@ textarea::-moz-selection,
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -0.25rem);
+    transform: translate(-50%, -1.5rem);
   }
 }
 
@@ -201,6 +201,22 @@ textarea::-moz-selection,
 
 .animate-green-glow {
   animation: green-glow 2s ease-in-out infinite;
+}
+
+/* Force grabbing cursor globally during any drag operation */
+body.is-dragging,
+body.is-dragging *,
+body.is-dragging *::before,
+body.is-dragging *::after {
+  cursor: grabbing !important;
+}
+
+/* Suppress FullCalendar mirror fly-back animation when parking a job */
+body.fc-parking .fc-event-mirror,
+body.fc-parking .fc-event-dragging {
+  display: none !important;
+  opacity: 0 !important;
+  transition: none !important;
 }
 
 /* Hide native time picker indicators for all browsers */

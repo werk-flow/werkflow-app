@@ -154,7 +154,8 @@ export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
  * Rules:
  * - Admin adding any entry → approved
  * - Manager adding for managed roles (accountant, secretary, employee) → approved
- * - Manager adding for self → pending (needs admin approval)
+ * - Manager adding for self → approved (TODO: make configurable via org settings;
+ *   when enabled, return 'pending' so admin approval is required)
  * - Other roles adding for self → pending (needs admin/manager approval)
  */
 export function determineApprovalStatus(
@@ -162,21 +163,13 @@ export function determineApprovalStatus(
   targetUserId: string,
   callerId: string
 ): TimeEntryStatus {
-  const isForSelf = targetUserId === callerId;
-
   // Admin adding any entry → immediately approved
   if (callerRole === 'admin') {
     return 'approved';
   }
 
-  // Manager adding entry
+  // Manager adding entry → immediately approved (both for self and managed roles)
   if (callerRole === 'buero') {
-    // For self → needs admin approval
-    if (isForSelf) {
-      return 'pending';
-    }
-    // For others (managed roles) → immediately approved
-    // Note: The caller must be adding for managed roles; this is checked elsewhere
     return 'approved';
   }
 
@@ -202,9 +195,8 @@ export function canManageEntries(
     return true;
   }
 
-  // Manager can manage entries for managed roles
+  // Manager can manage entries for managed roles and their own
   if (callerRole === 'buero') {
-    // Managers can manage their own entries (with approval required)
     if (isOwnEntry) {
       return true;
     }
@@ -216,19 +208,16 @@ export function canManageEntries(
 }
 
 /**
- * Check if a change request is needed (requires admin approval)
- * This is true when a manager is trying to edit/delete their own entries
+ * Check if a change request is needed (requires admin approval).
+ * TODO: make configurable via org settings. When enabled, return true
+ * for `callerRole === 'buero' && isOwnEntry` so Büro edits/deletes
+ * on their own entries require admin approval.
  */
 export function needsChangeRequest(
-  callerRole: OrgRole,
-  targetRole: OrgRole,
-  isOwnEntry: boolean
+  _callerRole: OrgRole,
+  _targetRole: OrgRole,
+  _isOwnEntry: boolean
 ): boolean {
-  // Manager editing their own entry needs admin approval
-  if (callerRole === 'buero' && isOwnEntry) {
-    return true;
-  }
-
   return false;
 }
 
@@ -280,9 +269,9 @@ export function canViewEntries(
     return true;
   }
 
-  // Manager can see entries for managed roles
-  if (callerRole === 'buero' && targetRole) {
-    return MANAGED_ROLES.includes(targetRole);
+  // Büro can see all entries in their org
+  if (callerRole === 'buero') {
+    return true;
   }
 
   return false;

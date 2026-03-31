@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,6 +9,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ManualEntryDialog } from '@/components/manual-entry-dialog';
+import { CalendarEntryDialog } from './calendar-entry-dialog';
+import { ParkplatzButton } from './parkplatz-button';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarView } from './calendar-container';
 
@@ -20,6 +23,14 @@ interface CalendarHeaderProps {
   onToday: () => void;
   onRefresh: () => void;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
+  isAdminOrManager?: boolean;
+  onJobSuccess?: () => void | Promise<void>;
+  parkedJobCount?: number;
+  parkplatzOpen?: boolean;
+  onParkplatzToggle?: () => void;
+  onParkJob?: (jobId: string) => void;
+  parkplatzButtonRef?: React.RefObject<HTMLButtonElement | null>;
+  isPointerOverParkplatz?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -101,8 +112,17 @@ export function CalendarHeader({
   onNext,
   onToday,
   onRefresh,
-  onManualEntrySuccess
+  onManualEntrySuccess,
+  isAdminOrManager = false,
+  onJobSuccess,
+  parkedJobCount = 0,
+  parkplatzOpen = false,
+  onParkplatzToggle,
+  onParkJob,
+  parkplatzButtonRef,
+  isPointerOverParkplatz
 }: CalendarHeaderProps) {
+  const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const now = new Date();
   const isCurrentPeriod =
     (view === 'day' && currentDate.toDateString() === now.toDateString()) ||
@@ -166,16 +186,37 @@ export function CalendarHeader({
       </div>
 
       <div className="flex items-center gap-3">
-        <ManualEntryDialog
-          preselectedDate={currentDate}
-          onSuccess={onManualEntrySuccess}
-          trigger={
-            <Button size="default" className="gap-2">
-              <CalendarPlus className="size-4" />
-              <span>Kalendereintrag</span>
-            </Button>
-          }
-        />
+        {isAdminOrManager && onParkplatzToggle && onParkJob && (
+          <ParkplatzButton
+            ref={parkplatzButtonRef}
+            count={parkedJobCount}
+            isOpen={parkplatzOpen}
+            onToggle={onParkplatzToggle}
+            onParkJob={onParkJob}
+            isPointerOverParkplatz={isPointerOverParkplatz}
+          />
+        )}
+        <Button size="default" className="gap-2" onClick={() => setEntryDialogOpen(true)}>
+          <CalendarPlus className="size-4" />
+          <span>Kalendereintrag</span>
+        </Button>
+
+        {isAdminOrManager ? (
+          <CalendarEntryDialog
+            open={entryDialogOpen}
+            onOpenChange={setEntryDialogOpen}
+            preselectedDate={currentDate}
+            onManualEntrySuccess={onManualEntrySuccess}
+            onJobSuccess={onJobSuccess}
+          />
+        ) : (
+          <ManualEntryDialog
+            controlledOpen={entryDialogOpen}
+            onOpenChange={setEntryDialogOpen}
+            preselectedDate={currentDate}
+            onSuccess={onManualEntrySuccess}
+          />
+        )}
       </div>
     </header>
   );

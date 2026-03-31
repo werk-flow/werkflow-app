@@ -73,6 +73,8 @@ const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
     'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   abgeschlossen:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  geparkt:
+    'bg-purple-500/15 text-purple-700 dark:text-purple-300',
 };
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
@@ -81,6 +83,8 @@ const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
     'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   fertig:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  geparkt:
+    'bg-purple-500/15 text-purple-700 dark:text-purple-300',
 };
 
 const PRIORITY_CLASSES: Record<string, string> = {
@@ -229,6 +233,7 @@ export function ProjectDetailContent({
   const inProgressCount = jobs.filter(
     (j) => j.status === 'in_bearbeitung'
   ).length;
+  const parkedCount = jobs.filter((j) => j.status === 'geparkt').length;
 
   const handleDelete = () => {
     startDeleteTransition(async () => {
@@ -628,6 +633,7 @@ export function ProjectDetailContent({
           jobCount: jobs.length,
           completedJobCount: completedCount,
           inProgressJobCount: inProgressCount,
+          parkedJobCount: parkedCount,
         }]}
         defaultProjectId={project.id}
         defaultClientId={project.clientId ?? undefined}

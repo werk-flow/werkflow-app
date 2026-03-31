@@ -1,13 +1,14 @@
 'use client';
 
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import type { EventClickArg, EventContentArg } from '@fullcalendar/core';
+import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core';
 import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { toLocalDateString } from '@/lib/utils';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { CalendarView } from './calendar-container';
@@ -32,6 +33,13 @@ interface FullCalendarViewProps {
   onDateSelect: (date: Date) => void;
   onViewChange: (view: CalendarView) => void;
   jobs?: CalendarJob[];
+  onJobDateChange?: (jobId: string, newDate: string, newTime?: string, revertFn?: () => void) => void;
+  onParkJob?: (jobId: string) => void;
+  onUnparkJob?: (jobId: string, date: string, time?: string) => void;
+  parkplatzZoneRef?: React.RefObject<HTMLElement | null>;
+  parkplatzPanelOpen?: boolean;
+  onSessionDateChange?: (clockInId: string, clockOutId: string, newDate: string, newMemberId: string, revertFn?: () => void) => void;
+  onPointerOverParkplatzChange?: (isOver: boolean) => void;
 }
 
 // Map our view names to FullCalendar view names
@@ -51,13 +59,109 @@ export function FullCalendarView({
   onEventClick,
   onDateSelect,
   onViewChange,
-  jobs = []
+  jobs = [],
+  onJobDateChange,
+  onParkJob,
+  onUnparkJob,
+  parkplatzZoneRef,
+  parkplatzPanelOpen,
+  onSessionDateChange,
+  onPointerOverParkplatzChange
 }: FullCalendarViewProps) {
   const calendarRef = useRef<FullCalendar>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [selectedJob, setSelectedJob] = useState<{
     job: CalendarJob;
     position: { x: number; y: number };
   } | null>(null);
+
+  const onUnparkJobRef = useRef(onUnparkJob);
+  onUnparkJobRef.current = onUnparkJob;
+  const onParkJobRef = useRef(onParkJob);
+  onParkJobRef.current = onParkJob;
+  const onPointerOverParkplatzChangeRef = useRef(onPointerOverParkplatzChange);
+  onPointerOverParkplatzChangeRef.current = onPointerOverParkplatzChange;
+  const fcDragMoveRef = useRef<((e: MouseEvent) => void) | null>(null);
+
+  useEffect(() => {
+    if (view !== 'month') return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const HIGHLIGHT_CLASS = 'fc-parkplatz-drop-highlight';
+    let currentHighlight: Element | null = null;
+
+    const findDayCell = (el: Element | null): Element | null => {
+      if (!el) return null;
+      if (el.classList?.contains('fc-daygrid-day')) return el;
+      return el.closest?.('.fc-daygrid-day') ?? null;
+    };
+
+    const handleDragOver = (e: Event) => {
+      const de = e as DragEvent;
+      if (!de.dataTransfer?.types.includes('application/x-werkflow-job')) return;
+      de.preventDefault();
+      const cell = findDayCell(de.target as Element);
+      if (cell && cell !== currentHighlight) {
+        currentHighlight?.classList.remove(HIGHLIGHT_CLASS);
+        cell.classList.add(HIGHLIGHT_CLASS);
+        currentHighlight = cell;
+      }
+    };
+
+    const handleDragLeave = (e: Event) => {
+      const de = e as DragEvent;
+      const cell = findDayCell(de.target as Element);
+      if (cell && cell === currentHighlight) {
+        const related = de.relatedTarget as Element | null;
+        if (!related || !cell.contains(related)) {
+          cell.classList.remove(HIGHLIGHT_CLASS);
+          currentHighlight = null;
+        }
+      }
+    };
+
+    const handleDrop = (e: Event) => {
+      const de = e as DragEvent;
+      currentHighlight?.classList.remove(HIGHLIGHT_CLASS);
+
+      const raw = de.dataTransfer?.getData('application/x-werkflow-job');
+      if (raw) {
+        try {
+          const payload = JSON.parse(raw);
+          if (payload.jobId) {
+            const cell = findDayCell(de.target as Element);
+            const dateStr = cell?.getAttribute('data-date');
+            if (dateStr) {
+              de.preventDefault();
+              de.stopPropagation();
+              onUnparkJobRef.current?.(payload.jobId, dateStr);
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      currentHighlight = null;
+    };
+
+    const handleDragEnd = () => {
+      currentHighlight?.classList.remove(HIGHLIGHT_CLASS);
+      currentHighlight = null;
+    };
+
+    container.addEventListener('dragover', handleDragOver);
+    container.addEventListener('dragleave', handleDragLeave);
+    container.addEventListener('drop', handleDrop);
+    window.addEventListener('dragend', handleDragEnd);
+
+    return () => {
+      container.removeEventListener('dragover', handleDragOver);
+      container.removeEventListener('dragleave', handleDragLeave);
+      container.removeEventListener('drop', handleDrop);
+      window.removeEventListener('dragend', handleDragEnd);
+      currentHighlight?.classList.remove(HIGHLIGHT_CLASS);
+    };
+  }, [view]);
 
   const memberNameMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -99,7 +203,7 @@ export function FullCalendarView({
       calculateWorkSessions(userEntries)
     );
 
-    return allSessions.map((session, index) => {
+    return allSessions.map((session) => {
       // Check for pending delete status
       const isPendingDelete =
         session.clockIn?.status === 'pending_delete' ||
@@ -112,7 +216,7 @@ export function FullCalendarView({
         const isPending = session.clockOut.status === 'pending';
 
         return {
-          id: `orphan-out-${session.clockOut.id}-${index}`,
+          id: `orphan-out-${session.clockOut.id}`,
           title: '',
           start: orphanTime,
           end: orphanEnd,
@@ -152,7 +256,7 @@ export function FullCalendarView({
         const isPending = session.clockIn.status === 'pending';
 
         return {
-          id: `orphan-in-${session.clockIn.id}-${index}`,
+          id: `orphan-in-${session.clockIn.id}`,
           title: '',
           start: orphanTime,
           end: orphanEnd,
@@ -206,11 +310,14 @@ export function FullCalendarView({
         ? `${hours}h ${minutes}m`
         : `${minutes}m`;
 
+      const canDrag = isAdminOrManager && !!session.clockOut && !isOpen;
+
       return {
-        id: `${session.clockIn!.id}-${index}`,
+        id: `session-${session.clockIn!.id}`,
         title: '', // Custom content will be used
         start,
         end,
+        editable: canDrag,
         backgroundColor: isPendingDelete
           ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
           : isPending
@@ -269,8 +376,10 @@ export function FullCalendarView({
         backgroundColor: 'rgb(123 44 191 / 0.15)',
         borderColor: 'rgb(123 44 191 / 0.4)',
         textColor: 'inherit',
+        editable: true,
         extendedProps: {
           isJobEvent: true,
+          jobId: job.id,
           job
         },
         classNames: ['fc-event-job']
@@ -425,6 +534,15 @@ export function FullCalendarView({
     };
   }, [view]);
 
+  useEffect(() => {
+    return () => {
+      if (fcDragMoveRef.current) {
+        window.removeEventListener('mousemove', fcDragMoveRef.current);
+        fcDragMoveRef.current = null;
+      }
+    };
+  }, []);
+
   const handleEventClick = (info: EventClickArg) => {
     if (info.event.extendedProps.isJobEvent) {
       const job = info.event.extendedProps.job as CalendarJob;
@@ -440,6 +558,139 @@ export function FullCalendarView({
     if (session) {
       onEventClick(session);
     }
+  };
+
+  const handleEventDrop = (info: EventDropArg) => {
+    // Always revert FullCalendar's internal move immediately. React state
+    // (entries/calendarJobs) is the single source of truth — the optimistic
+    // update in the handler will re-render FullCalendar with the correct
+    // position via the events prop. Without this revert, FullCalendar's
+    // internal state and our React state fight each other, causing entries
+    // to flicker, jump, or disappear during rapid successive drags.
+    info.revert();
+
+    const newDate = info.event.start ? toLocalDateString(info.event.start) : null;
+    if (!newDate) return;
+
+    if (info.event.extendedProps.isJobEvent) {
+      const jobId = info.event.extendedProps.jobId as string;
+      if (!jobId) return;
+      const newTime = info.event.allDay
+        ? undefined
+        : info.event.start
+          ? `${String(info.event.start.getHours()).padStart(2, '0')}:${String(info.event.start.getMinutes()).padStart(2, '0')}`
+          : undefined;
+      onJobDateChange?.(jobId, newDate, newTime);
+      return;
+    }
+
+    const session = info.event.extendedProps.session as WorkSession | undefined;
+    if (session?.clockIn && session?.clockOut) {
+      onSessionDateChange?.(
+        session.clockIn.id,
+        session.clockOut.id,
+        newDate,
+        session.clockIn.userId
+      );
+      return;
+    }
+  };
+
+  const handleEventDragStart = useCallback((info: { event: { extendedProps: Record<string, unknown> } }) => {
+    document.body.classList.add('is-dragging');
+
+    if (!info.event.extendedProps.isJobEvent) return;
+
+    const handler = (e: MouseEvent) => {
+      let overParkplatz = false;
+
+      const btnEl = parkplatzZoneRef?.current;
+      if (btnEl) {
+        const rect = btnEl.getBoundingClientRect();
+        overParkplatz =
+          e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom;
+      }
+
+      if (!overParkplatz && parkplatzPanelOpen) {
+        const panelEl = document.querySelector('[data-parkplatz-panel]');
+        if (panelEl) {
+          const rect = panelEl.getBoundingClientRect();
+          overParkplatz =
+            e.clientX >= rect.left && e.clientX <= rect.right &&
+            e.clientY >= rect.top && e.clientY <= rect.bottom;
+        }
+      }
+
+      onPointerOverParkplatzChangeRef.current?.(overParkplatz);
+    };
+
+    window.addEventListener('mousemove', handler);
+    fcDragMoveRef.current = handler;
+  }, [parkplatzZoneRef, parkplatzPanelOpen]);
+
+  const handleEventDragStop = (info: { event: { extendedProps: Record<string, unknown>; remove: () => void }; el: HTMLElement; jsEvent: MouseEvent }) => {
+    document.body.classList.remove('is-dragging');
+
+    if (fcDragMoveRef.current) {
+      window.removeEventListener('mousemove', fcDragMoveRef.current);
+      fcDragMoveRef.current = null;
+      onPointerOverParkplatzChangeRef.current?.(false);
+    }
+
+    if (!info.event.extendedProps.isJobEvent) return;
+
+    const jobId = info.event.extendedProps.jobId as string | undefined;
+    if (!jobId) return;
+
+    const { clientX, clientY } = info.jsEvent;
+
+    const isOverZone = (el: Element | HTMLElement | null | undefined) => {
+      if (!el) return false;
+      const rect = (el as HTMLElement).getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    };
+
+    const hitParkplatz =
+      isOverZone(parkplatzZoneRef?.current) ||
+      (parkplatzPanelOpen && isOverZone(document.querySelector('[data-parkplatz-panel]')));
+
+    if (hitParkplatz) {
+      document.body.classList.add('fc-parking');
+      info.el.style.display = 'none';
+      document.querySelectorAll('.fc-event-mirror').forEach(m => {
+        (m as HTMLElement).style.display = 'none';
+      });
+      info.event.remove();
+      onParkJobRef.current?.(jobId);
+      setTimeout(() => {
+        document.body.classList.remove('fc-parking');
+      }, 500);
+    }
+  };
+
+  const handleEventReceive = (info: { event: { start: Date | null; allDay: boolean; extendedProps: Record<string, unknown>; remove: () => void } }) => {
+    document.body.classList.remove('is-dragging');
+    const jobId = info.event.extendedProps.jobId as string | undefined;
+    if (!jobId) {
+      info.event.remove();
+      return;
+    }
+
+    const date = info.event.start ? toLocalDateString(info.event.start) : null;
+    if (!date) {
+      info.event.remove();
+      return;
+    }
+
+    const time = info.event.allDay
+      ? undefined
+      : info.event.start
+        ? `${String(info.event.start.getHours()).padStart(2, '0')}:${String(info.event.start.getMinutes()).padStart(2, '0')}`
+        : undefined;
+
+    info.event.remove();
+    onUnparkJob?.(jobId, date, time);
   };
 
   const renderEventContent = (eventInfo: EventContentArg) => {
@@ -520,8 +771,13 @@ export function FullCalendarView({
   };
 
   return (
-    <div className="fullcalendar-wrapper p-4">
+    <div ref={containerRef} className="fullcalendar-wrapper p-4 h-full">
       <style jsx global>{`
+        /* Parkplatz drop highlight for month view cells */
+        .fc-daygrid-day.fc-parkplatz-drop-highlight {
+          box-shadow: inset 0 0 0 2px rgba(123, 44, 191, 0.5);
+          background-color: rgba(123, 44, 191, 0.05) !important;
+        }
         /* ===== BASE VARIABLES ===== */
         .fullcalendar-wrapper {
           background: transparent;
@@ -542,6 +798,7 @@ export function FullCalendarView({
           border: none;
           border-radius: 0.75rem;
           overflow: hidden;
+          height: 100%;
         }
 
         /* ===== RESET DEFAULT TABLE SPACING ===== */
@@ -576,6 +833,9 @@ export function FullCalendarView({
         /* ===== HEADER STYLING ===== */
         .fullcalendar-wrapper .fc-col-header {
           background: transparent;
+          position: sticky;
+          top: 0;
+          z-index: 3;
         }
 
         .fullcalendar-wrapper .fc-col-header-cell {
@@ -1099,6 +1359,10 @@ export function FullCalendarView({
           z-index: 5;
         }
 
+        .fullcalendar-wrapper .fc-event:active {
+          cursor: grabbing;
+        }
+
         .fullcalendar-wrapper .fc-event-pending-delete {
           background-image: repeating-linear-gradient(
             -45deg,
@@ -1247,6 +1511,11 @@ export function FullCalendarView({
         eventDisplay="block"
         eventClick={handleEventClick}
         eventContent={renderEventContent}
+        eventDrop={handleEventDrop}
+        eventDragStart={handleEventDragStart}
+        eventDragStop={handleEventDragStop}
+        droppable={true}
+        eventReceive={handleEventReceive}
         dateClick={(arg) => {
           // In day view, clicking the column/header should do nothing (no navigation)
           // Only week/month views should navigate to day view
@@ -1262,10 +1531,12 @@ export function FullCalendarView({
         locale="de"
         firstDay={1} // Monday
         headerToolbar={false} // We use our own header
-        height="auto"
+        height="100%"
         allDaySlot={jobs.length > 0}
-        slotMinTime="06:00:00"
-        slotMaxTime="22:00:00"
+        slotEventOverlap={false}
+        slotMinTime="00:00:00"
+        slotMaxTime="24:00:00"
+        scrollTime="06:00:00"
         slotDuration="00:30:00"
         slotLabelInterval="01:00:00"
         slotLabelFormat={{
@@ -1290,8 +1561,14 @@ export function FullCalendarView({
         nowIndicator={true}
         selectable={false}
         editable={false}
+        dragRevertDuration={0}
         dayMaxEvents={2} // Show at most 2 entries before "+ mehr"
-        moreLinkContent={(arg) => `+${arg.num} mehr`}
+        moreLinkContent={(arg) => (
+          <>
+            <span className="sm:hidden">+{arg.num}</span>
+            <span className="hidden sm:inline">+{arg.num} mehr</span>
+          </>
+        )}
       />
 
       {selectedJob && (

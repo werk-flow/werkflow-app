@@ -101,25 +101,27 @@ async function AuftraegeData({
 
     const clientLookup = new Map(clientList.map((c) => [c.id, c]));
 
-    const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number }>();
+    const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
     for (const job of jobList) {
       if (!job.projectId) continue;
-      const counts = projectJobCounts.get(job.projectId) ?? { total: 0, completed: 0, inProgress: 0 };
+      const counts = projectJobCounts.get(job.projectId) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
       counts.total++;
       if (job.status === 'fertig') counts.completed++;
       if (job.status === 'in_bearbeitung') counts.inProgress++;
+      if (job.status === 'geparkt') counts.parked++;
       projectJobCounts.set(job.projectId, counts);
     }
 
     projectList = (projectsResult.data ?? []).map((row) => {
       const project = toProject(row);
-      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0 };
+      const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
       return {
         ...project,
         client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
         inProgressJobCount: counts.inProgress,
+        parkedJobCount: counts.parked,
       };
     });
   } else {
@@ -196,13 +198,14 @@ async function AuftraegeData({
           .eq('organization_id', activeOrgId),
       ]);
 
-      const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number }>();
+      const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
       for (const job of projectJobsResult.data ?? []) {
         if (!job.project_id) continue;
-        const counts = projectJobCounts.get(job.project_id) ?? { total: 0, completed: 0, inProgress: 0 };
+        const counts = projectJobCounts.get(job.project_id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
         counts.total++;
         if (job.status === 'fertig') counts.completed++;
         if (job.status === 'in_bearbeitung') counts.inProgress++;
+        if (job.status === 'geparkt') counts.parked++;
         projectJobCounts.set(job.project_id, counts);
       }
 
@@ -210,13 +213,14 @@ async function AuftraegeData({
 
       projectList = (projectsResult.data ?? []).map((row) => {
         const project = toProject(row);
-        const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0 };
+        const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
         return {
           ...project,
           client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
           jobCount: counts.total,
           completedJobCount: counts.completed,
           inProgressJobCount: counts.inProgress,
+          parkedJobCount: counts.parked,
         };
       });
     }

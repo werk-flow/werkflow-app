@@ -114,6 +114,7 @@ export type ProjectWithDetails = Project & {
   jobCount: number;
   completedJobCount: number;
   inProgressJobCount: number;
+  parkedJobCount: number;
 };
 
 /**
@@ -286,6 +287,7 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   nicht_bearbeitet: 'Nicht bearbeitet',
   in_bearbeitung: 'In Bearbeitung',
   fertig: 'Fertig',
+  geparkt: 'Geparkt',
 };
 
 export const JOB_PRIORITY_LABELS: Record<JobPriority, string> = {
@@ -298,6 +300,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   nicht_begonnen: 'Nicht begonnen',
   in_bearbeitung: 'In Bearbeitung',
   abgeschlossen: 'Abgeschlossen',
+  geparkt: 'Geparkt',
 };
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
@@ -313,12 +316,13 @@ export type UnifiedListEntry =
   | { type: 'standalone-job'; job: Job }
   | { type: 'project'; project: ProjectWithDetails; childJobs: Job[] };
 
-export type UnifiedStatus = 'offen' | 'in_bearbeitung' | 'abgeschlossen';
+export type UnifiedStatus = 'offen' | 'in_bearbeitung' | 'abgeschlossen' | 'geparkt';
 
 export const UNIFIED_STATUS_LABELS: Record<UnifiedStatus, string> = {
   offen: 'Offen',
   in_bearbeitung: 'In Bearbeitung',
   abgeschlossen: 'Abgeschlossen',
+  geparkt: 'Geparkt',
 };
 
 // ============================================
@@ -331,6 +335,7 @@ export const JOB_STATUS_ORDER: JobStatus[] = [
   'nicht_bearbeitet',
   'in_bearbeitung',
   'fertig',
+  'geparkt',
 ];
 
 export const JOB_PRIORITY_ORDER: JobPriority[] = [
@@ -343,6 +348,7 @@ export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
   'nicht_begonnen',
   'in_bearbeitung',
   'abgeschlossen',
+  'geparkt',
 ];
 
 // ============================================
@@ -356,6 +362,9 @@ export const PROJECT_STATUS_ORDER: ProjectStatus[] = [
  */
 export function deriveProjectStatus(jobs: Pick<Job, 'status'>[]): ProjectStatus {
   if (jobs.length === 0) return 'nicht_begonnen';
+
+  const allParked = jobs.every((j) => j.status === 'geparkt');
+  if (allParked) return 'geparkt';
 
   const allDone = jobs.every((j) => j.status === 'fertig');
   if (allDone) return 'abgeschlossen';
@@ -459,6 +468,7 @@ export function getJobUnifiedStatus(job: Pick<Job, 'status'>): UnifiedStatus {
     case 'nicht_bearbeitet': return 'offen';
     case 'in_bearbeitung': return 'in_bearbeitung';
     case 'fertig': return 'abgeschlossen';
+    case 'geparkt': return 'geparkt';
   }
 }
 
@@ -471,6 +481,7 @@ export function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedSta
     case 'nicht_begonnen': return 'offen';
     case 'in_bearbeitung': return 'in_bearbeitung';
     case 'abgeschlossen': return 'abgeschlossen';
+    case 'geparkt': return 'geparkt';
   }
 }
 
@@ -478,9 +489,10 @@ export function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedSta
  * Derive effective project status from aggregate counts (avoids needing the jobs array).
  */
 export function getEffectiveProjectStatusFromCounts(
-  project: Pick<ProjectWithDetails, 'jobCount' | 'completedJobCount' | 'inProgressJobCount'>
+  project: Pick<ProjectWithDetails, 'jobCount' | 'completedJobCount' | 'inProgressJobCount' | 'parkedJobCount'>
 ): ProjectStatus {
   if (project.jobCount === 0) return 'nicht_begonnen';
+  if (project.parkedJobCount === project.jobCount) return 'geparkt';
   if (project.completedJobCount === project.jobCount) return 'abgeschlossen';
   if (project.completedJobCount > 0 || project.inProgressJobCount > 0) return 'in_bearbeitung';
   return 'nicht_begonnen';
@@ -541,7 +553,7 @@ export function buildUnifiedList(
 }
 
 // ============================================
-// Archive Split
+// Archive / Parkplatz Split
 // ============================================
 
 function isArchivedEntry(entry: UnifiedListEntry): boolean {
@@ -554,6 +566,16 @@ function isArchivedEntry(entry: UnifiedListEntry): boolean {
   return effective === 'abgeschlossen';
 }
 
+function isParkedEntry(entry: UnifiedListEntry): boolean {
+  if (entry.type === 'standalone-job') {
+    return entry.job.status === 'geparkt';
+  }
+  const effective =
+    entry.project.statusOverride ??
+    getEffectiveProjectStatusFromCounts(entry.project);
+  return effective === 'geparkt';
+}
+
 export function splitActiveAndArchived(
   entries: UnifiedListEntry[]
 ): { active: UnifiedListEntry[]; archived: UnifiedListEntry[] } {
@@ -564,6 +586,24 @@ export function splitActiveAndArchived(
     else active.push(entry);
   }
   return { active, archived };
+}
+
+export function splitEntries(
+  entries: UnifiedListEntry[]
+): { active: UnifiedListEntry[]; parked: UnifiedListEntry[]; archived: UnifiedListEntry[] } {
+  const active: UnifiedListEntry[] = [];
+  const parked: UnifiedListEntry[] = [];
+  const archived: UnifiedListEntry[] = [];
+  for (const entry of entries) {
+    if (isArchivedEntry(entry)) {
+      archived.push(entry);
+    } else if (isParkedEntry(entry)) {
+      parked.push(entry);
+    } else {
+      active.push(entry);
+    }
+  }
+  return { active, parked, archived };
 }
 
 // ============================================
@@ -646,6 +686,7 @@ const STATUS_SORT_ORDER: Record<string, number> = {
   nicht_bearbeitet: 0, nicht_begonnen: 0,
   in_bearbeitung: 1,
   fertig: 2, abgeschlossen: 2,
+  geparkt: 3,
 };
 
 const PRIORITY_SORT_ORDER: Record<string, number> = {

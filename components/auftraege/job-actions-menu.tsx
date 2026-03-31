@@ -25,6 +25,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
 import {
   JOB_STATUS_LABELS,
@@ -41,12 +42,17 @@ interface JobActionsMenuProps {
 export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showParkDialog, setShowParkDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleStatusChange = async (newStatus: JobStatus) => {
     if (isChangingStatus) return;
+    if (newStatus === 'geparkt') {
+      setShowParkDialog(true);
+      return;
+    }
     setIsChangingStatus(true);
 
     const result = await updateJobStatus(job.id, newStatus);
@@ -57,6 +63,17 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
       console.error('Status change failed:', result.error);
     }
 
+    setIsChangingStatus(false);
+  };
+
+  const handleParkConfirm = async () => {
+    setIsChangingStatus(true);
+    const result = await updateJobStatus(job.id, 'geparkt');
+    if (result.success) {
+      router.refresh();
+    } else {
+      console.error('Park failed:', result.error);
+    }
     setIsChangingStatus(false);
   };
 
@@ -165,6 +182,15 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ParkConfirmationDialog
+        open={showParkDialog}
+        onOpenChange={setShowParkDialog}
+        variant="job"
+        title={job.title}
+        identifier={job.jobNumber ?? undefined}
+        onConfirm={handleParkConfirm}
+      />
     </>
   );
 }

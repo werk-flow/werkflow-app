@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { ArrowUp, ArrowDown, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
-import { HOUR_WIDTH } from './timeline-grid';
+import { HOUR_WIDTH, BASE_HOUR_WIDTH } from './timeline-grid';
+import { useBlockDrag } from './use-block-drag';
 
 const EntryDetailsDialog = dynamic(
   () =>
@@ -21,6 +22,15 @@ import type {
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
+export interface MoveResizeResult {
+  clockInEntryId?: string;
+  clockOutEntryId?: string;
+  newClockInTimestamp: string;
+  newClockOutTimestamp: string;
+  originalClockInTimestamp: string;
+  originalClockOutTimestamp: string;
+}
+
 interface WorkSessionBlockProps {
   session: WorkSession;
   left: number;
@@ -30,8 +40,31 @@ interface WorkSessionBlockProps {
   currentUserId?: string;
   onRefresh: () => void;
   changeRequestMap?: EntryChangeRequestMap;
-  /** If true, left and width are percentages instead of pixels */
   usePercentage?: boolean;
+  entryUserRole?: OrgRole;
+  effectiveHourWidth?: number;
+  /** Called when user drags to move or resize the block. */
+  onMoveResize?: (result: MoveResizeResult) => void;
+  /** The date of the current day view (needed to build timestamps). */
+  viewDate?: Date;
+  /** Called on pointer-down in the move area when DayView handles cross-row moves. */
+  onBlockMoveStart?: (
+    session: WorkSession,
+    memberId: string,
+    left: number,
+    width: number,
+    e: React.PointerEvent
+  ) => void;
+  /** The member id that owns this block. Required for cross-row drag. */
+  memberId?: string;
+  /** When true, hide this block because DayView is rendering a floating preview. */
+  isDraggedAway?: boolean;
+  /** Ref that DayView sets to true when a cross-row drag occurred (prevents click opening dialog). */
+  dayViewDragDidOccurRef?: React.RefObject<boolean>;
+  /** Vertical offset within the row (from overlap layout). */
+  layoutTop?: number;
+  /** Height of the block (from overlap layout). */
+  layoutHeight?: number;
 }
 
 function formatTime(date: Date): string {
@@ -41,18 +74,27 @@ function formatTime(date: Date): string {
   });
 }
 
-/**
- * Calculate block position from a timestamp
- */
-function getPositionFromTime(date: Date): number {
+function getPositionFromTime(
+  date: Date,
+  hourWidth: number = HOUR_WIDTH
+): number {
   const hours = date.getHours();
   const minutes = date.getMinutes();
-  return (hours + minutes / 60) * HOUR_WIDTH;
+  return (hours + minutes / 60) * hourWidth;
 }
 
-/**
- * CSS for diagonal hatching pattern (for removed time / deletion)
- */
+function pixelToTimeStr(px: number, hourWidth: number, baseDate: Date): string {
+  const totalMinutes = Math.max(
+    0,
+    Math.min(24 * 60, Math.round((px / hourWidth) * 60))
+  );
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const d = new Date(baseDate);
+  d.setHours(Math.min(23, hours), Math.min(59, minutes), 0, 0);
+  return d.toISOString();
+}
+
 const hatchedStyle = {
   backgroundImage: `repeating-linear-gradient(
     -45deg,
@@ -63,13 +105,11 @@ const hatchedStyle = {
   )`
 };
 
-/**
- * Analyze a change request to determine edit type and positions
- */
 function analyzeEditRequest(
   changeRequest: ChangeRequest,
   entryType: 'clock_in' | 'clock_out',
-  currentTimestamp: string
+  currentTimestamp: string,
+  hourWidth: number = HOUR_WIDTH
 ): {
   editType: 'add_time' | 'remove_time';
   originalPos: number;
@@ -81,11 +121,9 @@ function analyzeEditRequest(
 
   const originalTime = new Date(changeRequest.originalTimestamp);
   const newTime = new Date(currentTimestamp);
-  const originalPos = getPositionFromTime(originalTime);
-  const newPos = getPositionFromTime(newTime);
+  const originalPos = getPositionFromTime(originalTime, hourWidth);
+  const newPos = getPositionFromTime(newTime, hourWidth);
 
-  // For clock_in: earlier time = add_time, later time = remove_time
-  // For clock_out: later time = add_time, earlier time = remove_time
   let editType: 'add_time' | 'remove_time';
 
   if (entryType === 'clock_in') {
@@ -97,6 +135,16 @@ function analyzeEditRequest(
   return { editType, originalPos, newPos };
 }
 
+function formatTimeFromPx(px: number, hourWidth: number): string {
+  const totalMinutes = Math.max(
+    0,
+    Math.min(24 * 60, Math.round((px / hourWidth) * 60))
+  );
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 export function WorkSessionBlock({
   session,
   left,
@@ -106,13 +154,102 @@ export function WorkSessionBlock({
   currentUserId,
   onRefresh,
   changeRequestMap = {},
-  usePercentage = false
+  usePercentage = false,
+  entryUserRole,
+  effectiveHourWidth = HOUR_WIDTH,
+  onMoveResize,
+  viewDate,
+  onBlockMoveStart,
+  memberId,
+  isDraggedAway = false,
+  dayViewDragDidOccurRef,
+  layoutTop,
+  layoutHeight
 }: WorkSessionBlockProps) {
-  // Helper to format position values
+  const hasLayout = layoutTop !== undefined && layoutHeight !== undefined;
+  const blockTop = hasLayout ? layoutTop : undefined;
+  const blockHeight = hasLayout ? layoutHeight : undefined;
+  const compact = hasLayout && layoutHeight <= 28;
   const posUnit = usePercentage ? '%' : 'px';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Get change requests for this session's entries
+  const canDrag = useMemo(() => {
+    if (!onMoveResize || !viewDate) return false;
+    if (!session.clockIn || !session.clockOut) return false;
+    if (session.isOrphan) return false;
+    if (
+      session.clockIn.status === 'pending_delete' ||
+      session.clockOut.status === 'pending_delete'
+    )
+      return false;
+    if (usePercentage) return false;
+    if (currentUserRole === 'admin') return true;
+    if (currentUserRole === 'buero') {
+      if (entryUserRole === 'employee') return true;
+      const userId = session.clockIn?.userId;
+      if (userId === currentUserId) return true;
+    }
+    return false;
+  }, [
+    onMoveResize,
+    viewDate,
+    session,
+    usePercentage,
+    currentUserRole,
+    entryUserRole,
+    currentUserId
+  ]);
+
+  const showResizeHint = useMemo(() => {
+    if (canDrag) return false;
+    if (!onMoveResize || !viewDate) return false;
+    if (!session.clockIn || !session.clockOut) return false;
+    if (session.isOrphan || usePercentage) return false;
+    if (
+      session.clockIn.status === 'pending_delete' ||
+      session.clockOut.status === 'pending_delete'
+    )
+      return false;
+    return true;
+  }, [canDrag, onMoveResize, viewDate, session, usePercentage]);
+
+  const isOwnEntryNeedingApproval = useMemo(() => {
+    if (currentUserRole !== 'buero') return false;
+    return session.clockIn?.userId === currentUserId;
+  }, [currentUserRole, session, currentUserId]);
+
+  const handleDragComplete = useCallback(
+    (newLeft: number, newWidth: number) => {
+      if (!onMoveResize || !viewDate || !session.clockIn || !session.clockOut)
+        return;
+
+      const newClockIn = pixelToTimeStr(newLeft, effectiveHourWidth, viewDate);
+      const newClockOut = pixelToTimeStr(
+        newLeft + newWidth,
+        effectiveHourWidth,
+        viewDate
+      );
+
+      onMoveResize({
+        clockInEntryId: session.clockIn.id,
+        clockOutEntryId: session.clockOut.id,
+        newClockInTimestamp: newClockIn,
+        newClockOutTimestamp: newClockOut,
+        originalClockInTimestamp: session.clockIn.timestamp,
+        originalClockOutTimestamp: session.clockOut.timestamp
+      });
+    },
+    [onMoveResize, viewDate, session, effectiveHourWidth]
+  );
+
+  const drag = useBlockDrag({
+    left,
+    width,
+    effectiveHourWidth,
+    enabled: canDrag,
+    onComplete: handleDragComplete
+  });
+
   const clockInCR = session.clockIn
     ? changeRequestMap[session.clockIn.id]
     : undefined;
@@ -120,27 +257,31 @@ export function WorkSessionBlock({
     ? changeRequestMap[session.clockOut.id]
     : undefined;
 
-  // Check if this is a pending deletion
   const isPendingDelete =
     session.clockIn?.status === 'pending_delete' ||
     session.clockOut?.status === 'pending_delete';
 
-  // Analyze edit requests
   const clockInEdit = useMemo(() => {
     if (!clockInCR || !session.clockIn) return null;
-    return analyzeEditRequest(clockInCR, 'clock_in', session.clockIn.timestamp);
-  }, [clockInCR, session.clockIn]);
+    return analyzeEditRequest(
+      clockInCR,
+      'clock_in',
+      session.clockIn.timestamp,
+      effectiveHourWidth
+    );
+  }, [clockInCR, session.clockIn, effectiveHourWidth]);
 
   const clockOutEdit = useMemo(() => {
     if (!clockOutCR || !session.clockOut) return null;
     return analyzeEditRequest(
       clockOutCR,
       'clock_out',
-      session.clockOut.timestamp
+      session.clockOut.timestamp,
+      effectiveHourWidth
     );
-  }, [clockOutCR, session.clockOut]);
+  }, [clockOutCR, session.clockOut, effectiveHourWidth]);
 
-  // Handle orphan clock_out (no clockIn)
+  // ──── Orphan clock_out ────
   if (session.isOrphan && !session.clockIn && session.clockOut) {
     const clockOutTime = new Date(session.clockOut.timestamp);
     const isNewPending = session.clockOut.status === 'pending';
@@ -150,19 +291,21 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
+            'absolute rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer z-10',
+            !hasLayout && 'top-1 h-8',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
             isPendingDelete
               ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
               : isNewPending
-              ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-              : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
           )}
           style={{
             left: `${left}${posUnit}`,
             width: usePercentage ? '6%' : '90px',
+            ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
             ...(isPendingDelete ? hatchedStyle : {})
           }}
           title={`Ausstempeln: ${formatTime(clockOutTime)}`}
@@ -180,13 +323,14 @@ export function WorkSessionBlock({
             currentUserRole={currentUserRole}
             currentUserId={currentUserId}
             onRefresh={onRefresh}
+            entryUserRole={entryUserRole}
           />
         )}
       </>
     );
   }
 
-  // Handle orphan clock_in (from previous day, no clockOut)
+  // ──── Orphan clock_in ────
   if (session.isOrphan && session.clockIn && !session.clockOut) {
     const clockInTime = new Date(session.clockIn.timestamp);
     const isNewPending = session.clockIn.status === 'pending';
@@ -196,19 +340,21 @@ export function WorkSessionBlock({
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-8 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
+            'absolute rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer z-10',
+            !hasLayout && 'top-1 h-8',
             'flex items-center justify-center gap-1 overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
             isPendingDelete
               ? 'bg-yellow-200/80 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200'
               : isNewPending
-              ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
-              : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
+                ? 'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+                : 'bg-red-500/20 text-red-700 dark:bg-red-600/20 dark:text-red-300 border border-red-500/40'
           )}
           style={{
             left: `${left}${posUnit}`,
             width: usePercentage ? '6%' : '90px',
+            ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
             ...(isPendingDelete ? hatchedStyle : {})
           }}
           title={`Einstempeln: ${formatTime(clockInTime)}`}
@@ -226,13 +372,14 @@ export function WorkSessionBlock({
             currentUserRole={currentUserRole}
             currentUserId={currentUserId}
             onRefresh={onRefresh}
+            entryUserRole={entryUserRole}
           />
         )}
       </>
     );
   }
 
-  // Normal session with clockIn (paired or open/currently working)
+  // ──── Normal session ────
   const clockInTime = new Date(session.clockIn!.timestamp);
   const clockOutTime = session.clockOut
     ? new Date(session.clockOut.timestamp)
@@ -247,16 +394,12 @@ export function WorkSessionBlock({
     ? `${formatTime(clockInTime)} - ${formatTime(clockOutTime)}`
     : `${formatTime(clockInTime)} - ...`;
 
-  // Check if this is a new pending entry (no edit request, just pending status)
   const isNewPendingEntry =
     isPending && !clockInEdit && !clockOutEdit && !isPendingDelete;
 
-  // Check if there are any pending edits
   const hasClockInEdit = clockInEdit !== null;
   const hasClockOutEdit = clockOutEdit !== null;
 
-  // Calculate positions for edit visualization
-  // For the main green block, we need to consider the "approved" portion
   let mainBlockLeft = left;
   let mainBlockWidth = width;
   const editBlocks: Array<{
@@ -268,7 +411,6 @@ export function WorkSessionBlock({
 
   if (hasClockInEdit && clockInEdit) {
     if (clockInEdit.editType === 'add_time') {
-      // Time was added at the start
       const addedWidth = clockInEdit.originalPos - clockInEdit.newPos;
       editBlocks.push({
         left: clockInEdit.newPos,
@@ -279,7 +421,6 @@ export function WorkSessionBlock({
       mainBlockLeft = clockInEdit.originalPos;
       mainBlockWidth = width - addedWidth;
     } else {
-      // Time was removed from the start
       const removedWidth = clockInEdit.newPos - clockInEdit.originalPos;
       editBlocks.push({
         left: clockInEdit.originalPos,
@@ -287,13 +428,11 @@ export function WorkSessionBlock({
         type: 'remove',
         position: 'start'
       });
-      // Main block is already at the new position
     }
   }
 
   if (hasClockOutEdit && clockOutEdit && clockOutTime) {
     if (clockOutEdit.editType === 'add_time') {
-      // Time was added at the end
       const addedWidth = clockOutEdit.newPos - clockOutEdit.originalPos;
       editBlocks.push({
         left: clockOutEdit.originalPos,
@@ -303,7 +442,6 @@ export function WorkSessionBlock({
       });
       mainBlockWidth = mainBlockWidth - addedWidth;
     } else {
-      // Time was removed from the end
       const removedWidth = clockOutEdit.originalPos - clockOutEdit.newPos;
       editBlocks.push({
         left: clockOutEdit.newPos,
@@ -314,14 +452,15 @@ export function WorkSessionBlock({
     }
   }
 
-  // If pending delete, show the entire block with hatched style
+  // ──── Pending delete ────
   if (isPendingDelete) {
     return (
       <>
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
+            'absolute rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer z-10',
+            !hasLayout && 'top-1 h-14',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -330,6 +469,7 @@ export function WorkSessionBlock({
           style={{
             left: `${left}${posUnit}`,
             width: `${width}${posUnit}`,
+            ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
             ...hatchedStyle
           }}
           title={`${timeRangeText} (${durationText}) - Löschung ausstehend`}
@@ -362,22 +502,23 @@ export function WorkSessionBlock({
             currentUserRole={currentUserRole}
             currentUserId={currentUserId}
             onRefresh={onRefresh}
+            entryUserRole={entryUserRole}
           />
         )}
       </>
     );
   }
 
-  // Render with edit blocks if present
+  // ──── Edit blocks ────
   if (editBlocks.length > 0) {
     return (
       <>
-        {/* Edit blocks (added or removed time) */}
         {editBlocks.map((block, idx) => (
           <div
             key={`edit-${idx}`}
             className={cn(
-              'absolute top-1 h-14 rounded-md',
+              'absolute rounded-md',
+              !hasLayout && 'top-1 h-14',
               block.type === 'add'
                 ? 'bg-yellow-400/80 dark:bg-yellow-500/80'
                 : 'bg-yellow-200/80 dark:bg-yellow-900/50'
@@ -385,6 +526,7 @@ export function WorkSessionBlock({
             style={{
               left: `${block.left}px`,
               width: `${Math.max(block.width, 2)}px`,
+              ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
               ...(block.type === 'remove' ? hatchedStyle : {})
             }}
             title={
@@ -395,11 +537,11 @@ export function WorkSessionBlock({
           />
         ))}
 
-        {/* Main approved block */}
         <button
           onClick={() => setIsDialogOpen(true)}
           className={cn(
-            'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
+            'absolute rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer z-10',
+            !hasLayout && 'top-1 h-14',
             'flex flex-col items-center justify-center overflow-hidden',
             'hover:shadow-md hover:z-20 hover:scale-[1.02]',
             'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
@@ -409,7 +551,8 @@ export function WorkSessionBlock({
           )}
           style={{
             left: `${mainBlockLeft}px`,
-            width: `${Math.max(mainBlockWidth, 20)}px`
+            width: `${Math.max(mainBlockWidth, 20)}px`,
+            ...(hasLayout ? { top: blockTop, height: blockHeight } : {})
           }}
           title={`${timeRangeText} (${durationText})`}
         >
@@ -443,64 +586,183 @@ export function WorkSessionBlock({
             currentUserRole={currentUserRole}
             currentUserId={currentUserId}
             onRefresh={onRefresh}
+            entryUserRole={entryUserRole}
           />
         )}
       </>
     );
   }
 
-  // Standard rendering (new pending entry or approved)
+  // ──── Standard rendering (with drag-to-move/resize support) ────
+  if (isDraggedAway) {
+    return (
+      <>
+        {isDialogOpen && (
+          <EntryDetailsDialog
+            open={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            session={session}
+            currentUserRole={currentUserRole}
+            currentUserId={currentUserId}
+            onRefresh={onRefresh}
+            entryUserRole={entryUserRole}
+          />
+        )}
+      </>
+    );
+  }
+
+  const displayLeft = drag.isDragging ? drag.currentLeft : left;
+  const displayWidth = drag.isDragging ? drag.currentWidth : width;
+
+  // Compute the live time range tooltip during drag
+  const liveTimeRange = drag.isDragging
+    ? `${formatTimeFromPx(drag.currentLeft, effectiveHourWidth)} - ${formatTimeFromPx(drag.currentLeft + drag.currentWidth, effectiveHourWidth)}`
+    : timeRangeText;
+
   return (
     <>
-      <button
-        onClick={() => setIsDialogOpen(true)}
+      {/* Ghost at original position during drag */}
+      {drag.isDragging && (
+        <div
+          className={cn(
+            'absolute rounded-md border-2 border-dashed pointer-events-none',
+            !hasLayout && 'top-1 h-14',
+            isOwnEntryNeedingApproval
+              ? 'border-green-400/60 bg-green-500/15'
+              : 'border-muted-foreground/30 bg-muted/20'
+          )}
+          style={{
+            left: `${left}px`,
+            width: `${width}px`,
+            ...(hasLayout ? { top: blockTop, height: blockHeight } : {})
+          }}
+        />
+      )}
+
+      <div
         className={cn(
-          'absolute top-1 h-14 rounded-md px-2 py-1 text-xs font-medium transition-all cursor-pointer',
-          'flex flex-col items-center justify-center overflow-hidden',
-          'hover:shadow-md hover:z-20 hover:scale-[1.02]',
-          'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-          // Approved state (green)
+          'absolute rounded-md text-xs font-medium transition-shadow z-10',
+          !hasLayout && 'top-1 h-14',
+          'flex items-stretch overflow-hidden',
+          'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1',
+          // Colors
           !isNewPendingEntry &&
             !isOpen &&
             'bg-green-500/80 text-white dark:bg-green-600/80',
-          // Open session (pulsing green)
           isOpen &&
             !isNewPendingEntry &&
             'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse',
-          // New pending entry (solid yellow, no dashed border)
           isNewPendingEntry &&
-            'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100'
+            'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100',
+          // Drag state
+          drag.isDragging &&
+            'opacity-90 shadow-lg ring-2 ring-white/30 scale-[0.990]',
+          !drag.isDragging &&
+            'hover:shadow-md hover:z-20 cursor-pointer'
         )}
         style={{
-          left: `${left}${posUnit}`,
-          width: `${width}${posUnit}`
+          left: `${displayLeft}${posUnit}`,
+          width: `${displayWidth}${posUnit}`,
+          ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
+          transition: drag.isDragging
+            ? 'none'
+            : 'box-shadow 0.15s, transform 0.15s'
         }}
-        title={`${timeRangeText} (${durationText})`}
+        onPointerMove={drag.handlers.onPointerMove}
+        onPointerUp={drag.handlers.onPointerUp}
+        title={
+          drag.isDragging ? liveTimeRange : `${timeRangeText} (${durationText})`
+        }
       >
-        {/* Use percentage thresholds when in percentage mode, pixel thresholds otherwise */}
-        {(usePercentage ? width > 5.5 : width > 80) && (
-          <>
+        {/* Left resize handle */}
+        {canDrag && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-20 hover:bg-white/20 rounded-l-md"
+            onPointerDown={drag.startResizeLeft}
+          />
+        )}
+        {showResizeHint && (
+          <div className="absolute left-0 top-0 bottom-0 w-1.5 cursor-not-allowed z-20 hover:bg-white/20 rounded-l-md" />
+        )}
+
+        {/* Main body — clickable / draggable */}
+        <button
+          className={cn(
+            'flex-1 flex items-center justify-center px-2 py-1 overflow-hidden min-w-0',
+            !compact && 'flex-col',
+            drag.isDragging && 'cursor-grabbing',
+            !drag.isDragging && 'cursor-pointer'
+          )}
+          onPointerDown={
+            canDrag
+              ? onBlockMoveStart && memberId
+                ? (e: React.PointerEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onBlockMoveStart(session, memberId, left, width, e);
+                  }
+                : drag.startMove
+              : undefined
+          }
+          onClick={(e) => {
+            if (drag.didDrag.current || dayViewDragDidOccurRef?.current) {
+              e.preventDefault();
+              return;
+            }
+            setIsDialogOpen(true);
+          }}
+        >
+          {(usePercentage ? displayWidth > 5.5 : displayWidth > 80) && (
+            compact ? (
+              <div className="flex items-center gap-1 truncate">
+                <Clock className="h-2.5 w-2.5 shrink-0 opacity-80" />
+                <span className="truncate text-[10px]">
+                  {drag.isDragging ? liveTimeRange : timeRangeText}
+                </span>
+                <span className="opacity-60 text-[9px]">•</span>
+                <span className="truncate text-[10px] opacity-80">
+                  {durationText}
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-1 truncate">
+                  <Clock className="h-3 w-3 shrink-0 opacity-80" />
+                  <span className="truncate">
+                    {drag.isDragging ? liveTimeRange : timeRangeText}
+                  </span>
+                </div>
+                <span className="truncate text-[10px] opacity-80">
+                  {durationText}
+                </span>
+              </>
+            )
+          )}
+          {(usePercentage
+            ? displayWidth <= 5.5 && displayWidth > 2.8
+            : displayWidth <= 80 && displayWidth > 40) && (
             <div className="flex items-center gap-1 truncate">
-              <Clock className="h-3 w-3 shrink-0 opacity-80" />
-              <span className="truncate">{timeRangeText}</span>
+              <Clock className={cn('shrink-0 opacity-80', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
+              <span className="truncate">{durationText}</span>
             </div>
-            <span className="truncate text-[10px] opacity-80">
-              {durationText}
-            </span>
-          </>
+          )}
+          {(usePercentage ? displayWidth <= 2.8 : displayWidth <= 40) && (
+            <Clock className={cn('shrink-0 opacity-80', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
+          )}
+        </button>
+
+        {/* Right resize handle */}
+        {canDrag && (
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-20 hover:bg-white/20 rounded-r-md"
+            onPointerDown={drag.startResizeRight}
+          />
         )}
-        {(usePercentage
-          ? width <= 5.5 && width > 2.8
-          : width <= 80 && width > 40) && (
-          <div className="flex items-center gap-1 truncate">
-            <Clock className="h-3 w-3 shrink-0 opacity-80" />
-            <span className="truncate">{durationText}</span>
-          </div>
+        {showResizeHint && (
+          <div className="absolute right-0 top-0 bottom-0 w-1.5 cursor-not-allowed z-20 hover:bg-white/20 rounded-r-md" />
         )}
-        {(usePercentage ? width <= 2.8 : width <= 40) && (
-          <Clock className="h-3 w-3 shrink-0 opacity-80" />
-        )}
-      </button>
+      </div>
 
       {isDialogOpen && (
         <EntryDetailsDialog
@@ -510,6 +772,7 @@ export function WorkSessionBlock({
           currentUserRole={currentUserRole}
           currentUserId={currentUserId}
           onRefresh={onRefresh}
+          entryUserRole={entryUserRole}
         />
       )}
     </>

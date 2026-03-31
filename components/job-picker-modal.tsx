@@ -237,7 +237,7 @@ export function JobPickerModal({
             Abbrechen
           </Button>
           <Button
-            className="flex-1"
+            className="flex-1 select-none"
             onClick={() => onConfirm(selectedJobId)}
             disabled={isPending || (mode === 'switch' && selectedJobId === currentJobId)}
           >

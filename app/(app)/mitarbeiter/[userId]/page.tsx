@@ -95,25 +95,27 @@ async function MitarbeiterDetailData({
   );
 
   const clientLookup = new Map(clients.map((c) => [c.id, c]));
-  const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number }>();
+  const projectJobCounts = new Map<string, { total: number; completed: number; inProgress: number; parked: number }>();
   for (const j of allJobsResult.data ?? []) {
     if (!j.project_id) continue;
-    const counts = projectJobCounts.get(j.project_id) ?? { total: 0, completed: 0, inProgress: 0 };
+    const counts = projectJobCounts.get(j.project_id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
     counts.total++;
     if (j.status === 'fertig') counts.completed++;
     if (j.status === 'in_bearbeitung') counts.inProgress++;
+    if (j.status === 'geparkt') counts.parked++;
     projectJobCounts.set(j.project_id, counts);
   }
 
   const allProjects: ProjectWithDetails[] = (allProjectsResult.data ?? []).map((row) => {
     const project = toProject(row);
-    const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0 };
+    const counts = projectJobCounts.get(project.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
     return {
       ...project,
       client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
       jobCount: counts.total,
       completedJobCount: counts.completed,
       inProgressJobCount: counts.inProgress,
+      parkedJobCount: counts.parked,
     };
   });
 

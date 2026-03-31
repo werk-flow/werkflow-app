@@ -28,7 +28,6 @@ import { TimeInput } from '@/components/ui/time-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
 
-const ASSIGNABLE_ROLES_EXCLUDED = ['admin', 'buero'];
 import { ClientSelectWithCreate } from './client-select-with-create';
 import {
   updateJob,
@@ -432,7 +431,7 @@ export function EditJobDialog({
             <div className="grid gap-2">
               <Label>Mitarbeiter</Label>
               <EmployeeMultiSelect
-                members={members.filter((m) => !m.role || !ASSIGNABLE_ROLES_EXCLUDED.includes(m.role))}
+                members={members}
                 selectedIds={selectedEmployees}
                 onSelectionChange={setSelectedEmployees}
                 disabled={formDisabled || isLoadingAssignments}
