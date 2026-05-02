@@ -24,6 +24,7 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import { JobEventPopover } from '../job-event-popover';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
+import { useCurrentTimePosition } from './use-current-time-position';
 
 interface CalendarMember {
   user_id: string;
@@ -108,6 +109,9 @@ export function DayView({
   } = useTimelineZoom();
 
   const dateKey = date.toISOString();
+  const isToday = date.toDateString() === new Date().toDateString();
+  const currentTimePosition = useCurrentTimePosition(effectiveHourWidth, isToday);
+
   useEffect(() => {
     resetZoom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -942,11 +946,18 @@ export function DayView({
     if (!dragJob) return;
     const durationMinutes = dragJob.estimatedDurationMinutes ?? 60;
     const width = (durationMinutes / 60) * effectiveHourWidth;
-    const snappedLeft = Math.max(0, snapToGrid(cursorX, effectiveHourWidth));
+    const cursorAnchorOffset = parkplatzDragJob ? width / 2 : 0;
+    const snappedLeft = Math.max(
+      0,
+      Math.min(
+        timelineWidth - width,
+        snapToGrid(cursorX - cursorAnchorOffset, effectiveHourWidth)
+      )
+    );
     setParkplatzDragHover({ snappedLeft, width, hoveredMemberId: memberId });
     if (parkplatzDragTimeoutRef.current) clearTimeout(parkplatzDragTimeoutRef.current);
     parkplatzDragTimeoutRef.current = setTimeout(() => setParkplatzDragHover(null), 150);
-  }, [parkplatzDragJob, effectiveHourWidth]);
+  }, [parkplatzDragJob, effectiveHourWidth, timelineWidth]);
 
   useEffect(() => {
     if (!parkplatzDragJob && !localChipDragJobRef.current) setParkplatzDragHover(null);
@@ -1092,7 +1103,7 @@ export function DayView({
         );
       })()}
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1">
         {/* Fixed employee names column */}
         <div className="w-48 shrink-0 border-r bg-background z-10">
           <div className="h-10 border-b bg-muted/30 px-3 flex items-center">
@@ -1133,13 +1144,18 @@ export function DayView({
         </div>
 
         {/* Scrollable timeline area — zoom-aware pixel layout */}
-        <div ref={scrollContainerRef} data-timeline-scroll="" className="flex-1 overflow-x-auto">
+        <div
+          ref={scrollContainerRef}
+          data-timeline-scroll=""
+          className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden"
+        >
           <div className="relative" style={{ width: timelineWidth }}>
             {/* Timeline header */}
             <TimelineHeader
               date={date}
               effectiveHourWidth={effectiveHourWidth}
               timelineWidth={timelineWidth}
+              currentTimePosition={currentTimePosition}
             />
 
             {/* Timeline rows */}
@@ -1173,6 +1189,7 @@ export function DayView({
                     isHighlighted={isHighlighted}
                     effectiveHourWidth={effectiveHourWidth}
                     timelineWidth={timelineWidth}
+                    currentTimePosition={currentTimePosition}
                     onDragCreate={handleDragCreate}
                     onMoveResize={handleMoveResize}
                     onBlockMoveStart={handleBlockMoveStart}

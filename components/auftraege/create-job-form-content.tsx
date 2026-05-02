@@ -21,7 +21,13 @@ import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-sele
 import { ClientSelectWithCreate } from './client-select-with-create';
 import { createJob, getNextJobNumber, type CreateJobInput } from '@/lib/jobs/actions';
 import { assignEmployee } from '@/lib/jobs/actions';
-import { JOB_PRIORITY_LABELS, type Client, type JobPriority, type ProjectWithDetails } from '@/lib/jobs/types';
+import {
+  JOB_PRIORITY_LABELS,
+  type Client,
+  type Job,
+  type JobPriority,
+  type ProjectWithDetails,
+} from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
@@ -56,7 +62,10 @@ export interface CreateJobFormContentProps {
   defaultDate?: Date;
   defaultTime?: string;
   defaultDurationHours?: string;
-  onSuccess?: () => void | Promise<void>;
+  onSuccess?: (payload: {
+    job: Job;
+    assignedUserIds: string[];
+  }) => void | Promise<void>;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean;
 }
@@ -170,10 +179,10 @@ export function CreateJobFormContent({
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        onSuccess?.();
-      }, 1500);
+      await onSuccess?.({
+        job: result.job,
+        assignedUserIds: selectedEmployees,
+      });
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     } finally {

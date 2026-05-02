@@ -1,7 +1,6 @@
 'use server';
 
 import { cookies } from 'next/headers';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
@@ -41,6 +40,7 @@ import {
   determineApprovalStatus,
   canManageEntries,
   canApproveEntries,
+  canViewEntries,
   canAddEntriesFor,
   needsChangeRequest
 } from './helpers';
@@ -50,7 +50,11 @@ import {
   getLocalDayStart,
   isSameLocalDay
 } from './day-utils';
-import { validateManualEntries, validateTimestampUpdate } from './validation';
+import {
+  validateManualEntries,
+  validateManualEntryJobOwnership,
+  validateTimestampUpdate
+} from './validation';
 
 /**
  * Get the current organization ID from cookies (with membership fallback).
@@ -213,6 +217,17 @@ function getTodayBounds(): TodayBounds {
   return getDayBounds(new Date());
 }
 
+function getManualEntryJobId(
+  entryType: TimeEntry['entryType'],
+  jobId?: string | null
+): string | null {
+  if (entryType !== 'clock_in') {
+    return null;
+  }
+
+  return jobId ?? null;
+}
+
 function buildAutoCloseInsert(entry: TimeEntry): TimeEntryInsert {
   const autoCloseAt = getLocalDayEnd(new Date(entry.timestamp)).toISOString();
 
@@ -235,7 +250,9 @@ async function closeStaleOpenSessionsForUser(
   orgId: string,
   referenceDate = new Date()
 ): Promise<void> {
-  const staleCutoff = getLocalDayStart(referenceDate).toISOString();
+  const effectiveReferenceDate =
+    referenceDate.getTime() > Date.now() ? new Date() : referenceDate;
+  const staleCutoff = getLocalDayStart(effectiveReferenceDate).toISOString();
 
   const { data, error } = await admin
     .from('time_entries')
@@ -329,39 +346,6 @@ async function closeStaleOpenSessionsForUser(
   if (insertError) {
     console.error('Error auto-closing stale sessions:', insertError);
   }
-}
-
-async function closeStaleOpenSessionsForOrg(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  orgId: string,
-  userIds?: string[]
-): Promise<void> {
-  let resolvedUserIds = userIds;
-
-  if (!resolvedUserIds) {
-    const { data: members, error } = await admin
-      .from('organization_members')
-      .select('user_id')
-      .eq('organization_id', orgId);
-
-    if (error) {
-      console.error(
-        'Error loading org members for stale-session cleanup:',
-        error
-      );
-      return;
-    }
-
-    resolvedUserIds = [
-      ...new Set((members || []).map((member) => member.user_id))
-    ];
-  }
-
-  await Promise.all(
-    (resolvedUserIds || []).map((userId) =>
-      closeStaleOpenSessionsForUser(admin, userId, orgId)
-    )
-  );
 }
 
 type OpenSessionOrg = { organizationId: string; organizationName: string };
@@ -687,18 +671,30 @@ export async function addManualEntry(
       };
     }
 
+    const normalizedEntries = entries.map((entry) => ({
+      ...entry,
+      jobId: getManualEntryJobId(entry.entryType, params.jobId)
+    }));
+    const jobOwnershipResult = validateManualEntryJobOwnership(normalizedEntries);
+    if (!jobOwnershipResult.valid) {
+      return {
+        success: false,
+        error: jobOwnershipResult.error || 'validation_failed'
+      };
+    }
+
     // Determine approval status
     const status = determineApprovalStatus(callerRole, targetUserId, user.id);
 
     // Cross-org guard: only run if these entries would result in an "open session" today
-    const simulatedEntries: TimeEntry[] = entries.map((e, idx) => ({
+    const simulatedEntries: TimeEntry[] = normalizedEntries.map((e, idx) => ({
       id: `simulated-${idx}`,
       userId: targetUserId,
       organizationId,
       entryType: e.entryType,
       timestamp: e.timestamp,
       isManual: true,
-      jobId: params.jobId ?? null,
+      jobId: e.jobId ?? null,
       status,
       reviewedBy: null,
       reviewedAt: null,
@@ -728,7 +724,7 @@ export async function addManualEntry(
       }
     }
 
-    const insertData = entries.map((entry) => ({
+    const insertData = normalizedEntries.map((entry) => ({
       user_id: targetUserId,
       organization_id: organizationId,
       entry_type: entry.entryType,
@@ -737,7 +733,7 @@ export async function addManualEntry(
       status,
       reviewed_by: status === 'approved' ? user.id : null,
       reviewed_at: status === 'approved' ? new Date().toISOString() : null,
-      job_id: params.jobId || null
+      job_id: entry.jobId ?? null
     }));
 
     const { data: newEntries, error: insertError } = await admin
@@ -1228,19 +1224,15 @@ export async function getTimeEntries(
     }
 
     const admin = createSupabaseAdminClient();
-    if (userId) {
-      await closeStaleOpenSessionsForUser(
-        admin,
-        userId,
-        organizationId,
-        new Date(to)
-      );
-    } else {
-      await closeStaleOpenSessionsForOrg(admin, organizationId);
+
+    if (
+      userId &&
+      !canViewEntries(callerRole, userId, user.id)
+    ) {
+      return { success: false, error: 'not_authorized' };
     }
 
-    const supabase = await createSupabaseServerClient();
-    let query = supabase
+    let query = admin
       .from('time_entries')
       .select('*')
       .eq('organization_id', organizationId)
@@ -1264,7 +1256,11 @@ export async function getTimeEntries(
       return { success: false, error: 'fetch_failed' };
     }
 
-    return { success: true, entries: toTimeEntries(data || []) };
+    const visibleEntries = (data || []).filter((entry) =>
+      canViewEntries(callerRole, entry.user_id, user.id)
+    );
+
+    return { success: true, entries: toTimeEntries(visibleEntries) };
   } catch (error) {
     console.error('Unexpected error in getTimeEntries:', error);
     return { success: false, error: 'unexpected_error' };
@@ -1346,13 +1342,13 @@ export async function getPendingEntries(
 }
 
 /**
- * Lightweight pending approval count for the sidebar badge.
- * Accepts orgId directly to avoid re-resolving the active org.
- * Returns just the count — no full objects, no profiles, no grouping.
+ * Canonical pending approval badge count.
+ * Uses the same grouped-session semantics as the approvals list so paired
+ * clock-in/clock-out requests count as exactly one everywhere.
  */
 export async function getPendingApprovalCount(
   orgId: string,
-  isAdmin: boolean
+  _isAdmin: boolean
 ): Promise<number> {
   try {
     const user = await getAuthenticatedUser();
@@ -1363,59 +1359,21 @@ export async function getPendingApprovalCount(
       return 0;
     }
 
-    const admin = createSupabaseAdminClient();
-
-    const pendingEntriesQuery = admin
-      .from('time_entries')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('status', 'pending');
-
-    if (isAdmin && callerRole === 'admin') {
-      const [entriesResult, changeRequestsResult] = await Promise.all([
-        pendingEntriesQuery,
-        admin
-          .from('entry_change_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('organization_id', orgId)
-          .eq('status', 'pending')
-      ]);
-
-      return (entriesResult.count ?? 0) + (changeRequestsResult.count ?? 0);
+    const pendingSessionsResult = await getPendingSessions(orgId);
+    if (!pendingSessionsResult.success) {
+      return 0;
     }
 
-    if (callerRole === 'buero') {
-      const { data: pendingEntries } = await admin
-        .from('time_entries')
-        .select('user_id')
-        .eq('organization_id', orgId)
-        .eq('status', 'pending');
+    let count = pendingSessionsResult.sessions.length;
 
-      if (!pendingEntries || pendingEntries.length === 0) {
-        return 0;
+    if (callerRole === 'admin') {
+      const changeRequestsResult = await getPendingChangeRequests(orgId);
+      if (changeRequestsResult.success) {
+        count += changeRequestsResult.requests.length;
       }
-
-      const uniqueUserIds = [
-        ...new Set(pendingEntries.map((entry) => entry.user_id))
-      ];
-      const { data: memberRows } = await admin
-        .from('organization_members')
-        .select('user_id, role')
-        .eq('organization_id', orgId)
-        .in('user_id', uniqueUserIds);
-
-      const managedUserIds = new Set(
-        (memberRows || [])
-          .filter((member) => MANAGED_ROLES.includes(member.role as OrgRole))
-          .map((member) => member.user_id)
-      );
-
-      return pendingEntries.filter((entry) => managedUserIds.has(entry.user_id))
-        .length;
     }
 
-    const { count } = await pendingEntriesQuery;
-    return count ?? 0;
+    return count;
   } catch {
     return 0;
   }
@@ -2417,20 +2375,132 @@ export async function getTimeEntriesForJob(
     }
 
     const admin = createSupabaseAdminClient();
+    const { data: job, error: jobError } = await admin
+      .from('jobs')
+      .select('id, organization_id')
+      .eq('id', jobId)
+      .single();
 
-    const { data, error } = await admin
+    if (jobError || !job) {
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const callerRole = await verifyMembershipFromCache(user.id, job.organization_id);
+    if (!callerRole) {
+      return { success: false, error: 'not_a_member' };
+    }
+
+    if (callerRole !== 'admin' && callerRole !== 'buero') {
+      const { data: assignment } = await admin
+        .from('job_assignments')
+        .select('id')
+        .eq('job_id', jobId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!assignment) {
+        return { success: false, error: 'not_authorized' };
+      }
+    }
+
+    const { data: jobClockIns, error: jobClockInsError } = await admin
       .from('time_entries')
       .select('*')
+      .eq('organization_id', job.organization_id)
+      .eq('entry_type', 'clock_in')
       .eq('job_id', jobId)
       .neq('status', 'rejected')
       .order('timestamp', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching time entries for job:', error);
+    if (jobClockInsError) {
+      console.error('Error fetching clock-ins for job:', jobClockInsError);
       return { success: false, error: 'fetch_failed' };
     }
 
-    return { success: true, entries: toTimeEntries(data || []) };
+    const targetClockIns = toTimeEntries(jobClockIns || []);
+    if (targetClockIns.length === 0) {
+      return { success: true, entries: [] };
+    }
+
+    const userIds = [...new Set(targetClockIns.map((entry) => entry.userId))];
+    const organizationIds = [
+      ...new Set(targetClockIns.map((entry) => entry.organizationId))
+    ];
+    const targetDayKeys = new Set(
+      targetClockIns.map(
+        (entry) =>
+          `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`
+      )
+    );
+    const timestamps = targetClockIns.map((entry) =>
+      new Date(entry.timestamp).getTime()
+    );
+    const rangeStart = getLocalDayStart(
+      new Date(Math.min(...timestamps))
+    ).toISOString();
+    const rangeEnd = getLocalDayEnd(new Date(Math.max(...timestamps))).toISOString();
+
+    const { data, error } = await admin
+      .from('time_entries')
+      .select('*')
+      .in('user_id', userIds)
+      .in('organization_id', organizationIds)
+      .gte('timestamp', rangeStart)
+      .lte('timestamp', rangeEnd)
+      .neq('status', 'rejected')
+      .order('timestamp', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching session-aware time entries for job:', error);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const relevantEntries = toTimeEntries(data || []).filter((entry) =>
+      targetDayKeys.has(
+        `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`
+      )
+    );
+    const entriesByUserDay = new Map<string, TimeEntry[]>();
+
+    for (const entry of relevantEntries) {
+      const key = `${entry.userId}:${entry.organizationId}:${getLocalDayKey(new Date(entry.timestamp))}`;
+      const existing = entriesByUserDay.get(key);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        entriesByUserDay.set(key, [entry]);
+      }
+    }
+
+    const dedupedEntries = new Map<string, TimeEntry>();
+
+    for (const entriesForDay of entriesByUserDay.values()) {
+      const sessions = calculateWorkSessions(entriesForDay).filter(
+        (session) => session.clockIn?.jobId === jobId
+      );
+
+      for (const session of sessions) {
+        if (session.clockIn) {
+          dedupedEntries.set(session.clockIn.id, session.clockIn);
+        }
+        if (session.clockOut) {
+          dedupedEntries.set(session.clockOut.id, session.clockOut);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      entries: [...dedupedEntries.values()]
+        .filter((entry) => canViewEntries(callerRole, entry.userId, user.id))
+        .sort((a, b) => {
+          const timestampDiff =
+            new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+          if (timestampDiff !== 0) return timestampDiff;
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        })
+    };
   } catch (error) {
     console.error('Unexpected error in getTimeEntriesForJob:', error);
     return { success: false, error: 'unexpected_error' };

@@ -49,10 +49,16 @@ function finalizeTodayMinutes(
   return state.todayMinutes + elapsedMinutes;
 }
 
-export function ClockStateProvider({ children }: { children: ReactNode }) {
+export function ClockStateProvider({
+  children,
+  initialState = null,
+}: {
+  children: ReactNode;
+  initialState?: LiveClockState | null;
+}) {
   const { activeOrgId } = useOrganization();
-  const [state, setState] = useState<LiveClockState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, setState] = useState<LiveClockState | null>(initialState);
+  const [isLoading, setIsLoading] = useState(!initialState);
   const [isPending, setIsPending] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
@@ -125,8 +131,15 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (initialState?.organizationId === activeOrgId) {
+      setState(initialState);
+      setStatusError(null);
+      setIsLoading(false);
+      return;
+    }
+
     void refresh();
-  }, [refresh]);
+  }, [activeOrgId, initialState, refresh]);
 
   useRealtimeEvent('time_entries', () => {
     if (skipNextRealtimeRef.current) {

@@ -74,6 +74,7 @@ export function JobPickerModal({
   }, [fetchJobs]);
 
   useRealtimeEvent('jobs', realtimeFetchJobs);
+  useRealtimeEvent('projects', realtimeFetchJobs);
   useRealtimeEvent('job_assignments', realtimeFetchJobs);
 
   useEffect(() => {

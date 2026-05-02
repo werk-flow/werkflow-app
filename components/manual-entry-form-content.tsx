@@ -95,6 +95,8 @@ export function ManualEntryFormContent({
   const [jobOptions, setJobOptions] = useState<JobOption[]>([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string>('');
+  const canAssignJob =
+    entryMode === 'clock_in' || entryMode === 'both';
 
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -138,6 +140,11 @@ export function ManualEntryFormContent({
     };
     fetchJobs();
   }, [isActive, activeOrgId, isAdminOrManager]);
+
+  useEffect(() => {
+    if (canAssignJob) return;
+    setSelectedJobId('');
+  }, [canAssignJob]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,7 +217,7 @@ export function ManualEntryFormContent({
           organizationId: activeOrgId,
           targetUserId,
           entries,
-          jobId: selectedJobId || undefined
+          jobId: canAssignJob ? selectedJobId || undefined : undefined
         });
 
         if (result.success) {
@@ -356,22 +363,24 @@ export function ManualEntryFormContent({
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>Auftrag (optional)</Label>
-          <SearchableSelect
-            options={jobOpts}
-            value={selectedJobId}
-            onChange={(v) => setSelectedJobId(v)}
-            placeholder={
-              isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
-            }
-            searchPlaceholder="Auftrag suchen..."
-            emptyMessage="Kein Auftrag gefunden"
-            disabled={isLoadingJobs}
-            allowNone
-            noneLabel="Kein Auftrag"
-          />
-        </div>
+        {canAssignJob && (
+          <div className="space-y-2">
+            <Label>Auftrag (optional)</Label>
+            <SearchableSelect
+              options={jobOpts}
+              value={selectedJobId}
+              onChange={(v) => setSelectedJobId(v)}
+              placeholder={
+                isLoadingJobs ? 'Lädt...' : 'Kein Auftrag'
+              }
+              searchPlaceholder="Auftrag suchen..."
+              emptyMessage="Kein Auftrag gefunden"
+              disabled={isLoadingJobs}
+              allowNone
+              noneLabel="Kein Auftrag"
+            />
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label>Datum</Label>

@@ -16,7 +16,13 @@ import type {
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/components/organization/organization-context';
 
-export type RealtimeTable = 'time_entries' | 'entry_change_requests' | 'organization_invites' | 'jobs' | 'job_assignments';
+export type RealtimeTable =
+  | 'time_entries'
+  | 'entry_change_requests'
+  | 'organization_invites'
+  | 'jobs'
+  | 'projects'
+  | 'job_assignments';
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
@@ -36,6 +42,7 @@ const TABLES: RealtimeTable[] = [
   'entry_change_requests',
   'organization_invites',
   'jobs',
+  'projects',
   'job_assignments'
 ];
 
@@ -162,6 +169,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('jobs', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'projects',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('projects', p)
         )
         .on(
           'postgres_changes',

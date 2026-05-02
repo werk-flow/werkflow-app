@@ -1,19 +1,13 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { Briefcase, ChevronRight, Plus, FolderKanban } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Briefcase, ChevronRight, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { FilterBar } from '@/components/auftraege/filter-bar';
 import { UnifiedAuftraegeTable } from '@/components/auftraege/unified-auftraege-table';
 import { CreateJobDialog } from '@/components/auftraege/create-job-dialog';
-import { CreateProjectDialog } from '@/components/auftraege/create-project-dialog';
+import { CreateAuftragProjectDialog } from '@/components/auftraege/create-auftrag-project-dialog';
 import {
   buildUnifiedList,
   splitEntries,
@@ -24,6 +18,7 @@ import {
   EMPTY_FILTER_STATE,
   type Job,
   type Client,
+  type Project,
   type ProjectWithDetails,
   type UnifiedListEntry,
   type FilterState,
@@ -31,6 +26,8 @@ import {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { cn } from '@/lib/utils';
+import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
+import { getAuftraegeDialogOptions } from '@/lib/jobs/actions';
 
 type ActiveStatusFilter = 'alle' | 'offen' | 'in_bearbeitung';
 
@@ -98,6 +95,7 @@ function applyDropdownFilters(
 interface EmbeddedAuftraegeSectionProps {
   jobs: Job[];
   projects: ProjectWithDetails[];
+  supportProjects?: ProjectWithDetails[];
   clientMap: Record<string, string>;
   jobAssignmentMap?: Record<string, string[]>;
   clients?: Client[];
@@ -116,15 +114,18 @@ interface EmbeddedAuftraegeSectionProps {
   hideProjectCreation?: boolean;
   /** Override projects list for create-job dialog (e.g. all active projects). */
   allProjectsForJobCreation?: ProjectWithDetails[];
+  /** Hide empty project rows while still keeping support project metadata in the live graph. */
+  hideEmptyProjects?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
 }
 
 export function EmbeddedAuftraegeSection({
-  jobs,
-  projects,
+  jobs: initialJobs,
+  projects: initialProjects,
+  supportProjects,
   clientMap,
-  jobAssignmentMap = {},
+  jobAssignmentMap: initialJobAssignmentMap = {},
   clients = [],
   members = [],
   isAdminOrManager,
@@ -136,6 +137,7 @@ export function EmbeddedAuftraegeSection({
   readOnlyClient,
   hideProjectCreation,
   allProjectsForJobCreation,
+  hideEmptyProjects = false,
   emptyTitle = 'Keine Aufträge',
   emptyDescription = 'Es sind keine Aufträge vorhanden.',
 }: EmbeddedAuftraegeSectionProps) {
@@ -160,12 +162,72 @@ export function EmbeddedAuftraegeSection({
     useState<FilterState>(EMPTY_FILTER_STATE);
   const [archiveSortCol, setArchiveSortCol] = useState<SortColumn>('datum');
   const [archiveSortDir, setArchiveSortDir] = useState<'asc' | 'desc'>('desc');
-  const [createJobOpen, setCreateJobOpen] = useState(false);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [dialogClients, setDialogClients] = useState(clients);
+  const [dialogMembers, setDialogMembers] = useState(members);
+  const [dialogProjects, setDialogProjects] = useState<ProjectWithDetails[]>(
+    allProjectsForJobCreation ?? []
+  );
+  const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
+  const {
+    jobs,
+    setJobs,
+    setRawProjects,
+    projects,
+    jobAssignmentMap,
+    setJobAssignmentMap,
+  } = useLiveAuftraegeData({
+    initialJobs,
+    initialProjects,
+    supportProjects,
+    initialJobAssignmentMap,
+    clients,
+  });
 
-  const unifiedEntries = useMemo(
-    () => buildUnifiedList(jobs, projects),
-    [jobs, projects]
+  const hasDialogOptions =
+    dialogClients.length > 0 ||
+    dialogMembers.length > 0 ||
+    dialogProjects.length > 0;
+
+  useEffect(() => {
+    if (
+      !isAdminOrManager ||
+      !createDialogOpen ||
+      hasDialogOptions ||
+      isLoadingDialogOptions
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingDialogOptions(true);
+    getAuftraegeDialogOptions()
+      .then((result) => {
+        if (cancelled || !result.success) return;
+        setDialogClients(result.clients);
+        setDialogMembers(result.members);
+        setDialogProjects(result.projects);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDialogOptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createDialogOpen, hasDialogOptions, isAdminOrManager, isLoadingDialogOptions]);
+
+  const dialogProjectOptions =
+    dialogProjects.length > 0 ? dialogProjects : allProjectsForJobCreation ?? projects;
+
+  const unifiedEntries = useMemo(() => {
+    const entries = buildUnifiedList(jobs, projects);
+    if (!hideEmptyProjects) return entries;
+
+    return entries.filter(
+      (entry) => entry.type !== 'project' || entry.childJobs.length > 0
+    );
+  }, [hideEmptyProjects, jobs, projects]
   );
 
   const { active: rawActive, parked: rawParked, archived: rawArchived } = useMemo(
@@ -231,6 +293,127 @@ export function EmbeddedAuftraegeSection({
     jobAssignmentMap,
   ]);
 
+  const handleJobUpsert = useCallback((job: Job) => {
+    setJobs((prev) => {
+      const next = prev.filter((entry) => entry.id !== job.id);
+      next.push(job);
+      return next;
+    });
+  }, [setJobs]);
+
+  const handleJobDelete = useCallback((jobId: string) => {
+    setJobs((prev) => prev.filter((entry) => entry.id !== jobId));
+    setJobAssignmentMap((prev) => {
+      if (!prev[jobId]) return prev;
+      const next = { ...prev };
+      delete next[jobId];
+      return next;
+    });
+  }, [setJobAssignmentMap, setJobs]);
+
+  const handleProjectUpsert = useCallback((project: Project) => {
+    setRawProjects((prev) => {
+      const next = prev.filter((entry) => entry.id !== project.id);
+      next.push(project);
+      return next;
+    });
+  }, [setRawProjects]);
+
+  const handleProjectDelete = useCallback((projectId: string) => {
+    setRawProjects((prev) => prev.filter((entry) => entry.id !== projectId));
+    setJobs((prev) =>
+      prev.map((job) =>
+        job.projectId === projectId ? { ...job, projectId: null } : job
+      )
+    );
+  }, [setJobs, setRawProjects]);
+
+  const handleJobAssignmentsReplace = useCallback((jobId: string, userIds: string[]) => {
+    setJobAssignmentMap((prev) => ({
+      ...prev,
+      [jobId]: userIds,
+    }));
+  }, [setJobAssignmentMap]);
+
+  const handleJobCreated = useCallback(
+    ({ job, assignedUserIds }: { job: Job; assignedUserIds: string[] }) => {
+      handleJobUpsert(job);
+      handleJobAssignmentsReplace(job.id, assignedUserIds);
+    },
+    [handleJobAssignmentsReplace, handleJobUpsert]
+  );
+
+  const handleProjectCreated = useCallback(
+    ({ project, linkedJobIds }: { project: Project; linkedJobIds: string[] }) => {
+      handleProjectUpsert(project);
+      if (linkedJobIds.length === 0) return;
+
+      setJobs((prev) =>
+        prev.map((job) =>
+          linkedJobIds.includes(job.id)
+            ? {
+                ...job,
+                projectId: project.id,
+                clientId: project.clientId ?? job.clientId,
+              }
+            : job
+        )
+      );
+    },
+    [handleProjectUpsert, setJobs]
+  );
+
+  const handleJobEdited = useCallback(
+    ({
+      job,
+      selectedEmployeeIds,
+    }: {
+      job: Job;
+      selectedEmployeeIds?: string[];
+    }) => {
+      handleJobUpsert(job);
+      if (selectedEmployeeIds) {
+        handleJobAssignmentsReplace(job.id, selectedEmployeeIds);
+      }
+    },
+    [handleJobAssignmentsReplace, handleJobUpsert]
+  );
+
+  const handleProjectEdited = useCallback(
+    ({
+      project,
+      selectedJobIds,
+    }: {
+      project: Project;
+      selectedJobIds?: string[];
+    }) => {
+      handleProjectUpsert(project);
+      if (!selectedJobIds) return;
+
+      setJobs((prev) =>
+        prev.map((job) => {
+          if (selectedJobIds.includes(job.id)) {
+            return {
+              ...job,
+              projectId: project.id,
+              clientId: project.clientId ?? job.clientId,
+            };
+          }
+
+          if (job.projectId === project.id) {
+            return {
+              ...job,
+              projectId: null,
+            };
+          }
+
+          return job;
+        })
+      );
+    },
+    [handleProjectUpsert, setJobs]
+  );
+
   const handleActiveSort = useCallback((col: SortColumn) => {
     setActiveSortCol((prev) => {
       if (col === prev) {
@@ -264,52 +447,49 @@ export function EmbeddedAuftraegeSection({
 
   const createButton = isAdminOrManager ? (
     hideProjectCreation ? (
-      <Button size="sm" className="gap-1.5" onClick={() => setCreateJobOpen(true)}>
+      <Button size="sm" className="gap-1.5" onClick={() => setCreateDialogOpen(true)}>
         <Plus className="size-3.5" />
         <span className="hidden sm:inline">Auftrag erstellen</span>
       </Button>
     ) : (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" className="gap-1.5">
-            <Plus className="size-3.5" />
-            <span className="hidden sm:inline">Erstellen</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => setCreateJobOpen(true)}>
-            <Briefcase className="mr-2 size-4" />
-            Auftrag erstellen
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
-            <FolderKanban className="mr-2 size-4" />
-            Projekt erstellen
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        size="sm"
+        className="gap-1.5"
+        onClick={() => setCreateDialogOpen(true)}
+      >
+        <Plus className="size-3.5" />
+        <span className="hidden sm:inline">Erstellen</span>
+      </Button>
     )
   ) : null;
 
   const createDialogs = isAdminOrManager ? (
     <>
-      <CreateJobDialog
-        clients={clients}
-        members={members}
-        projects={allProjectsForJobCreation ?? projects}
-        defaultClientId={defaultClientId}
-        defaultEmployeeIds={defaultEmployeeIds}
-        readOnlyClient={readOnlyClient}
-        open={createJobOpen}
-        onOpenChange={setCreateJobOpen}
-      />
-      {!hideProjectCreation && (
-        <CreateProjectDialog
-          clients={clients}
+      {hideProjectCreation ? (
+        <CreateJobDialog
+          clients={dialogClients}
+          members={dialogMembers}
+          projects={dialogProjectOptions}
+          defaultClientId={defaultClientId}
+          defaultEmployeeIds={defaultEmployeeIds}
+          readOnlyClient={readOnlyClient}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onJobCreated={handleJobCreated}
+        />
+      ) : (
+        <CreateAuftragProjectDialog
+          clients={dialogClients}
+          members={dialogMembers}
+          projects={dialogProjectOptions}
           jobs={jobs}
           defaultClientId={defaultClientId}
+          defaultEmployeeIds={defaultEmployeeIds}
           readOnlyClient={readOnlyClient}
-          open={createProjectOpen}
-          onOpenChange={setCreateProjectOpen}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onJobCreated={handleJobCreated}
+          onProjectCreated={handleProjectCreated}
         />
       )}
     </>
@@ -395,6 +575,11 @@ export function EmbeddedAuftraegeSection({
             jobAssignmentMap={jobAssignmentMap}
             members={members}
             hideClientColumn={hideClientColumn}
+            clients={clients}
+            onJobUpdated={handleJobEdited}
+            onJobDeleted={handleJobDelete}
+            onProjectUpdated={handleProjectEdited}
+            onProjectDeleted={handleProjectDelete}
           />
         </div>
       </section>
@@ -442,6 +627,11 @@ export function EmbeddedAuftraegeSection({
                 jobAssignmentMap={jobAssignmentMap}
                 members={members}
                 hideClientColumn={hideClientColumn}
+                clients={clients}
+                onJobUpdated={handleJobEdited}
+                onJobDeleted={handleJobDelete}
+                onProjectUpdated={handleProjectEdited}
+                onProjectDeleted={handleProjectDelete}
               />
             </div>
           )}
@@ -492,6 +682,11 @@ export function EmbeddedAuftraegeSection({
                 jobAssignmentMap={jobAssignmentMap}
                 members={members}
                 hideClientColumn={hideClientColumn}
+                clients={clients}
+                onJobUpdated={handleJobEdited}
+                onJobDeleted={handleJobDelete}
+                onProjectUpdated={handleProjectEdited}
+                onProjectDeleted={handleProjectDelete}
               />
             </div>
           )}

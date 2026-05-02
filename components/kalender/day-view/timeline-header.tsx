@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useState, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { BASE_HOUR_WIDTH } from './timeline-grid';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -9,42 +9,20 @@ interface TimelineHeaderProps {
   date?: Date;
   effectiveHourWidth?: number;
   timelineWidth?: number;
+  currentTimePosition?: number | null;
 }
 
 export const TimelineHeader = memo(function TimelineHeader({
   date,
   effectiveHourWidth = BASE_HOUR_WIDTH,
-  timelineWidth: totalWidth
+  timelineWidth: totalWidth,
+  currentTimePosition = null
 }: TimelineHeaderProps) {
   const timelineWidth = totalWidth ?? 24 * effectiveHourWidth;
-
-  const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(
-    null
-  );
 
   const isToday = date
     ? date.toDateString() === new Date().toDateString()
     : true;
-
-  useEffect(() => {
-    if (!isToday) {
-      setCurrentTimePosition(null);
-      return;
-    }
-
-    const updateCurrentTime = () => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const position = (hours + minutes / 60) * effectiveHourWidth;
-      setCurrentTimePosition(position);
-    };
-
-    updateCurrentTime();
-    const interval = setInterval(updateCurrentTime, 60000);
-    return () => clearInterval(interval);
-  }, [isToday, effectiveHourWidth]);
-
   // Determine which sub-labels to show based on zoom
   const subLabels = useMemo(() => {
     if (effectiveHourWidth >= 200) return [15, 30, 45];
@@ -108,10 +86,10 @@ export const TimelineHeader = memo(function TimelineHeader({
       {/* Current time indicator */}
       {isToday && currentTimePosition !== null && (
         <div
-          className="absolute top-0 h-full w-0.5 bg-destructive z-10"
+          className="absolute top-0 z-10 h-full w-0.5 -translate-x-1/2 bg-destructive"
           style={{ left: currentTimePosition }}
         >
-          <div className="absolute -top-0.5 -left-1 h-2 w-2 rounded-full bg-destructive" />
+          <div className="absolute -top-0.5 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-destructive" />
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
 
 interface LiveCounterProps {
   clockInTime: string;
@@ -8,9 +9,8 @@ interface LiveCounterProps {
 }
 
 function formatElapsedTime(startTime: Date, baseMinutes: number): string {
-  const now = new Date();
-  const elapsed = now.getTime() - startTime.getTime();
-  const totalMs = elapsed + baseMinutes * 60 * 1000;
+  const totalMs =
+    getNonNegativeElapsedMs(startTime.toISOString()) + baseMinutes * 60 * 1000;
 
   const hours = Math.floor(totalMs / (1000 * 60 * 60));
   const minutes = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60));

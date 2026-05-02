@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Trash2, ArrowRightLeft, Loader2, RotateCcw } from 'lucide-react';
+import {
+  MoreHorizontal,
+  ExternalLink,
+  Trash2,
+  ArrowRightLeft,
+  Loader2,
+  RotateCcw,
+  Pencil,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,10 +34,14 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
+import { EditProjectDialog } from './edit-project-dialog';
 import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_ORDER,
+  type Client,
+  type Job,
+  type Project,
   type ProjectStatus,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
@@ -37,15 +49,27 @@ import {
 interface ProjectActionsMenuProps {
   project: ProjectWithDetails;
   detailHref: string;
+  clients: Client[];
+  jobs: Job[];
+  onProjectUpdated?: (payload: {
+    project: Project;
+    selectedJobIds?: string[];
+  }) => void | Promise<void>;
+  onProjectDeleted?: (projectId: string) => void | Promise<void>;
 }
 
 export function ProjectActionsMenu({
   project,
   detailHref,
+  clients,
+  jobs,
+  onProjectUpdated,
+  onProjectDeleted,
 }: ProjectActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showParkDialog, setShowParkDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +85,11 @@ export function ProjectActionsMenu({
     const result = await updateProject(project.id, { statusOverride: newStatus });
 
     if (result.success) {
-      router.refresh();
+      if (onProjectUpdated) {
+        await onProjectUpdated({ project: result.project });
+      } else {
+        router.refresh();
+      }
     } else {
       console.error('Status override failed:', result.error);
     }
@@ -73,7 +101,11 @@ export function ProjectActionsMenu({
     setIsChangingStatus(true);
     const result = await parkProject(project.id);
     if (result.success) {
-      router.refresh();
+      if (onProjectUpdated) {
+        await onProjectUpdated({ project: result.project });
+      } else {
+        router.refresh();
+      }
     } else {
       console.error('Park project failed:', result.error);
     }
@@ -89,7 +121,11 @@ export function ProjectActionsMenu({
 
     if (result.success) {
       setShowDeleteDialog(false);
-      router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
+      if (onProjectDeleted) {
+        await onProjectDeleted(project.id);
+      } else {
+        router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
+      }
     } else {
       setError(result.error || 'Fehler beim Löschen des Projekts');
       setIsDeleting(false);
@@ -120,6 +156,10 @@ export function ProjectActionsMenu({
           <DropdownMenuItem onClick={() => router.push(detailHref)}>
             <ExternalLink className="size-4" />
             Details anzeigen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+            <Pencil className="size-4" />
+            Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
@@ -204,6 +244,15 @@ export function ProjectActionsMenu({
         title={project.name}
         identifier={project.projectNumber ?? undefined}
         onConfirm={handleParkConfirm}
+      />
+
+      <EditProjectDialog
+        project={project}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        clients={clients}
+        jobs={jobs}
+        onSuccess={onProjectUpdated}
       />
     </>
   );

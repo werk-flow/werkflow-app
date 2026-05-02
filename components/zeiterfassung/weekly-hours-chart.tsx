@@ -54,7 +54,7 @@ export function WeeklyHoursChart({
   const minutesToPx = (mins: number) => (mins / maxMinutes) * BAR_HEIGHT;
 
   return (
-    <div className={cn('w-full', className)}>
+    <div className={cn('isolate w-full overflow-hidden', className)}>
       {weekLabel && (
         <div className="mb-6 flex items-baseline justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
           <span>{weekLabel.dateRange}</span>

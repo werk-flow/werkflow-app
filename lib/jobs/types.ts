@@ -535,9 +535,20 @@ export function buildUnifiedList(
     entries.push({ type: 'standalone-job', job });
   }
 
+  const matchedProjectIds = new Set<string>();
   for (const project of projects) {
     const childJobs = jobsByProject.get(project.id) ?? [];
+    matchedProjectIds.add(project.id);
     entries.push({ type: 'project', project, childJobs });
+  }
+
+  // If the local project graph is temporarily incomplete, still show the job
+  // instead of dropping it from the UI entirely.
+  for (const [projectId, childJobs] of jobsByProject.entries()) {
+    if (matchedProjectIds.has(projectId)) continue;
+    for (const job of childJobs) {
+      entries.push({ type: 'standalone-job', job });
+    }
   }
 
   entries.sort((a, b) => {

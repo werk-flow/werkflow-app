@@ -1,13 +1,11 @@
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import type { OrgRole } from '@/lib/members/actions';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import NestedJobDetailLoading from './loading';
@@ -39,14 +37,12 @@ async function NestedJobDetailData({
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
 
-  const supabase = await createSupabaseServerClient();
-
-  const [projectResult, jobResult, membersResult] = await Promise.all([
+  const [
+    projectResult,
+    jobResult,
+  ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     getJobByNumber(decodeURIComponent(jobNumber)),
-    isAdminOrManager
-      ? supabase.rpc('get_org_members', { p_org_id: activeOrgId })
-      : Promise.resolve({ data: null }),
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -68,15 +64,6 @@ async function NestedJobDetailData({
     );
   }
 
-  const members: OrgMemberOption[] = (membersResult.data ?? []).map(
-    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
-      userId: m.user_id,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: m.role,
-    })
-  );
-
   return (
     <JobDetailContent
       job={job}
@@ -85,7 +72,9 @@ async function NestedJobDetailData({
         name: project.name,
         projectNumber: project.projectNumber!,
       }}
-      members={members}
+      clients={[]}
+      members={[]}
+      projects={[]}
       isAdminOrManager={isAdminOrManager}
     />
   );

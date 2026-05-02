@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   calculateBlockPosition,
   BASE_HOUR_WIDTH,
@@ -49,6 +49,8 @@ interface EmployeeTimelineRowProps {
   effectiveHourWidth?: number;
   /** Total pixel width of the timeline. */
   timelineWidth?: number;
+  /** Shared current-time position calculated once by DayView. */
+  currentTimePosition?: number | null;
   /** Callback when user drags to create a new entry on this member's row. */
   onDragCreate?: (memberId: string, startTime: string, endTime: string) => void;
   /** Callback when user drags to move/resize a work session block. */
@@ -128,6 +130,7 @@ export function EmployeeTimelineRow({
   isHighlighted = false,
   effectiveHourWidth = BASE_HOUR_WIDTH,
   timelineWidth: totalWidth,
+  currentTimePosition = null,
   onDragCreate,
   onMoveResize,
   onBlockMoveStart,
@@ -148,10 +151,6 @@ export function EmployeeTimelineRow({
   onJobDragEnd
 }: EmployeeTimelineRowProps) {
   const timelineWidth = totalWidth ?? 24 * effectiveHourWidth;
-
-  const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(
-    null
-  );
 
   const totalMinutes = useMemo(() => {
     return calculateTotalMinutes(sessions);
@@ -251,25 +250,6 @@ export function EmployeeTimelineRow({
     ? date.toDateString() === new Date().toDateString()
     : false;
 
-  useEffect(() => {
-    if (showNameOnly || !isToday) {
-      setCurrentTimePosition(null);
-      return;
-    }
-
-    const updateCurrentTime = () => {
-      const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const position = (hours + minutes / 60) * effectiveHourWidth;
-      setCurrentTimePosition(position);
-    };
-
-    updateCurrentTime();
-    const interval = setInterval(updateCurrentTime, 60000);
-    return () => clearInterval(interval);
-  }, [showNameOnly, isToday, effectiveHourWidth]);
-
   const wrappedJobDragUpdate = useCallback(
     (jobId: string, left: number, width: number) => {
       onJobDragUpdate?.(jobId, left, width, member.user_id);
@@ -341,7 +321,16 @@ export function EmployeeTimelineRow({
           try {
             const payload: DragJobPayload = JSON.parse(raw);
             const rawX = e.clientX - e.currentTarget.getBoundingClientRect().left;
-            const snappedX = Math.max(0, snapToGrid(rawX, effectiveHourWidth));
+            const durationMinutes = payload.durationMinutes ?? 60;
+            const dragWidth = (durationMinutes / 60) * effectiveHourWidth;
+            const anchorOffset = payload.source === 'parkplatz' ? dragWidth / 2 : 0;
+            const snappedX = Math.max(
+              0,
+              Math.min(
+                timelineWidth - dragWidth,
+                snapToGrid(rawX - anchorOffset, effectiveHourWidth)
+              )
+            );
             const time = formatTimeFromPx(snappedX, effectiveHourWidth);
             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
@@ -379,7 +368,7 @@ export function EmployeeTimelineRow({
         {/* Current time indicator */}
         {isToday && currentTimePosition !== null && (
           <div
-            className="absolute top-0 h-full w-0.5 bg-destructive/50 z-10"
+            className="absolute top-0 z-10 h-full w-0.5 -translate-x-1/2 bg-destructive/50"
             style={{ left: currentTimePosition }}
           />
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import {
   hasOpenSession,
@@ -39,6 +39,7 @@ export function useMemberStatusPolling({
   const [statusMap, setStatusMap] = useState<MemberStatusMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchStatus = useCallback(async () => {
     if (!organizationId || memberIds.length === 0) {
@@ -120,15 +121,54 @@ export function useMemberStatusPolling({
     }
   }, [organizationId, memberIds]);
 
+  const scheduleFetchStatus = useCallback(() => {
+    if (!enabled) return;
+
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void fetchStatus();
+    }, 150);
+  }, [enabled, fetchStatus]);
+
   // Initial fetch
   useEffect(() => {
     if (enabled) {
-      fetchStatus();
+      void fetchStatus();
     }
   }, [fetchStatus, enabled]);
 
-  // Realtime: refetch when time entries change
-  useRealtimeEvent('time_entries', fetchStatus);
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleFetchStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [enabled, scheduleFetchStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Realtime: refetch when time entries change, but debounce bursts and
+  // synthetic visibility events into a single repair fetch.
+  useRealtimeEvent('time_entries', () => {
+    scheduleFetchStatus();
+  });
 
   return {
     statusMap,

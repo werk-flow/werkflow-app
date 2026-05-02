@@ -48,9 +48,19 @@ interface ParkplatzPanelProps {
   onDragJobStart?: (job: CalendarJob) => void;
   onDragJobEnd?: () => void;
   isExternalDragOver?: boolean;
+  primaryHeaderHeight?: number;
 }
 
-export function ParkplatzPanel({ jobs, onClose, memberNames, onParkJob, onDragJobStart, onDragJobEnd, isExternalDragOver }: ParkplatzPanelProps) {
+export function ParkplatzPanel({
+  jobs,
+  onClose,
+  memberNames,
+  onParkJob,
+  onDragJobStart,
+  onDragJobEnd,
+  isExternalDragOver,
+  primaryHeaderHeight = 76,
+}: ParkplatzPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -70,7 +80,7 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, onParkJob, onDragJo
       ref={panelRef}
       data-parkplatz-panel=""
       className={cn(
-        'fixed right-0 top-0 bottom-0 z-40 w-80 bg-background border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-200',
+        'fixed right-0 top-0 bottom-0 z-[60] w-80 border-l bg-background shadow-xl flex flex-col animate-in slide-in-from-right duration-200',
         (isDragOver || isExternalDragOver) && 'ring-2 ring-inset ring-brand-purple/50 border-l-brand-purple/40'
       )}
       onDragOver={(e) => {
@@ -105,7 +115,10 @@ export function ParkplatzPanel({ jobs, onClose, memberNames, onParkJob, onDragJo
         } catch { /* ignore parse errors */ }
       }}
     >
-      <div className="flex items-center justify-between px-4 py-3 sm:py-4 border-b shrink-0">
+      <div
+        className="flex shrink-0 items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4"
+        style={{ minHeight: primaryHeaderHeight, height: primaryHeaderHeight }}
+      >
         <div className="flex items-center gap-2">
           <ParkingSquare className="size-5 text-brand-purple" />
           <h2 className="font-semibold text-base">Parkplatz</h2>

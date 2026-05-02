@@ -48,6 +48,142 @@ export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plan
   estimatedDurationMinutes?: number | null;
 };
 
+type ProjectClientContext = {
+  id: string;
+  client_id: string | null;
+};
+
+export type AuftraegeDialogOptionsResult =
+  | {
+      success: true;
+      clients: ReturnType<typeof toClient>[];
+      members: Array<{
+        userId: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+      }>;
+      projects: ProjectWithDetails[];
+      jobs: Job[];
+    }
+  | { success: false; error: string };
+
+export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOptionsResult> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const [clientsResult, membersResult, projectsResult, jobsResult] =
+    await Promise.all([
+      admin
+        .from('clients')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .order('name', { ascending: true }),
+      admin.rpc('get_org_members', { p_org_id: auth.context.orgId }),
+      admin
+        .from('projects')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .order('created_at', { ascending: false }),
+      admin
+        .from('jobs')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .order('planned_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false }),
+    ]);
+
+  if (clientsResult.error) return { success: false, error: 'clients_failed' };
+  if (membersResult.error) return { success: false, error: 'members_failed' };
+  if (projectsResult.error) return { success: false, error: 'projects_failed' };
+  if (jobsResult.error) return { success: false, error: 'jobs_failed' };
+
+  const clients = (clientsResult.data ?? []).map(toClient);
+  const clientLookup = new Map(clients.map((client) => [client.id, client]));
+  const projectJobCounts = new Map<
+    string,
+    { total: number; completed: number; inProgress: number; parked: number }
+  >();
+
+  for (const job of jobsResult.data ?? []) {
+    if (!job.project_id) continue;
+    const counts = projectJobCounts.get(job.project_id) ?? {
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      parked: 0,
+    };
+    counts.total++;
+    if (job.status === 'fertig') counts.completed++;
+    if (job.status === 'in_bearbeitung') counts.inProgress++;
+    if (job.status === 'geparkt') counts.parked++;
+    projectJobCounts.set(job.project_id, counts);
+  }
+
+  return {
+    success: true,
+    clients,
+    members: (membersResult.data ?? []).map(
+      (member: {
+        user_id: string;
+        first_name: string | null;
+        last_name: string | null;
+        role: string;
+      }) => ({
+        userId: member.user_id,
+        firstName: member.first_name ?? '',
+        lastName: member.last_name ?? '',
+        role: member.role,
+      })
+    ),
+    projects: (projectsResult.data ?? []).map((row) => {
+      const project = toProject(row);
+      const counts = projectJobCounts.get(project.id) ?? {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        parked: 0,
+      };
+
+      return {
+        ...project,
+        client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
+        jobCount: counts.total,
+        completedJobCount: counts.completed,
+        inProgressJobCount: counts.inProgress,
+        parkedJobCount: counts.parked,
+      };
+    }),
+    jobs: (jobsResult.data ?? []).map(toJob),
+  };
+}
+
+async function getProjectClientContext(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  orgId: string,
+  projectId: string
+): Promise<
+  | { success: true; project: ProjectClientContext }
+  | { success: false; error: 'project_not_found' }
+> {
+  const { data: project, error: projectError } = await admin
+    .from('projects')
+    .select('id, client_id')
+    .eq('id', projectId)
+    .eq('organization_id', orgId)
+    .single();
+
+  if (projectError || !project) {
+    return { success: false, error: 'project_not_found' };
+  }
+
+  return { success: true, project };
+}
+
 // ============================================
 // Actions
 // ============================================
@@ -86,20 +222,22 @@ export async function createJob(
       return { success: false, error: 'job_number_taken' };
     }
 
+    let inheritedProjectClientId: string | null | undefined = undefined;
     if (input.projectId) {
-      const { data: project, error: projectError } = await admin
-        .from('projects')
-        .select('id')
-        .eq('id', input.projectId)
-        .eq('organization_id', orgId)
-        .single();
+      const projectContext = await getProjectClientContext(
+        admin,
+        orgId,
+        input.projectId
+      );
 
-      if (projectError || !project) {
+      if (!projectContext.success) {
         return { success: false, error: 'project_not_found' };
       }
+
+      inheritedProjectClientId = projectContext.project.client_id;
     }
 
-    if (input.clientId) {
+    if (!input.projectId && input.clientId) {
       const { data: client, error: clientError } = await admin
         .from('clients')
         .select('id')
@@ -117,7 +255,10 @@ export async function createJob(
       .insert({
         organization_id: orgId,
         project_id: input.projectId || null,
-        client_id: input.clientId || null,
+        client_id:
+          inheritedProjectClientId !== undefined
+            ? inheritedProjectClientId
+            : input.clientId || null,
         job_number: jobNumber,
         title: input.title.trim(),
         description: input.description?.trim() || null,
@@ -165,7 +306,7 @@ export async function updateJob(
 
     const { data: existing, error: fetchError } = await admin
       .from('jobs')
-      .select('id, project_id, status')
+      .select('id, project_id, client_id, status')
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
@@ -174,20 +315,25 @@ export async function updateJob(
       return { success: false, error: 'job_not_found' };
     }
 
-    if (input.projectId !== undefined && input.projectId) {
-      const { data: project, error: projectError } = await admin
-        .from('projects')
-        .select('id')
-        .eq('id', input.projectId)
-        .eq('organization_id', orgId)
-        .single();
+    const resultingProjectId =
+      input.projectId !== undefined ? input.projectId || null : existing.project_id;
+    let inheritedProjectClientId: string | null | undefined = undefined;
 
-      if (projectError || !project) {
+    if (resultingProjectId) {
+      const projectContext = await getProjectClientContext(
+        admin,
+        orgId,
+        resultingProjectId
+      );
+
+      if (!projectContext.success) {
         return { success: false, error: 'project_not_found' };
       }
+
+      inheritedProjectClientId = projectContext.project.client_id;
     }
 
-    if (input.clientId !== undefined && input.clientId) {
+    if (!resultingProjectId && input.clientId !== undefined && input.clientId) {
       const { data: client, error: clientError } = await admin
         .from('clients')
         .select('id')
@@ -218,10 +364,13 @@ export async function updateJob(
     if (input.title !== undefined) updateData.title = input.title.trim();
     if (input.description !== undefined)
       updateData.description = input.description?.trim() || null;
-    if (input.clientId !== undefined)
-      updateData.client_id = input.clientId || null;
     if (input.projectId !== undefined)
       updateData.project_id = input.projectId || null;
+    if (resultingProjectId) {
+      updateData.client_id = inheritedProjectClientId ?? null;
+    } else if (input.clientId !== undefined) {
+      updateData.client_id = input.clientId || null;
+    }
     if (input.jobNumber !== undefined)
       updateData.job_number = input.jobNumber?.trim() || null;
     if (input.priority !== undefined) updateData.priority = input.priority;
@@ -609,10 +758,17 @@ export async function getJobDetails(
       }
     }
 
-    const { data: assignmentRows } = await admin
-      .from('job_assignments')
-      .select('*')
-      .eq('job_id', jobId);
+    const [assignmentRowsResult, projectResult] = await Promise.all([
+      admin.from('job_assignments').select('*').eq('job_id', jobId),
+      jobData.project_id
+        ? admin
+            .from('projects')
+            .select('id, name, project_number, client_id')
+            .eq('id', jobData.project_id)
+            .single()
+        : Promise.resolve({ data: null }),
+    ]);
+    const assignmentRows = assignmentRowsResult.data;
 
     const assignments: JobAssignmentWithProfile[] = [];
     if (assignmentRows && assignmentRows.length > 0) {
@@ -637,23 +793,23 @@ export async function getJobDetails(
       }
     }
 
-    // Fetch client and project in parallel (they're independent)
-    const [clientResult, projectResult] = await Promise.all([
-      jobData.client_id
-        ? admin.from('clients').select('*').eq('id', jobData.client_id).single()
-        : Promise.resolve({ data: null }),
-      jobData.project_id
-        ? admin.from('projects').select('id, name, project_number').eq('id', jobData.project_id).single()
-        : Promise.resolve({ data: null }),
-    ]);
+    const { data: projectData } = projectResult;
+    const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
+    const { data: clientData } = effectiveClientId
+      ? await admin.from('clients').select('*').eq('id', effectiveClientId).single()
+      : { data: null };
 
-    const client = clientResult.data ? toClient(clientResult.data) : null;
-    const project = projectResult.data
-      ? { id: projectResult.data.id, name: projectResult.data.name, projectNumber: projectResult.data.project_number }
+    const client = clientData ? toClient(clientData) : null;
+    const project = projectData
+      ? {
+          id: projectData.id,
+          name: projectData.name,
+          projectNumber: projectData.project_number,
+        }
       : null;
 
     const job: JobWithDetails = {
-      ...toJob(jobData),
+      ...toJob({ ...jobData, client_id: effectiveClientId }),
       assignments,
       client,
       project,
@@ -702,18 +858,17 @@ export async function getJobByNumber(
       }
     }
 
-    // Fetch assignments, client, and project in parallel
-    const [assignmentResult, clientResult, projectResult] = await Promise.all([
+    const [assignmentRowsResult, projectResult] = await Promise.all([
       admin.from('job_assignments').select('*').eq('job_id', jobData.id),
-      jobData.client_id
-        ? admin.from('clients').select('*').eq('id', jobData.client_id).single()
-        : Promise.resolve({ data: null }),
       jobData.project_id
-        ? admin.from('projects').select('id, name, project_number').eq('id', jobData.project_id).single()
+        ? admin
+            .from('projects')
+            .select('id, name, project_number, client_id')
+            .eq('id', jobData.project_id)
+            .single()
         : Promise.resolve({ data: null }),
     ]);
-
-    const assignmentRows = assignmentResult.data;
+    const assignmentRows = assignmentRowsResult.data;
     const assignments: JobAssignmentWithProfile[] = [];
     if (assignmentRows && assignmentRows.length > 0) {
       const userIds = assignmentRows.map((a) => a.user_id);
@@ -737,13 +892,23 @@ export async function getJobByNumber(
       }
     }
 
-    const client = clientResult.data ? toClient(clientResult.data) : null;
-    const project = projectResult.data
-      ? { id: projectResult.data.id, name: projectResult.data.name, projectNumber: projectResult.data.project_number }
+    const { data: projectData } = projectResult;
+    const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
+    const { data: clientData } = effectiveClientId
+      ? await admin.from('clients').select('*').eq('id', effectiveClientId).single()
+      : { data: null };
+
+    const client = clientData ? toClient(clientData) : null;
+    const project = projectData
+      ? {
+          id: projectData.id,
+          name: projectData.name,
+          projectNumber: projectData.project_number,
+        }
       : null;
 
     const job: JobWithDetails = {
-      ...toJob(jobData),
+      ...toJob({ ...jobData, client_id: effectiveClientId }),
       assignments,
       client,
       project,

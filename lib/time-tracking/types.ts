@@ -66,6 +66,7 @@ export type AddManualEntryParams = {
   organizationId: string;
   targetUserId: string;
   entries: ManualEntryInput[];
+  /** Optional job for the work block started by a clock_in entry. */
   jobId?: string;
 };
 

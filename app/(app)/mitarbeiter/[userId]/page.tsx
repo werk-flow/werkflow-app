@@ -119,11 +119,18 @@ async function MitarbeiterDetailData({
     };
   });
 
+  const employeeProjectGraph = Array.from(
+    new Map(
+      [...allProjects, ...jobsData.projects].map((project) => [project.id, project])
+    ).values()
+  );
+
   return (
     <MitarbeiterDetailContent
       member={member}
       jobs={jobsData.jobs}
       projects={jobsData.projects}
+      projectGraphProjects={employeeProjectGraph}
       clientMap={jobsData.clientMap}
       jobAssignmentMap={jobsData.jobAssignmentMap}
       clients={clients}

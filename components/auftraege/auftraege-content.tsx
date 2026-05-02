@@ -2,19 +2,12 @@
 
 import { useState, useCallback, useEffect, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Plus, Briefcase, FolderKanban, ChevronRight } from 'lucide-react';
+import { RefreshCw, Plus, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { UnifiedAuftraegeTable } from './unified-auftraege-table';
 import { FilterBar } from './filter-bar';
-import { CreateJobDialog } from './create-job-dialog';
-import { CreateProjectDialog } from './create-project-dialog';
+import { CreateAuftragProjectDialog } from './create-auftrag-project-dialog';
 import {
   UNIFIED_STATUS_LABELS,
   EMPTY_FILTER_STATE,
@@ -23,6 +16,7 @@ import {
   matchesSearch,
   sortUnifiedEntries,
   getEntryUnifiedStatus,
+  type Project,
   type Client,
   type Job,
   type UnifiedStatus,
@@ -33,6 +27,7 @@ import {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
+import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
 
 type ActiveStatusFilter = 'alle' | 'offen' | 'in_bearbeitung';
 
@@ -109,14 +104,25 @@ export function AuftraegeContent({
   clientMap,
   clients,
   members,
-  jobAssignmentMap,
+  jobAssignmentMap: initialJobAssignmentMap,
   isAdminOrManager,
 }: AuftraegeContentProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [jobs, setJobs] = useState<Job[]>(initialJobs);
-  const [projects, setProjects] = useState<ProjectWithDetails[]>(initialProjects);
   const [prevEntryCount, setPrevEntryCount] = useState(0);
+  const {
+    jobs,
+    setJobs,
+    setRawProjects,
+    projects,
+    jobAssignmentMap,
+    setJobAssignmentMap,
+  } = useLiveAuftraegeData({
+    initialJobs,
+    initialProjects,
+    initialJobAssignmentMap,
+    clients,
+  });
 
   // Active section state
   const [activeStatusFilter, setActiveStatusFilter] = useState<ActiveStatusFilter>('alle');
@@ -139,11 +145,7 @@ export function AuftraegeContent({
   const [archiveSortCol, setArchiveSortCol] = useState<SortColumn>('datum');
   const [archiveSortDir, setArchiveSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const [createJobOpen, setCreateJobOpen] = useState(false);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
-
-  useEffect(() => { setJobs(initialJobs); }, [initialJobs]);
-  useEffect(() => { setProjects(initialProjects); }, [initialProjects]);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const unifiedEntries = useMemo(
     () => buildUnifiedList(jobs, projects),
@@ -220,6 +222,126 @@ export function AuftraegeContent({
     startTransition(() => { router.refresh(); });
   }, [router, unifiedEntries.length]);
 
+  const handleJobUpsert = useCallback((job: Job) => {
+    setJobs((prev) => {
+      const next = prev.filter((entry) => entry.id !== job.id);
+      next.push(job);
+      return next;
+    });
+  }, [setJobs]);
+
+  const handleJobDelete = useCallback((jobId: string) => {
+    setJobs((prev) => prev.filter((entry) => entry.id !== jobId));
+    setJobAssignmentMap((prev) => {
+      if (!prev[jobId]) return prev;
+      const next = { ...prev };
+      delete next[jobId];
+      return next;
+    });
+  }, [setJobAssignmentMap, setJobs]);
+
+  const handleProjectUpsert = useCallback((project: Project) => {
+    setRawProjects((prev) => {
+      const next = prev.filter((entry) => entry.id !== project.id);
+      next.push(project);
+      return next;
+    });
+  }, [setRawProjects]);
+
+  const handleProjectDelete = useCallback((projectId: string) => {
+    setRawProjects((prev) => prev.filter((entry) => entry.id !== projectId));
+    setJobs((prev) =>
+      prev.map((job) =>
+        job.projectId === projectId ? { ...job, projectId: null } : job
+      )
+    );
+  }, [setJobs, setRawProjects]);
+
+  const handleJobAssignmentsReplace = useCallback((jobId: string, userIds: string[]) => {
+    setJobAssignmentMap((prev) => ({
+      ...prev,
+      [jobId]: userIds,
+    }));
+  }, [setJobAssignmentMap]);
+
+  const handleJobCreated = useCallback(
+    ({ job, assignedUserIds }: { job: Job; assignedUserIds: string[] }) => {
+      handleJobUpsert(job);
+      handleJobAssignmentsReplace(job.id, assignedUserIds);
+    },
+    [handleJobAssignmentsReplace, handleJobUpsert]
+  );
+
+  const handleProjectCreated = useCallback(
+    ({ project, linkedJobIds }: { project: Project; linkedJobIds: string[] }) => {
+      handleProjectUpsert(project);
+      if (linkedJobIds.length === 0) return;
+
+      setJobs((prev) =>
+        prev.map((job) =>
+          linkedJobIds.includes(job.id)
+            ? {
+                ...job,
+                projectId: project.id,
+                clientId: project.clientId ?? job.clientId,
+              }
+            : job
+        )
+      );
+    },
+    [handleProjectUpsert, setJobs]
+  );
+
+  const handleJobEdited = useCallback(
+    ({
+      job,
+      selectedEmployeeIds,
+    }: {
+      job: Job;
+      selectedEmployeeIds?: string[];
+    }) => {
+      handleJobUpsert(job);
+      if (selectedEmployeeIds) {
+        handleJobAssignmentsReplace(job.id, selectedEmployeeIds);
+      }
+    },
+    [handleJobAssignmentsReplace, handleJobUpsert]
+  );
+
+  const handleProjectEdited = useCallback(
+    ({
+      project,
+      selectedJobIds,
+    }: {
+      project: Project;
+      selectedJobIds?: string[];
+    }) => {
+      handleProjectUpsert(project);
+      if (!selectedJobIds) return;
+      setJobs((prev) =>
+        prev.map((job) => {
+          if (selectedJobIds.includes(job.id)) {
+            return {
+              ...job,
+              projectId: project.id,
+              clientId: project.clientId ?? job.clientId,
+            };
+          }
+
+          if (job.projectId === project.id) {
+            return {
+              ...job,
+              projectId: null,
+            };
+          }
+
+          return job;
+        })
+      );
+    },
+    [handleProjectUpsert, setJobs]
+  );
+
   const handleActiveSort = useCallback((col: SortColumn) => {
     if (col === activeSortCol) {
       setActiveSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -243,24 +365,14 @@ export function AuftraegeContent({
       <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Aufträge</h1>
         {isAdminOrManager && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="default" className="gap-2">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Erstellen</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setCreateJobOpen(true)}>
-                <Briefcase className="mr-2 size-4" />
-                Auftrag erstellen
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCreateProjectOpen(true)}>
-                <FolderKanban className="mr-2 size-4" />
-                Projekt erstellen
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            size="default"
+            className="gap-2"
+            onClick={() => setCreateDialogOpen(true)}
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Erstellen</span>
+          </Button>
         )}
       </header>
 
@@ -328,7 +440,12 @@ export function AuftraegeContent({
             sortDirection={activeSortDir}
             onSort={handleActiveSort}
             jobAssignmentMap={jobAssignmentMap}
+            clients={clients}
             members={members}
+            onJobUpdated={handleJobEdited}
+            onJobDeleted={handleJobDelete}
+            onProjectUpdated={handleProjectEdited}
+            onProjectDeleted={handleProjectDelete}
           />
         </div>
       </section>
@@ -372,7 +489,12 @@ export function AuftraegeContent({
                 sortDirection={parkplatzSortDir}
                 onSort={handleParkplatzSort}
                 jobAssignmentMap={jobAssignmentMap}
+                clients={clients}
                 members={members}
+                onJobUpdated={handleJobEdited}
+                onJobDeleted={handleJobDelete}
+                onProjectUpdated={handleProjectEdited}
+                onProjectDeleted={handleProjectDelete}
               />
             </div>
           )}
@@ -419,7 +541,12 @@ export function AuftraegeContent({
                 onSort={handleArchiveSort}
                 isArchive
                 jobAssignmentMap={jobAssignmentMap}
+                clients={clients}
                 members={members}
+                onJobUpdated={handleJobEdited}
+                onJobDeleted={handleJobDelete}
+                onProjectUpdated={handleProjectEdited}
+                onProjectDeleted={handleProjectDelete}
               />
             </div>
           )}
@@ -427,21 +554,16 @@ export function AuftraegeContent({
       )}
 
       {isAdminOrManager && (
-        <>
-          <CreateJobDialog
-            clients={clients}
-            members={members}
-            projects={projects}
-            open={createJobOpen}
-            onOpenChange={setCreateJobOpen}
-          />
-          <CreateProjectDialog
-            clients={clients}
-            jobs={jobs}
-            open={createProjectOpen}
-            onOpenChange={setCreateProjectOpen}
-          />
-        </>
+        <CreateAuftragProjectDialog
+          clients={clients}
+          members={members}
+          projects={projects}
+          jobs={jobs}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          onJobCreated={handleJobCreated}
+          onProjectCreated={handleProjectCreated}
+        />
       )}
     </div>
     </div>

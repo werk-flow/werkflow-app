@@ -15,6 +15,7 @@ import {
   X,
   UserPlus,
   ChevronDown,
+  Pencil,
 } from 'lucide-react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
@@ -56,6 +57,9 @@ import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { PlaceholderSection } from '@/components/shared/placeholder-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
+import { ClientAssignmentDialog } from './client-assignment-dialog';
+import { EditJobDialog } from './edit-job-dialog';
+import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import {
@@ -64,16 +68,21 @@ import {
   deleteJob,
   assignEmployee,
   unassignEmployee,
+  getAuftraegeDialogOptions,
 } from '@/lib/jobs/actions';
+import { updateProject } from '@/lib/projects/actions';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
   type JobWithDetails,
   type JobStatus,
   type JobPriority,
   type Project,
+  type ProjectWithDetails,
+  type Client,
   JOB_STATUS_LABELS,
   JOB_PRIORITY_LABELS,
   CLIENT_TYPE_LABELS,
@@ -139,31 +148,83 @@ function getInitials(firstName: string | null, lastName: string | null): string 
 interface JobDetailContentProps {
   job: JobWithDetails;
   parentProject?: Pick<Project, 'id' | 'name' | 'projectNumber'>;
+  clients: Client[];
   members: OrgMemberOption[];
+  projects?: ProjectWithDetails[];
   isAdminOrManager: boolean;
 }
 
 export function JobDetailContent({
   job,
   parentProject,
+  clients,
   members,
+  projects = [],
   isAdminOrManager,
 }: JobDetailContentProps) {
   const router = useRouter();
   const { activeJobIds } = useActiveJobs();
   const isJobActive = activeJobIds.has(job.id);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [showClientDialog, setShowClientDialog] = useState(false);
+  const [showProjectDialog, setShowProjectDialog] = useState(false);
   const [showParkDialog, setShowParkDialog] = useState(false);
   const [unassigningUserId, setUnassigningUserId] = useState<string | null>(
     null
   );
   const [assignSelectedIds, setAssignSelectedIds] = useState<string[]>([]);
   const [isAssigning, startAssignTransition] = useTransition();
+  const [isUpdatingClient, startClientUpdateTransition] = useTransition();
+  const [isUpdatingProject, startProjectUpdateTransition] = useTransition();
+  const [dialogClients, setDialogClients] = useState(clients);
+  const [dialogMembers, setDialogMembers] = useState(members);
+  const [dialogProjects, setDialogProjects] = useState(projects);
+  const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
+  const hasDialogOptions =
+    dialogClients.length > 0 || dialogMembers.length > 0 || dialogProjects.length > 0;
+  const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
 
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [isLoadingTime, setIsLoadingTime] = useState(true);
+
+  useEffect(() => {
+    if (
+      !isAdminOrManager ||
+      hasDialogOptions ||
+      isLoadingDialogOptions ||
+      (!showAssignDialog && !showClientDialog && !showProjectDialog && !showEditDialog)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingDialogOptions(true);
+    getAuftraegeDialogOptions()
+      .then((result) => {
+        if (cancelled || !result.success) return;
+        setDialogClients(result.clients);
+        setDialogMembers(result.members);
+        setDialogProjects(result.projects);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingDialogOptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    hasDialogOptions,
+    isAdminOrManager,
+    isLoadingDialogOptions,
+    showAssignDialog,
+    showClientDialog,
+    showEditDialog,
+    showProjectDialog,
+  ]);
   const [showAllSessions, setShowAllSessions] = useState(false);
 
   const fetchTimeEntries = useCallback(async () => {
@@ -183,9 +244,39 @@ export function JobDetailContent({
     fetchTimeEntries();
   }, [fetchTimeEntries]);
 
+  useRealtimeRouterRefresh({
+    tables: ['jobs', 'projects', 'job_assignments'],
+    enabled: !suspendRealtimeRefresh,
+  });
   useRealtimeEvent('time_entries', () => fetchTimeEntries());
 
-  const workSessions = useMemo(() => {
+  const sessionPeople = useMemo(() => {
+    const people = new Map<
+      string,
+      { firstName: string | null; lastName: string | null; email?: string | null }
+    >();
+
+    for (const member of members) {
+      people.set(member.userId, {
+        firstName: member.firstName || null,
+        lastName: member.lastName || null,
+      });
+    }
+
+    for (const assignment of job.assignments) {
+      if (!people.has(assignment.userId)) {
+        people.set(assignment.userId, {
+          firstName: assignment.firstName,
+          lastName: assignment.lastName,
+          email: assignment.email,
+        });
+      }
+    }
+
+    return people;
+  }, [job.assignments, members]);
+
+  const allSessions = useMemo(() => {
     const entriesByUser: Record<string, TimeEntry[]> = {};
     for (const e of timeEntries) {
       if (!entriesByUser[e.userId]) entriesByUser[e.userId] = [];
@@ -200,33 +291,71 @@ export function JobDetailContent({
       );
   }, [timeEntries]);
 
+  const completedWorkSessions = useMemo(
+    () => allSessions.filter((session) => session.clockIn && session.clockOut),
+    [allSessions]
+  );
+
+  const activeWorkSessions = useMemo(
+    () =>
+      allSessions.filter(
+        (session) =>
+          session.clockIn &&
+          !session.clockOut &&
+          !session.isOrphan &&
+          session.jobId === job.id
+      ),
+    [allSessions, job.id]
+  );
+
   const totalMinutes = useMemo(
     () =>
-      workSessions.reduce(
+      completedWorkSessions.reduce(
         (sum, s) => sum + (s.durationMinutes ?? 0),
         0
       ),
-    [workSessions]
+    [completedWorkSessions]
   );
 
   const perEmployeeMinutes = useMemo(() => {
-    const map: Record<string, { name: string; minutes: number }> = {};
-    for (const s of workSessions) {
+    const map: Record<string, { userId: string; name: string; minutes: number }> =
+      {};
+    for (const s of completedWorkSessions) {
       if (!s.clockIn) continue;
       const uid = s.clockIn.userId;
       if (!map[uid]) {
-        const a = job.assignments.find((a) => a.userId === uid);
-        const name = a
-          ? [a.firstName, a.lastName].filter(Boolean).join(' ') ||
-            a.email ||
+        const person = sessionPeople.get(uid);
+        const name = person
+          ? [person.firstName, person.lastName].filter(Boolean).join(' ') ||
+            person.email ||
             'Mitarbeiter'
           : 'Mitarbeiter';
-        map[uid] = { name, minutes: 0 };
+        map[uid] = { userId: uid, name, minutes: 0 };
       }
       map[uid].minutes += s.durationMinutes ?? 0;
     }
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
-  }, [workSessions, job.assignments]);
+  }, [completedWorkSessions, sessionPeople]);
+
+  const activeWorkers = useMemo(
+    () =>
+      activeWorkSessions.map((session) => {
+        const userId = session.clockIn!.userId;
+        const person = sessionPeople.get(userId);
+        return {
+          userId,
+          clockIn: session.clockIn!,
+          name:
+            (person &&
+              ([person.firstName, person.lastName].filter(Boolean).join(' ') ||
+                person.email)) ||
+            'Mitarbeiter',
+          initials: getInitials(person?.firstName ?? null, person?.lastName ?? null),
+          isPending: session.pendingState === 'full' || session.pendingState === 'partial',
+        };
+      }),
+    [activeWorkSessions, sessionPeople]
+  );
 
   const projectInfo = parentProject ?? job.project;
 
@@ -277,6 +406,57 @@ export function JobDetailContent({
     await unassignEmployee(job.id, userId);
     setUnassigningUserId(null);
     router.refresh();
+  };
+
+  const handleClientSave = async (clientId: string) => {
+    startClientUpdateTransition(async () => {
+      if (parentProject?.id) {
+        await updateProject(parentProject.id, { clientId });
+      } else {
+        await updateJob(job.id, {
+          clientId,
+        });
+      }
+      setShowClientDialog(false);
+      router.refresh();
+    });
+  };
+
+  const handleProjectSave = async (projectId: string) => {
+    startProjectUpdateTransition(async () => {
+      setSuspendRealtimeRefresh(true);
+      const result = await updateJob(job.id, { projectId });
+      setShowProjectDialog(false);
+      if (!result.success && result.error !== 'no_changes') {
+        setSuspendRealtimeRefresh(false);
+        router.refresh();
+        return;
+      }
+
+      const nextJobNumber = result.success ? result.job.jobNumber : job.jobNumber;
+      if (!nextJobNumber) {
+        setSuspendRealtimeRefresh(false);
+        router.refresh();
+        return;
+      }
+
+      const nextProjectId = projectId || '';
+      if (!nextProjectId) {
+        router.replace(`/auftraege/${encodeURIComponent(nextJobNumber)}`);
+        return;
+      }
+
+      const nextProject = projects.find((entry) => entry.id === nextProjectId);
+      if (!nextProject?.projectNumber) {
+        setSuspendRealtimeRefresh(false);
+        router.refresh();
+        return;
+      }
+
+      router.replace(
+        `/auftraege/projekt/${encodeURIComponent(nextProject.projectNumber)}/${encodeURIComponent(nextJobNumber)}`
+      );
+    });
   };
 
   const breadcrumbs = projectInfo?.projectNumber
@@ -474,6 +654,10 @@ export function JobDetailContent({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                  <Pencil className="mr-2 size-4" />
+                  Bearbeiten
+                </DropdownMenuItem>
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>Status ändern</DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
@@ -507,7 +691,7 @@ export function JobDetailContent({
         }
       />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <div className="flex-1 overflow-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
           {/* Left Column: Metadata + Client + Employees */}
           <div className="space-y-6">
@@ -542,6 +726,9 @@ export function JobDetailContent({
                 href=""
                 icon={<Building2 className="size-5" />}
                 emptyState={{ text: 'Kein Kunde zugewiesen' }}
+                onEmptyClick={
+                  isAdminOrManager ? () => setShowClientDialog(true) : undefined
+                }
               />
             )}
 
@@ -640,6 +827,9 @@ export function JobDetailContent({
                 href=""
                 icon={<FolderOpen className="size-5" />}
                 emptyState={{ text: 'Keinem Projekt zugeordnet' }}
+                onEmptyClick={
+                  isAdminOrManager ? () => setShowProjectDialog(true) : undefined
+                }
               />
             )}
 
@@ -662,12 +852,54 @@ export function JobDetailContent({
                   <Skeleton className="h-8 w-3/4" />
                   <Skeleton className="h-8 w-1/2" />
                 </div>
-              ) : workSessions.length === 0 ? (
+              ) : activeWorkers.length === 0 && completedWorkSessions.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   Noch keine Arbeitszeiten für diesen Auftrag erfasst.
                 </p>
               ) : (
                 <div className="space-y-4">
+                  {activeWorkers.length > 0 && (
+                    <div className="rounded-md border border-green-200 bg-green-50/80 p-3 dark:border-green-900/40 dark:bg-green-950/20">
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+                        </span>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                          Aktiv in Arbeit
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {activeWorkers.map((worker) => (
+                          <div
+                            key={worker.userId}
+                            className="flex items-center gap-3 rounded-md bg-background/80 px-3 py-2"
+                          >
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-[10px] font-medium text-green-700 dark:text-green-300">
+                              {worker.initials}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">
+                                {worker.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Eingestempelt seit{' '}
+                                {new Date(worker.clockIn.timestamp).toLocaleTimeString(
+                                  'de-DE',
+                                  {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  }
+                                )}
+                                {worker.isPending ? ' · ausstehend' : ''}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Summary stats */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-md bg-muted/50 p-3">
@@ -677,9 +909,9 @@ export function JobDetailContent({
                       </p>
                     </div>
                     <div className="rounded-md bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Einträge</p>
+                      <p className="text-xs text-muted-foreground">Abgeschlossene Einsätze</p>
                       <p className="text-lg font-bold tabular-nums">
-                        {workSessions.length}
+                        {completedWorkSessions.length}
                       </p>
                     </div>
                   </div>
@@ -696,7 +928,7 @@ export function JobDetailContent({
                             ? (emp.minutes / totalMinutes) * 100
                             : 0;
                         return (
-                          <div key={emp.name} className="space-y-1">
+                          <div key={emp.userId} className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-medium truncate">
                                 {emp.name}
@@ -724,7 +956,7 @@ export function JobDetailContent({
                       className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors"
                     >
                       <span>
-                        Einzelne Einträge ({workSessions.length})
+                        Einzelne Einträge ({completedWorkSessions.length})
                       </span>
                       <ChevronDown
                         className={cn(
@@ -736,23 +968,22 @@ export function JobDetailContent({
 
                     {showAllSessions && (
                       <div className="mt-2 divide-y max-h-64 overflow-auto">
-                        {workSessions.map((s, idx) => {
+                        {completedWorkSessions.map((s, idx) => {
                           if (!s.clockIn || !s.clockOut) return null;
-                          const emp = job.assignments.find(
-                            (a) => a.userId === s.clockIn!.userId
-                          );
-                          const empName = emp
-                            ? [emp.firstName, emp.lastName]
-                                .filter(Boolean)
-                                .join(' ') || emp.email
-                            : 'Mitarbeiter';
+                          const member = sessionPeople.get(s.clockIn.userId);
+                          const empName =
+                            [member?.firstName, member?.lastName]
+                              .filter(Boolean)
+                              .join(' ') ||
+                            member?.email ||
+                            'Mitarbeiter';
 
                           return (
                             <div key={idx} className="flex items-center gap-3 py-2 text-sm">
                               <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
                                 {getInitials(
-                                  emp?.firstName ?? null,
-                                  emp?.lastName ?? null
+                                  member?.firstName ?? null,
+                                  member?.lastName ?? null
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
@@ -835,10 +1066,16 @@ export function JobDetailContent({
           </DialogHeader>
           <div className="py-4">
             <EmployeeMultiSelect
-              members={members}
+              members={dialogMembers}
               selectedIds={assignSelectedIds}
               onSelectionChange={setAssignSelectedIds}
             />
+            {isLoadingDialogOptions && (
+              <div className="mt-3 space-y-2">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-2/3" />
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button
@@ -848,7 +1085,10 @@ export function JobDetailContent({
             >
               Abbrechen
             </Button>
-            <Button onClick={handleAssignEmployees} disabled={isAssigning}>
+            <Button
+              onClick={handleAssignEmployees}
+              disabled={isAssigning || isLoadingDialogOptions}
+            >
               {isAssigning && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
@@ -857,6 +1097,40 @@ export function JobDetailContent({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ClientAssignmentDialog
+        open={showClientDialog}
+        onOpenChange={setShowClientDialog}
+        clients={dialogClients}
+        currentClientId={job.clientId}
+        title={
+          parentProject?.id
+            ? 'Kunde zum Projekt hinzufügen'
+            : 'Kunde zum Auftrag hinzufügen'
+        }
+        isSaving={isUpdatingClient}
+        onSave={handleClientSave}
+      />
+
+      <ProjectAssignmentDialog
+        open={showProjectDialog}
+        onOpenChange={setShowProjectDialog}
+        projects={dialogProjects}
+        currentProjectId={job.projectId}
+        currentClientId={job.clientId}
+        title="Projekt zum Auftrag hinzufügen"
+        isSaving={isUpdatingProject}
+        onSave={handleProjectSave}
+      />
+
+      <EditJobDialog
+        job={job}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        clients={dialogClients}
+        members={dialogMembers}
+        projects={dialogProjects}
+      />
 
       <ParkConfirmationDialog
         open={showParkDialog}

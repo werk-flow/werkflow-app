@@ -10,7 +10,6 @@ import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-c
 import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
 import {
   getCurrentClockState,
-  getPendingApprovalCount,
   getTimeEntries,
 } from '@/lib/time-tracking/actions';
 import type { OrgRole } from '@/lib/members/actions';
@@ -76,30 +75,27 @@ async function ZeiterfassungData({
   currentUserRole: OrgRole;
   tab: string | undefined;
 }) {
-  let initialPendingCount = 0;
-  let members: Array<{
+  async function fetchMembers(): Promise<Array<{
     user_id: string;
     first_name: string | null;
     last_name: string | null;
     email: string;
     role: string;
-  }> = [];
-  const initialOverview = await getInitialOverview(activeOrgId, userId);
+  }>> {
+    if (!isAdminOrManager) return [];
 
-  if (isAdminOrManager) {
     const supabase = await createSupabaseServerClient();
+    const { data: membersData } = await supabase.rpc('get_org_members', {
+      p_org_id: activeOrgId,
+    });
 
-    const [pendingCount, { data: membersData }] = await Promise.all([
-      getPendingApprovalCount(activeOrgId, isAdmin),
-      supabase.rpc('get_org_members', { p_org_id: activeOrgId })
-    ]);
-
-    initialPendingCount = pendingCount;
-
-    if (membersData) {
-      members = membersData;
-    }
+    return membersData ?? [];
   }
+
+  const [initialOverview, members] = await Promise.all([
+    getInitialOverview(activeOrgId, userId),
+    fetchMembers(),
+  ]);
 
   return (
     <ZeiterfassungContent
@@ -109,7 +105,6 @@ async function ZeiterfassungData({
       isAdmin={isAdmin}
       currentUserRole={currentUserRole}
       initialTab={tab === 'approvals' ? 'approvals' : 'overview'}
-      initialPendingCount={initialPendingCount}
       members={members}
       initialOverview={initialOverview}
     />

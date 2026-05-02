@@ -57,6 +57,7 @@ import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import {
   computeTimeBreakdown,
   formatDuration,
+  getNonNegativeElapsedMs,
   WORK_GOAL_MINUTES,
 } from '@/lib/time-tracking/helpers';
 import type {
@@ -111,6 +112,7 @@ interface MitarbeiterDetailContentProps {
   member: MemberDetail;
   jobs: Job[];
   projects: ProjectWithDetails[];
+  projectGraphProjects: ProjectWithDetails[];
   clientMap: Record<string, string>;
   jobAssignmentMap: Record<string, string[]>;
   clients: Client[];
@@ -126,6 +128,7 @@ export function MitarbeiterDetailContent({
   member,
   jobs,
   projects,
+  projectGraphProjects,
   clientMap,
   jobAssignmentMap,
   clients,
@@ -209,9 +212,7 @@ export function MitarbeiterDetailContent({
     const compute = () => {
       let base = status?.todayMinutes ?? 0;
       if (status?.isClockedIn && status.clockInTime) {
-        const elapsed =
-          (Date.now() - new Date(status.clockInTime).getTime()) / 60000;
-        base += elapsed;
+        base += getNonNegativeElapsedMs(status.clockInTime) / 60000;
       }
       setLiveTotalMinutes(base);
     };
@@ -439,6 +440,7 @@ export function MitarbeiterDetailContent({
             <EmbeddedAuftraegeSection
               jobs={jobs}
               projects={projects}
+              supportProjects={projectGraphProjects}
               clientMap={clientMap}
               jobAssignmentMap={jobAssignmentMap}
               clients={clients}
@@ -447,6 +449,7 @@ export function MitarbeiterDetailContent({
               defaultEmployeeIds={[member.userId]}
               isAdminOrManager={isAdminOrManager}
               hideProjectCreation
+              hideEmptyProjects
               allProjectsForJobCreation={allProjects}
               emptyTitle="Keine Aufträge zugewiesen"
               emptyDescription="Diesem Mitarbeiter sind derzeit keine Aufträge zugewiesen."

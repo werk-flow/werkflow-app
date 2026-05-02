@@ -83,17 +83,19 @@ function useDialogAwareDropdownLayout(
       if (!trigger) return;
 
       const triggerRect = trigger.getBoundingClientRect();
-      const dialog = trigger.closest('[role="dialog"]') as HTMLElement | null;
-      const bounds = dialog?.getBoundingClientRect() ?? {
-        top: 8,
-        bottom: window.innerHeight - 8
+      const VIEWPORT_PADDING = 12;
+      const MIN_DROPDOWN_HEIGHT = 176;
+      const MAX_DROPDOWN_HEIGHT = 320;
+      const bounds = {
+        top: VIEWPORT_PADDING,
+        bottom: window.innerHeight - VIEWPORT_PADDING
       };
 
       const spaceBelow = bounds.bottom - triggerRect.bottom - 8;
       const spaceAbove = triggerRect.top - bounds.top - 8;
       const estimatedContent = Math.min(
-        280,
-        Math.max(120, 52 + optionCount * 34)
+        MAX_DROPDOWN_HEIGHT,
+        Math.max(MIN_DROPDOWN_HEIGHT, 52 + optionCount * 38)
       );
 
       const preferredSide: DropdownSide =
@@ -103,7 +105,9 @@ function useDialogAwareDropdownLayout(
       const available = preferredSide === 'bottom' ? spaceBelow : spaceAbove;
 
       setSide(preferredSide);
-      setMaxHeight(Math.max(120, Math.min(280, Math.floor(available - 52))));
+      setMaxHeight(
+        Math.max(MIN_DROPDOWN_HEIGHT, Math.min(MAX_DROPDOWN_HEIGHT, Math.floor(available - 52)))
+      );
     };
 
     update();

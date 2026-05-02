@@ -44,7 +44,6 @@ interface PendingApprovalsProps {
   isAdmin: boolean;
   currentUserRole: OrgRole;
   currentUserId: string;
-  onCountChange?: (count: number) => void;
 }
 
 // Union type for all request types
@@ -131,7 +130,6 @@ export function PendingApprovals({
   isAdmin,
   currentUserRole,
   currentUserId,
-  onCountChange
 }: PendingApprovalsProps) {
   // Use separate states for initial load vs refresh to preserve UI during refresh
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -178,9 +176,6 @@ export function PendingApprovals({
           setChangeRequests([]);
         }
 
-        // Update total count using the freshly fetched data
-        const totalCount = newSessions.length + newChangeRequests.length;
-        onCountChange?.(totalCount);
       } catch (err) {
         console.error('Error fetching pending items:', err);
         setError('Fehler beim Laden');
@@ -189,7 +184,7 @@ export function PendingApprovals({
         setIsRefreshing(false);
       }
     },
-    [organizationId, isAdmin, onCountChange]
+    [organizationId, isAdmin]
   );
 
   useEffect(() => {
@@ -199,15 +194,6 @@ export function PendingApprovals({
   // Realtime: refetch when time entries or change requests change
   useRealtimeEvent('time_entries', () => fetchPendingItems(true));
   useRealtimeEvent('entry_change_requests', () => fetchPendingItems(true));
-
-  // Keep the count in sync when sessions or changeRequests change (after approve/reject)
-  useEffect(() => {
-    // Only update if we're not in initial loading (to preserve the badge during load)
-    if (!isInitialLoading) {
-      const totalCount = sessions.length + changeRequests.length;
-      onCountChange?.(totalCount);
-    }
-  }, [sessions.length, changeRequests.length, onCountChange, isInitialLoading]);
 
   const handleRefresh = () => {
     fetchPendingItems(true);

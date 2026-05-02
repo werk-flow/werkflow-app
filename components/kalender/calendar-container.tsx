@@ -115,7 +115,9 @@ export function CalendarContainer({
   const parkplatzBannerSeqRef = useRef(0);
   const [parkplatzBanner, setParkplatzBanner] = useState<ActionBannerState | null>(null);
   const parkplatzButtonRef = useRef<HTMLButtonElement>(null);
+  const calendarHeaderRef = useRef<HTMLDivElement>(null);
   const realtimePausedUntilRef = useRef(0);
+  const [calendarHeaderHeight, setCalendarHeaderHeight] = useState(76);
 
   // Tracks the currently-dragged parkplatz job (for day view visual indicators)
   const [parkplatzDragJob, setParkplatzDragJob] = useState<CalendarJob | null>(null);
@@ -170,6 +172,26 @@ export function CalendarContainer({
     };
   }, [parkplatzDragJob]);
 
+  useEffect(() => {
+    const headerEl = calendarHeaderRef.current;
+    if (!headerEl) return;
+
+    const updateHeights = () => {
+      setCalendarHeaderHeight(headerEl.getBoundingClientRect().height);
+    };
+
+    updateHeights();
+
+    const observer = new ResizeObserver(updateHeights);
+    observer.observe(headerEl);
+    window.addEventListener('resize', updateHeights);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeights);
+    };
+  }, []);
+
   // In-flight mutation counter. Every mutation handler increments this when it
   // starts and decrements it when the server call (or undo) settles. The
   // debounced silent-refresh only fires once this drops back to 0, ensuring
@@ -196,6 +218,8 @@ export function CalendarContainer({
   const entriesRequestIdRef = useRef(0);
   const jobsRequestIdRef = useRef(0);
   const parkedJobsRequestIdRef = useRef(0);
+  const jobsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parkedJobsLoadedRef = useRef(false);
 
   // Track which member to highlight when navigating from week view cell click
   // We use two states: pendingHighlight stores the ID while loading,
@@ -241,6 +265,47 @@ export function CalendarContainer({
     return { start, end };
   }, [currentDate, view]);
 
+  const fetchChangeRequestsForCurrentEntries = useCallback(
+    async (sourceEntries: TimeEntry[], requestId: number, requestOrgId: string) => {
+      const entryIds = sourceEntries.map((e) => e.id);
+      if (entryIds.length === 0) {
+        setChangeRequestMap({});
+        return;
+      }
+
+      try {
+        const crResult = await getChangeRequestsForEntries(entryIds);
+        if (
+          entriesRequestIdRef.current !== requestId ||
+          previousOrgIdRef.current !== requestOrgId
+        ) {
+          return;
+        }
+
+        if (crResult.success && crResult.requests) {
+          const crMap: EntryChangeRequestMap = {};
+          for (const cr of crResult.requests) {
+            crMap[cr.entryId] = cr;
+            if (cr.pairedEntryId) {
+              crMap[cr.pairedEntryId] = cr;
+            }
+          }
+          setChangeRequestMap(crMap);
+        }
+      } catch (crError) {
+        if (
+          entriesRequestIdRef.current !== requestId ||
+          previousOrgIdRef.current !== requestOrgId
+        ) {
+          return;
+        }
+
+        console.error('Error fetching change requests:', crError);
+      }
+    },
+    []
+  );
+
   // Fetch entries and their pending change requests via server actions.
   // - silent=true  → no visual indicator (used by Realtime)
   // - silent=false → spinner in header; skeleton only when no data exists yet
@@ -275,48 +340,11 @@ export function CalendarContainer({
         hasDataRef.current = true;
         fetchedRangeRef.current = { start, end };
 
-        // Fetch change requests in background (non-blocking)
-        const entryIds = result.entries.map((e) => e.id);
-        if (entryIds.length > 0) {
-          getChangeRequestsForEntries(entryIds)
-            .then((crResult) => {
-              if (
-                entriesRequestIdRef.current !== requestId ||
-                previousOrgIdRef.current !== requestOrgId
-              ) {
-                return;
-              }
-
-              if (crResult.success && crResult.requests) {
-                const crMap: EntryChangeRequestMap = {};
-                for (const cr of crResult.requests) {
-                  crMap[cr.entryId] = cr;
-                  if (cr.pairedEntryId) {
-                    crMap[cr.pairedEntryId] = cr;
-                  }
-                }
-                setChangeRequestMap(crMap);
-              }
-            })
-            .catch((crError) => {
-              if (
-                entriesRequestIdRef.current !== requestId ||
-                previousOrgIdRef.current !== requestOrgId
-              ) {
-                return;
-              }
-
-              console.error('Error fetching change requests:', crError);
-            });
-        } else {
-          if (
-            entriesRequestIdRef.current !== requestId ||
-            previousOrgIdRef.current !== requestOrgId
-          ) {
-            return;
-          }
-          setChangeRequestMap({});
-        }
+        void fetchChangeRequestsForCurrentEntries(
+          result.entries,
+          requestId,
+          requestOrgId
+        );
       } else if (!result.success) {
         console.error('Error fetching entries:', result.error);
       }
@@ -332,7 +360,7 @@ export function CalendarContainer({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [organizationId, getDateRange]);
+  }, [organizationId, getDateRange, fetchChangeRequestsForCurrentEntries]);
 
   const fetchJobs = useCallback(async () => {
     const requestId = ++jobsRequestIdRef.current;
@@ -363,7 +391,10 @@ export function CalendarContainer({
     try {
       const result = await getParkedJobs();
       if (parkedJobsRequestIdRef.current !== requestId) return;
-      if (result.success) setParkedJobs(result.jobs);
+      if (result.success) {
+        setParkedJobs(result.jobs);
+        parkedJobsLoadedRef.current = true;
+      }
     } catch (error) {
       console.error('Error fetching parked jobs:', error);
     }
@@ -387,6 +418,7 @@ export function CalendarContainer({
     setChangeRequestMap({});
     setCalendarJobs([]);
     setParkedJobs([]);
+    parkedJobsLoadedRef.current = false;
     setParkplatzOpen(false);
     setSelectedMembers(members.map((member) => member.user_id));
     setSelectedSession(null);
@@ -417,10 +449,54 @@ export function CalendarContainer({
     fetchJobs();
   }, [fetchEntries, fetchJobs, getDateRange]);
 
-  // Fetch parked jobs on initial load
   useEffect(() => {
-    if (isAdminOrManager) fetchParkedJobs();
-  }, [isAdminOrManager, fetchParkedJobs]);
+    if (!initialEntries?.length || Object.keys(initialChangeRequestMap ?? {}).length > 0) {
+      return;
+    }
+
+    void fetchChangeRequestsForCurrentEntries(
+      initialEntries,
+      entriesRequestIdRef.current,
+      organizationId
+    );
+  }, [
+    fetchChangeRequestsForCurrentEntries,
+    initialChangeRequestMap,
+    initialEntries,
+    organizationId,
+  ]);
+
+  // Fetch parked jobs only once the panel is opened.
+  useEffect(() => {
+    if (isAdminOrManager && parkplatzOpen && !parkedJobsLoadedRef.current) {
+      fetchParkedJobs();
+    }
+  }, [isAdminOrManager, fetchParkedJobs, parkplatzOpen]);
+
+  const scheduleJobsRefresh = useCallback(() => {
+    if (jobsRefreshTimerRef.current) {
+      clearTimeout(jobsRefreshTimerRef.current);
+    }
+
+    jobsRefreshTimerRef.current = setTimeout(() => {
+      jobsRefreshTimerRef.current = null;
+      fetchJobs();
+      if (isAdminOrManager && parkplatzOpen) {
+        fetchParkedJobs();
+      }
+    }, 150);
+  }, [fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (jobsRefreshTimerRef.current) {
+        clearTimeout(jobsRefreshTimerRef.current);
+      }
+      if (silentRefreshTimerRef.current) {
+        clearTimeout(silentRefreshTimerRef.current);
+      }
+    };
+  }, []);
 
   // Realtime events always refetch (data changed, bypass range check).
   // During optimistic DnD operations the Realtime-triggered refetch would
@@ -437,11 +513,15 @@ export function CalendarContainer({
   });
   useRealtimeEvent('jobs', () => {
     if (Date.now() < realtimePausedUntilRef.current) return;
-    fetchJobs(); if (isAdminOrManager) fetchParkedJobs();
+    scheduleJobsRefresh();
+  });
+  useRealtimeEvent('projects', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
   });
   useRealtimeEvent('job_assignments', () => {
     if (Date.now() < realtimePausedUntilRef.current) return;
-    fetchJobs(); if (isAdminOrManager) fetchParkedJobs();
+    scheduleJobsRefresh();
   });
 
   // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
@@ -450,8 +530,8 @@ export function CalendarContainer({
     setIsLoading(true);
     fetchEntries();
     fetchJobs();
-    if (isAdminOrManager) fetchParkedJobs();
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
+    if (isAdminOrManager && parkplatzOpen) fetchParkedJobs();
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
 
   const handleOperationStart = useCallback(() => {
     inflightRef.current++;
@@ -495,9 +575,9 @@ export function CalendarContainer({
       if (inflightRef.current > 0) return;
       fetchEntries(true);
       fetchJobs();
-      if (isAdminOrManager) fetchParkedJobs();
+      if (isAdminOrManager && parkplatzOpen) fetchParkedJobs();
     }, 300);
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
 
   const handleManualEntrySuccess = useCallback(
     async (newEntries: TimeEntry[]) => {
@@ -1105,24 +1185,26 @@ export function CalendarContainer({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <CalendarHeader
-        currentDate={currentDate}
-        view={view}
-        isLoading={showLoadingSkeleton || isRefreshing}
-        onPrevious={handlePrevious}
-        onNext={handleNext}
-        onToday={handleToday}
-        onRefresh={handleManualRefresh}
-        onManualEntrySuccess={handleManualEntrySuccess}
-        isAdminOrManager={isAdminOrManager}
-        onJobSuccess={handleSilentRefresh}
-        parkedJobCount={filteredParkedJobs.length}
-        parkplatzOpen={parkplatzOpen}
-        onParkplatzToggle={() => setParkplatzOpen((v) => !v)}
-        onParkJob={handleParkJob}
-        parkplatzButtonRef={parkplatzButtonRef}
-        isPointerOverParkplatz={fcDragOverParkplatz}
-      />
+      <div ref={calendarHeaderRef}>
+        <CalendarHeader
+          currentDate={currentDate}
+          view={view}
+          isLoading={showLoadingSkeleton || isRefreshing}
+          onPrevious={handlePrevious}
+          onNext={handleNext}
+          onToday={handleToday}
+          onRefresh={handleManualRefresh}
+          onManualEntrySuccess={handleManualEntrySuccess}
+          isAdminOrManager={isAdminOrManager}
+          onJobSuccess={handleSilentRefresh}
+          parkedJobCount={filteredParkedJobs.length}
+          parkplatzOpen={parkplatzOpen}
+          onParkplatzToggle={() => setParkplatzOpen((v) => !v)}
+          onParkJob={handleParkJob}
+          parkplatzButtonRef={parkplatzButtonRef}
+          isPointerOverParkplatz={fcDragOverParkplatz}
+        />
+      </div>
 
       <div className="border-b px-4 py-2 sm:px-6">
         <CalendarViewTabs
@@ -1227,6 +1309,7 @@ export function CalendarContainer({
           onDragJobStart={(job) => setParkplatzDragJob(job)}
           onDragJobEnd={() => setParkplatzDragJob(null)}
           isExternalDragOver={fcDragOverParkplatz}
+          primaryHeaderHeight={calendarHeaderHeight}
         />
       )}
 

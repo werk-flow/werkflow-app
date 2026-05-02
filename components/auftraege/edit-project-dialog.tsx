@@ -21,7 +21,12 @@ import { JobMultiSelect } from './job-multi-select';
 import { ClientSelectWithCreate } from './client-select-with-create';
 import { updateProject, getProjectDetails, type UpdateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
-import { type Client, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
+import {
+  type Client,
+  type Job,
+  type Project,
+  type ProjectWithDetails,
+} from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -42,6 +47,10 @@ interface EditProjectDialogProps {
   onOpenChange: (open: boolean) => void;
   clients: Client[];
   jobs: Job[];
+  onSuccess?: (payload: {
+    project: Project;
+    selectedJobIds: string[];
+  }) => void | Promise<void>;
 }
 
 export function EditProjectDialog({
@@ -50,6 +59,7 @@ export function EditProjectDialog({
   onOpenChange,
   clients,
   jobs,
+  onSuccess,
 }: EditProjectDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -176,11 +186,16 @@ export function EditProjectDialog({
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        onOpenChange(false);
-        setSuccess(false);
+      onOpenChange(false);
+      if (onSuccess) {
+        await onSuccess({
+          project: result.success ? result.project : project,
+          selectedJobIds,
+        });
+      } else {
         router.refresh();
-      }, 1500);
+      }
+      setSuccess(false);
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     } finally {

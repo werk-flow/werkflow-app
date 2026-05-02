@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import type { OrgMemberOption } from './employee-multi-select';
 import { CreateJobFormContent } from './create-job-form-content';
-import type { Client, ProjectWithDetails } from '@/lib/jobs/types';
+import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
 
 interface CreateJobDialogProps {
   clients: Client[];
@@ -28,9 +28,13 @@ interface CreateJobDialogProps {
   readOnlyProject?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onJobCreated?: (payload: {
+    job: Job;
+    assignedUserIds: string[];
+  }) => void | Promise<void>;
 }
 
-export function CreateJobDialog({ clients, members, projects = [], defaultProjectId, defaultClientId, defaultEmployeeIds, readOnlyClient, readOnlyProject, open: controlledOpen, onOpenChange: controlledOnOpenChange }: CreateJobDialogProps) {
+export function CreateJobDialog({ clients, members, projects = [], defaultProjectId, defaultClientId, defaultEmployeeIds, readOnlyClient, readOnlyProject, open: controlledOpen, onOpenChange: controlledOnOpenChange, onJobCreated }: CreateJobDialogProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -67,8 +71,12 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
           defaultEmployeeIds={defaultEmployeeIds}
           readOnlyClient={readOnlyClient}
           readOnlyProject={readOnlyProject}
-          onSuccess={() => {
+          onSuccess={async (payload) => {
             setOpen(false);
+            if (onJobCreated) {
+              await onJobCreated(payload);
+              return;
+            }
             router.refresh();
           }}
         />

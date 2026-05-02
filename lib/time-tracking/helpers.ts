@@ -31,6 +31,19 @@ export function computeTimeBreakdown(totalMinutes: number): TimeBreakdown {
   return { workMinutes, breakMinutes, overtimeMinutes };
 }
 
+/**
+ * Compute elapsed milliseconds for a live session.
+ * Client and server clocks can drift slightly, so never return a negative duration.
+ */
+export function getNonNegativeElapsedMs(clockInTime: string | null): number {
+  if (!clockInTime) return 0;
+
+  const startMs = new Date(clockInTime).getTime();
+  if (Number.isNaN(startMs)) return 0;
+
+  return Math.max(0, Date.now() - startMs);
+}
+
 export interface RingSegment {
   startFraction: number; // 0-1, position on ring
   endFraction: number;   // 0-1, position on ring

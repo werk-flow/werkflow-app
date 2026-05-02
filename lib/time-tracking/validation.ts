@@ -384,6 +384,28 @@ export function validateManualEntries(
 }
 
 /**
+ * A job can only be attached to entries that start a work block.
+ * Standalone clock_out entries never own a job.
+ */
+export function validateManualEntryJobOwnership(
+  newEntries: Array<ManualEntryInput & { jobId?: string | null }>
+): ValidationResult {
+  const invalidClockOut = newEntries.find(
+    (entry) => entry.entryType === 'clock_out' && !!entry.jobId
+  );
+
+  if (invalidClockOut) {
+    return {
+      valid: false,
+      error:
+        'Ein Auftrag kann nur einem Eintrag zugewiesen werden, der einen Arbeitsblock startet.'
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Check if a timestamp update would create an overlap
  */
 export function validateTimestampUpdate(

@@ -145,7 +145,7 @@ export async function updateProject(
 
     const { data: existing, error: fetchError } = await admin
       .from('projects')
-      .select('id')
+      .select('id, client_id')
       .eq('id', projectId)
       .eq('organization_id', orgId)
       .single();
@@ -213,7 +213,31 @@ export async function updateProject(
       return { success: false, error: 'update_failed' };
     }
 
+    if (
+      input.clientId !== undefined &&
+      input.clientId !== existing.client_id
+    ) {
+      const { error: syncJobsError } = await admin
+        .from('jobs')
+        .update({ client_id: data.client_id })
+        .eq('organization_id', orgId)
+        .eq('project_id', projectId);
+
+      if (syncJobsError) {
+        console.error('Error syncing project job clients:', syncJobsError);
+
+        await admin
+          .from('projects')
+          .update({ client_id: existing.client_id })
+          .eq('id', projectId)
+          .eq('organization_id', orgId);
+
+        return { success: false, error: 'update_failed' };
+      }
+    }
+
     updateTag(CACHE_TAGS.projects(orgId));
+    updateTag(CACHE_TAGS.jobs(orgId));
 
     return { success: true, project: toProject(data) };
   } catch (error) {
@@ -457,27 +481,28 @@ export async function getProjectDetails(
       }
     }
 
-    const { data: jobRows } = await admin
-      .from('jobs')
-      .select('*')
-      .eq('project_id', projectId)
-      .eq('organization_id', orgId)
-      .order('planned_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
+    const [jobsResult, clientResult] = await Promise.all([
+      admin
+        .from('jobs')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('organization_id', orgId)
+        .order('planned_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false }),
+      projectData.client_id
+        ? admin
+            .from('clients')
+            .select('*')
+            .eq('id', projectData.client_id)
+            .single()
+        : Promise.resolve({ data: null }),
+    ]);
 
-    const jobs = (jobRows ?? []).map(toJob);
+    const jobs = (jobsResult.data ?? []).map(toJob);
 
     let client = null;
-    if (projectData.client_id) {
-      const { data: clientData } = await admin
-        .from('clients')
-        .select('*')
-        .eq('id', projectData.client_id)
-        .single();
-
-      if (clientData) {
-        client = toClient(clientData);
-      }
+    if (clientResult.data) {
+      client = toClient(clientResult.data);
     }
 
     const project = toProject(projectData);
@@ -541,27 +566,28 @@ export async function getProjectByNumber(
       }
     }
 
-    const { data: jobRows } = await admin
-      .from('jobs')
-      .select('*')
-      .eq('project_id', projectData.id)
-      .eq('organization_id', orgId)
-      .order('planned_date', { ascending: true, nullsFirst: false })
-      .order('created_at', { ascending: false });
+    const [jobsResult, clientResult] = await Promise.all([
+      admin
+        .from('jobs')
+        .select('*')
+        .eq('project_id', projectData.id)
+        .eq('organization_id', orgId)
+        .order('planned_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false }),
+      projectData.client_id
+        ? admin
+            .from('clients')
+            .select('*')
+            .eq('id', projectData.client_id)
+            .single()
+        : Promise.resolve({ data: null }),
+    ]);
 
-    const jobs = (jobRows ?? []).map(toJob);
+    const jobs = (jobsResult.data ?? []).map(toJob);
 
     let client = null;
-    if (projectData.client_id) {
-      const { data: clientData } = await admin
-        .from('clients')
-        .select('*')
-        .eq('id', projectData.client_id)
-        .single();
-
-      if (clientData) {
-        client = toClient(clientData);
-      }
+    if (clientResult.data) {
+      client = toClient(clientResult.data);
     }
 
     const project = toProject(projectData);

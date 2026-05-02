@@ -1,14 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
-import {
-  getPendingApprovalCount
-} from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 
@@ -52,8 +48,6 @@ interface ZeiterfassungContentProps {
   isAdmin: boolean;
   currentUserRole: OrgRole;
   initialTab?: 'overview' | 'approvals' | 'history';
-  /** Initial pending count fetched on the server for immediate display */
-  initialPendingCount?: number;
   /** Members for the history filter (admin/manager only) */
   members?: MemberInfo[];
   initialOverview: ZeiterfassungOverview;
@@ -66,29 +60,10 @@ export function ZeiterfassungContent({
   isAdmin,
   currentUserRole,
   initialTab = 'overview',
-  initialPendingCount = 0,
   members = [],
   initialOverview
 }: ZeiterfassungContentProps) {
-  const [pendingCount, setPendingCount] = useState(initialPendingCount);
-
-  const handleCountChange = useCallback((count: number) => {
-    setPendingCount(count);
-  }, []);
-
-  // Fetch pending count directly so the tab badge updates even when
-  // PendingApprovals is unmounted (Radix TabsContent unmounts inactive tabs).
-  const fetchPendingCount = useCallback(async () => {
-    try {
-      const count = await getPendingApprovalCount(organizationId, isAdmin);
-      setPendingCount(count);
-    } catch {
-      // keep current count on error
-    }
-  }, [organizationId, isAdmin]);
-
-  useRealtimeEvent('time_entries', fetchPendingCount);
-  useRealtimeEvent('entry_change_requests', fetchPendingCount);
+  const { pendingApprovalCount } = usePendingApprovalCount();
 
   // For regular employees, just show the dashboard
   if (!isAdminOrManager) {
@@ -108,9 +83,9 @@ export function ZeiterfassungContent({
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
         <TabsTrigger value="approvals" className="group">
           Anträge
-          {pendingCount > 0 && (
+          {pendingApprovalCount > 0 && (
             <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
-              {pendingCount}
+              {pendingApprovalCount}
             </span>
           )}
         </TabsTrigger>
@@ -131,7 +106,6 @@ export function ZeiterfassungContent({
           isAdmin={isAdmin}
           currentUserRole={currentUserRole}
           currentUserId={userId}
-          onCountChange={handleCountChange}
         />
       </TabsContent>
 

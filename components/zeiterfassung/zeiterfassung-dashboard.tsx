@@ -16,6 +16,7 @@ import { JobPickerModal } from '@/components/job-picker-modal';
 import {
   computeTimeBreakdown,
   formatDuration,
+  getNonNegativeElapsedMs,
   WORK_GOAL_MINUTES,
 } from '@/lib/time-tracking/helpers';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
@@ -38,10 +39,7 @@ function formatLiveTime(
   let totalMs = baseMinutes * 60 * 1000;
 
   if (isClockedIn && clockInTime) {
-    const startTime = new Date(clockInTime);
-    const now = new Date();
-    const elapsedMs = now.getTime() - startTime.getTime();
-    totalMs += elapsedMs;
+    totalMs += getNonNegativeElapsedMs(clockInTime);
   }
 
   const hours = Math.floor(totalMs / (1000 * 60 * 60));
@@ -61,10 +59,7 @@ function calculateLiveTotalMinutes(
   let totalMinutes = baseMinutes;
 
   if (isClockedIn && clockInTime) {
-    const startTime = new Date(clockInTime);
-    const now = new Date();
-    const elapsedMs = now.getTime() - startTime.getTime();
-    totalMinutes += elapsedMs / (1000 * 60);
+    totalMinutes += getNonNegativeElapsedMs(clockInTime) / (1000 * 60);
   }
 
   return totalMinutes;

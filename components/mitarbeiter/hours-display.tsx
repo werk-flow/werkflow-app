@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
+import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
 
 interface HoursDisplayProps {
@@ -24,10 +25,7 @@ function calculateTotalMinutes(
 ): number {
   if (!clockInTime) return baseMinutes;
 
-  const startTime = new Date(clockInTime);
-  const now = new Date();
-  const elapsedMs = now.getTime() - startTime.getTime();
-  const elapsedMinutes = elapsedMs / (1000 * 60);
+  const elapsedMinutes = getNonNegativeElapsedMs(clockInTime) / (1000 * 60);
 
   return baseMinutes + elapsedMinutes;
 }

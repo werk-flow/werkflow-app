@@ -26,8 +26,10 @@ import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfas
 import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
-import { getPendingApprovalCount } from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import {
+  PendingApprovalCountProvider,
+  usePendingApprovalCount,
+} from '@/components/realtime/pending-approval-count-provider';
 
 const OrganizationSwitcher = dynamic(
   () =>
@@ -156,8 +158,8 @@ function SidebarSkeleton() {
 // Sidebar content component (shared between desktop and mobile)
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const { activeOrg, activeOrgId } = useOrganization();
-  const [pendingCount, setPendingCount] = useState(0);
+  const { activeOrg } = useOrganization();
+  const { pendingApprovalCount } = usePendingApprovalCount();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
 
   // Reset optimistic path once the real pathname catches up
@@ -167,28 +169,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
-  const isAdmin = activeOrg?.role === 'admin';
-
-  const fetchPendingCount = useCallback(async () => {
-    if (!activeOrgId || !isAdminOrManager) {
-      setPendingCount(0);
-      return;
-    }
-
-    try {
-      const count = await getPendingApprovalCount(activeOrgId, isAdmin);
-      setPendingCount(count);
-    } catch (err) {
-      console.error('Error fetching pending count:', err);
-    }
-  }, [activeOrgId, isAdminOrManager, isAdmin]);
-
-  useEffect(() => {
-    fetchPendingCount();
-  }, [fetchPendingCount]);
-
-  useRealtimeEvent('time_entries', fetchPendingCount);
-  useRealtimeEvent('entry_change_requests', fetchPendingCount);
 
   const visibleNavItems = navItems.filter(
     (item) => !item.managerOrAbove || isAdminOrManager
@@ -249,7 +229,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             const showBadge =
               item.href === '/zeiterfassung' &&
               isAdminOrManager &&
-              pendingCount > 0;
+              pendingApprovalCount > 0;
 
             return (
               <li key={item.href}>
@@ -267,7 +247,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   <span className="flex-1">{item.label}</span>
                   {showBadge && (
                     <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
-                      {pendingCount}
+                      {pendingApprovalCount}
                     </span>
                   )}
                 </Link>
@@ -435,16 +415,25 @@ function OrgSwitchOverlay() {
   if (!isSwitchingOrg || !currentSkeleton) return null;
 
   return (
-    <div className="absolute inset-0 z-10 overflow-auto bg-background">
+    <div className="absolute inset-0 z-50 overflow-auto bg-background">
       {currentSkeleton}
     </div>
   );
 }
 
 // Main app shell component — static frame with no direct data dependencies
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  initialPendingApprovalCount,
+  initialOrganizationId,
+}: {
+  children: React.ReactNode;
+  initialPendingApprovalCount?: number;
+  initialOrganizationId?: string | null;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const { isSwitchingOrg } = useOrganization();
 
   useEffect(() => {
     setIsOpen(false);
@@ -452,15 +441,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
-      <div className="flex h-screen flex-col bg-background md:flex-row">
-        <MobileHeader />
-        <DesktopSidebar />
-        <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          <main className="h-full overflow-hidden">{children}</main>
-          <OrgSwitchOverlay />
+      <PendingApprovalCountProvider
+        initialPendingApprovalCount={initialPendingApprovalCount}
+        initialOrganizationId={initialOrganizationId}
+      >
+        <div className="flex h-screen flex-col bg-background md:flex-row">
+          <MobileHeader />
+          <DesktopSidebar />
+          <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <main
+              aria-hidden={isSwitchingOrg}
+              className={cn(
+                'h-full overflow-hidden',
+                isSwitchingOrg && 'pointer-events-none opacity-0'
+              )}
+            >
+              {children}
+            </main>
+            <OrgSwitchOverlay />
+          </div>
         </div>
-      </div>
+      </PendingApprovalCountProvider>
     </SidebarContext.Provider>
   );
 }

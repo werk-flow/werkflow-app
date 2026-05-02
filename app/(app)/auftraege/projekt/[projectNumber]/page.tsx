@@ -2,15 +2,12 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getProjectByNumber } from '@/lib/projects/actions';
-import { toClient, type Client } from '@/lib/jobs/types';
+import { type Client } from '@/lib/jobs/types';
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
@@ -40,22 +37,7 @@ async function ProjectDetailData({
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
 
-  const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
-
-  const [result, clientsResult, membersResult] = await Promise.all([
-    getProjectByNumber(decodeURIComponent(projectNumber)),
-    isAdminOrManager
-      ? admin
-          .from('clients')
-          .select('*')
-          .eq('organization_id', activeOrgId)
-          .order('name', { ascending: true })
-      : Promise.resolve({ data: null }),
-    isAdminOrManager
-      ? supabase.rpc('get_org_members', { p_org_id: activeOrgId })
-      : Promise.resolve({ data: null }),
-  ]);
+  const result = await getProjectByNumber(decodeURIComponent(projectNumber));
 
   if (!result.success) {
     return (
@@ -67,15 +49,7 @@ async function ProjectDetailData({
 
   const { project, client, jobs, derivedStatus } = result.details;
 
-  const clients: Client[] = (clientsResult.data ?? []).map(toClient);
-  const members: OrgMemberOption[] = (membersResult.data ?? []).map(
-    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
-      userId: m.user_id,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: m.role,
-    })
-  );
+  const clients: Client[] = client ? [client] : [];
 
   return (
     <>
@@ -89,9 +63,10 @@ async function ProjectDetailData({
         project={project}
         client={client}
         jobs={jobs}
+        availableJobs={[]}
         derivedStatus={derivedStatus}
         clients={clients}
-        members={members}
+        members={[]}
         isAdminOrManager={isAdminOrManager}
       />
     </>

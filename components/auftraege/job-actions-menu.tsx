@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Trash2, ArrowRightLeft, Loader2 } from 'lucide-react';
+import {
+  MoreHorizontal,
+  ExternalLink,
+  Trash2,
+  ArrowRightLeft,
+  Loader2,
+  Pencil,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,23 +33,44 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
+import { EditJobDialog } from './edit-job-dialog';
 import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
 import {
   JOB_STATUS_LABELS,
   JOB_STATUS_ORDER,
+  type Client,
   type Job,
   type JobStatus,
+  type ProjectWithDetails,
 } from '@/lib/jobs/types';
+import type { OrgMemberOption } from './employee-multi-select';
 
 interface JobActionsMenuProps {
   job: Job;
   detailHref: string;
+  clients: Client[];
+  members: OrgMemberOption[];
+  projects: ProjectWithDetails[];
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
 }
 
-export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
+export function JobActionsMenu({
+  job,
+  detailHref,
+  clients,
+  members,
+  projects,
+  onJobUpdated,
+  onJobDeleted,
+}: JobActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showParkDialog, setShowParkDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +86,13 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
     const result = await updateJobStatus(job.id, newStatus);
 
     if (result.success) {
-      router.refresh();
+      if (onJobUpdated) {
+        await onJobUpdated({
+          job: result.job,
+        });
+      } else {
+        router.refresh();
+      }
     } else {
       console.error('Status change failed:', result.error);
     }
@@ -70,7 +104,13 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
     setIsChangingStatus(true);
     const result = await updateJobStatus(job.id, 'geparkt');
     if (result.success) {
-      router.refresh();
+      if (onJobUpdated) {
+        await onJobUpdated({
+          job: result.job,
+        });
+      } else {
+        router.refresh();
+      }
     } else {
       console.error('Park failed:', result.error);
     }
@@ -86,7 +126,11 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
 
     if (result.success) {
       setShowDeleteDialog(false);
-      router.push(`/auftraege?deleted_job=${encodeURIComponent(job.title)}`);
+      if (onJobDeleted) {
+        await onJobDeleted(job.id);
+      } else {
+        router.push(`/auftraege?deleted_job=${encodeURIComponent(job.title)}`);
+      }
     } else {
       setError(result.error || 'Fehler beim Löschen des Auftrags');
       setIsDeleting(false);
@@ -118,6 +162,10 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
           <DropdownMenuItem onClick={() => router.push(detailHref)}>
             <ExternalLink className="size-4" />
             Details anzeigen
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+            <Pencil className="size-4" />
+            Bearbeiten
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
@@ -190,6 +238,16 @@ export function JobActionsMenu({ job, detailHref }: JobActionsMenuProps) {
         title={job.title}
         identifier={job.jobNumber ?? undefined}
         onConfirm={handleParkConfirm}
+      />
+
+      <EditJobDialog
+        job={job}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        clients={clients}
+        members={members}
+        projects={projects}
+        onSuccess={onJobUpdated}
       />
     </>
   );

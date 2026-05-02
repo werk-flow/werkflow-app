@@ -9,6 +9,7 @@ interface EntityLinkCardProps {
   metadata?: { label: string; value: string }[];
   badge?: React.ReactNode;
   emptyState?: { text: string; action?: React.ReactNode };
+  onEmptyClick?: () => void;
 }
 
 export function EntityLinkCard({
@@ -18,17 +19,28 @@ export function EntityLinkCard({
   metadata,
   badge,
   emptyState,
+  onEmptyClick,
 }: EntityLinkCardProps) {
   const isEmpty = !href && emptyState;
 
   if (isEmpty) {
+    const isClickable = !!onEmptyClick;
     return (
-      <div className="rounded-lg border border-dashed bg-card p-4">
+      <button
+        type="button"
+        className={`w-full rounded-lg border border-dashed bg-card p-4 text-left ${
+          isClickable
+            ? 'cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/30'
+            : ''
+        }`}
+        onClick={onEmptyClick}
+        disabled={!isClickable}
+      >
         <div className="flex flex-col items-center gap-2 py-2 text-center">
           <span className="text-muted-foreground">{emptyState!.text}</span>
           {emptyState!.action}
         </div>
-      </div>
+      </button>
     );
   }
 

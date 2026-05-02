@@ -5,15 +5,11 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import {
-  getTimeEntries,
-  getChangeRequestsForEntries
-} from '@/lib/time-tracking/actions';
+import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
 import type { OrgRole } from '@/lib/members/actions';
-import type { EntryChangeRequestMap } from '@/lib/time-tracking/types';
 import { toLocalDateString } from '@/lib/utils';
 
 type MemberRow = {
@@ -66,20 +62,6 @@ async function KalenderData({
     getJobsForCalendar(fromIso, toIso)
   ]);
 
-  let initialChangeRequestMap: EntryChangeRequestMap = {};
-  if (entriesResult.success && entriesResult.entries && entriesResult.entries.length > 0) {
-    const entryIds = entriesResult.entries.map((e) => e.id);
-    const crResult = await getChangeRequestsForEntries(entryIds);
-    if (crResult.success && crResult.requests) {
-      for (const cr of crResult.requests) {
-        initialChangeRequestMap[cr.entryId] = cr;
-        if (cr.pairedEntryId) {
-          initialChangeRequestMap[cr.pairedEntryId] = cr;
-        }
-      }
-    }
-  }
-
   return (
     <CalendarContainer
       organizationId={activeOrgId}
@@ -88,7 +70,6 @@ async function KalenderData({
       isAdminOrManager={isAdminOrManager}
       members={members}
       initialEntries={entriesResult.success ? entriesResult.entries : undefined}
-      initialChangeRequestMap={initialChangeRequestMap}
       initialJobs={jobsResult.success ? jobsResult.jobs : undefined}
     />
   );

@@ -64,6 +64,10 @@ interface EditJobDialogProps {
   clients: Client[];
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
+  onSuccess?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
 }
 
 export function EditJobDialog({
@@ -72,7 +76,8 @@ export function EditJobDialog({
   onOpenChange,
   clients,
   members,
-  projects = []
+  projects = [],
+  onSuccess,
 }: EditJobDialogProps) {
   const [jobNumber, setJobNumber] = useState('');
   const [title, setTitle] = useState('');
@@ -195,11 +200,16 @@ export function EditJobDialog({
       }
 
       setSuccess(true);
-      setTimeout(() => {
-        onOpenChange(false);
-        setSuccess(false);
+      onOpenChange(false);
+      if (onSuccess) {
+        await onSuccess({
+          job: result.success ? result.job : job,
+          selectedEmployeeIds: selectedEmployees,
+        });
+      } else {
         router.refresh();
-      }, 1500);
+      }
+      setSuccess(false);
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     } finally {

@@ -427,22 +427,26 @@ export async function getMemberDetail(
 
     const admin = createSupabaseAdminClient();
 
-    const { data: membership, error: membershipError } = await admin
-      .from('organization_members')
-      .select('user_id, role, joined_at')
-      .eq('organization_id', orgId)
-      .eq('user_id', userId)
-      .single();
+    const [membershipResult, profileResult] = await Promise.all([
+      admin
+        .from('organization_members')
+        .select('user_id, role, joined_at')
+        .eq('organization_id', orgId)
+        .eq('user_id', userId)
+        .single(),
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .eq('id', userId)
+        .single(),
+    ]);
+
+    const { data: membership, error: membershipError } = membershipResult;
+    const { data: profile, error: profileError } = profileResult;
 
     if (membershipError || !membership) {
       return { success: false, error: 'not_found' };
     }
-
-    const { data: profile, error: profileError } = await admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .eq('id', userId)
-      .single();
 
     if (profileError || !profile) {
       return { success: false, error: 'not_found' };

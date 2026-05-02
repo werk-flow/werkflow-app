@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowDown, ArrowUp, ArrowUpDown, Briefcase, ChevronRight } from 'lucide-react';
 
@@ -24,9 +24,11 @@ import {
   PROJECT_STATUS_LABELS,
   calculateTrafficLightFromCounts,
   getEffectiveProjectStatusFromCounts,
+  type Client,
   type Job,
   type JobStatus,
   type JobPriority,
+  type Project,
   type ProjectStatus,
   type ProjectWithDetails,
   type UnifiedListEntry,
@@ -261,6 +263,11 @@ function StandaloneJobRow({
   memberLookup,
   assignedUserIds,
   hideClientColumn,
+  clients,
+  members,
+  projects,
+  onJobUpdated,
+  onJobDeleted,
 }: {
   job: Job;
   clientName: string;
@@ -269,6 +276,14 @@ function StandaloneJobRow({
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
   hideClientColumn?: boolean;
+  clients: Client[];
+  members: OrgMemberOption[];
+  projects: ProjectWithDetails[];
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const detailHref = `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
@@ -307,7 +322,15 @@ function StandaloneJobRow({
       </TableCell>
       {isAdminOrManager && (
         <TableCell onClick={(e) => e.stopPropagation()}>
-          <JobActionsMenu job={job} detailHref={detailHref} />
+          <JobActionsMenu
+            job={job}
+            detailHref={detailHref}
+            clients={clients}
+            members={members}
+            projects={projects}
+            onJobUpdated={onJobUpdated}
+            onJobDeleted={onJobDeleted}
+          />
         </TableCell>
       )}
     </TableRow>
@@ -326,6 +349,14 @@ function ProjectRow({
   memberLookup,
   jobAssignmentMap,
   hideClientColumn,
+  clients,
+  jobs,
+  members,
+  projects,
+  onJobUpdated,
+  onJobDeleted,
+  onProjectUpdated,
+  onProjectDeleted,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -338,6 +369,20 @@ function ProjectRow({
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
   hideClientColumn?: boolean;
+  clients: Client[];
+  jobs: Job[];
+  members: OrgMemberOption[];
+  projects: ProjectWithDetails[];
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onProjectUpdated?: (payload: {
+    project: Project;
+    selectedJobIds?: string[];
+  }) => void | Promise<void>;
+  onProjectDeleted?: (projectId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
@@ -410,7 +455,14 @@ function ProjectRow({
         </TableCell>
         {isAdminOrManager && (
           <TableCell onClick={(e) => e.stopPropagation()}>
-            <ProjectActionsMenu project={project} detailHref={projectHref} />
+            <ProjectActionsMenu
+              project={project}
+              detailHref={projectHref}
+              clients={clients}
+              jobs={jobs}
+              onProjectUpdated={onProjectUpdated}
+              onProjectDeleted={onProjectDeleted}
+            />
           </TableCell>
         )}
       </TableRow>
@@ -458,7 +510,15 @@ function ProjectRow({
               </TableCell>
               {isAdminOrManager && (
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  <JobActionsMenu job={job} detailHref={childHref} />
+                  <JobActionsMenu
+                    job={job}
+                    detailHref={childHref}
+                    clients={clients}
+                    members={members}
+                    projects={projects}
+                    onJobUpdated={onJobUpdated}
+                    onJobDeleted={onJobDeleted}
+                  />
                 </TableCell>
               )}
             </TableRow>
@@ -481,6 +541,11 @@ function JobCard({
   isActive,
   memberLookup,
   assignedUserIds,
+  clients,
+  members,
+  projects,
+  onJobUpdated,
+  onJobDeleted,
 }: {
   job: Job;
   clientName: string;
@@ -490,6 +555,14 @@ function JobCard({
   isActive?: boolean;
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
+  clients: Client[];
+  members: OrgMemberOption[];
+  projects: ProjectWithDetails[];
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const detailHref = projectNumber
@@ -543,7 +616,15 @@ function JobCard({
       </div>
       {isAdminOrManager && (
         <div onClick={(e) => e.stopPropagation()}>
-          <JobActionsMenu job={job} detailHref={detailHref} />
+          <JobActionsMenu
+            job={job}
+            detailHref={detailHref}
+            clients={clients}
+            members={members}
+            projects={projects}
+            onJobUpdated={onJobUpdated}
+            onJobDeleted={onJobDeleted}
+          />
         </div>
       )}
     </div>
@@ -559,6 +640,14 @@ function ProjectCard({
   activeJobIds,
   memberLookup,
   jobAssignmentMap,
+  clients,
+  jobs,
+  members,
+  projects,
+  onJobUpdated,
+  onJobDeleted,
+  onProjectUpdated,
+  onProjectDeleted,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -568,6 +657,20 @@ function ProjectCard({
   activeJobIds: Set<string>;
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
+  clients: Client[];
+  jobs: Job[];
+  members: OrgMemberOption[];
+  projects: ProjectWithDetails[];
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onProjectUpdated?: (payload: {
+    project: Project;
+    selectedJobIds?: string[];
+  }) => void | Promise<void>;
+  onProjectDeleted?: (projectId: string) => void | Promise<void>;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -650,7 +753,14 @@ function ProjectCard({
         </div>
         {isAdminOrManager && (
           <div onClick={(e) => e.stopPropagation()}>
-            <ProjectActionsMenu project={project} detailHref={projectHref} />
+            <ProjectActionsMenu
+              project={project}
+              detailHref={projectHref}
+              clients={clients}
+              jobs={jobs}
+              onProjectUpdated={onProjectUpdated}
+              onProjectDeleted={onProjectDeleted}
+            />
           </div>
         )}
       </div>
@@ -668,6 +778,11 @@ function ProjectCard({
               isActive={activeJobIds.has(job.id)}
               memberLookup={memberLookup}
               assignedUserIds={jobAssignmentMap[job.id] ?? []}
+              clients={clients}
+              members={members}
+              projects={projects}
+              onJobUpdated={onJobUpdated}
+              onJobDeleted={onJobDeleted}
             />
           ))}
         </div>
@@ -724,8 +839,19 @@ interface UnifiedAuftraegeTableProps {
   onSort: (column: SortColumn) => void;
   isArchive?: boolean;
   jobAssignmentMap?: Record<string, string[]>;
+  clients?: Client[];
   members?: OrgMemberOption[];
   hideClientColumn?: boolean;
+  onJobUpdated?: (payload: {
+    job: Job;
+    selectedEmployeeIds?: string[];
+  }) => void | Promise<void>;
+  onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onProjectUpdated?: (payload: {
+    project: Project;
+    selectedJobIds?: string[];
+  }) => void | Promise<void>;
+  onProjectDeleted?: (projectId: string) => void | Promise<void>;
 }
 
 export function UnifiedAuftraegeTable({
@@ -740,11 +866,33 @@ export function UnifiedAuftraegeTable({
   isArchive = false,
   jobAssignmentMap = {},
   members = [],
+  clients = [],
   hideClientColumn = false,
+  onJobUpdated,
+  onJobDeleted,
+  onProjectUpdated,
+  onProjectDeleted,
 }: UnifiedAuftraegeTableProps) {
   const { activeJobIds } = useActiveJobs();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const memberLookup = buildMemberLookup(members);
+  const allProjects = useMemo(
+    () =>
+      entries
+        .filter(
+          (item): item is Extract<UnifiedListEntry, { type: 'project' }> =>
+            item.type === 'project'
+        )
+        .map((item) => item.project),
+    [entries]
+  );
+  const allJobs = useMemo(
+    () =>
+      entries.flatMap((item) =>
+        item.type === 'standalone-job' ? [item.job] : item.childJobs
+      ),
+    [entries]
+  );
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((prev) => {
@@ -826,6 +974,11 @@ export function UnifiedAuftraegeTable({
                 isActive={activeJobIds.has(entry.job.id)}
                 memberLookup={memberLookup}
                 assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
+                clients={clients}
+                members={members}
+                projects={allProjects}
+                onJobUpdated={onJobUpdated}
+                onJobDeleted={onJobDeleted}
               />
             );
           }
@@ -840,6 +993,14 @@ export function UnifiedAuftraegeTable({
               activeJobIds={activeJobIds}
               memberLookup={memberLookup}
               jobAssignmentMap={jobAssignmentMap}
+              clients={clients}
+              jobs={allJobs}
+              members={members}
+              projects={allProjects}
+              onJobUpdated={onJobUpdated}
+              onJobDeleted={onJobDeleted}
+              onProjectUpdated={onProjectUpdated}
+              onProjectDeleted={onProjectDeleted}
             />
           );
         })}
@@ -879,7 +1040,12 @@ export function UnifiedAuftraegeTable({
                     isActive={activeJobIds.has(entry.job.id)}
                     memberLookup={memberLookup}
                     assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
+                    clients={clients}
+                    members={members}
+                    projects={allProjects}
                     hideClientColumn={hideClientColumn}
+                    onJobUpdated={onJobUpdated}
+                    onJobDeleted={onJobDeleted}
                   />
                 );
               }
@@ -896,7 +1062,15 @@ export function UnifiedAuftraegeTable({
                   activeJobIds={activeJobIds}
                   memberLookup={memberLookup}
                   jobAssignmentMap={jobAssignmentMap}
+                  clients={clients}
+                  jobs={allJobs}
+                  members={members}
+                  projects={allProjects}
                   hideClientColumn={hideClientColumn}
+                  onJobUpdated={onJobUpdated}
+                  onJobDeleted={onJobDeleted}
+                  onProjectUpdated={onProjectUpdated}
+                  onProjectDeleted={onProjectDeleted}
                 />
               );
             })}

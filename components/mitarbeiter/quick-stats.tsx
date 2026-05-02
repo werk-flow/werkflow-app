@@ -1,13 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Users, Clock, AlertCircle } from 'lucide-react';
-import {
-  getPendingSessions,
-  getPendingChangeRequests
-} from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
 
 interface QuickStatsProps {
   organizationId: string;
@@ -19,40 +14,13 @@ interface QuickStatsProps {
 }
 
 export function QuickStats({
-  organizationId,
+  organizationId: _organizationId,
   totalMembers,
   activeWorkingCount,
-  isAdmin = false
+  isAdmin: _isAdmin = false
 }: QuickStatsProps) {
-  const [pendingCount, setPendingCount] = useState(0);
-
-  const fetchPendingStats = useCallback(async () => {
-    const pendingResult = await getPendingSessions(organizationId);
-
-    let count = 0;
-    if (pendingResult.success) {
-      // Use sessions count - pairs are counted as 1 session
-      count = pendingResult.sessions.length;
-    }
-
-    // Admins also see change requests (edit/delete from managers)
-    if (isAdmin) {
-      const changeRequestsResult = await getPendingChangeRequests();
-      if (changeRequestsResult.success) {
-        count += changeRequestsResult.requests.length;
-      }
-    }
-
-    setPendingCount(count);
-  }, [organizationId, isAdmin]);
-
-  useEffect(() => {
-    fetchPendingStats();
-  }, [fetchPendingStats]);
-
-  // Realtime: refetch when time entries or change requests change
-  useRealtimeEvent('time_entries', fetchPendingStats);
-  useRealtimeEvent('entry_change_requests', fetchPendingStats);
+  const { pendingApprovalCount } = usePendingApprovalCount();
+  const pendingCount = pendingApprovalCount;
 
   return (
     <div className="flex flex-wrap gap-4 mb-4">
