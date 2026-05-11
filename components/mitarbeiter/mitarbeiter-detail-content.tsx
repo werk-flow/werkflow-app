@@ -211,17 +211,22 @@ export function MitarbeiterDetailContent({
   useEffect(() => {
     const compute = () => {
       let base = status?.todayMinutes ?? 0;
-      if (status?.isClockedIn && status.clockInTime) {
-        base += getNonNegativeElapsedMs(status.clockInTime) / 60000;
+      if (status?.isClockedIn && status.statusStartedAt) {
+        base += getNonNegativeElapsedMs(status.statusStartedAt) / 60000;
       }
       setLiveTotalMinutes(base);
     };
     compute();
     const interval = setInterval(compute, 60000);
     return () => clearInterval(interval);
-  }, [status?.isClockedIn, status?.clockInTime, status?.todayMinutes]);
+  }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);
 
-  const memberBreakdown = computeTimeBreakdown(liveTotalMinutes);
+  const liveBreakMinutes =
+    (status?.breakMinutes ?? 0) +
+    (status?.status === 'on_break' && status.statusStartedAt
+      ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
+      : 0);
+  const memberBreakdown = computeTimeBreakdown(liveTotalMinutes, liveBreakMinutes);
   const dailyPercentage = Math.min(
     100,
     Math.round((memberBreakdown.workMinutes / DAILY_GOAL_MINUTES) * 100)
@@ -339,6 +344,7 @@ export function MitarbeiterDetailContent({
               </h3>
               <div className="space-y-2.5">
                 <StatusBadge
+                  status={status?.status}
                   isClockedIn={status?.isClockedIn ?? false}
                   isPending={status?.isPending ?? false}
                   canViewStatus
@@ -374,7 +380,7 @@ export function MitarbeiterDetailContent({
                     className="h-2"
                     indicatorClassName={cn(
                       'bg-green-500',
-                      status?.isClockedIn && 'opacity-80'
+                      status?.status === 'working' && 'opacity-80'
                     )}
                   />
                 </div>
@@ -392,7 +398,9 @@ export function MitarbeiterDetailContent({
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-yellow-500" />
                     <span className="text-muted-foreground">Pause</span>
                     <span className="font-medium tabular-nums">
-                      {memberBreakdown.breakMinutes > 0 ? '30 Min.' : '0 Min.'}
+                      {memberBreakdown.breakMinutes > 0
+                        ? formatDuration(memberBreakdown.breakMinutes)
+                        : '0 Min.'}
                     </span>
                   </span>
                   <span className="flex items-center gap-1">
@@ -419,6 +427,7 @@ export function MitarbeiterDetailContent({
                   weekData={weekData}
                   todayIndex={todayIndex}
                   liveTodayMinutes={liveTotalMinutes}
+                  liveTodayBreakMinutes={liveBreakMinutes}
                   weekLabel={weekLabel}
                 />
               ) : (

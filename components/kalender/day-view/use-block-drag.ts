@@ -9,9 +9,14 @@ interface UseBlockDragOptions {
   width: number;
   effectiveHourWidth: number;
   enabled: boolean;
-  onComplete: (newLeft: number, newWidth: number) => void;
+  allowMove?: boolean;
+  allowResizeLeft?: boolean;
+  allowResizeRight?: boolean;
+  onComplete: (newLeft: number, newWidth: number, mode: DragMode) => void;
   onDragUpdate?: (left: number, width: number) => void;
   onDragEnd?: () => void;
+  isDropInvalid?: (left: number, width: number, mode: DragMode) => boolean;
+  onInvalidDrop?: (mode: DragMode) => void;
 }
 
 function snapToGrid(px: number, hourWidth: number): number {
@@ -25,9 +30,14 @@ export function useBlockDrag({
   width,
   effectiveHourWidth,
   enabled,
+  allowMove = true,
+  allowResizeLeft = true,
+  allowResizeRight = true,
   onComplete,
   onDragUpdate,
-  onDragEnd: onDragEndCb
+  onDragEnd: onDragEndCb,
+  isDropInvalid,
+  onInvalidDrop
 }: UseBlockDragOptions) {
   const [dragMode, setDragMode] = useState<DragMode>('none');
   const [currentLeft, setCurrentLeft] = useState(left);
@@ -48,6 +58,10 @@ export function useBlockDrag({
   onDragUpdateRef.current = onDragUpdate;
   const onDragEndCbRef = useRef(onDragEndCb);
   onDragEndCbRef.current = onDragEndCb;
+  const isDropInvalidRef = useRef(isDropInvalid);
+  isDropInvalidRef.current = isDropInvalid;
+  const onInvalidDropRef = useRef(onInvalidDrop);
+  onInvalidDropRef.current = onInvalidDrop;
 
   useEffect(() => {
     if (dragModeRef.current !== 'none') return;
@@ -63,7 +77,16 @@ export function useBlockDrag({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, mode: DragMode) => {
-      if (!enabled || mode === 'none') return;
+      const modeAllowed =
+        mode === 'move'
+          ? allowMove
+          : mode === 'resize-left'
+            ? allowResizeLeft
+            : mode === 'resize-right'
+              ? allowResizeRight
+              : false;
+
+      if (!enabled || mode === 'none' || !modeAllowed) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -81,7 +104,7 @@ export function useBlockDrag({
 
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [enabled, left, width]
+    [enabled, left, width, allowMove, allowResizeLeft, allowResizeRight]
   );
 
   const handlePointerMove = useCallback(
@@ -135,9 +158,19 @@ export function useBlockDrag({
     const finalLeft = currentLeftRef.current;
     const finalWidth = currentWidthRef.current;
 
+    if (isDropInvalidRef.current?.(finalLeft, finalWidth, mode)) {
+      setCurrentLeft(left);
+      setCurrentWidth(width);
+      currentLeftRef.current = left;
+      currentWidthRef.current = width;
+      onInvalidDropRef.current?.(mode);
+      setTimeout(() => { didDragRef.current = false; }, 0);
+      return;
+    }
+
     if (finalLeft !== left || finalWidth !== width) {
       setIsHolding(true);
-      queueMicrotask(() => onCompleteRef.current(finalLeft, finalWidth));
+      queueMicrotask(() => onCompleteRef.current(finalLeft, finalWidth, mode));
       setTimeout(() => setIsHolding(false), 5000);
     }
 

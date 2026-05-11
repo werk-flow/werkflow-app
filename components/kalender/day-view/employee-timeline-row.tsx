@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import {
   calculateBlockPosition,
   BASE_HOUR_WIDTH,
@@ -15,9 +15,14 @@ import {
   formatDuration,
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
+import {
+  calculateCalendarWorkBlocks,
+  createSessionFromCalendarBlock,
+} from '@/lib/time-tracking/calendar-blocks';
 import { computeOverlapLayout } from '@/lib/calendar/overlap';
 import { cn } from '@/lib/utils';
 import type {
+  InteractiveCalendarSession,
   TimeEntry,
   WorkSession,
   EntryChangeRequestMap
@@ -65,6 +70,8 @@ interface EmployeeTimelineRowProps {
   ) => void;
   /** Session ID (clockIn or clockOut) that is currently being dragged across rows. */
   activeDragSessionId?: string | null;
+  /** Calendar block IDs that the active drag currently conflicts with. */
+  activeConflictTargetIds?: string[];
   /** Ref set by DayView when cross-row drag occurred (prevents click opening dialog). */
   dayViewDragDidOccurRef?: React.RefObject<boolean>;
   /** Timed jobs to display as blocks on this member's row. */
@@ -99,6 +106,8 @@ interface EmployeeTimelineRowProps {
   onJobDragUpdate?: (jobId: string, left: number, width: number, memberId?: string) => void;
   /** Callback when in-row job drag ends */
   onJobDragEnd?: (jobId: string) => void;
+  /** Callback when a session move/resize is rejected locally before drop. */
+  onInvalidSessionPlacement?: (message: string) => void;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -108,12 +117,30 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MIN_LAYOUT_WIDTH = 0.5;
 
 function getMemberDisplayName(member: CalendarMember): string {
   if (member.first_name || member.last_name) {
     return `${member.first_name || ''} ${member.last_name || ''}`.trim();
   }
   return member.email;
+}
+
+function getExactLayoutWidth(
+  startTime: Date,
+  endTime: Date | null,
+  hourWidth: number
+): number {
+  const effectiveEnd =
+    endTime ??
+    (startTime.toDateString() === new Date().toDateString()
+      ? new Date()
+      : new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate(), 24, 0, 0, 0));
+
+  const diffHours =
+    (effectiveEnd.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+
+  return Math.max(diffHours * hourWidth, MIN_LAYOUT_WIDTH);
 }
 
 export function EmployeeTimelineRow({
@@ -135,6 +162,7 @@ export function EmployeeTimelineRow({
   onMoveResize,
   onBlockMoveStart,
   activeDragSessionId,
+  activeConflictTargetIds = [],
   dayViewDragDidOccurRef,
   jobs,
   onJobClick,
@@ -148,7 +176,8 @@ export function EmployeeTimelineRow({
   onParkplatzDragOver,
   jobDragShadow,
   onJobDragUpdate,
-  onJobDragEnd
+  onJobDragEnd,
+  onInvalidSessionPlacement
 }: EmployeeTimelineRowProps) {
   const timelineWidth = totalWidth ?? 24 * effectiveHourWidth;
 
@@ -163,6 +192,7 @@ export function EmployeeTimelineRow({
   const daySessionsWithBlocks = useMemo(() => {
     if (!date) return [];
     return sessions
+      .filter((session) => session.isOrphan)
       .map((session) => {
         let referenceDate: Date;
         if (session.clockIn) {
@@ -189,7 +219,12 @@ export function EmployeeTimelineRow({
         return {
           session,
           left,
-          width,
+          width: getExactLayoutWidth(referenceDate, clockOutDate, effectiveHourWidth),
+          layoutWidth: getExactLayoutWidth(
+            referenceDate,
+            clockOutDate,
+            effectiveHourWidth
+          ),
           isPending:
             session.clockIn?.status === 'pending' ||
             session.clockOut?.status === 'pending'
@@ -199,9 +234,52 @@ export function EmployeeTimelineRow({
       session: WorkSession;
       left: number;
       width: number;
+      layoutWidth: number;
       isPending: boolean;
     }>;
-  }, [sessions, date, effectiveHourWidth]);
+  }, [sessions, date, effectiveHourWidth, currentTimePosition]);
+
+  const dayEntries = useMemo(() => {
+    if (!date) return [];
+    return entries.filter((entry) => {
+      const entryDate = new Date(entry.timestamp);
+      return entryDate.toDateString() === date.toDateString();
+    });
+  }, [entries, date]);
+
+  const dayWorkBlocks = useMemo(() => {
+    if (!date) return [];
+
+    return calculateCalendarWorkBlocks(dayEntries).map((block) => {
+      const start = new Date(block.start);
+      const end = block.end ? new Date(block.end) : null;
+      const { left, width } = calculateBlockPosition(start, end, effectiveHourWidth);
+      const layoutWidth = getExactLayoutWidth(start, end, effectiveHourWidth);
+
+      const segments = block.segments.map((segment) => {
+        const segmentPosition = calculateBlockPosition(
+          new Date(segment.start),
+          segment.end ? new Date(segment.end) : null,
+          effectiveHourWidth
+        );
+
+        return {
+          id: segment.id,
+          type: segment.type,
+          left: Math.max(0, segmentPosition.left - left),
+          width: Math.max(2, segmentPosition.width)
+        };
+      });
+
+      return {
+        block,
+        left,
+        width: layoutWidth,
+        layoutWidth,
+        segments
+      };
+    });
+  }, [date, dayEntries, effectiveHourWidth, currentTimePosition]);
 
   const dayJobsWithBlocks = useMemo(() => {
     if (!date || !jobs?.length) return [];
@@ -211,28 +289,47 @@ export function EmployeeTimelineRow({
         const start = new Date(`${job.plannedDate}T${job.plannedTime}:00`);
         const end = new Date(start.getTime() + job.estimatedDurationMinutes! * 60000);
         const { left, width } = calculateBlockPosition(start, end, effectiveHourWidth);
-        return { job, left, width };
+        return {
+          job,
+          left,
+          width,
+          layoutWidth: getExactLayoutWidth(start, end, effectiveHourWidth)
+        };
       });
   }, [jobs, date, effectiveHourWidth]);
 
   const ROW_PADDING = 4;
   const ROW_INNER_HEIGHT = 56; // 64px row - 2*4px padding
+  const sessionCollisionBlocks = useMemo(
+    () =>
+      dayWorkBlocks.map(({ block, left, layoutWidth }) => ({
+        id: block.id,
+        left,
+        width: layoutWidth
+      })),
+    [dayWorkBlocks]
+  );
 
   const blockLayout = useMemo(() => {
     const blocks = [
+      ...dayWorkBlocks.map((block) => ({
+        id: `work-block-${block.block.id}`,
+        left: block.left,
+        width: block.layoutWidth,
+      })),
       ...daySessionsWithBlocks.map((s) => ({
         id: `session-${s.session.clockIn?.id ?? s.session.clockOut?.id}`,
         left: s.left,
-        width: s.width,
+        width: s.layoutWidth,
       })),
       ...dayJobsWithBlocks.map((j) => ({
         id: `job-${j.job.id}`,
         left: j.left,
-        width: j.width,
+        width: j.layoutWidth,
       })),
     ];
     return computeOverlapLayout(blocks);
-  }, [daySessionsWithBlocks, dayJobsWithBlocks]);
+  }, [dayWorkBlocks, daySessionsWithBlocks, dayJobsWithBlocks]);
 
   function getLayoutProps(blockId: string) {
     const layout = blockLayout.get(blockId);
@@ -255,6 +352,37 @@ export function EmployeeTimelineRow({
       onJobDragUpdate?.(jobId, left, width, member.user_id);
     },
     [onJobDragUpdate, member.user_id]
+  );
+  const [dragConflictState, setDragConflictState] = useState<{
+    sourceId: string | null;
+    targetIds: string[];
+  }>({
+    sourceId: null,
+    targetIds: []
+  });
+
+  const handleConflictTargetsChange = useCallback(
+    (sourceId: string, targetIds: string[]) => {
+      setDragConflictState((prev) => {
+        if (targetIds.length === 0) {
+          if (prev.sourceId === null && prev.targetIds.length === 0) {
+            return prev;
+          }
+          return { sourceId: null, targetIds: [] };
+        }
+
+        if (
+          prev.sourceId === sourceId &&
+          prev.targetIds.length === targetIds.length &&
+          prev.targetIds.every((targetId) => targetIds.includes(targetId))
+        ) {
+          return prev;
+        }
+
+        return { sourceId: sourceId, targetIds };
+      });
+    },
+    []
   );
 
   if (showNameOnly) {
@@ -389,16 +517,70 @@ export function EmployeeTimelineRow({
           />
         )}
 
-        {/* Work session blocks — pixel positioning with overlap layout */}
+        {/* Attendance blocks — merged across breaks when the work block continues */}
+        {dayWorkBlocks.map(({ block, left, width, segments }) => {
+          const layout = getLayoutProps(`work-block-${block.id}`);
+          const session: InteractiveCalendarSession = {
+            ...createSessionFromCalendarBlock(block),
+            employeeName: getMemberDisplayName(member),
+            employeeRole: member.role as OrgRole
+          };
+          const sessionKey =
+            session.calendarBlockId ?? session.clockIn?.id ?? session.clockOut?.id ?? block.id;
+          const isDraggedAway = activeDragSessionId === sessionKey;
+          const blockedRanges = sessionCollisionBlocks.filter(
+            (collisionBlock) => collisionBlock.id !== block.id
+          );
+
+          return (
+            <WorkSessionBlock
+              key={`work-block-${block.id}`}
+              blockId={block.id}
+              session={session}
+              left={left}
+              width={width}
+              isPending={block.isPending}
+              backgroundSegments={segments}
+              currentUserRole={currentUserRole!}
+              currentUserId={currentUserId}
+              onRefresh={onRefresh!}
+              changeRequestMap={changeRequestMap}
+              entryUserRole={member.role as OrgRole}
+              effectiveHourWidth={effectiveHourWidth}
+              onMoveResize={onMoveResize}
+              viewDate={date}
+              onBlockMoveStart={onBlockMoveStart}
+              memberId={member.user_id}
+              isDraggedAway={isDraggedAway}
+              dayViewDragDidOccurRef={dayViewDragDidOccurRef}
+              layoutTop={layout.layoutTop}
+              layoutHeight={layout.layoutHeight}
+              blockedRanges={blockedRanges}
+              isConflictTarget={
+                dragConflictState.targetIds.includes(block.id) ||
+                activeConflictTargetIds.includes(block.id)
+              }
+              onConflictTargetsChange={handleConflictTargetsChange}
+              onInvalidPlacement={onInvalidSessionPlacement}
+            />
+          );
+        })}
+
+        {/* Orphan session blocks — pixel positioning with overlap layout */}
         {daySessionsWithBlocks.map(
           ({ session, left, width, isPending }, index) => {
+            const interactiveSession: InteractiveCalendarSession = {
+              ...(session as InteractiveCalendarSession),
+              employeeName: getMemberDisplayName(member),
+              employeeRole: member.role as OrgRole
+            };
             const sessionKey = session.clockIn?.id ?? session.clockOut?.id ?? String(index);
             const isDraggedAway = activeDragSessionId === sessionKey;
             const layout = getLayoutProps(`session-${sessionKey}`);
             return (
               <WorkSessionBlock
                 key={`${sessionKey}-${index}`}
-                session={session}
+                session={interactiveSession}
                 left={left}
                 width={width}
                 isPending={isPending}

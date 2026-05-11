@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { CACHE_TAGS } from '@/lib/data/cached';
 
@@ -29,11 +30,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
     }
 
-    // Call the RPC to redeem the invite
-    const { data: redeemResult, error: redeemError } = await supabase.rpc(
-      'redeem_organization_invite',
-      { p_invite_code: inviteCode }
-    );
+    const { data: redeemResult, error: redeemError } =
+      await createSupabaseAdminClient().rpc(
+        'redeem_organization_invite_for_user',
+        {
+          p_invite_code: inviteCode,
+          p_user_id: user.id
+        }
+      );
 
     if (redeemError) {
       console.error('RPC error redeeming invite:', redeemError);

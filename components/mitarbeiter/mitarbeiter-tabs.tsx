@@ -61,7 +61,7 @@ export function MitarbeiterTabs({
 
   // Calculate active working count from statusMap
   const activeWorkingCount = useMemo(() => {
-    return Object.values(statusMap).filter((status) => status.isClockedIn)
+    return Object.values(statusMap).filter((status) => status.status === 'working')
       .length;
   }, [statusMap]);
 

@@ -1,4 +1,5 @@
 import type {
+  BreakSession,
   TimeEntry,
   ManualEntryInput,
   ValidationResult,
@@ -6,8 +7,11 @@ import type {
 } from './types';
 import {
   getLocalDayEnd,
+  getLocalDayKey,
   isSameLocalDay
 } from './day-utils';
+import { getEffectiveTimeEntries } from './effective-entries';
+import { isBreakEndFollowedByClockIn } from './transition-pairs';
 
 /**
  * Check if two timestamps are in the same minute (minute-level overlap)
@@ -31,7 +35,8 @@ export function checkMinuteOverlap(existingTs: Date, newTs: Date): boolean {
  */
 export function validateSingleEntryNoOverlap(
   existingEntries: TimeEntry[],
-  newTimestamp: Date
+  newTimestamp: Date,
+  entryBeingUpdated?: TimeEntry
 ): ValidationResult {
   // Filter to only active entries (approved or pending, not rejected or pending_delete)
   const activeEntries = existingEntries.filter(
@@ -44,6 +49,17 @@ export function validateSingleEntryNoOverlap(
   for (const entry of activeEntries) {
     const existingTs = new Date(entry.timestamp);
     if (checkMinuteOverlap(existingTs, newTimestamp)) {
+      const isBreakResumeBoundaryPair =
+        !!entryBeingUpdated &&
+        ((entry.entryType === 'break_end' &&
+          entryBeingUpdated.entryType === 'clock_in') ||
+          (entry.entryType === 'clock_in' &&
+            entryBeingUpdated.entryType === 'break_end'));
+
+      if (isBreakResumeBoundaryPair) {
+        continue;
+      }
+
       return {
         valid: false,
         error: `Ein Eintrag existiert bereits um ${existingTs.toLocaleTimeString(
@@ -101,15 +117,333 @@ function determinePendingState(
  * - Unpaired clock_in from TODAY → open session (user is currently working)
  */
 export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
-  const now = new Date();
+  const activeEntries = getEffectiveTimeEntries(entries);
 
-  // Future entries are invalid for time tracking and can break "currently working"
-  // state if they slip into the database. Ignore them while deriving sessions.
-  const activeEntries = entries
+  const sessions: WorkSession[] = [];
+  let currentWorkStart: TimeEntry | null = null;
+
+  const pushUnpairedWorkStart = (startEntry: TimeEntry) => {
+    const startDate = new Date(startEntry.timestamp);
+    const isOpenSession = isToday(startDate);
+
+    sessions.push({
+      clockIn: startEntry,
+      clockOut: null,
+      durationMinutes: null,
+      jobId: startEntry.jobId,
+      startEntryType:
+        startEntry.entryType === 'break_end' ? 'break_end' : 'clock_in',
+      endEntryType: null,
+      isOrphan: !isOpenSession,
+      pendingState: determinePendingState(startEntry, null)
+    });
+  };
+
+  for (let index = 0; index < activeEntries.length; index += 1) {
+    const entry = activeEntries[index];
+    if (
+      currentWorkStart &&
+      !isSameLocalDay(new Date(currentWorkStart.timestamp), new Date(entry.timestamp))
+    ) {
+      sessions.push({
+        clockIn: currentWorkStart,
+        clockOut: null,
+        durationMinutes: null,
+        jobId: currentWorkStart.jobId,
+        startEntryType:
+          currentWorkStart.entryType === 'break_end' ? 'break_end' : 'clock_in',
+        endEntryType: null,
+        isOrphan: true,
+        pendingState: determinePendingState(currentWorkStart, null)
+      });
+      currentWorkStart = null;
+    }
+
+    const startsWork =
+      entry.entryType === 'clock_in' ||
+      (entry.entryType === 'break_end' &&
+        !isBreakEndFollowedByClockIn(activeEntries, index));
+
+    if (startsWork) {
+      if (currentWorkStart) {
+        pushUnpairedWorkStart(currentWorkStart);
+      }
+      currentWorkStart = entry;
+    } else if (entry.entryType === 'clock_out' || entry.entryType === 'break_start') {
+      if (
+        currentWorkStart &&
+        isSameLocalDay(
+          new Date(currentWorkStart.timestamp),
+          new Date(entry.timestamp)
+        )
+      ) {
+        const startTime = new Date(currentWorkStart.timestamp).getTime();
+        const endTime = new Date(entry.timestamp).getTime();
+        const durationMinutes = (endTime - startTime) / 60000;
+
+        sessions.push({
+          clockIn: currentWorkStart,
+          clockOut: entry,
+          durationMinutes,
+          jobId: currentWorkStart.jobId,
+          startEntryType:
+            currentWorkStart.entryType === 'break_end' ? 'break_end' : 'clock_in',
+          endEntryType:
+            entry.entryType === 'break_start' ? 'break_start' : 'clock_out',
+          pendingState: determinePendingState(currentWorkStart, entry)
+        });
+        currentWorkStart = null;
+      } else {
+        if (currentWorkStart) {
+          pushUnpairedWorkStart(currentWorkStart);
+          currentWorkStart = null;
+        }
+
+        if (entry.entryType === 'clock_out') {
+          sessions.push({
+            clockIn: null,
+            clockOut: entry,
+            durationMinutes: null,
+            jobId: entry.jobId,
+            startEntryType: null,
+            endEntryType: 'clock_out',
+            isOrphan: true,
+            pendingState: determinePendingState(null, entry)
+          });
+        }
+      }
+    }
+  }
+
+  if (currentWorkStart) {
+    pushUnpairedWorkStart(currentWorkStart);
+  }
+
+  return sessions;
+}
+
+export function calculateBreakSessions(entries: TimeEntry[]): BreakSession[] {
+  const activeEntries = getEffectiveTimeEntries(entries);
+
+  const sessions: BreakSession[] = [];
+  let currentBreakStart: TimeEntry | null = null;
+
+  for (const entry of activeEntries) {
+    if (
+      currentBreakStart &&
+      !isSameLocalDay(new Date(currentBreakStart.timestamp), new Date(entry.timestamp))
+    ) {
+      sessions.push({
+        breakStart: currentBreakStart,
+        breakEnd: null,
+        durationMinutes: null,
+        isOpen: false,
+        pendingState: determinePendingState(currentBreakStart, null)
+      });
+      currentBreakStart = null;
+    }
+
+    if (entry.entryType === 'break_start') {
+      if (currentBreakStart) {
+        sessions.push({
+          breakStart: currentBreakStart,
+          breakEnd: null,
+          durationMinutes: null,
+          isOpen: true,
+          pendingState: determinePendingState(currentBreakStart, null)
+        });
+      }
+      currentBreakStart = entry;
+    } else if (
+      currentBreakStart &&
+      (entry.entryType === 'break_end' || entry.entryType === 'clock_out')
+    ) {
+      const breakStartTime = new Date(currentBreakStart.timestamp).getTime();
+      const breakEndTime = new Date(entry.timestamp).getTime();
+
+      sessions.push({
+        breakStart: currentBreakStart,
+        breakEnd: entry,
+        durationMinutes: (breakEndTime - breakStartTime) / 60000,
+        isOpen: false,
+        pendingState: determinePendingState(currentBreakStart, entry)
+      });
+      currentBreakStart = null;
+    }
+  }
+
+  if (currentBreakStart) {
+    sessions.push({
+      breakStart: currentBreakStart,
+      breakEnd: null,
+      durationMinutes: null,
+      isOpen: true,
+      pendingState: determinePendingState(currentBreakStart, null)
+    });
+  }
+
+  return sessions;
+}
+
+function formatTimeLabel(date: Date): string {
+  return date.toLocaleTimeString('de-DE', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function getActiveDayEntries(entries: TimeEntry[], referenceDate: Date): TimeEntry[] {
+  return entries
     .filter(
-      (e) =>
-        e.status !== 'rejected' &&
-        new Date(e.timestamp).getTime() <= now.getTime()
+      (entry) =>
+        entry.status !== 'rejected' &&
+        entry.status !== 'pending_delete' &&
+        isSameLocalDay(new Date(entry.timestamp), referenceDate)
+    )
+    .sort((a, b) => {
+      const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      if (diff !== 0) return diff;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+}
+
+function getWorkSessionEndMs(session: WorkSession): number | null {
+  if (!session.clockIn) return null;
+
+  if (session.clockOut) {
+    return new Date(session.clockOut.timestamp).getTime();
+  }
+
+  const startDate = new Date(session.clockIn.timestamp);
+  return isToday(startDate)
+    ? Date.now()
+    : getLocalDayEnd(startDate).getTime();
+}
+
+function getBreakSessionEndMs(session: BreakSession): number {
+  if (session.breakEnd) {
+    return new Date(session.breakEnd.timestamp).getTime();
+  }
+
+  const startDate = new Date(session.breakStart.timestamp);
+  return isToday(startDate)
+    ? Date.now()
+    : getLocalDayEnd(startDate).getTime();
+}
+
+function isTimestampInsideWorkWindow(
+  sessions: WorkSession[],
+  timestamp: Date,
+  options?: { includeOpenSessions?: boolean }
+): WorkSession | null {
+  const targetMs = timestamp.getTime();
+
+  for (const session of sessions) {
+    if (!session.clockIn) continue;
+    if (!options?.includeOpenSessions && !session.clockOut) continue;
+
+    const startMs = new Date(session.clockIn.timestamp).getTime();
+    const endMs = getWorkSessionEndMs(session);
+    if (endMs === null) continue;
+
+    if (startMs < targetMs && targetMs < endMs) {
+      return session;
+    }
+  }
+
+  return null;
+}
+
+function isTimestampInsideBreakWindow(
+  sessions: BreakSession[],
+  timestamp: Date,
+  options?: { includeOpenSessions?: boolean }
+): BreakSession | null {
+  const targetMs = timestamp.getTime();
+
+  for (const session of sessions) {
+    if (!options?.includeOpenSessions && !session.breakEnd) continue;
+
+    const startMs = new Date(session.breakStart.timestamp).getTime();
+    const endMs = getBreakSessionEndMs(session);
+
+    if (startMs < targetMs && targetMs < endMs) {
+      return session;
+    }
+  }
+
+  return null;
+}
+
+function validateBreakWindowOverlap(
+  breakSessions: BreakSession[],
+  newStart: Date,
+  newEnd: Date
+): ValidationResult {
+  const newStartMs = newStart.getTime();
+  const newEndMs = newEnd.getTime();
+
+  for (const session of breakSessions) {
+    const startMs = new Date(session.breakStart.timestamp).getTime();
+    const endMs = getBreakSessionEndMs(session);
+
+    if (newStartMs < endMs && startMs < newEndMs) {
+      const startLabel = formatTimeLabel(new Date(session.breakStart.timestamp));
+      const endLabel = session.breakEnd
+        ? formatTimeLabel(new Date(session.breakEnd.timestamp))
+        : 'offen';
+
+      return {
+        valid: false,
+        error: `Der neue Zeitraum überschneidet sich mit einer bestehenden Pause (${startLabel} - ${endLabel}). Manuelle Arbeitszeiten müssen vollständig außerhalb bestehender Pausen liegen.`
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+type EntrySequenceState = 'clocked_out' | 'working' | 'on_break';
+
+function deriveSequenceStateAtTimestamp(
+  entries: TimeEntry[],
+  referenceDate: Date
+): EntrySequenceState {
+  const dayEntries = getActiveDayEntries(entries, referenceDate).filter(
+    (entry) => new Date(entry.timestamp).getTime() <= referenceDate.getTime()
+  );
+
+  let state: EntrySequenceState = 'clocked_out';
+
+  for (const entry of dayEntries) {
+    switch (entry.entryType) {
+      case 'clock_in':
+        state = 'working';
+        break;
+      case 'break_start':
+        if (state === 'working') {
+          state = 'on_break';
+        }
+        break;
+      case 'break_end':
+        if (state !== 'clocked_out') {
+          state = 'working';
+        }
+        break;
+      case 'clock_out':
+        state = 'clocked_out';
+        break;
+    }
+  }
+
+  return state;
+}
+
+export function validateDayEntrySequence(entries: TimeEntry[]): ValidationResult {
+  const sortedEntries = entries
+    .filter(
+      (entry) =>
+        entry.status !== 'rejected' && entry.status !== 'pending_delete'
     )
     .sort((a, b) => {
       const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
@@ -117,87 +451,195 @@ export function calculateWorkSessions(entries: TimeEntry[]): WorkSession[] {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
 
-  const sessions: WorkSession[] = [];
-  let currentClockIn: TimeEntry | null = null;
+  let state: EntrySequenceState = 'clocked_out';
+  let previousEntry: TimeEntry | null = null;
 
-  const pushUnpairedClockIn = (clockIn: TimeEntry) => {
-    const clockInDate = new Date(clockIn.timestamp);
-    const isOpenSession = isToday(clockInDate);
+  for (const entry of sortedEntries) {
+    const timeLabel = formatTimeLabel(new Date(entry.timestamp));
 
-    sessions.push({
-      clockIn,
-      clockOut: null,
-      durationMinutes: null,
-      jobId: clockIn.jobId,
-      isOrphan: !isOpenSession,
-      pendingState: determinePendingState(clockIn, null)
-    });
-  };
-
-  for (const entry of activeEntries) {
-    if (
-      currentClockIn &&
-      !isSameLocalDay(new Date(currentClockIn.timestamp), new Date(entry.timestamp))
-    ) {
-      sessions.push({
-        clockIn: currentClockIn,
-        clockOut: null,
-        durationMinutes: null,
-        jobId: currentClockIn.jobId,
-        isOrphan: true,
-        pendingState: determinePendingState(currentClockIn, null)
-      });
-      currentClockIn = null;
-    }
-
-    if (entry.entryType === 'clock_in') {
-      if (currentClockIn) {
-        pushUnpairedClockIn(currentClockIn);
-      }
-      currentClockIn = entry;
-    } else if (entry.entryType === 'clock_out') {
-      if (
-        currentClockIn &&
-        isSameLocalDay(
-          new Date(currentClockIn.timestamp),
-          new Date(entry.timestamp)
-        )
-      ) {
-        const clockInTime = new Date(currentClockIn.timestamp).getTime();
-        const clockOutTime = new Date(entry.timestamp).getTime();
-        const durationMinutes = (clockOutTime - clockInTime) / 60000;
-
-        sessions.push({
-          clockIn: currentClockIn,
-          clockOut: entry,
-          durationMinutes,
-          jobId: currentClockIn.jobId,
-          pendingState: determinePendingState(currentClockIn, entry)
-        });
-        currentClockIn = null;
-      } else {
-        if (currentClockIn) {
-          pushUnpairedClockIn(currentClockIn);
-          currentClockIn = null;
+    switch (entry.entryType) {
+      case 'clock_in':
+        if (state !== 'clocked_out' && previousEntry?.entryType !== 'break_end') {
+          return {
+            valid: false,
+            error: `Ungültige Eintragsfolge um ${timeLabel}: Ein Arbeitsblock kann nur begonnen werden, wenn keine laufende Arbeitszeit oder Pause besteht.`
+          };
         }
+        state = 'working';
+        break;
+      case 'break_start':
+        if (state !== 'working') {
+          return {
+            valid: false,
+            error: `Ungültige Eintragsfolge um ${timeLabel}: Eine Pause kann nur während einer laufenden Arbeitszeit gestartet werden.`
+          };
+        }
+        state = 'on_break';
+        break;
+      case 'break_end':
+        if (state !== 'on_break') {
+          return {
+            valid: false,
+            error: `Ungültige Eintragsfolge um ${timeLabel}: Eine Pause kann nur beendet werden, wenn zu diesem Zeitpunkt bereits eine Pause läuft.`
+          };
+        }
+        state = 'working';
+        break;
+      case 'clock_out':
+        if (state === 'clocked_out') {
+          return {
+            valid: false,
+            error: `Ungültige Eintragsfolge um ${timeLabel}: Ausstempeln ist nur während einer laufenden Arbeitszeit oder Pause möglich.`
+          };
+        }
+        state = 'clocked_out';
+        break;
+    }
 
-        sessions.push({
-          clockIn: null,
-          clockOut: entry,
-          durationMinutes: null,
-          jobId: entry.jobId,
-          isOrphan: true,
-          pendingState: determinePendingState(null, entry)
-        });
-      }
+    previousEntry = entry;
+  }
+
+  return { valid: true };
+}
+
+function buildSimulatedManualEntry(
+  entry: ManualEntryInput,
+  index: number
+): TimeEntry {
+  return {
+    id: `manual-simulated-${index}`,
+    userId: 'manual-simulated-user',
+    organizationId: 'manual-simulated-org',
+    entryType: entry.entryType,
+    timestamp: entry.timestamp,
+    isManual: true,
+    jobId: null,
+    status: 'approved',
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: entry.timestamp,
+    updatedAt: entry.timestamp
+  };
+}
+
+function validateSingleManualEntry(
+  existingEntries: TimeEntry[],
+  newEntry: ManualEntryInput
+): ValidationResult {
+  const timestamp = new Date(newEntry.timestamp);
+  const dayEntries = getActiveDayEntries(existingEntries, timestamp);
+  const sortedDayEntries = getEffectiveTimeEntries(dayEntries).filter(
+    (entry) => new Date(entry.timestamp).getTime() < timestamp.getTime()
+  );
+  const previousEntry =
+    sortedDayEntries.length > 0 ? sortedDayEntries[sortedDayEntries.length - 1] : null;
+  const workSessions = calculateWorkSessions(dayEntries);
+  const breakSessions = calculateBreakSessions(dayEntries);
+  const beforeTimestamp = new Date(timestamp.getTime() - 1);
+  const stateBefore = deriveSequenceStateAtTimestamp(dayEntries, beforeTimestamp);
+
+  if (newEntry.entryType === 'clock_in') {
+    if (stateBefore !== 'clocked_out' && previousEntry?.entryType !== 'break_end') {
+      return {
+        valid: false,
+        error:
+          stateBefore === 'on_break'
+            ? 'Während einer laufenden Pause kann kein manueller Arbeitsbeginn hinzugefügt werden.'
+            : 'Ein manueller Arbeitsbeginn ist nur möglich, wenn zu diesem Zeitpunkt keine laufende Arbeitszeit besteht.'
+      };
+    }
+
+    const overlappingWorkSession = isTimestampInsideWorkWindow(
+      workSessions,
+      timestamp,
+      { includeOpenSessions: true }
+    );
+    if (overlappingWorkSession?.clockIn) {
+      const startLabel = formatTimeLabel(
+        new Date(overlappingWorkSession.clockIn.timestamp)
+      );
+      const endLabel = overlappingWorkSession.clockOut
+        ? formatTimeLabel(new Date(overlappingWorkSession.clockOut.timestamp))
+        : 'offen';
+
+      return {
+        valid: false,
+        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden Arbeitszeit (${startLabel} - ${endLabel}).`
+      };
+    }
+
+    const overlappingBreakSession = isTimestampInsideBreakWindow(
+      breakSessions,
+      timestamp,
+      { includeOpenSessions: true }
+    );
+    if (overlappingBreakSession) {
+      const startLabel = formatTimeLabel(
+        new Date(overlappingBreakSession.breakStart.timestamp)
+      );
+      const endLabel = overlappingBreakSession.breakEnd
+        ? formatTimeLabel(new Date(overlappingBreakSession.breakEnd.timestamp))
+        : 'offen';
+
+      return {
+        valid: false,
+        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden Pause (${startLabel} - ${endLabel}). Manuelle Arbeitszeiten müssen vollständig außerhalb von Pausen liegen.`
+      };
     }
   }
 
-  if (currentClockIn) {
-    pushUnpairedClockIn(currentClockIn);
+  if (newEntry.entryType === 'clock_out') {
+    if (stateBefore === 'clocked_out') {
+      return {
+        valid: false,
+        error:
+          'Ein manuelles Ausstempeln ist nur möglich, wenn zu diesem Zeitpunkt bereits eine laufende Arbeitszeit oder Pause besteht.'
+      };
+    }
+
+    const overlappingClosedWorkSession = isTimestampInsideWorkWindow(
+      workSessions,
+      timestamp
+    );
+    if (overlappingClosedWorkSession?.clockIn) {
+      const startLabel = formatTimeLabel(
+        new Date(overlappingClosedWorkSession.clockIn.timestamp)
+      );
+      const endLabel = overlappingClosedWorkSession.clockOut
+        ? formatTimeLabel(new Date(overlappingClosedWorkSession.clockOut.timestamp))
+        : 'offen';
+
+      return {
+        valid: false,
+        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden abgeschlossenen Arbeitszeit (${startLabel} - ${endLabel}).`
+      };
+    }
+
+    const overlappingClosedBreakSession = isTimestampInsideBreakWindow(
+      breakSessions,
+      timestamp
+    );
+    if (overlappingClosedBreakSession) {
+      const startLabel = formatTimeLabel(
+        new Date(overlappingClosedBreakSession.breakStart.timestamp)
+      );
+      const endLabel = overlappingClosedBreakSession.breakEnd
+        ? formatTimeLabel(new Date(overlappingClosedBreakSession.breakEnd.timestamp))
+        : 'offen';
+
+      return {
+        valid: false,
+        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden abgeschlossenen Pause (${startLabel} - ${endLabel}).`
+      };
+    }
   }
 
-  return sessions;
+  const simulatedEntries = [
+    ...dayEntries,
+    buildSimulatedManualEntry(newEntry, 0)
+  ];
+
+  return validateDayEntrySequence(simulatedEntries);
 }
 
 /**
@@ -300,7 +742,92 @@ export function validateManualPair(
     return windowOverlap;
   }
 
+  const existingBreakSessions = calculateBreakSessions(existingEntries);
+  const breakOverlap = validateBreakWindowOverlap(
+    existingBreakSessions,
+    clockInTimestamp,
+    clockOutTimestamp
+  );
+  if (!breakOverlap.valid) {
+    return breakOverlap;
+  }
+
+  const beforeClockIn = new Date(clockInTimestamp.getTime() - 1);
+  const stateBeforeClockIn = deriveSequenceStateAtTimestamp(
+    existingEntries,
+    beforeClockIn
+  );
+  if (stateBeforeClockIn !== 'clocked_out') {
+    return {
+      valid: false,
+      error:
+        stateBeforeClockIn === 'on_break'
+          ? 'Während einer laufenden Pause kann kein manueller Arbeitsblock begonnen werden.'
+          : 'Ein manueller Arbeitsblock kann nur beginnen, wenn zu diesem Zeitpunkt keine laufende Arbeitszeit besteht.'
+    };
+  }
+
+  const simulatedEntries = [
+    ...getActiveDayEntries(existingEntries, clockInTimestamp),
+    buildSimulatedManualEntry(
+      { entryType: 'clock_in', timestamp: clockInTimestamp.toISOString() },
+      0
+    ),
+    buildSimulatedManualEntry(
+      { entryType: 'clock_out', timestamp: clockOutTimestamp.toISOString() },
+      1
+    )
+  ];
+
+  const sequenceValidation = validateDayEntrySequence(simulatedEntries);
+  if (!sequenceValidation.valid) {
+    return sequenceValidation;
+  }
+
   return { valid: true };
+}
+
+export function validateManualBreakPair(
+  existingEntries: TimeEntry[],
+  breakStartTimestamp: Date,
+  breakEndTimestamp: Date
+): ValidationResult {
+  if (breakStartTimestamp.getTime() >= breakEndTimestamp.getTime()) {
+    return {
+      valid: false,
+      error: 'Der Pausenbeginn muss vor dem Pausenende liegen.'
+    };
+  }
+
+  const breakStartOverlap = validateSingleEntryNoOverlap(
+    existingEntries,
+    breakStartTimestamp
+  );
+  if (!breakStartOverlap.valid) {
+    return breakStartOverlap;
+  }
+
+  const breakEndOverlap = validateSingleEntryNoOverlap(
+    existingEntries,
+    breakEndTimestamp
+  );
+  if (!breakEndOverlap.valid) {
+    return breakEndOverlap;
+  }
+
+  const simulatedEntries = [
+    ...getActiveDayEntries(existingEntries, breakStartTimestamp),
+    buildSimulatedManualEntry(
+      { entryType: 'break_start', timestamp: breakStartTimestamp.toISOString() },
+      0
+    ),
+    buildSimulatedManualEntry(
+      { entryType: 'break_end', timestamp: breakEndTimestamp.toISOString() },
+      1
+    )
+  ];
+
+  return validateDayEntrySequence(simulatedEntries);
 }
 
 /**
@@ -360,12 +887,22 @@ export function validateManualEntries(
   if (newEntries.length === 2) {
     const clockIn = newEntries.find((e) => e.entryType === 'clock_in');
     const clockOut = newEntries.find((e) => e.entryType === 'clock_out');
+    const breakStart = newEntries.find((e) => e.entryType === 'break_start');
+    const breakEnd = newEntries.find((e) => e.entryType === 'break_end');
 
     if (clockIn && clockOut) {
       return validateManualPair(
         dayEntries,
         new Date(clockIn.timestamp),
         new Date(clockOut.timestamp)
+      );
+    }
+
+    if (breakStart && breakEnd) {
+      return validateManualBreakPair(
+        dayEntries,
+        new Date(breakStart.timestamp),
+        new Date(breakEnd.timestamp)
       );
     }
   }
@@ -377,9 +914,13 @@ export function validateManualEntries(
     if (!overlapResult.valid) {
       return overlapResult;
     }
+
+    const sequenceResult = validateSingleManualEntry(dayEntries, entry);
+    if (!sequenceResult.valid) {
+      return sequenceResult;
+    }
   }
 
-  // No longer enforce strict alternating pattern - entries will pair automatically
   return { valid: true };
 }
 
@@ -419,32 +960,17 @@ export function validateTimestampUpdate(
     return { valid: false, error: 'Eintrag nicht gefunden.' };
   }
 
-  // Find the paired entry (if this is a clock_in, find its clock_out and vice versa)
-  // First, calculate sessions from ALL entries to find the current pairing
-  const allSessions = calculateWorkSessions(existingEntries);
-  const currentSession = allSessions.find(
-    (s) => s.clockIn?.id === entryId || s.clockOut?.id === entryId
-  );
-
-  // Get the ID of the paired entry (if any)
-  const pairedEntryId =
-    currentSession?.clockIn?.id === entryId
-      ? currentSession?.clockOut?.id
-      : currentSession?.clockIn?.id;
-
-  // Filter out BOTH the entry being updated AND its paired entry
-  // This prevents false overlap detection when editing one entry of a pair
-  const otherEntries = existingEntries.filter(
-    (e) => e.id !== entryId && e.id !== pairedEntryId
-  );
-  const relevantEntries = otherEntries.filter((entry) =>
-    isSameLocalDay(new Date(entry.timestamp), newTimestamp)
+  const relevantEntries = existingEntries.filter(
+    (entry) =>
+      entry.id !== entryId &&
+      isSameLocalDay(new Date(entry.timestamp), newTimestamp)
   );
 
   // Check minute-level overlap with other entries (excluding the current session)
   const overlapResult = validateSingleEntryNoOverlap(
     relevantEntries,
-    newTimestamp
+    newTimestamp,
+    entryBeingUpdated
   );
   if (!overlapResult.valid) {
     return overlapResult;
@@ -458,50 +984,27 @@ export function validateTimestampUpdate(
     };
   }
 
-  // Calculate sessions from other entries (excluding the current session) to check window overlap
-  const otherSessions = calculateWorkSessions(relevantEntries);
+  const simulatedEntries = existingEntries.map((entry) =>
+    entry.id === entryId
+      ? {
+          ...entry,
+          timestamp: newTimestamp.toISOString()
+        }
+      : entry
+  );
 
-  if (currentSession) {
-    // Check if this update creates an invalid session (clock_out before clock_in)
-    if (entryBeingUpdated.entryType === 'clock_in' && currentSession.clockOut) {
-      const clockOutTime = new Date(
-        currentSession.clockOut.timestamp
-      ).getTime();
-      if (newTimestamp.getTime() >= clockOutTime) {
-        return {
-          valid: false,
-          error: 'Die Einstempelzeit muss vor der Ausstempelzeit liegen.'
-        };
-      }
-      // Check window overlap with the updated time range
-      const windowOverlap = checkWindowOverlap(
-        otherSessions,
-        newTimestamp,
-        new Date(currentSession.clockOut.timestamp)
-      );
-      if (!windowOverlap.valid) {
-        return windowOverlap;
-      }
-    } else if (
-      entryBeingUpdated.entryType === 'clock_out' &&
-      currentSession.clockIn
-    ) {
-      const clockInTime = new Date(currentSession.clockIn.timestamp).getTime();
-      if (newTimestamp.getTime() <= clockInTime) {
-        return {
-          valid: false,
-          error: 'Die Ausstempelzeit muss nach der Einstempelzeit liegen.'
-        };
-      }
-      // Check window overlap with the updated time range
-      const windowOverlap = checkWindowOverlap(
-        otherSessions,
-        new Date(currentSession.clockIn.timestamp),
-        newTimestamp
-      );
-      if (!windowOverlap.valid) {
-        return windowOverlap;
-      }
+  const affectedDayKeys = new Set([
+    getLocalDayKey(new Date(entryBeingUpdated.timestamp)),
+    getLocalDayKey(newTimestamp)
+  ]);
+
+  for (const dayKey of affectedDayKeys) {
+    const dayReference = new Date(`${dayKey}T12:00:00`);
+    const dayEntries = getActiveDayEntries(simulatedEntries, dayReference);
+    const sequenceResult = validateDayEntrySequence(dayEntries);
+
+    if (!sequenceResult.valid) {
+      return sequenceResult;
     }
   }
 

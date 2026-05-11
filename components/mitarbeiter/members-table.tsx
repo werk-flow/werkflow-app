@@ -173,15 +173,17 @@ function MemberCard({
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <StatusBadge
+            status={status?.status}
             isClockedIn={status?.isClockedIn ?? false}
             isPending={status?.isPending ?? false}
             canViewStatus={canViewStatus}
           />
           <span className="text-muted-foreground/60">·</span>
           <HoursDisplay
+            status={status?.status}
             isClockedIn={status?.isClockedIn ?? false}
-            clockInTime={status?.clockInTime ?? null}
-            todayMinutes={status?.todayMinutes ?? 0}
+            statusStartedAt={status?.statusStartedAt ?? null}
+            workMinutes={status?.workMinutes ?? 0}
             canViewStatus={canViewStatus}
           />
         </div>
@@ -363,6 +365,7 @@ export function MembersTable({
                   </TableCell>
                   <TableCell className="px-4">
                     <StatusBadge
+                      status={status?.status}
                       isClockedIn={status?.isClockedIn ?? false}
                       isPending={status?.isPending ?? false}
                       canViewStatus={canViewStatus}
@@ -370,9 +373,10 @@ export function MembersTable({
                   </TableCell>
                   <TableCell className="px-4">
                     <HoursDisplay
+                      status={status?.status}
                       isClockedIn={status?.isClockedIn ?? false}
-                      clockInTime={status?.clockInTime ?? null}
-                      todayMinutes={status?.todayMinutes ?? 0}
+                      statusStartedAt={status?.statusStartedAt ?? null}
+                      workMinutes={status?.workMinutes ?? 0}
                       canViewStatus={canViewStatus}
                     />
                   </TableCell>

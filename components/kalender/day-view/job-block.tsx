@@ -3,7 +3,7 @@
 import { useMemo, useCallback } from 'react';
 import { Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useBlockDrag } from './use-block-drag';
+import { useBlockDrag, type DragMode } from './use-block-drag';
 import type { CalendarJob } from '@/lib/jobs/types';
 
 export interface JobMoveResizeResult {
@@ -76,7 +76,7 @@ export function JobBlock({
   }, [onMoveResize, job.plannedTime, job.estimatedDurationMinutes]);
 
   const handleDragComplete = useCallback(
-    (newLeft: number, newWidth: number) => {
+    (newLeft: number, newWidth: number, _mode: DragMode) => {
       if (!onMoveResize || !job.plannedTime || !job.estimatedDurationMinutes) return;
 
       const newTime = pixelToHHMM(newLeft, effectiveHourWidth);

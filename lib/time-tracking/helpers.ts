@@ -1,18 +1,26 @@
-import type { TimeEntry, TimeEntryStatus, OrgRole, WorkSession } from './types';
+import type {
+  BreakSession,
+  ClockStatus,
+  ClockTimelineSegment,
+  OrgRole,
+  TimeEntry,
+  TimeEntryStatus,
+  WorkSession,
+} from './types';
 import { MANAGED_ROLES } from './types';
 import {
   getLocalDayEnd,
   getLocalDayKey,
-  getLocalDayStart,
   isSameLocalDay
 } from './day-utils';
+import { getEffectiveTimeEntries } from './effective-entries';
 
 // ── Time model constants ──────────────────────────────────────────────
 export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
 export const BREAK_THRESHOLD_MINUTES = 360;   // 6h total clocked → break applies
 export const BREAK_DURATION_MINUTES = 30;
 export const BREAK_START_MINUTES = 330;       // 5.5h mark on ring where yellow starts
-export const OVERTIME_THRESHOLD_MINUTES = 510; // 8.5h total clocked → overtime starts
+export const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
 export const WORK_GOAL_MINUTES = 480;         // 8h = actual work goal
 export const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
 
@@ -22,10 +30,20 @@ export interface TimeBreakdown {
   overtimeMinutes: number;
 }
 
-export function computeTimeBreakdown(totalMinutes: number): TimeBreakdown {
-  const breakMinutes = totalMinutes >= BREAK_THRESHOLD_MINUTES
-    ? BREAK_DURATION_MINUTES
-    : 0;
+export function computeTimeBreakdown(
+  totalMinutes: number,
+  actualBreakMinutes?: number
+): TimeBreakdown {
+  if (actualBreakMinutes !== undefined) {
+    const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, totalMinutes));
+    const netWorkMinutes = Math.max(0, totalMinutes - clampedBreakMinutes);
+    const overtimeMinutes = Math.max(0, netWorkMinutes - WORK_GOAL_MINUTES);
+    const workMinutes = Math.max(0, netWorkMinutes - overtimeMinutes);
+    return { workMinutes, breakMinutes: clampedBreakMinutes, overtimeMinutes };
+  }
+
+  const breakMinutes =
+    totalMinutes >= BREAK_THRESHOLD_MINUTES ? BREAK_DURATION_MINUTES : 0;
   const overtimeMinutes = Math.max(0, totalMinutes - OVERTIME_THRESHOLD_MINUTES);
   const workMinutes = totalMinutes - breakMinutes - overtimeMinutes;
   return { workMinutes, breakMinutes, overtimeMinutes };
@@ -55,13 +73,139 @@ export interface RingData {
   overtimeFraction: number; // 0-1, how full the outer overtime ring is
 }
 
+type ClockTimelineOptions = {
+  sameLocalDayOnly?: boolean;
+  includeOpenSegment?: boolean;
+};
+
+function pushTimelineSegment(
+  segments: ClockTimelineSegment[],
+  type: 'work' | 'break',
+  startMs: number,
+  endMs: number
+) {
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+    return;
+  }
+
+  segments.push({
+    type,
+    minutes: (endMs - startMs) / 60000
+  });
+}
+
+export function buildClockTimelineSegments(
+  entries: TimeEntry[],
+  referenceDate = new Date(),
+  options?: ClockTimelineOptions
+): ClockTimelineSegment[] {
+  const effectiveEntries = getEffectiveTimeEntries(entries, {
+    referenceDate,
+    sameLocalDayOnly: options?.sameLocalDayOnly ?? true
+  });
+  const includeOpenSegment = options?.includeOpenSegment ?? false;
+
+  const segments: ClockTimelineSegment[] = [];
+  let activeType: 'work' | 'break' | null = null;
+  let activeStartMs: number | null = null;
+  let activeStartDate: Date | null = null;
+
+  for (const entry of effectiveEntries) {
+    const entryDate = new Date(entry.timestamp);
+    const entryMs = entryDate.getTime();
+
+    switch (entry.entryType) {
+      case 'clock_in':
+        if (activeType && activeStartMs !== null) {
+          pushTimelineSegment(segments, activeType, activeStartMs, entryMs);
+        }
+        activeType = 'work';
+        activeStartMs = entryMs;
+        activeStartDate = entryDate;
+        break;
+      case 'break_start':
+        if (activeType === 'work' && activeStartMs !== null) {
+          pushTimelineSegment(segments, 'work', activeStartMs, entryMs);
+          activeType = 'break';
+          activeStartMs = entryMs;
+          activeStartDate = entryDate;
+        }
+        break;
+      case 'break_end':
+        if (activeType === 'break' && activeStartMs !== null) {
+          pushTimelineSegment(segments, 'break', activeStartMs, entryMs);
+          activeType = 'work';
+          activeStartMs = entryMs;
+          activeStartDate = entryDate;
+        } else {
+          activeType = 'work';
+          activeStartMs = entryMs;
+          activeStartDate = entryDate;
+        }
+        break;
+      case 'clock_out':
+        if (activeType && activeStartMs !== null) {
+          pushTimelineSegment(segments, activeType, activeStartMs, entryMs);
+        }
+        activeType = null;
+        activeStartMs = null;
+        activeStartDate = null;
+        break;
+    }
+  }
+
+  if (includeOpenSegment && activeType && activeStartMs !== null && activeStartDate) {
+    const openSegmentEndMs = isSameLocalDay(activeStartDate, referenceDate)
+      ? referenceDate.getTime()
+      : getLocalDayEnd(activeStartDate).getTime();
+    pushTimelineSegment(segments, activeType, activeStartMs, openSegmentEndMs);
+  }
+
+  return segments;
+}
+
 /**
  * Computes multi-segment ring data from raw total minutes.
  * Main ring: 0 → TOTAL_RING_MINUTES (510 min / 8.5h).
  * Break window: always at 5.5h–6h mark once total >= 6h.
  * Overtime: separate outer ring that fills over 4h.
  */
-export function computeRingSegments(totalMinutes: number): RingData {
+export function computeRingSegments(
+  totalMinutes: number,
+  actualBreakMinutes?: number
+): RingData {
+  if (actualBreakMinutes !== undefined) {
+    const clamped = Math.max(0, totalMinutes);
+    const mainMinutes = Math.min(clamped, TOTAL_RING_MINUTES);
+    const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, mainMinutes));
+    const clampedWorkMinutes = Math.max(0, mainMinutes - clampedBreakMinutes);
+    const overtimeMinutes = Math.max(
+      0,
+      Math.max(0, totalMinutes - actualBreakMinutes) - WORK_GOAL_MINUTES
+    );
+    const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
+
+    const segments: RingSegment[] = [];
+
+    if (clampedWorkMinutes > 0) {
+      segments.push({
+        startFraction: 0,
+        endFraction: clampedWorkMinutes / TOTAL_RING_MINUTES,
+        type: 'work',
+      });
+    }
+
+    if (clampedBreakMinutes > 0) {
+      segments.push({
+        startFraction: clampedWorkMinutes / TOTAL_RING_MINUTES,
+        endFraction: (clampedWorkMinutes + clampedBreakMinutes) / TOTAL_RING_MINUTES,
+        type: 'break',
+      });
+    }
+
+    return { segments, overtimeFraction };
+  }
+
   const clamped = Math.max(0, totalMinutes);
   const mainMinutes = Math.min(clamped, TOTAL_RING_MINUTES);
   const overtimeMinutes = Math.max(0, clamped - TOTAL_RING_MINUTES);
@@ -90,6 +234,41 @@ export function computeRingSegments(totalMinutes: number): RingData {
   return { segments, overtimeFraction };
 }
 
+export function computeRingSegmentsFromTimeline(
+  timelineSegments: ClockTimelineSegment[]
+): RingData {
+  const normalizedSegments = timelineSegments.filter((segment) => segment.minutes > 0);
+  const totalWorkMinutes = normalizedSegments.reduce(
+    (total, segment) => total + (segment.type === 'work' ? segment.minutes : 0),
+    0
+  );
+  const overtimeMinutes = Math.max(0, totalWorkMinutes - WORK_GOAL_MINUTES);
+  const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
+
+  const segments: RingSegment[] = [];
+  let cursorMinutes = 0;
+
+  for (const segment of normalizedSegments) {
+    if (cursorMinutes >= TOTAL_RING_MINUTES) {
+      break;
+    }
+
+    const usableMinutes = Math.min(segment.minutes, TOTAL_RING_MINUTES - cursorMinutes);
+    if (usableMinutes <= 0) {
+      continue;
+    }
+
+    segments.push({
+      startFraction: cursorMinutes / TOTAL_RING_MINUTES,
+      endFraction: (cursorMinutes + usableMinutes) / TOTAL_RING_MINUTES,
+      type: segment.type
+    });
+    cursorMinutes += usableMinutes;
+  }
+
+  return { segments, overtimeFraction };
+}
+
 /**
  * Role hierarchy for permission checks
  * Lower number = higher rank
@@ -99,6 +278,82 @@ export const ROLE_HIERARCHY: Record<OrgRole, number> = {
   buero: 2,
   employee: 3
 };
+
+export type DerivedClockState = {
+  status: ClockStatus;
+  isClockedIn: boolean;
+  isOnBreak: boolean;
+  clockInTime: string | null;
+  statusStartedAt: string | null;
+  breakStartTime: string | null;
+  activeJobId: string | null;
+  lastEntry: TimeEntry | null;
+};
+
+export function deriveCurrentClockState(
+  entries: TimeEntry[],
+  referenceDate = new Date()
+): DerivedClockState {
+  const todayEntries = getEffectiveTimeEntries(entries, {
+    referenceDate,
+    sameLocalDayOnly: true,
+  });
+
+  let status: ClockStatus = 'clocked_out';
+  let clockInTime: string | null = null;
+  let statusStartedAt: string | null = null;
+  let breakStartTime: string | null = null;
+  let activeJobId: string | null = null;
+
+  for (const entry of todayEntries) {
+    switch (entry.entryType) {
+      case 'clock_in':
+        status = 'working';
+        clockInTime = entry.timestamp;
+        statusStartedAt = entry.timestamp;
+        breakStartTime = null;
+        activeJobId = entry.jobId ?? null;
+        break;
+      case 'break_start':
+        if (status === 'working') {
+          status = 'on_break';
+          statusStartedAt = entry.timestamp;
+          breakStartTime = entry.timestamp;
+          activeJobId = null;
+        }
+        break;
+      case 'break_end':
+        if (status !== 'clocked_out') {
+          status = 'working';
+          statusStartedAt = entry.timestamp;
+          breakStartTime = null;
+          activeJobId = entry.jobId ?? null;
+        }
+        break;
+      case 'clock_out':
+        status = 'clocked_out';
+        clockInTime = null;
+        statusStartedAt = null;
+        breakStartTime = null;
+        activeJobId = null;
+        break;
+    }
+  }
+
+  const lastEntry =
+    todayEntries.length > 0 ? todayEntries[todayEntries.length - 1] : null;
+
+  return {
+    status,
+    isClockedIn: status !== 'clocked_out',
+    isOnBreak: status === 'on_break',
+    clockInTime,
+    statusStartedAt,
+    breakStartTime,
+    activeJobId,
+    lastEntry,
+  };
+}
 
 /**
  * Check if a user has an open session (currently working)
@@ -112,32 +367,11 @@ export const ROLE_HIERARCHY: Record<OrgRole, number> = {
  * in the new optimistic approval model. Pending entries affect the working state
  * immediately - approval just confirms they stay, rejection removes them.
  */
-export function hasOpenSession(entries: TimeEntry[]): boolean {
-  if (entries.length === 0) return false;
-
-  const now = new Date();
-  const todayStart = getLocalDayStart(now);
-  const todayEnd = getLocalDayEnd(now);
-
-  // Ignore future-dated entries when determining the current working state.
-  // This keeps buggy synthetic day-end rows from overriding a real open session.
-  const todayActiveEntries = entries
-    .filter((e) => {
-      if (e.status === 'rejected' || e.status === 'pending_delete')
-        return false;
-      const entryDate = new Date(e.timestamp);
-      return entryDate.getTime() <= now.getTime() && isSameLocalDay(entryDate, now);
-    })
-    .sort((a, b) => {
-      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      if (diff !== 0) return diff;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-  if (todayActiveEntries.length === 0) return false;
-
-  // Check if the most recent entry TODAY is a clock_in
-  return todayActiveEntries[0].entryType === 'clock_in';
+export function hasOpenSession(
+  entries: TimeEntry[],
+  referenceDate = new Date()
+): boolean {
+  return deriveCurrentClockState(entries, referenceDate).isClockedIn;
 }
 
 /**
@@ -146,18 +380,9 @@ export function hasOpenSession(entries: TimeEntry[]): boolean {
  * Entries marked for deletion (pending_delete) are excluded.
  */
 export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
-  const now = new Date();
-  const activeEntries = entries
-    .filter((e) => {
-      if (e.status === 'rejected' || e.status === 'pending_delete') return false;
-      return new Date(e.timestamp).getTime() <= now.getTime();
-    })
-    .sort((a, b) => {
-      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      if (diff !== 0) return diff;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
+  const activeEntries = getEffectiveTimeEntries(entries)
+    .slice()
+    .reverse();
   return activeEntries[0] || null;
 }
 
@@ -173,9 +398,12 @@ export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
  */
 export function determineApprovalStatus(
   callerRole: OrgRole,
-  targetUserId: string,
-  callerId: string
+  _targetUserId: string,
+  _callerId: string
 ): TimeEntryStatus {
+  void _targetUserId;
+  void _callerId;
+
   // Admin adding any entry → immediately approved
   if (callerRole === 'admin') {
     return 'approved';
@@ -231,6 +459,9 @@ export function needsChangeRequest(
   _targetRole: OrgRole,
   _isOwnEntry: boolean
 ): boolean {
+  void _callerRole;
+  void _targetRole;
+  void _isOwnEntry;
   return false;
 }
 
@@ -270,8 +501,10 @@ export function canViewEntries(
   callerRole: OrgRole,
   targetUserId: string,
   callerId: string,
-  targetRole?: OrgRole
+  _targetRole?: OrgRole
 ): boolean {
+  void _targetRole;
+
   // Everyone can see their own entries
   if (targetUserId === callerId) {
     return true;
@@ -295,6 +528,7 @@ export function canViewEntries(
  * Re-exported from validation for convenience
  */
 export { calculateWorkSessions } from './validation';
+export { calculateBreakSessions } from './validation';
 
 /**
  * Calculate total worked minutes from work sessions
@@ -303,6 +537,19 @@ export function calculateTotalMinutes(sessions: WorkSession[]): number {
   return sessions.reduce((total, session) => {
     return total + (session.durationMinutes || 0);
   }, 0);
+}
+
+export function calculateBreakMinutes(sessions: BreakSession[]): number {
+  return sessions.reduce((total, session) => {
+    return total + (session.durationMinutes || 0);
+  }, 0);
+}
+
+export function calculatePresenceMinutes(
+  workSessions: WorkSession[],
+  breakSessions: BreakSession[]
+): number {
+  return calculateTotalMinutes(workSessions) + calculateBreakMinutes(breakSessions);
 }
 
 /**

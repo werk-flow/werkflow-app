@@ -2,7 +2,6 @@
 
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -313,11 +312,30 @@ export async function removeMember(
 
 export type OrgMemberInfo = {
   user_id: string;
-  first_name: string | null;
-  last_name: string | null;
+  first_name: string;
+  last_name: string;
   email: string;
-  role: string;
+  role: OrgRole;
+  joined_at: string;
 };
+
+export async function getOrgMembersForUser(
+  organizationId: string,
+  userId: string
+): Promise<OrgMemberInfo[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc('get_org_members_for_user', {
+    p_org_id: organizationId,
+    p_user_id: userId
+  });
+
+  if (error) {
+    console.error('Error fetching organization members:', error);
+    return [];
+  }
+
+  return (data ?? []) as OrgMemberInfo[];
+}
 
 /**
  * Get org members (server action replacement for /api/get-org-members).
@@ -344,16 +362,7 @@ export async function getOrgMembersAction(
       return { success: false, error: 'not_authorized' };
     }
 
-    const supabase = await createSupabaseServerClient();
-    const { data: members, error } = await supabase.rpc('get_org_members', {
-      p_org_id: organizationId
-    });
-
-    if (error) {
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    let filtered = (members ?? []) as OrgMemberInfo[];
+    let filtered = await getOrgMembersForUser(organizationId, user.id);
 
     if (userRole === 'buero') {
       filtered = filtered.filter(

@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  hasOpenSession,
-  getLastEntry,
+  calculateBreakMinutes,
+  calculateBreakSessions,
+  deriveCurrentClockState,
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
@@ -11,9 +12,14 @@ import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 export type CurrentUserStatus = {
+  status: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
+  isOnBreak: boolean;
   clockInTime: string | null;
+  statusStartedAt: string | null;
   todayMinutes: number;
+  workMinutes: number;
+  breakMinutes: number;
 };
 
 interface UseCurrentUserStatusOptions {
@@ -34,9 +40,14 @@ export function useCurrentUserStatus({
   refetch: () => Promise<void>;
 } {
   const [status, setStatus] = useState<CurrentUserStatus>({
+    status: 'clocked_out',
     isClockedIn: false,
+    isOnBreak: false,
     clockInTime: null,
-    todayMinutes: 0
+    statusStartedAt: null,
+    todayMinutes: 0,
+    workMinutes: 0,
+    breakMinutes: 0
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,34 +80,22 @@ export function useCurrentUserStatus({
 
       const userEntries = result.entries || [];
 
-      const isClockedIn = hasOpenSession(userEntries);
-      const lastEntry = getLastEntry(userEntries);
-      const sessions = calculateWorkSessions(userEntries);
-      const todayMinutes = calculateTotalMinutes(sessions);
-
-      // If clocked in, find the last active clock_in timestamp
-      // Include both approved AND pending entries since pending entries take immediate effect
-      let clockInTime: string | null = null;
-      if (isClockedIn && lastEntry) {
-        const clockInEntry = userEntries
-          .filter(
-            (e) =>
-              e.entryType === 'clock_in' &&
-              (e.status === 'approved' || e.status === 'pending')
-          )
-          .sort((a, b) => {
-            const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-            if (diff !== 0) return diff;
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-          })[0];
-
-        clockInTime = clockInEntry?.timestamp || null;
-      }
+      const currentState = deriveCurrentClockState(userEntries);
+      const workSessions = calculateWorkSessions(userEntries);
+      const breakSessions = calculateBreakSessions(userEntries);
+      const workMinutes = calculateTotalMinutes(workSessions);
+      const breakMinutes = calculateBreakMinutes(breakSessions);
+      const todayMinutes = workMinutes + breakMinutes;
 
       setStatus({
-        isClockedIn,
-        clockInTime,
-        todayMinutes
+        status: currentState.status,
+        isClockedIn: currentState.isClockedIn,
+        isOnBreak: currentState.isOnBreak,
+        clockInTime: currentState.clockInTime,
+        statusStartedAt: currentState.statusStartedAt,
+        todayMinutes,
+        workMinutes,
+        breakMinutes
       });
       setError(null);
     } catch (err) {

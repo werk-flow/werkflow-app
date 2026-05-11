@@ -2,11 +2,18 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { computeRingSegments } from '@/lib/time-tracking/helpers';
+import {
+  computeRingSegments,
+  computeRingSegmentsFromTimeline
+} from '@/lib/time-tracking/helpers';
+import type { ClockTimelineSegment } from '@/lib/time-tracking/types';
 
 interface TimeProgressRingProps {
   totalMinutes: number;
+  breakMinutes?: number;
+  timelineSegments?: ClockTimelineSegment[];
   isActive?: boolean;
+  glowVariant?: 'work' | 'break';
   size?: number;
   strokeWidth?: number;
   children?: React.ReactNode;
@@ -21,9 +28,12 @@ const OVERTIME_COLOR = '#3b82f6'; // blue-500
 
 export function TimeProgressRing({
   totalMinutes,
+  breakMinutes,
+  timelineSegments,
   size = 260,
   strokeWidth = 14,
   isActive = false,
+  glowVariant = 'work',
   children,
   className
 }: TimeProgressRingProps) {
@@ -38,8 +48,11 @@ export function TimeProgressRing({
   const outerSize = (overtimeRadius + overtimeStroke / 2) * 2;
 
   const { segments, overtimeFraction } = useMemo(
-    () => computeRingSegments(totalMinutes),
-    [totalMinutes]
+    () =>
+      timelineSegments && timelineSegments.length > 0
+        ? computeRingSegmentsFromTimeline(timelineSegments)
+        : computeRingSegments(totalMinutes, breakMinutes),
+    [breakMinutes, timelineSegments, totalMinutes]
   );
 
   const viewBox = `${center - outerSize / 2} ${center - outerSize / 2} ${outerSize} ${outerSize}`;
@@ -72,7 +85,10 @@ export function TimeProgressRing({
         viewBox={viewBox}
         className={cn(
           'absolute inset-0 -rotate-90',
-          isActive && 'animate-green-glow'
+          isActive &&
+            (glowVariant === 'break'
+              ? 'animate-yellow-glow'
+              : 'animate-green-glow')
         )}
       >
         {/* Main ring background */}

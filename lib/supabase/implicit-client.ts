@@ -1,9 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 
 export function createSupabaseImplicitClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseUrl(),
+    getSupabasePublishableKey(),
     {
       auth: {
         flowType: "implicit",

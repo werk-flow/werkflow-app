@@ -83,7 +83,10 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
         .select('*')
         .eq('organization_id', auth.context.orgId)
         .order('name', { ascending: true }),
-      admin.rpc('get_org_members', { p_org_id: auth.context.orgId }),
+      admin.rpc('get_org_members_for_user', {
+        p_org_id: auth.context.orgId,
+        p_user_id: auth.context.userId
+      }),
       admin
         .from('projects')
         .select('*')

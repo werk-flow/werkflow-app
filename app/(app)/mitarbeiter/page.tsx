@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
@@ -11,7 +11,7 @@ import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbei
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 
 async function MitarbeiterData({
   activeOrgId,
@@ -22,11 +22,9 @@ async function MitarbeiterData({
   userId: string;
   currentUserRole: OrgRole;
 }) {
-  const supabase = await createSupabaseServerClient();
-
   const [membersResult, invitesResult] = await Promise.all([
-    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
-    supabase
+    getOrgMembersForUser(activeOrgId, userId),
+    createSupabaseAdminClient()
       .from('organization_invites')
       .select(
         'id, email, status, created_at, expires_at, accepted_at, invited_role'
@@ -35,22 +33,12 @@ async function MitarbeiterData({
       .order('created_at', { ascending: false })
   ]);
 
-  if (membersResult.error) {
-    console.error('Error fetching members:', membersResult.error);
-    return (
-      <p className="text-destructive">
-        Fehler beim Laden der Mitarbeiter:{' '}
-        {membersResult.error.message || 'Unbekannter Fehler'}
-      </p>
-    );
-  }
+  const memberList = membersResult as OrgMember[];
+  const inviteList = (invitesResult.data as Invite[]) || [];
 
   if (invitesResult.error) {
     console.error('Error fetching invites:', invitesResult.error);
   }
-
-  const memberList = (membersResult.data as OrgMember[]) || [];
-  const inviteList = (invitesResult.data as Invite[]) || [];
 
   return (
     <MitarbeiterTabs

@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createServerClient } from '@supabase/ssr';
 import { type EmailOtpType } from '@supabase/supabase-js';
+import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+
+function redeemInviteForUser(inviteCode: string, userId: string) {
+  return createSupabaseAdminClient().rpc('redeem_organization_invite_for_user', {
+    p_invite_code: inviteCode,
+    p_user_id: userId
+  });
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
@@ -24,8 +33,8 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(`${origin}${redirectTo}`);
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      getSupabaseUrl(),
+      getSupabasePublishableKey(),
       {
         cookies: {
           get(name) {
@@ -74,8 +83,8 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(`${origin}${redirectTo}`);
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      getSupabaseUrl(),
+      getSupabasePublishableKey(),
       {
         cookies: {
           get(name) {
@@ -107,10 +116,16 @@ export async function GET(req: NextRequest) {
 
     // If there's an invite code, try to redeem it
     if (inviteCode) {
-      const { data: redeemResult, error: redeemError } = await supabase.rpc(
-        'redeem_organization_invite',
-        { p_invite_code: inviteCode }
-      );
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return NextResponse.redirect(`${origin}/login?invite_code=${inviteCode}`);
+      }
+
+      const { data: redeemResult, error: redeemError } =
+        await redeemInviteForUser(inviteCode, user.id);
 
       if (redeemError) {
         console.error('Invite redemption error:', redeemError);
@@ -194,8 +209,8 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(`${origin}/dashboard`);
 
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      getSupabaseUrl(),
+      getSupabasePublishableKey(),
       {
         cookies: {
           get(name) {
@@ -221,10 +236,8 @@ export async function GET(req: NextRequest) {
 
     if (user) {
       // User is logged in - redeem the invite
-      const { data: redeemResult, error: redeemError } = await supabase.rpc(
-        'redeem_organization_invite',
-        { p_invite_code: inviteCode }
-      );
+      const { data: redeemResult, error: redeemError } =
+        await redeemInviteForUser(inviteCode, user.id);
 
       if (redeemError) {
         console.error(
@@ -312,8 +325,8 @@ export async function POST(req: NextRequest) {
   const res = NextResponse.json({ success: true });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getSupabaseUrl(),
+    getSupabasePublishableKey(),
     {
       cookies: {
         get(name) {

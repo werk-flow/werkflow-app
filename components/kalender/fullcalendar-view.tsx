@@ -8,8 +8,17 @@ import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core';
 import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import {
+  calculateCalendarWorkBlocks,
+  createSessionFromCalendarBlock,
+  getCalendarBlockDurationMinutes
+} from '@/lib/time-tracking/calendar-blocks';
 import { toLocalDateString } from '@/lib/utils';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type {
+  InteractiveCalendarSession,
+  TimeEntry,
+  WorkSession
+} from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { CalendarView } from './calendar-container';
 import { JobEventPopover } from './job-event-popover';
@@ -29,7 +38,7 @@ interface FullCalendarViewProps {
   members: CalendarMember[];
   currentUserId: string;
   isAdminOrManager: boolean;
-  onEventClick: (session: WorkSession) => void;
+  onEventClick: (session: InteractiveCalendarSession) => void;
   onDateSelect: (date: Date) => void;
   onViewChange: (view: CalendarView) => void;
   jobs?: CalendarJob[];
@@ -38,7 +47,7 @@ interface FullCalendarViewProps {
   onUnparkJob?: (jobId: string, date: string, time?: string) => void;
   parkplatzZoneRef?: React.RefObject<HTMLElement | null>;
   parkplatzPanelOpen?: boolean;
-  onSessionDateChange?: (clockInId: string, clockOutId: string, newDate: string, newMemberId: string, revertFn?: () => void) => void;
+  onSessionDateChange?: (session: InteractiveCalendarSession, newDate: string, newMemberId: string, revertFn?: () => void) => void;
   onPointerOverParkplatzChange?: (isOver: boolean) => void;
 }
 
@@ -74,6 +83,7 @@ export function FullCalendarView({
     job: CalendarJob;
     position: { x: number; y: number };
   } | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const onUnparkJobRef = useRef(onUnparkJob);
   onUnparkJobRef.current = onUnparkJob;
@@ -81,6 +91,14 @@ export function FullCalendarView({
   onParkJobRef.current = onParkJob;
   const onPointerOverParkplatzChangeRef = useRef(onPointerOverParkplatzChange);
   onPointerOverParkplatzChangeRef.current = onPointerOverParkplatzChange;
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, []);
   const fcDragMoveRef = useRef<((e: MouseEvent) => void) | null>(null);
 
   useEffect(() => {
@@ -181,6 +199,24 @@ export function FullCalendarView({
     return member.first_name || member.email.split('@')[0] || 'Arbeitszeit';
   };
 
+  const withMemberContext = useCallback(
+    (session: WorkSession): InteractiveCalendarSession => {
+      const userId = session.clockIn?.userId || session.clockOut?.userId;
+      const member = members.find((item) => item.user_id === userId);
+
+      return {
+        ...(session as InteractiveCalendarSession),
+        employeeName: member
+          ? member.first_name || member.last_name
+            ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
+            : member.email
+          : undefined,
+        employeeRole: member?.role as InteractiveCalendarSession['employeeRole']
+      };
+    },
+    [members]
+  );
+
   // Convert work sessions to FullCalendar events
   const events = useMemo(() => {
     // Filter entries for the current user (for employees) or all (for admin in month view)
@@ -198,158 +234,145 @@ export function FullCalendarView({
       entriesByUser[entry.userId].push(entry);
     }
 
-    // Calculate sessions for each user separately, then flatten
-    const allSessions = Object.values(entriesByUser).flatMap((userEntries) =>
-      calculateWorkSessions(userEntries)
-    );
+    return Object.values(entriesByUser).flatMap((userEntries) => {
+      const sessions = calculateWorkSessions(userEntries);
+      const orphanSessions = sessions.filter((session) => session.isOrphan);
+      const workBlocks = calculateCalendarWorkBlocks(userEntries);
 
-    return allSessions.map((session) => {
-      // Check for pending delete status
-      const isPendingDelete =
-        session.clockIn?.status === 'pending_delete' ||
-        session.clockOut?.status === 'pending_delete';
+      const orphanEvents = orphanSessions.map((session) => {
+        const isPendingDelete =
+          session.clockIn?.status === 'pending_delete' ||
+          session.clockOut?.status === 'pending_delete';
 
-      // Handle orphan clock_out (no clockIn)
-      if (session.isOrphan && !session.clockIn && session.clockOut) {
-        const orphanTime = new Date(session.clockOut.timestamp);
-        const orphanEnd = new Date(orphanTime.getTime() + 15 * 60 * 1000); // 15 min duration for display
-        const isPending = session.clockOut.status === 'pending';
+        if (session.isOrphan && !session.clockIn && session.clockOut) {
+          const orphanTime = new Date(session.clockOut.timestamp);
+          const orphanEnd = new Date(orphanTime.getTime() + 15 * 60 * 1000);
+          const isPending = session.clockOut.status === 'pending';
+
+          return {
+            id: `orphan-out-${session.clockOut.id}`,
+            title: '',
+            start: orphanTime,
+            end: orphanEnd,
+            backgroundColor: isPendingDelete
+              ? 'rgb(254 240 138 / 0.8)'
+              : isPending
+                ? 'rgb(250 204 21 / 0.8)'
+                : 'rgb(239 68 68 / 0.2)',
+            borderColor: isPendingDelete
+              ? 'rgba(202, 138, 4, 0.5)'
+              : isPending
+                ? 'rgba(202, 138, 4, 0.5)'
+                : 'rgba(239, 68, 68, 0.4)',
+            textColor: 'inherit',
+            extendedProps: {
+              session: withMemberContext(session),
+              isPending,
+              isPendingDelete,
+              isOpen: false,
+              isOrphan: true,
+              isOrphanClockIn: false,
+              durationText: isPendingDelete ? 'Löschen' : 'Ausstempeln',
+              memberName: getMemberName(session.clockOut.userId)
+            },
+            classNames: [
+              'fc-event-custom',
+              'fc-event-orphan',
+              isPendingDelete ? 'fc-event-pending-delete' : ''
+            ].filter(Boolean)
+          };
+        }
+
+        if (session.isOrphan && session.clockIn && !session.clockOut) {
+          const orphanTime = new Date(session.clockIn.timestamp);
+          const orphanEnd = new Date(orphanTime.getTime() + 15 * 60 * 1000);
+          const isPending = session.clockIn.status === 'pending';
+
+          return {
+            id: `orphan-in-${session.clockIn.id}`,
+            title: '',
+            start: orphanTime,
+            end: orphanEnd,
+            backgroundColor: isPendingDelete
+              ? 'rgb(254 240 138 / 0.8)'
+              : isPending
+                ? 'rgb(250 204 21 / 0.8)'
+                : 'rgb(239 68 68 / 0.2)',
+            borderColor: isPendingDelete
+              ? 'rgba(202, 138, 4, 0.5)'
+              : isPending
+                ? 'rgba(202, 138, 4, 0.5)'
+                : 'rgba(239, 68, 68, 0.4)',
+            textColor: 'inherit',
+            extendedProps: {
+              session: withMemberContext(session),
+              isPending,
+              isPendingDelete,
+              isOpen: false,
+              isOrphan: true,
+              isOrphanClockIn: true,
+              durationText: isPendingDelete ? 'Löschen' : 'Einstempeln',
+              memberName: getMemberName(session.clockIn.userId)
+            },
+            classNames: [
+              'fc-event-custom',
+              'fc-event-orphan',
+              isPendingDelete ? 'fc-event-pending-delete' : ''
+            ].filter(Boolean)
+          };
+        }
+
+        return null;
+      });
+
+      const workEvents = workBlocks.map((block) => {
+        const start = new Date(block.start);
+        const end = block.end ? new Date(block.end) : new Date(nowTick);
+        const durationMinutes = Math.round(getCalendarBlockDurationMinutes(block));
+        const hours = Math.floor(durationMinutes / 60);
+        const minutes = durationMinutes % 60;
+        const durationText =
+          hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+        const isPulseOpen = block.isOpen && !block.isOnBreak;
+        const session = withMemberContext(createSessionFromCalendarBlock(block));
+        const canDrag = isAdminOrManager && !!session?.clockOut && !block.isOpen;
 
         return {
-          id: `orphan-out-${session.clockOut.id}`,
+          id: `work-block-${block.id}`,
           title: '',
-          start: orphanTime,
-          end: orphanEnd,
-          backgroundColor: isPendingDelete
-            ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
-            : isPending
-            ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
-            : 'rgb(239 68 68 / 0.2)', // red-500/20 - matches day view orphan style
-          borderColor: isPendingDelete
-            ? 'rgba(202, 138, 4, 0.5)'
-            : isPending
-            ? 'rgba(202, 138, 4, 0.5)'
-            : 'rgba(239, 68, 68, 0.4)', // red-500/40 - matches day view orphan border
-          textColor: 'inherit',
+          start,
+          end,
+          editable: canDrag,
+          backgroundColor: block.isOpen
+            ? 'rgb(34 197 94 / 0.6)'
+            : 'rgb(34 197 94 / 0.8)',
+          borderColor: 'transparent',
+          textColor: '#fff',
           extendedProps: {
             session,
-            isPending,
-            isPendingDelete,
-            isOpen: false,
-            isOrphan: true,
+            isPending: block.isPending,
+            isPendingDelete: false,
+            isOpen: isPulseOpen,
+            isOrphan: false,
             isOrphanClockIn: false,
-            durationText: isPendingDelete ? 'Löschen' : 'Ausstempeln',
-            memberName: getMemberName(session.clockOut.userId)
+            durationText,
+            memberName: getMemberName(block.userId),
+            isComposite: block.isComposite
           },
           classNames: [
             'fc-event-custom',
-            'fc-event-orphan',
-            isPendingDelete ? 'fc-event-pending-delete' : ''
+            isPulseOpen ? 'fc-event-open' : '',
+            canDrag ? '' : 'fc-event-not-draggable'
           ].filter(Boolean)
         };
-      }
+      });
 
-      // Handle orphan clock_in (from previous day, no clockOut)
-      if (session.isOrphan && session.clockIn && !session.clockOut) {
-        const orphanTime = new Date(session.clockIn.timestamp);
-        const orphanEnd = new Date(orphanTime.getTime() + 15 * 60 * 1000); // 15 min duration for display
-        const isPending = session.clockIn.status === 'pending';
-
-        return {
-          id: `orphan-in-${session.clockIn.id}`,
-          title: '',
-          start: orphanTime,
-          end: orphanEnd,
-          backgroundColor: isPendingDelete
-            ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
-            : isPending
-            ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
-            : 'rgb(239 68 68 / 0.2)', // red-500/20 - matches day view orphan style
-          borderColor: isPendingDelete
-            ? 'rgba(202, 138, 4, 0.5)'
-            : isPending
-            ? 'rgba(202, 138, 4, 0.5)'
-            : 'rgba(239, 68, 68, 0.4)', // red-500/40 - matches day view orphan border
-          textColor: 'inherit',
-          extendedProps: {
-            session,
-            isPending,
-            isPendingDelete,
-            isOpen: false,
-            isOrphan: true,
-            isOrphanClockIn: true,
-            durationText: isPendingDelete ? 'Löschen' : 'Einstempeln',
-            memberName: getMemberName(session.clockIn.userId)
-          },
-          classNames: [
-            'fc-event-custom',
-            'fc-event-orphan',
-            isPendingDelete ? 'fc-event-pending-delete' : ''
-          ].filter(Boolean)
-        };
-      }
-
-      // Normal session with clockIn (paired or open/currently working)
-      const start = new Date(session.clockIn!.timestamp);
-      const end = session.clockOut
-        ? new Date(session.clockOut.timestamp)
-        : new Date(); // Open session extends to now
-
-      const isPending =
-        session.clockIn!.status === 'pending' ||
-        session.clockOut?.status === 'pending';
-      const isOpen = !session.clockOut && !session.isOrphan;
-
-      // Calculate duration text
-      const durationMs = end.getTime() - start.getTime();
-      const hours = Math.floor(durationMs / (1000 * 60 * 60));
-      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
-      const durationText = isPendingDelete
-        ? 'Löschen'
-        : hours > 0
-        ? `${hours}h ${minutes}m`
-        : `${minutes}m`;
-
-      const canDrag = isAdminOrManager && !!session.clockOut && !isOpen;
-
-      return {
-        id: `session-${session.clockIn!.id}`,
-        title: '', // Custom content will be used
-        start,
-        end,
-        editable: canDrag,
-        backgroundColor: isPendingDelete
-          ? 'rgb(254 240 138 / 0.8)' // yellow-200/80 - hatched yellow bg
-          : isPending
-          ? 'rgb(250 204 21 / 0.8)' // yellow-400/80 - solid yellow for new pending
-          : isOpen
-          ? 'rgb(34 197 94 / 0.6)' // green-500/60 - pulsing green for open
-          : 'rgb(34 197 94 / 0.8)', // green-500/80 - solid green bg
-        borderColor: isPendingDelete
-          ? 'rgba(202, 138, 4, 0.5)'
-          : isPending
-          ? 'rgba(202, 138, 4, 0.4)'
-          : 'transparent',
-        textColor: isPending || isPendingDelete ? '#713f12' : '#fff',
-        extendedProps: {
-          session,
-          isPending,
-          isPendingDelete,
-          isOpen,
-          isOrphan: false,
-          isOrphanClockIn: false,
-          durationText,
-          memberName: getMemberName(session.clockIn!.userId)
-        },
-        classNames: [
-          'fc-event-custom',
-          isPending && !isPendingDelete ? 'fc-event-pending' : '',
-          isPendingDelete ? 'fc-event-pending-delete' : '',
-          isOpen ? 'fc-event-open' : ''
-        ].filter(Boolean)
-      };
+      return [
+        ...workEvents,
+        ...orphanEvents.filter((event): event is NonNullable<typeof event> => event !== null)
+      ];
     });
-  }, [entries, currentUserId, isAdminOrManager, members]);
+  }, [entries, currentUserId, isAdminOrManager, members, nowTick, withMemberContext]);
 
   const jobEvents = useMemo(() => {
     return jobs.map((job) => {
@@ -554,7 +577,7 @@ export function FullCalendarView({
       return;
     }
 
-    const session = info.event.extendedProps.session as WorkSession;
+    const session = info.event.extendedProps.session as InteractiveCalendarSession;
     if (session) {
       onEventClick(session);
     }
@@ -584,11 +607,10 @@ export function FullCalendarView({
       return;
     }
 
-    const session = info.event.extendedProps.session as WorkSession | undefined;
+    const session = info.event.extendedProps.session as InteractiveCalendarSession | undefined;
     if (session?.clockIn && session?.clockOut) {
       onSessionDateChange?.(
-        session.clockIn.id,
-        session.clockOut.id,
+        session,
         newDate,
         session.clockIn.userId
       );
@@ -746,13 +768,7 @@ export function FullCalendarView({
 
     // Regular events - text at top
     const label = isAdminOrManager ? memberName : 'Arbeitszeit';
-    const activityText = isPendingDelete
-      ? 'Löschen'
-      : isOpen
-      ? isAdminOrManager
-        ? 'arbeitet'
-        : 'Du arbeitest'
-      : durationText;
+    const activityText = isPendingDelete ? 'Löschen' : durationText;
 
     const textColorClass =
       isPendingDelete || isPending
@@ -1361,6 +1377,14 @@ export function FullCalendarView({
 
         .fullcalendar-wrapper .fc-event:active {
           cursor: grabbing;
+        }
+
+        .fullcalendar-wrapper .fc-event-not-draggable {
+          cursor: pointer !important;
+        }
+
+        .fullcalendar-wrapper .fc-event-not-draggable:active {
+          cursor: pointer !important;
         }
 
         .fullcalendar-wrapper .fc-event-pending-delete {

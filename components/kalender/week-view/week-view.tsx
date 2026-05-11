@@ -1,11 +1,18 @@
 'use client';
 
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import {
+  calculateCalendarWorkBlocks,
+  createSessionFromCalendarBlock,
+  getCalendarBlockDurationMinutes
+} from '@/lib/time-tracking/calendar-blocks';
+import { formatDuration } from '@/lib/time-tracking/helpers';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn, toLocalDateString } from '@/lib/utils';
 import type {
+  InteractiveCalendarSession,
   TimeEntry,
   WorkSession,
   EntryChangeRequestMap
@@ -21,8 +28,7 @@ const JOB_MIME = 'application/x-werkflow-job';
 const SESSION_MIME = 'application/x-werkflow-session';
 
 type DragSessionPayload = {
-  clockInId: string;
-  clockOutId: string;
+  session: InteractiveCalendarSession;
   sourceDate: string;
   sourceMemberId: string;
 };
@@ -67,7 +73,7 @@ interface WeekViewProps {
   onParkJob?: (jobId: string) => void;
   onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string) => void;
   onJobWeekMove?: (jobId: string, newDate: string, newMemberId: string, oldMemberId: string) => void;
-  onSessionWeekMove?: (clockInId: string, clockOutId: string, newDate: string, newMemberId: string) => void;
+  onSessionWeekMove?: (session: WorkSession, newDate: string, newMemberId: string) => void;
 }
 
 const DAY_NAMES_SHORT = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -95,6 +101,17 @@ function getMemberDisplayName(member: CalendarMember): string {
   return member.email.split('@')[0];
 }
 
+function withMemberContext(
+  session: WorkSession,
+  member: CalendarMember
+): InteractiveCalendarSession {
+  return {
+    ...(session as InteractiveCalendarSession),
+    employeeName: getMemberDisplayName(member),
+    employeeRole: member.role as OrgRole
+  };
+}
+
 export function WeekView({
   date,
   entries,
@@ -117,11 +134,20 @@ export function WeekView({
   const weekDays = useMemo(() => getWeekDays(date), [date]);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const [selectedJob, setSelectedJob] = useState<{
     job: CalendarJob;
     position: { x: number; y: number };
   } | null>(null);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   const memberNameMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -165,7 +191,7 @@ export function WeekView({
     if (sessionRaw) {
       try {
         const payload: DragSessionPayload = JSON.parse(sessionRaw);
-        onSessionWeekMove?.(payload.clockInId, payload.clockOutId, targetDate, targetMemberId);
+        onSessionWeekMove?.(payload.session, targetDate, targetMemberId);
       } catch { /* ignore */ }
     }
   }, [onUnparkJob, onJobWeekMove, onSessionWeekMove]);
@@ -194,7 +220,13 @@ export function WeekView({
   // Pre-compute sessions for all member×day combinations in a single pass.
   // Avoids calling calculateWorkSessions per-cell inside the render loop.
   const sessionsByMemberDay = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof calculateWorkSessions>>();
+    const map = new Map<
+      string,
+      {
+        workBlocks: ReturnType<typeof calculateCalendarWorkBlocks>;
+        orphanSessions: ReturnType<typeof calculateWorkSessions>;
+      }
+    >();
     for (const [userId, userEntries] of Object.entries(entriesByUser)) {
       for (const day of weekDays) {
         const dayTime = day.getTime();
@@ -204,12 +236,16 @@ export function WeekView({
           return d.getTime() === dayTime;
         });
         if (dayEntries.length > 0) {
-          map.set(`${userId}-${day.toDateString()}`, calculateWorkSessions(dayEntries));
+          const sessions = calculateWorkSessions(dayEntries);
+          map.set(`${userId}-${day.toDateString()}`, {
+            workBlocks: calculateCalendarWorkBlocks(dayEntries),
+            orphanSessions: sessions.filter((session) => session.isOrphan)
+          });
         }
       }
     }
     return map;
-  }, [entriesByUser, weekDays]);
+  }, [entriesByUser, weekDays, nowTick]);
 
   if (isLoading) {
     return (
@@ -284,14 +320,17 @@ export function WeekView({
                     const dayStr = day.toDateString();
                     const isToday = dayStr === today.toDateString();
 
-                    const sessions = sessionsByMemberDay.get(`${member.user_id}-${dayStr}`) || [];
+                    const cellData = sessionsByMemberDay.get(`${member.user_id}-${dayStr}`);
+                    const workBlocks = cellData?.workBlocks ?? [];
+                    const orphanSessions = cellData?.orphanSessions ?? [];
+                    const items = [...workBlocks, ...orphanSessions];
 
-                    const visibleSessions = sessions.slice(
+                    const visibleSessions = items.slice(
                       0,
                       MAX_SESSIONS_PER_DAY
                     );
                     const extraSessions =
-                      sessions.length - visibleSessions.length;
+                      items.length - visibleSessions.length;
 
                     return (
                       <div
@@ -332,6 +371,65 @@ export function WeekView({
                       >
                         <div className="space-y-1.5">
                           {visibleSessions.map((session, idx) => {
+                            if ('segments' in session) {
+                              const durationText = formatDuration(
+                                Math.round(getCalendarBlockDurationMinutes(session))
+                              );
+                              const sessionForBlock = withMemberContext(
+                                createSessionFromCalendarBlock(session),
+                                member
+                              );
+                              const canDrag =
+                                !!sessionForBlock.clockIn &&
+                                !!sessionForBlock.clockOut &&
+                                !session.isOpen;
+
+                              return (
+                                <button
+                                  key={`work-block-${session.id}`}
+                                  type="button"
+                                  draggable={canDrag}
+                                  onDragStart={canDrag ? (e) => {
+                                    didDragRef.current = true;
+                                    const payload: DragSessionPayload = {
+                                      session: sessionForBlock,
+                                      sourceDate: toLocalDateString(day),
+                                      sourceMemberId: member.user_id,
+                                    };
+                                    e.dataTransfer.setData(SESSION_MIME, JSON.stringify(payload));
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    document.body.classList.add('is-dragging');
+                                  } : undefined}
+                                  onDragEnd={canDrag ? () => {
+                                    document.body.classList.remove('is-dragging');
+                                    setTimeout(() => { didDragRef.current = false; }, 0);
+                                  } : undefined}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (didDragRef.current) return;
+                                    onSessionClick?.(sessionForBlock);
+                                  }}
+                                  className={cn(
+                                    'week-view-entry text-xs p-1.5 rounded-md flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity',
+                                    sessionForBlock
+                                      ? 'cursor-pointer hover:opacity-80'
+                                      : 'cursor-default',
+                                    session.isOpen && !session.isOnBreak
+                                      ? 'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse'
+                                      : 'bg-green-500/80 text-white dark:bg-green-600/80'
+                                  )}
+                                >
+                                  <Clock className="h-3 w-3 shrink-0 opacity-70" />
+                                  <span className="font-medium truncate">
+                                    Arbeitszeit
+                                  </span>
+                                  <span className="opacity-70 truncate text-[10px]">
+                                    {durationText}
+                                  </span>
+                                </button>
+                              );
+                            }
+
                             // Check if pending delete
                             const isPendingDelete =
                               session.clockIn?.status === 'pending_delete' ||
@@ -375,7 +473,7 @@ export function WeekView({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onSessionClick?.(session);
+                                    onSessionClick?.(withMemberContext(session, member));
                                   }}
                                   className={cn(
                                     'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
@@ -421,7 +519,7 @@ export function WeekView({
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    onSessionClick?.(session);
+                                    onSessionClick?.(withMemberContext(session, member));
                                   }}
                                   className={cn(
                                     'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',
@@ -477,8 +575,7 @@ export function WeekView({
                                 onDragStart={canDrag ? (e) => {
                                   didDragRef.current = true;
                                   const payload: DragSessionPayload = {
-                                    clockInId: session.clockIn!.id,
-                                    clockOutId: session.clockOut!.id,
+                                    session: withMemberContext(session, member),
                                     sourceDate: toLocalDateString(day),
                                     sourceMemberId: member.user_id,
                                   };
@@ -490,7 +587,7 @@ export function WeekView({
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (didDragRef.current) return;
-                                  onSessionClick?.(session);
+                                  onSessionClick?.(withMemberContext(session, member));
                                 }}
                                 className={cn(
                                   'week-view-entry text-xs p-1.5 rounded-md flex items-center gap-1.5 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80',

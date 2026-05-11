@@ -1,10 +1,11 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import {
+  calculateBreakMinutes,
   calculateTotalMinutes,
   computeTimeBreakdown,
   groupEntriesByDate,
 } from './helpers';
-import { calculateWorkSessions } from './validation';
+import { calculateBreakSessions, calculateWorkSessions } from './validation';
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -70,9 +71,12 @@ export function buildWeeklyTimeData(
     day.setDate(monday.getDate() + i);
     const key = formatDateKey(day);
     const dayEntries = grouped[key] || [];
-    const sessions = calculateWorkSessions(dayEntries);
-    const totalMinutes = calculateTotalMinutes(sessions);
-    const breakdown = computeTimeBreakdown(totalMinutes);
+    const workSessions = calculateWorkSessions(dayEntries);
+    const breakSessions = calculateBreakSessions(dayEntries);
+    const workMinutes = calculateTotalMinutes(workSessions);
+    const breakMinutes = calculateBreakMinutes(breakSessions);
+    const totalMinutes = workMinutes + breakMinutes;
+    const breakdown = computeTimeBreakdown(totalMinutes, breakMinutes);
 
     days.push({
       date: key,

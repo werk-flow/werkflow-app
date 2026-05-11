@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { ArrowUp, ArrowDown, Clock } from 'lucide-react';
+import { ArrowUp, ArrowDown, BriefcaseBusiness, Clock, Coffee } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDuration } from '@/lib/time-tracking/helpers';
+import {
+  buildClockTimelineSegments,
+  formatDuration
+} from '@/lib/time-tracking/helpers';
 import { HOUR_WIDTH, BASE_HOUR_WIDTH } from './timeline-grid';
-import { useBlockDrag } from './use-block-drag';
+import { useBlockDrag, type DragMode } from './use-block-drag';
 
 const EntryDetailsDialog = dynamic(
   () =>
@@ -16,9 +19,11 @@ const EntryDetailsDialog = dynamic(
   { ssr: false }
 );
 import type {
+  InteractiveCalendarSession,
   WorkSession,
   EntryChangeRequestMap,
-  ChangeRequest
+  ChangeRequest,
+  TimeEntry
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
@@ -29,13 +34,25 @@ export interface MoveResizeResult {
   newClockOutTimestamp: string;
   originalClockInTimestamp: string;
   originalClockOutTimestamp: string;
+  additionalEntryUpdates?: Array<{
+    entryId: string;
+    newTimestamp: string;
+    originalTimestamp: string;
+  }>;
 }
 
 interface WorkSessionBlockProps {
   session: WorkSession;
+  blockId?: string;
   left: number;
   width: number;
   isPending: boolean;
+  backgroundSegments?: Array<{
+    id: string;
+    left: number;
+    width: number;
+    type: 'work' | 'break';
+  }>;
   currentUserRole: OrgRole;
   currentUserId?: string;
   onRefresh: () => void;
@@ -65,6 +82,14 @@ interface WorkSessionBlockProps {
   layoutTop?: number;
   /** Height of the block (from overlap layout). */
   layoutHeight?: number;
+  blockedRanges?: Array<{
+    id: string;
+    left: number;
+    width: number;
+  }>;
+  isConflictTarget?: boolean;
+  onConflictTargetsChange?: (sourceBlockId: string, targetIds: string[]) => void;
+  onInvalidPlacement?: (message: string) => void;
 }
 
 function formatTime(date: Date): string {
@@ -78,9 +103,13 @@ function getPositionFromTime(
   date: Date,
   hourWidth: number = HOUR_WIDTH
 ): number {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  return (hours + minutes / 60) * hourWidth;
+  return (
+    (date.getHours() +
+      date.getMinutes() / 60 +
+      date.getSeconds() / 3600 +
+      date.getMilliseconds() / 3600000) *
+    hourWidth
+  );
 }
 
 function pixelToTimeStr(px: number, hourWidth: number, baseDate: Date): string {
@@ -145,11 +174,53 @@ function formatTimeFromPx(px: number, hourWidth: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
+type SegmentSummary = {
+  workMinutes: number;
+  breakMinutes: number;
+  workText: string;
+  breakText: string | null;
+};
+
+function buildSegmentSummary(
+  entries: TimeEntry[],
+  referenceDate: Date
+): SegmentSummary | null {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const timelineSegments = buildClockTimelineSegments(entries, referenceDate, {
+    sameLocalDayOnly: true,
+    includeOpenSegment: true
+  });
+  const workMinutes = timelineSegments.reduce(
+    (total, segment) => total + (segment.type === 'work' ? segment.minutes : 0),
+    0
+  );
+  const breakMinutes = timelineSegments.reduce(
+    (total, segment) => total + (segment.type === 'break' ? segment.minutes : 0),
+    0
+  );
+
+  if (workMinutes <= 0 && breakMinutes <= 0) {
+    return null;
+  }
+
+  return {
+    workMinutes,
+    breakMinutes,
+    workText: formatDuration(workMinutes),
+    breakText: breakMinutes > 0 ? formatDuration(breakMinutes) : null
+  };
+}
+
 export function WorkSessionBlock({
   session,
+  blockId,
   left,
   width,
   isPending,
+  backgroundSegments,
   currentUserRole,
   currentUserId,
   onRefresh,
@@ -164,22 +235,28 @@ export function WorkSessionBlock({
   isDraggedAway = false,
   dayViewDragDidOccurRef,
   layoutTop,
-  layoutHeight
+  layoutHeight,
+  blockedRanges = [],
+  isConflictTarget = false,
+  onConflictTargetsChange,
+  onInvalidPlacement
 }: WorkSessionBlockProps) {
+  const hasBackgroundSegments = (backgroundSegments?.length ?? 0) > 0;
   const hasLayout = layoutTop !== undefined && layoutHeight !== undefined;
   const blockTop = hasLayout ? layoutTop : undefined;
   const blockHeight = hasLayout ? layoutHeight : undefined;
   const compact = hasLayout && layoutHeight <= 28;
   const posUnit = usePercentage ? '%' : 'px';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const isOpenSession = !session.clockOut && !session.isOrphan;
 
-  const canDrag = useMemo(() => {
+  const canManageBlock = useMemo(() => {
     if (!onMoveResize || !viewDate) return false;
-    if (!session.clockIn || !session.clockOut) return false;
+    if (!session.clockIn) return false;
     if (session.isOrphan) return false;
     if (
       session.clockIn.status === 'pending_delete' ||
-      session.clockOut.status === 'pending_delete'
+      session.clockOut?.status === 'pending_delete'
     )
       return false;
     if (usePercentage) return false;
@@ -200,18 +277,22 @@ export function WorkSessionBlock({
     currentUserId
   ]);
 
+  const canMove = canManageBlock && !isOpenSession && !!session.clockOut;
+  const canResizeLeft = canManageBlock && !!session.clockIn;
+  const canResizeRight = canManageBlock && !!session.clockOut && !isOpenSession;
+
   const showResizeHint = useMemo(() => {
-    if (canDrag) return false;
+    if (canResizeLeft || canResizeRight) return false;
     if (!onMoveResize || !viewDate) return false;
-    if (!session.clockIn || !session.clockOut) return false;
+    if (!session.clockIn) return false;
     if (session.isOrphan || usePercentage) return false;
     if (
       session.clockIn.status === 'pending_delete' ||
-      session.clockOut.status === 'pending_delete'
+      session.clockOut?.status === 'pending_delete'
     )
       return false;
     return true;
-  }, [canDrag, onMoveResize, viewDate, session, usePercentage]);
+  }, [canResizeLeft, canResizeRight, onMoveResize, viewDate, session, usePercentage]);
 
   const isOwnEntryNeedingApproval = useMemo(() => {
     if (currentUserRole !== 'buero') return false;
@@ -219,8 +300,8 @@ export function WorkSessionBlock({
   }, [currentUserRole, session, currentUserId]);
 
   const handleDragComplete = useCallback(
-    (newLeft: number, newWidth: number) => {
-      if (!onMoveResize || !viewDate || !session.clockIn || !session.clockOut)
+    (newLeft: number, newWidth: number, mode: DragMode) => {
+      if (!onMoveResize || !viewDate || !session.clockIn)
         return;
 
       const newClockIn = pixelToTimeStr(newLeft, effectiveHourWidth, viewDate);
@@ -229,25 +310,103 @@ export function WorkSessionBlock({
         effectiveHourWidth,
         viewDate
       );
+      const interactiveSession = session as InteractiveCalendarSession;
+      const sourceEntries = interactiveSession.sourceEntries ?? [];
+      const clockInDelta =
+        new Date(newClockIn).getTime() - new Date(session.clockIn.timestamp).getTime();
+      const clockOutDelta =
+        session.clockOut
+          ? new Date(newClockOut).getTime() - new Date(session.clockOut.timestamp).getTime()
+          : 0;
+
+      let additionalEntryUpdates:
+        | Array<{
+            entryId: string;
+            newTimestamp: string;
+            originalTimestamp: string;
+          }>
+        | undefined;
+
+      if (sourceEntries.length > 2) {
+        if (mode === 'move' && clockInDelta === clockOutDelta) {
+          additionalEntryUpdates = sourceEntries
+            .filter(
+              (entry) =>
+                entry.id !== session.clockIn?.id && entry.id !== session.clockOut?.id
+            )
+            .map((entry) => ({
+              entryId: entry.id,
+              originalTimestamp: entry.timestamp,
+              newTimestamp: new Date(
+                new Date(entry.timestamp).getTime() + clockInDelta
+              ).toISOString()
+            }))
+            .filter(
+              (update) => update.newTimestamp !== update.originalTimestamp
+            );
+        } else if (
+          mode === 'resize-right' &&
+          backgroundSegments &&
+          backgroundSegments[backgroundSegments.length - 1]?.type === 'break'
+        ) {
+          const trailingBreakStart = [...sourceEntries]
+            .reverse()
+            .find((entry) => entry.entryType === 'break_start');
+
+          if (trailingBreakStart && session.clockOut) {
+            additionalEntryUpdates = [
+              {
+                entryId: trailingBreakStart.id,
+                originalTimestamp: trailingBreakStart.timestamp,
+                newTimestamp: new Date(
+                  new Date(trailingBreakStart.timestamp).getTime() + clockOutDelta
+                ).toISOString()
+              }
+            ].filter(
+              (update) => update.newTimestamp !== update.originalTimestamp
+            );
+          }
+        }
+      }
 
       onMoveResize({
         clockInEntryId: session.clockIn.id,
-        clockOutEntryId: session.clockOut.id,
+        clockOutEntryId: session.clockOut?.id,
         newClockInTimestamp: newClockIn,
         newClockOutTimestamp: newClockOut,
         originalClockInTimestamp: session.clockIn.timestamp,
-        originalClockOutTimestamp: session.clockOut.timestamp
+        originalClockOutTimestamp:
+          session.clockOut?.timestamp ?? session.clockIn.timestamp,
+        additionalEntryUpdates
       });
     },
-    [onMoveResize, viewDate, session, effectiveHourWidth]
+    [onMoveResize, viewDate, session, effectiveHourWidth, backgroundSegments]
   );
 
   const drag = useBlockDrag({
     left,
     width,
     effectiveHourWidth,
-    enabled: canDrag,
-    onComplete: handleDragComplete
+    enabled: canManageBlock,
+    allowMove: canMove,
+    allowResizeLeft: canResizeLeft,
+    allowResizeRight: canResizeRight,
+    onComplete: handleDragComplete,
+    isDropInvalid: (nextLeft, nextWidth) =>
+      blockedRanges.some(
+        (range) => range.left < nextLeft + nextWidth && nextLeft < range.left + range.width
+      ),
+    onInvalidDrop: (mode) => {
+      const action =
+        mode === 'move'
+          ? 'verschoben'
+          : mode === 'resize-left' || mode === 'resize-right'
+            ? 'geändert'
+            : 'platziert';
+      onInvalidPlacement?.(
+        `Arbeitszeit konnte nicht ${action} werden, weil sie sich mit einem anderen Arbeitsblock überschneiden würde.`
+      );
+    }
   });
 
   const clockInCR = session.clockIn
@@ -280,6 +439,68 @@ export function WorkSessionBlock({
       effectiveHourWidth
     );
   }, [clockOutCR, session.clockOut, effectiveHourWidth]);
+
+  const displayLeft = drag.isDragging ? drag.currentLeft : left;
+  const displayWidth = drag.isDragging ? drag.currentWidth : width;
+  const displaySegments = useMemo(() => {
+    if (!backgroundSegments) return [];
+    if (!drag.isDragging) return backgroundSegments;
+
+    const adjusted = backgroundSegments.map((segment) => ({ ...segment }));
+    const deltaLeft = displayLeft - left;
+    const deltaWidth = displayWidth - width;
+
+    if (drag.dragMode === 'resize-left' && adjusted.length > 0) {
+      if (adjusted[0].type === 'work') {
+        adjusted[0].width = Math.max(2, adjusted[0].width - deltaLeft);
+      }
+      for (let index = 1; index < adjusted.length; index += 1) {
+        adjusted[index].left = adjusted[index].left - deltaLeft;
+      }
+    }
+
+    if (drag.dragMode === 'resize-right' && adjusted.length > 0) {
+      const lastIndex = adjusted.length - 1;
+      const lastSegment = adjusted[lastIndex];
+      if (lastSegment.type === 'break' && lastIndex > 0) {
+        adjusted[lastIndex].left = adjusted[lastIndex].left + deltaWidth;
+        if (adjusted[lastIndex - 1].type === 'work') {
+          adjusted[lastIndex - 1].width = Math.max(
+            2,
+            adjusted[lastIndex - 1].width + deltaWidth
+          );
+        }
+      } else if (lastSegment.type === 'work') {
+        adjusted[lastIndex].width = Math.max(2, adjusted[lastIndex].width + deltaWidth);
+      }
+    }
+
+    return adjusted;
+  }, [
+    backgroundSegments,
+    drag.dragMode,
+    drag.isDragging,
+    displayLeft,
+    displayWidth,
+    left,
+    width
+  ]);
+
+  const segmentSummary = useMemo(
+    () => {
+      const interactiveSession = session as InteractiveCalendarSession;
+      const sourceEntries = interactiveSession.sourceEntries ?? [];
+      return buildSegmentSummary(sourceEntries, new Date());
+    },
+    [session]
+  );
+  const conflictingBlockIds = useMemo(() => {
+    const displayRight = displayLeft + displayWidth;
+    return blockedRanges
+      .filter((range) => range.left < displayRight && displayLeft < range.left + range.width)
+      .map((range) => range.id);
+  }, [blockedRanges, displayLeft, displayWidth]);
+  const hasDropConflict = drag.isDragging && conflictingBlockIds.length > 0;
 
   // ──── Orphan clock_out ────
   if (session.isOrphan && !session.clockIn && session.clockOut) {
@@ -389,10 +610,24 @@ export function WorkSessionBlock({
   const durationText = session.durationMinutes
     ? formatDuration(session.durationMinutes)
     : 'Offen';
+  const secondaryDurationText = segmentSummary?.breakText
+    ? `${segmentSummary.workText} Arbeit · ${segmentSummary.breakText} Pause`
+    : durationText;
 
   const timeRangeText = clockOutTime
     ? `${formatTime(clockInTime)} - ${formatTime(clockOutTime)}`
     : `${formatTime(clockInTime)} - ...`;
+
+  useEffect(() => {
+    if (!blockId || !onConflictTargetsChange) return;
+
+    if (!drag.isDragging || conflictingBlockIds.length === 0) {
+      onConflictTargetsChange(blockId, []);
+      return;
+    }
+
+    onConflictTargetsChange(blockId, conflictingBlockIds);
+  }, [blockId, onConflictTargetsChange, conflictingBlockIds, drag.isDragging]);
 
   const isNewPendingEntry =
     isPending && !clockInEdit && !clockOutEdit && !isPendingDelete;
@@ -472,7 +707,7 @@ export function WorkSessionBlock({
             ...(hasLayout ? { top: blockTop, height: blockHeight } : {}),
             ...hatchedStyle
           }}
-          title={`${timeRangeText} (${durationText}) - Löschung ausstehend`}
+          title={`${timeRangeText} (${secondaryDurationText}) - Löschung ausstehend`}
         >
           {width > 80 && (
             <>
@@ -554,7 +789,7 @@ export function WorkSessionBlock({
             width: `${Math.max(mainBlockWidth, 20)}px`,
             ...(hasLayout ? { top: blockTop, height: blockHeight } : {})
           }}
-          title={`${timeRangeText} (${durationText})`}
+          title={`${timeRangeText} (${secondaryDurationText})`}
         >
           {mainBlockWidth > 80 && (
             <>
@@ -562,15 +797,38 @@ export function WorkSessionBlock({
                 <Clock className="h-3 w-3 shrink-0 opacity-80" />
                 <span className="truncate">{timeRangeText}</span>
               </div>
-              <span className="truncate text-[10px] opacity-80 pl-4">
-                {durationText}
-              </span>
+              <div className="flex items-center gap-2 truncate text-[10px] opacity-85">
+                <span className="flex items-center gap-1 truncate">
+                  <BriefcaseBusiness className="h-2.5 w-2.5 shrink-0" />
+                  <span className="truncate">
+                    {segmentSummary?.workText ?? durationText}
+                  </span>
+                </span>
+                {segmentSummary?.breakText && (
+                  <span className="flex items-center gap-1 truncate">
+                    <Coffee className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{segmentSummary.breakText}</span>
+                  </span>
+                )}
+              </div>
             </>
           )}
           {mainBlockWidth <= 80 && mainBlockWidth > 40 && (
             <div className="flex items-center gap-1 truncate">
-              <Clock className="h-3 w-3 shrink-0 opacity-80" />
-              <span className="truncate">{durationText}</span>
+              {segmentSummary?.breakText ? (
+                <>
+                  <BriefcaseBusiness className="h-3 w-3 shrink-0 opacity-80" />
+                  <span className="truncate text-[10px]">
+                    {segmentSummary.workText}
+                  </span>
+                  <Coffee className="h-3 w-3 shrink-0 opacity-70" />
+                </>
+              ) : (
+                <>
+                  <Clock className="h-3 w-3 shrink-0 opacity-80" />
+                  <span className="truncate">{durationText}</span>
+                </>
+              )}
             </div>
           )}
           {mainBlockWidth <= 40 && (
@@ -612,9 +870,6 @@ export function WorkSessionBlock({
     );
   }
 
-  const displayLeft = drag.isDragging ? drag.currentLeft : left;
-  const displayWidth = drag.isDragging ? drag.currentWidth : width;
-
   // Compute the live time range tooltip during drag
   const liveTimeRange = drag.isDragging
     ? `${formatTimeFromPx(drag.currentLeft, effectiveHourWidth)} - ${formatTimeFromPx(drag.currentLeft + drag.currentWidth, effectiveHourWidth)}`
@@ -649,15 +904,28 @@ export function WorkSessionBlock({
           // Colors
           !isNewPendingEntry &&
             !isOpen &&
+            !hasBackgroundSegments &&
             'bg-green-500/80 text-white dark:bg-green-600/80',
           isOpen &&
             !isNewPendingEntry &&
+            !hasBackgroundSegments &&
             'bg-green-500/60 text-white dark:bg-green-600/60 animate-pulse',
+          hasBackgroundSegments &&
+            !isNewPendingEntry &&
+            'text-white',
+          hasBackgroundSegments &&
+            isOpen &&
+            !isNewPendingEntry &&
+            'animate-pulse',
           isNewPendingEntry &&
             'bg-yellow-400/80 text-yellow-900 dark:bg-yellow-500/80 dark:text-yellow-100',
+          isConflictTarget &&
+            !drag.isDragging &&
+            'ring-2 ring-red-500/70 bg-red-500/10',
           // Drag state
           drag.isDragging &&
             'opacity-90 shadow-lg ring-2 ring-white/30 scale-[0.990]',
+          hasDropConflict && 'ring-red-500/80 bg-red-500/10',
           !drag.isDragging &&
             'hover:shadow-md hover:z-20 cursor-pointer'
         )}
@@ -672,11 +940,33 @@ export function WorkSessionBlock({
         onPointerMove={drag.handlers.onPointerMove}
         onPointerUp={drag.handlers.onPointerUp}
         title={
-          drag.isDragging ? liveTimeRange : `${timeRangeText} (${durationText})`
+          drag.isDragging ? liveTimeRange : `${timeRangeText} (${secondaryDurationText})`
         }
       >
+        {hasBackgroundSegments && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-md">
+            {displaySegments.map((segment) => (
+              <div
+                key={segment.id}
+                className={cn(
+                  'absolute inset-y-0',
+                  segment.type === 'break'
+                    ? 'bg-yellow-500/80'
+                    : isOpen
+                      ? 'bg-green-500/60 dark:bg-green-600/60'
+                      : 'bg-green-500/80 dark:bg-green-600/80'
+                )}
+                style={{ left: segment.left, width: segment.width }}
+              />
+            ))}
+          </div>
+        )}
+        {(isConflictTarget || hasDropConflict) && (
+          <div className="pointer-events-none absolute inset-0 rounded-md border border-red-500/80 bg-red-500/10" />
+        )}
+
         {/* Left resize handle */}
-        {canDrag && (
+        {canResizeLeft && (
           <div
             className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-20 hover:bg-white/20 rounded-l-md"
             onPointerDown={drag.startResizeLeft}
@@ -690,16 +980,15 @@ export function WorkSessionBlock({
         <button
           className={cn(
             'flex-1 flex items-center justify-center px-2 py-1 overflow-hidden min-w-0',
+            'relative z-[1]',
             !compact && 'flex-col',
             drag.isDragging && 'cursor-grabbing',
             !drag.isDragging && 'cursor-pointer'
           )}
           onPointerDown={
-            canDrag
+            canMove
               ? onBlockMoveStart && memberId
                 ? (e: React.PointerEvent) => {
-                    e.preventDefault();
-                    e.stopPropagation();
                     onBlockMoveStart(session, memberId, left, width, e);
                   }
                 : drag.startMove
@@ -716,26 +1005,100 @@ export function WorkSessionBlock({
           {(usePercentage ? displayWidth > 5.5 : displayWidth > 80) && (
             compact ? (
               <div className="flex items-center gap-1 truncate">
-                <Clock className="h-2.5 w-2.5 shrink-0 opacity-80" />
-                <span className="truncate text-[10px]">
+                <Clock
+                  className={cn(
+                    'h-2.5 w-2.5 shrink-0',
+                    hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                  )}
+                />
+                <span
+                  className={cn(
+                    'truncate text-[10px]',
+                    hasBackgroundSegments ? 'opacity-100' : ''
+                  )}
+                >
                   {drag.isDragging ? liveTimeRange : timeRangeText}
                 </span>
-                <span className="opacity-60 text-[9px]">•</span>
-                <span className="truncate text-[10px] opacity-80">
-                  {durationText}
+                <span
+                  className={cn(
+                    'text-[9px]',
+                    hasBackgroundSegments ? 'opacity-90' : 'opacity-60'
+                  )}
+                >
+                  •
                 </span>
+                <span
+                  className={cn(
+                    'truncate text-[10px]',
+                    hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                  )}
+                >
+                  {segmentSummary?.breakText ? segmentSummary.workText : durationText}
+                </span>
+                {segmentSummary?.breakText && (
+                  <>
+                    <span
+                      className={cn(
+                        'text-[9px]',
+                        hasBackgroundSegments ? 'opacity-90' : 'opacity-60'
+                      )}
+                    >
+                      •
+                    </span>
+                    <Coffee
+                      className={cn(
+                        'h-2.5 w-2.5 shrink-0',
+                        hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        'truncate text-[10px]',
+                        hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                      )}
+                    >
+                      {segmentSummary.breakText}
+                    </span>
+                  </>
+                )}
               </div>
             ) : (
               <>
                 <div className="flex items-center gap-1 truncate">
-                  <Clock className="h-3 w-3 shrink-0 opacity-80" />
-                  <span className="truncate">
+                  <Clock
+                    className={cn(
+                      'h-3 w-3 shrink-0',
+                      hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      'truncate',
+                      hasBackgroundSegments ? 'opacity-100' : ''
+                    )}
+                  >
                     {drag.isDragging ? liveTimeRange : timeRangeText}
                   </span>
                 </div>
-                <span className="truncate text-[10px] opacity-80">
-                  {durationText}
-                </span>
+                <div
+                  className={cn(
+                    'flex items-center gap-2 truncate text-[10px]',
+                    hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                  )}
+                >
+                  <span className="flex items-center gap-1 truncate">
+                    <BriefcaseBusiness className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">
+                      {segmentSummary?.workText ?? durationText}
+                    </span>
+                  </span>
+                  {segmentSummary?.breakText && (
+                    <span className="flex items-center gap-1 truncate">
+                      <Coffee className="h-2.5 w-2.5 shrink-0" />
+                      <span className="truncate">{segmentSummary.breakText}</span>
+                    </span>
+                  )}
+                </div>
               </>
             )
           )}
@@ -743,23 +1106,59 @@ export function WorkSessionBlock({
             ? displayWidth <= 5.5 && displayWidth > 2.8
             : displayWidth <= 80 && displayWidth > 40) && (
             <div className="flex items-center gap-1 truncate">
-              <Clock className={cn('shrink-0 opacity-80', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
-              <span className="truncate">{durationText}</span>
+              {segmentSummary?.breakText ? (
+                <>
+                  <BriefcaseBusiness
+                    className={cn(
+                      'shrink-0',
+                      compact ? 'h-2.5 w-2.5' : 'h-3 w-3',
+                      hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                    )}
+                  />
+                  <span className="truncate text-[10px]">
+                    {segmentSummary.workText}
+                  </span>
+                  <Coffee
+                    className={cn(
+                      'shrink-0',
+                      compact ? 'h-2.5 w-2.5' : 'h-3 w-3',
+                      hasBackgroundSegments ? 'opacity-100' : 'opacity-70'
+                    )}
+                  />
+                </>
+              ) : (
+                <>
+                  <Clock
+                    className={cn(
+                      'shrink-0',
+                      compact ? 'h-2.5 w-2.5' : 'h-3 w-3',
+                      hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+                    )}
+                  />
+                  <span className="truncate">{durationText}</span>
+                </>
+              )}
             </div>
           )}
           {(usePercentage ? displayWidth <= 2.8 : displayWidth <= 40) && (
-            <Clock className={cn('shrink-0 opacity-80', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
+            <Clock
+              className={cn(
+                'shrink-0',
+                compact ? 'h-2.5 w-2.5' : 'h-3 w-3',
+                hasBackgroundSegments ? 'opacity-100' : 'opacity-80'
+              )}
+            />
           )}
         </button>
 
         {/* Right resize handle */}
-        {canDrag && (
+        {canResizeRight && (
           <div
             className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-20 hover:bg-white/20 rounded-r-md"
             onPointerDown={drag.startResizeRight}
           />
         )}
-        {showResizeHint && (
+        {showResizeHint && session.clockOut && (
           <div className="absolute right-0 top-0 bottom-0 w-1.5 cursor-not-allowed z-20 hover:bg-white/20 rounded-r-md" />
         )}
       </div>

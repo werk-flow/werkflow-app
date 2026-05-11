@@ -3,6 +3,7 @@
 import { cookies, headers } from 'next/headers';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
+import { getSiteUrl, getSupabaseSecretKey } from '@/lib/env/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE } from '@/lib/org/cookies';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
@@ -64,6 +65,7 @@ export async function sendOrgInvite(
     }
 
     const admin = createSupabaseAdminClient();
+    const supabaseSecretKey = getSupabaseSecretKey();
 
     const { data: org, error: orgErr } = await admin
       .from('organizations')
@@ -139,8 +141,7 @@ export async function sendOrgInvite(
 
     // Build redirect URL based on whether user exists
     const headersList = await headers();
-    const origin =
-      process.env.NEXT_PUBLIC_SITE_URL || headersList.get('origin') || '';
+    const origin = getSiteUrl() || headersList.get('origin') || '';
 
     // Get inviter's profile for the email
     const { data: inviterProfile } = await admin
@@ -167,6 +168,10 @@ export async function sendOrgInvite(
     const { error: emailError } = await admin.functions.invoke(
       'send-invite-email',
       {
+        headers: {
+          apikey: supabaseSecretKey!,
+          Authorization: `Bearer ${supabaseSecretKey}`
+        },
         body: {
           to: trimmedEmail,
           inviterName,

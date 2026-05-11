@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 
 export async function POST(request: Request) {
   try {
@@ -43,21 +43,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
-    // Get organization members using the RPC
-    const { data: members, error } = await supabase.rpc('get_org_members', {
-      p_org_id: organizationId
-    });
-
-    if (error) {
-      console.error('Error fetching members:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch members' },
-        { status: 500 }
-      );
-    }
+    const members = await getOrgMembersForUser(organizationId, user.id);
 
     // Filter members based on role (managers can only see managed roles)
-    let filteredMembers = members || [];
+    let filteredMembers = members;
 
     if (userRole === 'buero') {
       filteredMembers = filteredMembers.filter(

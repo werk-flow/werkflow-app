@@ -30,7 +30,7 @@ interface JobPickerModalProps {
   onClose: () => void;
   onConfirm: (jobId: string | null) => void;
   organizationId: string;
-  mode: 'clock_in' | 'switch';
+  mode: 'clock_in' | 'switch' | 'resume';
   currentJobId: string | null;
   isPending: boolean;
 }
@@ -119,12 +119,18 @@ export function JobPickerModal({
             </div>
             <div>
               <h3 className="text-base font-semibold leading-tight">
-                {mode === 'clock_in' ? 'Einstempeln' : 'Auftrag wechseln'}
+                {mode === 'clock_in'
+                  ? 'Einstempeln'
+                  : mode === 'resume'
+                    ? 'Arbeit fortsetzen'
+                    : 'Auftrag wechseln'}
               </h3>
               <p className="text-xs text-muted-foreground">
                 {mode === 'clock_in'
                   ? 'Wähle einen Auftrag aus (optional)'
-                  : 'Wähle den neuen Auftrag'}
+                  : mode === 'resume'
+                    ? 'Wähle den Auftrag für die Fortsetzung'
+                    : 'Wähle den neuen Auftrag'}
               </p>
             </div>
           </div>
@@ -240,16 +246,24 @@ export function JobPickerModal({
           <Button
             className="flex-1 select-none"
             onClick={() => onConfirm(selectedJobId)}
-            disabled={isPending || (mode === 'switch' && selectedJobId === currentJobId)}
+            disabled={
+              isPending || (mode === 'switch' && selectedJobId === currentJobId)
+            }
           >
             {isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : mode === 'clock_in' ? (
               <Play className="mr-2 h-4 w-4" />
+            ) : mode === 'resume' ? (
+              <Play className="mr-2 h-4 w-4" />
             ) : (
               <ArrowLeftRight className="mr-2 h-4 w-4" />
             )}
-            {mode === 'clock_in' ? 'Einstempeln' : 'Wechseln'}
+            {mode === 'clock_in'
+              ? 'Einstempeln'
+              : mode === 'resume'
+                ? 'Fortsetzen'
+                : 'Wechseln'}
           </Button>
         </div>
       </div>

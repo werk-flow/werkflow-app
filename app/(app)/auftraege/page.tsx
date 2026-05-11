@@ -3,7 +3,6 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import {
@@ -17,7 +16,7 @@ import {
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
 import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
 import { ActionBanner } from '@/components/shared/action-banner';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
 async function AuftraegeData({
@@ -32,7 +31,6 @@ async function AuftraegeData({
   currentUserRole: OrgRole | undefined;
 }) {
   const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
 
   let jobList: Job[] = [];
   let clientList: Client[] = [];
@@ -58,7 +56,7 @@ async function AuftraegeData({
         .select('*')
         .eq('organization_id', activeOrgId)
         .order('name', { ascending: true }),
-      supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
+      getOrgMembersForUser(activeOrgId, userId),
     ]);
 
     if (jobsResult.error) {
@@ -74,13 +72,9 @@ async function AuftraegeData({
       );
     }
 
-    if (membersResult.error) {
-      console.error('Error fetching members:', membersResult.error);
-    }
-
     jobList = (jobsResult.data ?? []).map(toJob);
     clientList = (clientsResult.data ?? []).map(toClient);
-    memberList = (membersResult.data ?? []).map((m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
+    memberList = membersResult.map((m) => ({
       userId: m.user_id,
       firstName: m.first_name,
       lastName: m.last_name,

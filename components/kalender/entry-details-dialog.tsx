@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useTransition, useEffect, useCallback } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Briefcase,
+  Check,
+  Clock,
+  Coffee,
+  ExternalLink,
+  Info,
   Loader2,
   Pencil,
+  Plus,
   Trash2,
-  Check,
-  X,
-  Clock,
-  Briefcase,
-  ExternalLink,
+  User,
+  X
 } from 'lucide-react';
 import {
   Dialog,
@@ -38,12 +42,19 @@ import {
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import {
-  updateEntry,
+  addManualEntry,
+  deleteEntriesBatch,
   deleteEntry,
-  reviewEntry
+  reviewEntry,
+  updateEntry
 } from '@/lib/time-tracking/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import type { WorkSession } from '@/lib/time-tracking/types';
+import type {
+  InteractiveCalendarSession,
+  TimeEntry,
+  WorkSession,
+  WorkSessionBreak
+} from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
 interface EntryDetailsDialogProps {
@@ -53,13 +64,40 @@ interface EntryDetailsDialogProps {
   currentUserRole: OrgRole;
   currentUserId?: string;
   onRefresh: () => void;
-  /** If true, opens the dialog directly in edit mode */
   startInEditMode?: boolean;
-  /** Resolved job name for display */
   jobName?: string | null;
-  /** Role of the user who owns the entry (used for permission checks) */
   entryUserRole?: OrgRole;
 }
+
+type EditableBreak = {
+  key: string;
+  breakStartEntry: TimeEntry | null;
+  breakEndEntry: TimeEntry | null;
+  breakStart: Date;
+  breakEnd: Date | null;
+  isNew?: boolean;
+};
+
+type StatusConfig = { label: string; className: string };
+
+const STATUS_LABELS: Record<string, StatusConfig> = {
+  approved: {
+    label: 'Genehmigt',
+    className: 'bg-green-500/20 text-green-700 dark:text-green-300'
+  },
+  pending: {
+    label: 'Ausstehend',
+    className: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
+  },
+  rejected: {
+    label: 'Abgelehnt',
+    className: 'bg-red-500/20 text-red-700 dark:text-red-300'
+  },
+  draft: {
+    label: 'Neu',
+    className: 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+  }
+};
 
 function formatDateTime(date: Date): string {
   return date.toLocaleString('de-DE', {
@@ -72,36 +110,198 @@ function formatDateTime(date: Date): string {
   });
 }
 
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  approved: {
-    label: 'Genehmigt',
-    className: 'bg-green-500/20 text-green-700 dark:text-green-300'
-  },
-  pending: {
-    label: 'Ausstehend',
-    className: 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300'
-  },
-  rejected: {
-    label: 'Abgelehnt',
-    className: 'bg-red-500/20 text-red-700 dark:text-red-300'
-  }
-};
-
-
 function formatTime(date: Date): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(
     date.getMinutes()
   ).padStart(2, '0')}`;
 }
 
+function formatActionError(error: string): string {
+  if (error === 'pending_request_exists') {
+    return 'Es gibt bereits einen ausstehenden Änderungsantrag für diesen Eintrag.';
+  }
+
+  if (
+    error === 'overlapping_entries' ||
+    error === 'overlapping_session' ||
+    error === 'validation_failed'
+  ) {
+    return 'Diese Zeitänderung würde zu einer ungültigen oder überlappenden Arbeitszeit führen.';
+  }
+
+  return error;
+}
+
+function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
+  return [...entries].sort((a, b) => {
+    const diff =
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (diff !== 0) return diff;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+}
+
+function deriveBreaksFromEntries(entries: TimeEntry[]): WorkSessionBreak[] {
+  const breaks: WorkSessionBreak[] = [];
+  let currentBreakStart: TimeEntry | null = null;
+
+  for (const entry of sortTimeEntries(entries)) {
+    if (entry.entryType === 'break_start') {
+      currentBreakStart = entry;
+      continue;
+    }
+
+    if (
+      currentBreakStart &&
+      (entry.entryType === 'break_end' || entry.entryType === 'clock_out')
+    ) {
+      breaks.push({
+        breakStart: currentBreakStart,
+        breakEnd: entry.entryType === 'break_end' ? entry : null
+      });
+      currentBreakStart = null;
+    }
+  }
+
+  if (currentBreakStart) {
+    breaks.push({
+      breakStart: currentBreakStart,
+      breakEnd: null
+    });
+  }
+
+  return breaks;
+}
+
+function buildEditableBreaks(breaks: WorkSessionBreak[]): EditableBreak[] {
+  return breaks.map((workBreak, index) => ({
+    key: `${workBreak.breakStart.id}:${workBreak.breakEnd?.id ?? index}`,
+    breakStartEntry: workBreak.breakStart,
+    breakEndEntry: workBreak.breakEnd,
+    breakStart: new Date(workBreak.breakStart.timestamp),
+    breakEnd: workBreak.breakEnd ? new Date(workBreak.breakEnd.timestamp) : null
+  }));
+}
+
+function getBreakDurationMinutes(workBreak: {
+  breakStart: Date;
+  breakEnd: Date | null;
+}): number {
+  const breakEnd = workBreak.breakEnd ?? new Date();
+  return Math.max(
+    0,
+    (breakEnd.getTime() - workBreak.breakStart.getTime()) / 60000
+  );
+}
+
+function applyDatePart(base: Date, dateSource: Date): Date {
+  const updated = new Date(base);
+  updated.setFullYear(
+    dateSource.getFullYear(),
+    dateSource.getMonth(),
+    dateSource.getDate()
+  );
+  return updated;
+}
+
+function buildDefaultBreakRange(start: Date, end: Date) {
+  const totalMinutes = Math.max(1, (end.getTime() - start.getTime()) / 60000);
+  const desiredBreakMinutes = Math.min(
+    30,
+    Math.max(5, Math.floor(totalMinutes / 3))
+  );
+  const centerMs = start.getTime() + (end.getTime() - start.getTime()) / 2;
+  const breakStart = new Date(centerMs - desiredBreakMinutes * 30000);
+  const breakEnd = new Date(breakStart.getTime() + desiredBreakMinutes * 60000);
+
+  if (breakStart <= start) {
+    breakStart.setTime(start.getTime() + 5 * 60000);
+    breakEnd.setTime(
+      Math.min(
+        end.getTime() - 5 * 60000,
+        breakStart.getTime() + desiredBreakMinutes * 60000
+      )
+    );
+  }
+
+  if (breakEnd >= end) {
+    breakEnd.setTime(end.getTime() - 5 * 60000);
+    breakStart.setTime(
+      Math.max(
+        start.getTime() + 5 * 60000,
+        breakEnd.getTime() - desiredBreakMinutes * 60000
+      )
+    );
+  }
+
+  return { breakStart, breakEnd };
+}
+
+function getStatusConfig(entry?: TimeEntry | null): StatusConfig {
+  if (!entry) return STATUS_LABELS.draft;
+  return STATUS_LABELS[entry.status] ?? STATUS_LABELS.approved;
+}
+
+function getEntryLabel(entry: TimeEntry, index = 0): string {
+  switch (entry.entryType) {
+    case 'clock_in':
+      return 'Arbeitsbeginn';
+    case 'clock_out':
+      return 'Arbeitsende';
+    case 'break_start':
+      return index > 0 ? `Pausenbeginn ${index + 1}` : 'Pausenbeginn';
+    case 'break_end':
+      return index > 0 ? `Pausenende ${index + 1}` : 'Pausenende';
+    default:
+      return 'Eintrag';
+  }
+}
+
+function buildDraftEntry(
+  key: string,
+  entryType: TimeEntry['entryType'],
+  timestamp: Date,
+  userId?: string,
+  organizationId?: string
+): TimeEntry {
+  const isoTimestamp = timestamp.toISOString();
+
+  return {
+    id: key,
+    userId: userId ?? '',
+    organizationId: organizationId ?? '',
+    entryType,
+    timestamp: isoTimestamp,
+    isManual: true,
+    jobId: null,
+    status: 'approved',
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: isoTimestamp,
+    updatedAt: isoTimestamp
+  };
+}
+
 interface DateTimePickerProps {
   value: Date;
   onChange: (date: Date) => void;
   label: string;
+  dateLabel?: string;
+  disableDateEditing?: boolean;
 }
 
-function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
+function DateTimePicker({
+  value,
+  onChange,
+  label,
+  dateLabel,
+  disableDateEditing = false
+}: DateTimePickerProps) {
   const [timeValue, setTimeValue] = useState(formatTime(value));
+
+  useEffect(() => {
+    setTimeValue(formatTime(value));
+  }, [value]);
 
   const handleDateChange = (newDate: Date | undefined) => {
     if (!newDate) return;
@@ -128,7 +328,13 @@ function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
       <Label>{label}</Label>
       <div className="flex gap-2">
         <div className="flex-1">
-          <DatePicker value={value} onChange={handleDateChange} />
+          {disableDateEditing ? (
+            <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+              {dateLabel ?? value.toLocaleDateString('de-DE')}
+            </div>
+          ) : (
+            <DatePicker value={value} onChange={handleDateChange} />
+          )}
         </div>
         <div className="relative w-28">
           <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
@@ -143,6 +349,43 @@ function DateTimePicker({ value, onChange, label }: DateTimePickerProps) {
   );
 }
 
+function DetailCard({
+  icon,
+  label,
+  value,
+  onClick,
+  disabled
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  const interactive = !!onClick && !disabled;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!interactive}
+      className={cn(
+        'flex w-full items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-left text-sm transition-colors',
+        interactive && 'cursor-pointer hover:bg-accent'
+      )}
+    >
+      <span className="text-muted-foreground">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate font-medium">{value}</p>
+      </div>
+      {interactive && (
+        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
 export function EntryDetailsDialog({
   open,
   onOpenChange,
@@ -152,42 +395,154 @@ export function EntryDetailsDialog({
   onRefresh,
   startInEditMode = false,
   jobName,
-  entryUserRole,
+  entryUserRole
 }: EntryDetailsDialogProps) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(startInEditMode);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [editedClockIn, setEditedClockIn] = useState<Date | null>(null);
+  const [editedClockOut, setEditedClockOut] = useState<Date | null>(null);
+  const [editedBreaks, setEditedBreaks] = useState<EditableBreak[]>([]);
+  const [removedBreaks, setRemovedBreaks] = useState<EditableBreak[]>([]);
+  const [editedBlockDate, setEditedBlockDate] = useState<Date | null>(null);
 
   const router = useRouter();
+  const interactiveSession = session as InteractiveCalendarSession;
   const [resolvedJob, setResolvedJob] = useState<{
     title: string;
     jobNumber: string | null;
     projectNumber: string | null;
-  } | null>(jobName ? { title: jobName, jobNumber: null, projectNumber: null } : null);
+  } | null>(
+    jobName ? { title: jobName, jobNumber: null, projectNumber: null } : null
+  );
+
+  const sourceEntries = useMemo(() => {
+    if (interactiveSession.sourceEntries?.length) {
+      return sortTimeEntries(interactiveSession.sourceEntries);
+    }
+
+    return sortTimeEntries(
+      [session.clockIn, session.clockOut].filter(Boolean) as TimeEntry[]
+    );
+  }, [interactiveSession.sourceEntries, session.clockIn, session.clockOut]);
+
+  const sessionBreaks = useMemo(() => {
+    if (interactiveSession.breaks?.length) {
+      return interactiveSession.breaks;
+    }
+
+    return deriveBreaksFromEntries(sourceEntries);
+  }, [interactiveSession.breaks, sourceEntries]);
+
+  const actualClockOutEntry = useMemo(() => {
+    return (
+      [...sourceEntries]
+        .reverse()
+        .find((entry) => entry.entryType === 'clock_out') ?? null
+    );
+  }, [sourceEntries]);
+
+  const startEntry = session.clockIn ?? null;
+  const clockInTimestamp = startEntry?.timestamp ?? null;
+  const clockOutTimestamp = actualClockOutEntry?.timestamp ?? null;
+  const clockInDate = useMemo(
+    () => (clockInTimestamp ? new Date(clockInTimestamp) : null),
+    [clockInTimestamp]
+  );
+  const clockOutDate = useMemo(
+    () => (clockOutTimestamp ? new Date(clockOutTimestamp) : null),
+    [clockOutTimestamp]
+  );
+  const sessionBreakSignature = useMemo(
+    () =>
+      sessionBreaks
+        .map(
+          (workBreak) =>
+            `${workBreak.breakStart.id}:${workBreak.breakStart.timestamp}:${
+              workBreak.breakEnd?.id ?? 'open'
+            }:${workBreak.breakEnd?.timestamp ?? 'open'}`
+        )
+        .join('|'),
+    [sessionBreaks]
+  );
+
+  const sessionEntriesForReview = useMemo(
+    () =>
+      sourceEntries.filter(
+        (entry, index, entries) =>
+          entries.findIndex((candidate) => candidate.id === entry.id) === index
+      ),
+    [sourceEntries]
+  );
+  const blockReferenceDate = useMemo(
+    () =>
+      clockInDate ??
+      clockOutDate ??
+      (sessionBreaks[0]
+        ? new Date(sessionBreaks[0].breakStart.timestamp)
+        : null),
+    [clockInDate, clockOutDate, sessionBreaks]
+  );
 
   useEffect(() => {
     if (!open || !session.jobId) {
       if (!jobName) setResolvedJob(null);
       return;
     }
+
     let cancelled = false;
     createSupabaseBrowserClient()
       .from('jobs')
       .select('title, job_number, projects(project_number)')
       .eq('id', session.jobId)
       .single()
-      .then(({ data }: { data: { title: string; job_number: string | null; projects: { project_number: string } | null } | null }) => {
-        if (!cancelled && data) {
-          setResolvedJob({
-            title: data.title,
-            jobNumber: data.job_number,
-            projectNumber: data.projects?.project_number ?? null,
-          });
+      .then(
+        ({
+          data
+        }: {
+          data: {
+            title: string;
+            job_number: string | null;
+            projects: { project_number: string } | null;
+          } | null;
+        }) => {
+          if (!cancelled && data) {
+            setResolvedJob({
+              title: data.title,
+              jobNumber: data.job_number,
+              projectNumber: data.projects?.project_number ?? null
+            });
+          }
         }
-      });
-    return () => { cancelled = true; };
-  }, [open, session.jobId, jobName]);
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobName, open, session.jobId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setIsEditing(startInEditMode);
+    setError(null);
+    setSuccessMessage(null);
+    setEditedClockIn(clockInTimestamp ? new Date(clockInTimestamp) : null);
+    setEditedClockOut(clockOutTimestamp ? new Date(clockOutTimestamp) : null);
+    setEditedBreaks(buildEditableBreaks(sessionBreaks));
+    setRemovedBreaks([]);
+    setEditedBlockDate(
+      blockReferenceDate ? new Date(blockReferenceDate) : null
+    );
+  }, [
+    blockReferenceDate,
+    clockInTimestamp,
+    clockOutTimestamp,
+    open,
+    sessionBreakSignature,
+    startInEditMode
+  ]);
 
   const jobDetailUrl = resolvedJob?.jobNumber
     ? resolvedJob.projectNumber
@@ -195,221 +550,551 @@ export function EntryDetailsDialog({
       : `/auftraege/${resolvedJob.jobNumber}`
     : null;
 
-  // Handle orphan sessions (no clockIn)
-  const isOrphan = session.isOrphan || !session.clockIn;
-
-  // Initialize edited values based on what exists
-  const [editedClockIn, setEditedClockIn] = useState<Date | null>(
-    session.clockIn ? new Date(session.clockIn.timestamp) : null
-  );
-  const [editedClockOut, setEditedClockOut] = useState<Date | null>(
-    session.clockOut ? new Date(session.clockOut.timestamp) : null
-  );
-
-  const clockInDate = session.clockIn
-    ? new Date(session.clockIn.timestamp)
-    : null;
-  const clockOutDate = session.clockOut
-    ? new Date(session.clockOut.timestamp)
-    : null;
-
-  // Handle dialog open/close - initialize editing state based on startInEditMode
-  useEffect(() => {
-    if (open) {
-      // When dialog opens, set editing state based on prop
-      setIsEditing(startInEditMode);
-      setError(null);
-      setSuccessMessage(null);
-      // Initialize edit values
-      setEditedClockIn(
-        session.clockIn ? new Date(session.clockIn.timestamp) : null
-      );
-      setEditedClockOut(
-        session.clockOut ? new Date(session.clockOut.timestamp) : null
-      );
-    }
-  }, [open, startInEditMode, session.clockIn, session.clockOut]);
-
-  // Determine if this is the user's own entry
-  const entryUserId = session.clockIn?.userId || session.clockOut?.userId;
+  const employeeName = interactiveSession.employeeName ?? null;
+  const effectiveEntryUserRole =
+    interactiveSession.employeeRole ?? entryUserRole;
+  const entryUserId =
+    sourceEntries[0]?.userId ??
+    session.clockIn?.userId ??
+    session.clockOut?.userId;
+  const entryOrganizationId =
+    sourceEntries[0]?.organizationId ??
+    session.clockIn?.organizationId ??
+    session.clockOut?.organizationId ??
+    null;
+  const employeeDetailUrl = entryUserId ? `/mitarbeiter/${entryUserId}` : null;
   const isOwnEntry = currentUserId && entryUserId === currentUserId;
+  const isOrphan = session.isOrphan || !session.clockIn;
+  const hasActualBreaks = editedBreaks.length > 0;
+  const totalBreakMinutes = useMemo(
+    () =>
+      editedBreaks.reduce(
+        (total, workBreak) => total + getBreakDurationMinutes(workBreak),
+        0
+      ),
+    [editedBreaks]
+  );
+  const totalWorkMinutes = useMemo(() => {
+    const blockStart = editedClockIn ?? clockInDate;
+    const blockEnd =
+      editedClockOut ?? clockOutDate ?? (blockStart ? new Date() : null);
+
+    if (!blockStart || !blockEnd) {
+      return null;
+    }
+
+    const totalMinutes = Math.max(
+      0,
+      (blockEnd.getTime() - blockStart.getTime()) / 60000
+    );
+    return Math.max(0, totalMinutes - totalBreakMinutes);
+  }, [
+    editedClockIn,
+    editedClockOut,
+    clockInDate,
+    clockOutDate,
+    totalBreakMinutes
+  ]);
 
   const canEdit = (() => {
     if (currentUserRole === 'admin') return true;
     if (currentUserRole === 'buero') {
       if (isOwnEntry) return true;
-      if (entryUserRole && entryUserRole !== 'employee') return false;
+      if (effectiveEntryUserRole && effectiveEntryUserRole !== 'employee') {
+        return false;
+      }
       return true;
     }
     return false;
   })();
 
-  const hasPendingEntry =
-    session.clockIn?.status === 'pending' ||
-    session.clockOut?.status === 'pending';
+  const pendingEntries = sessionEntriesForReview.filter(
+    (entry) => entry.status === 'pending'
+  );
+  const hasPendingEntry = pendingEntries.length > 0;
+  const isActiveBlock = !isOrphan && !actualClockOutEntry;
+  const showBlockScopedTotalHint = !isOrphan;
+  const showBoundaryExplanation =
+    !isOrphan &&
+    !actualClockOutEntry &&
+    !interactiveSession.isOnBreakBlock &&
+    (session.endEntryType === 'break_start' || session.clockOut !== null);
   const canApprove =
     hasPendingEntry &&
     (currentUserRole === 'admin' ||
       (currentUserRole === 'buero' && !isOwnEntry && canEdit));
 
+  const getDescriptionText = () => {
+    if (isOrphan) {
+      if (session.clockIn && !session.clockOut) {
+        return 'Einzelner Einstempel-Eintrag (unvollständig)';
+      }
+
+      return 'Einzelner Ausstempel-Eintrag (unvollständig)';
+    }
+
+    if (session.durationMinutes) {
+      return `Arbeitszeit: ${formatDuration(session.durationMinutes)}`;
+    }
+
+    return 'Aktive Sitzung';
+  };
+
   const handleStartEdit = () => {
     setIsEditing(true);
-    setEditedClockIn(
-      session.clockIn ? new Date(session.clockIn.timestamp) : null
-    );
-    setEditedClockOut(
-      session.clockOut ? new Date(session.clockOut.timestamp) : null
+    setEditedClockIn(clockInDate ? new Date(clockInDate) : null);
+    setEditedClockOut(clockOutDate ? new Date(clockOutDate) : null);
+    setEditedBreaks(buildEditableBreaks(sessionBreaks));
+    setRemovedBreaks([]);
+    setEditedBlockDate(
+      blockReferenceDate ? new Date(blockReferenceDate) : null
     );
     setError(null);
   };
 
   const handleCancelEdit = () => {
     setIsEditing(false);
+    setEditedClockIn(clockInDate ? new Date(clockInDate) : null);
+    setEditedClockOut(clockOutDate ? new Date(clockOutDate) : null);
+    setEditedBreaks(buildEditableBreaks(sessionBreaks));
+    setRemovedBreaks([]);
+    setEditedBlockDate(
+      blockReferenceDate ? new Date(blockReferenceDate) : null
+    );
     setError(null);
+  };
+
+  const handleAddBreak = () => {
+    if (!editedClockIn || !editedClockOut) return;
+
+    const { breakStart, breakEnd } = buildDefaultBreakRange(
+      editedClockIn,
+      editedClockOut
+    );
+
+    setEditedBreaks([
+      {
+        key: `new-break-${Date.now()}`,
+        breakStartEntry: null,
+        breakEndEntry: null,
+        breakStart,
+        breakEnd,
+        isNew: true
+      }
+    ]);
+  };
+
+  const handleStartEditWithBreak = () => {
+    handleStartEdit();
+
+    const baseClockIn = clockInDate ? new Date(clockInDate) : null;
+    const baseClockOut = clockOutDate ? new Date(clockOutDate) : null;
+    if (!baseClockIn || !baseClockOut) return;
+
+    const { breakStart, breakEnd } = buildDefaultBreakRange(
+      baseClockIn,
+      baseClockOut
+    );
+
+    setEditedBreaks([
+      {
+        key: `new-break-${Date.now()}`,
+        breakStartEntry: null,
+        breakEndEntry: null,
+        breakStart,
+        breakEnd,
+        isNew: true
+      }
+    ]);
+  };
+
+  const handleRemoveBreak = (key: string) => {
+    setEditedBreaks((prev) => {
+      const targetBreak = prev.find((workBreak) => workBreak.key === key);
+
+      if (targetBreak && !targetBreak.isNew) {
+        setRemovedBreaks((current) => [...current, targetBreak]);
+      }
+
+      return prev.filter((workBreak) => workBreak.key !== key);
+    });
+  };
+
+  const handleBreakChange = (
+    key: string,
+    field: 'breakStart' | 'breakEnd',
+    value: Date
+  ) => {
+    setEditedBreaks((prev) =>
+      prev.map((workBreak) =>
+        workBreak.key === key
+          ? {
+              ...workBreak,
+              [field]: value
+            }
+          : workBreak
+      )
+    );
+  };
+
+  const handleBlockDateChange = (nextDate: Date | undefined) => {
+    if (!nextDate) return;
+
+    setEditedBlockDate(new Date(nextDate));
+    setEditedClockIn((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
+    setEditedClockOut((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
+    setEditedBreaks((prev) =>
+      prev.map((workBreak) => ({
+        ...workBreak,
+        breakStart: applyDatePart(workBreak.breakStart, nextDate),
+        breakEnd: workBreak.breakEnd
+          ? applyDatePart(workBreak.breakEnd, nextDate)
+          : null
+      }))
+    );
+  };
+
+  const validateTimeline = () => {
+    const referenceDay =
+      editedClockIn ??
+      editedClockOut ??
+      editedBreaks[0]?.breakStart ??
+      clockInDate ??
+      clockOutDate;
+
+    const now = Date.now();
+
+    if (editedClockIn && editedClockIn.getTime() > now) {
+      return 'Arbeitsbeginn kann nicht in der Zukunft liegen.';
+    }
+
+    if (editedClockOut && editedClockOut.getTime() > now) {
+      return 'Arbeitsende kann nicht in der Zukunft liegen.';
+    }
+
+    if (editedClockIn && editedClockOut && editedClockOut <= editedClockIn) {
+      return 'Das Arbeitsende muss nach dem Arbeitsbeginn liegen.';
+    }
+
+    if (!referenceDay) {
+      return null;
+    }
+
+    const sameLocalDay = (value: Date) =>
+      value.getFullYear() === referenceDay.getFullYear() &&
+      value.getMonth() === referenceDay.getMonth() &&
+      value.getDate() === referenceDay.getDate();
+
+    const sortedBreaks = [...editedBreaks].sort(
+      (a, b) => a.breakStart.getTime() - b.breakStart.getTime()
+    );
+
+    let previousBreakEnd: Date | null = null;
+
+    for (const [index, workBreak] of sortedBreaks.entries()) {
+      if (workBreak.breakStart.getTime() > now) {
+        return 'Pausenbeginn kann nicht in der Zukunft liegen.';
+      }
+
+      if (!sameLocalDay(workBreak.breakStart)) {
+        return 'Pausenzeiten müssen innerhalb desselben Tages liegen.';
+      }
+
+      if (!workBreak.breakEnd) {
+        return 'Bitte gib für die Pause auch ein Pausenende an.';
+      }
+
+      if (workBreak.breakEnd.getTime() > now) {
+        return 'Pausenende kann nicht in der Zukunft liegen.';
+      }
+
+      if (!sameLocalDay(workBreak.breakEnd)) {
+        return 'Pausenzeiten müssen innerhalb desselben Tages liegen.';
+      }
+
+      if (editedClockIn && workBreak.breakStart <= editedClockIn) {
+        return 'Der Pausenbeginn muss nach dem Arbeitsbeginn liegen.';
+      }
+
+      if (workBreak.breakEnd <= workBreak.breakStart) {
+        return 'Das Pausenende muss nach dem Pausenbeginn liegen.';
+      }
+
+      if (editedClockOut && workBreak.breakEnd >= editedClockOut) {
+        return 'Die Pause muss vor dem Arbeitsende abgeschlossen sein.';
+      }
+
+      if (previousBreakEnd && workBreak.breakStart <= previousBreakEnd) {
+        return `Pausen dürfen sich nicht überschneiden (Pause ${index + 1}).`;
+      }
+
+      previousBreakEnd = workBreak.breakEnd;
+    }
+
+    return null;
   };
 
   const handleSaveEdit = async () => {
     setError(null);
     setSuccessMessage(null);
 
-    // Validate: clock out must be after clock in
-    if (editedClockIn && editedClockOut) {
-      if (editedClockOut.getTime() <= editedClockIn.getTime()) {
-        setError('Die Ausstempelzeit muss nach der Einstempelzeit liegen.');
-        return;
-      }
+    const validationError = validateTimeline();
+    if (validationError) {
+      setError(validationError);
+      return;
     }
 
     startTransition(async () => {
+      let requestCreated = false;
+      const appliedUpdates: Array<{
+        entryId: string;
+        originalTimestamp: string;
+        originalEntryType?: TimeEntry['entryType'];
+        originalJobId?: string | null;
+      }> = [];
+      const createdEntries: TimeEntry[] = [];
+
+      const rollbackUpdates = async () => {
+        for (const rollback of [...appliedUpdates].reverse()) {
+          await updateEntry(rollback.entryId, {
+            timestamp: rollback.originalTimestamp,
+            entryType: rollback.originalEntryType,
+            jobId: rollback.originalJobId
+          });
+        }
+
+        for (const entry of createdEntries.reverse()) {
+          await deleteEntry(entry.id);
+        }
+      };
+
+      const performUpdate = async (entryId: string, timestamp: string) => {
+        const result = await updateEntry(entryId, { timestamp });
+
+        if (!result.success) {
+          setError(formatActionError(result.error));
+          return false;
+        }
+
+        if ('request' in result) {
+          requestCreated = true;
+        }
+
+        return true;
+      };
+
+      const performDelete = async (entryId: string, pairedEntryId?: string) => {
+        const result = await deleteEntry(entryId, pairedEntryId);
+
+        if (!result.success) {
+          setError(formatActionError(result.error));
+          return false;
+        }
+
+        if ('request' in result) {
+          requestCreated = true;
+        }
+
+        return true;
+      };
+
       try {
-        let requestCreated = false;
+        const updates: Array<{
+          entryId: string;
+          originalTimestamp: string;
+          nextTimestamp: string;
+        }> = [];
 
-        // Determine if clock-in and clock-out are both being changed
-        const clockInChanged =
-          session.clockIn &&
-          editedClockIn &&
-          clockInDate &&
-          editedClockIn.getTime() !== clockInDate.getTime();
-
-        const clockOutChanged =
-          session.clockOut &&
-          editedClockOut &&
-          clockOutDate &&
-          editedClockOut.getTime() !== clockOutDate.getTime();
-
-        // Helper function to update an entry and handle errors
-        const performUpdate = async (
-          entryId: string,
-          timestamp: string
-        ): Promise<boolean> => {
-          const result = await updateEntry(entryId, { timestamp });
-          if (!result.success) {
-            if (result.error === 'overlapping_entries') {
-              setError(
-                'Diese Zeitspanne überschneidet sich mit einem anderen Eintrag.'
-              );
-            } else if (result.error === 'pending_request_exists') {
-              setError(
-                'Es gibt bereits einen ausstehenden Änderungsantrag für diesen Eintrag.'
-              );
-            } else {
-              setError(result.error);
-            }
-            return false;
+        if (startEntry && editedClockIn && clockInDate) {
+          if (editedClockIn.getTime() !== clockInDate.getTime()) {
+            updates.push({
+              entryId: startEntry.id,
+              originalTimestamp: startEntry.timestamp,
+              nextTimestamp: editedClockIn.toISOString()
+            });
           }
-          if ('request' in result) {
-            requestCreated = true;
+        }
+
+        if (actualClockOutEntry && editedClockOut && clockOutDate) {
+          if (editedClockOut.getTime() !== clockOutDate.getTime()) {
+            updates.push({
+              entryId: actualClockOutEntry.id,
+              originalTimestamp: actualClockOutEntry.timestamp,
+              nextTimestamp: editedClockOut.toISOString()
+            });
           }
-          return true;
-        };
+        }
 
-        // When both are changing, we need to update in the correct order to avoid
-        // validation errors. The server validates each update against the current DB state.
-        // - If moving window LATER (new clock-in > old clock-in): update clock-out first
-        // - If moving window EARLIER (new clock-in < old clock-in): update clock-in first
-        // - If only one is changing, just update that one
-
-        if (clockInChanged && clockOutChanged && clockInDate && clockOutDate) {
-          // Both are changing - determine order based on direction
-          const movingLater = editedClockIn!.getTime() > clockInDate.getTime();
-
-          if (movingLater) {
-            // Moving window later: update clock-out first to make room
-            if (
-              !(await performUpdate(
-                session.clockOut!.id,
-                editedClockOut!.toISOString()
-              ))
-            ) {
-              return;
-            }
-            if (
-              !(await performUpdate(
-                session.clockIn!.id,
-                editedClockIn!.toISOString()
-              ))
-            ) {
-              return;
-            }
-          } else {
-            // Moving window earlier: update clock-in first
-            if (
-              !(await performUpdate(
-                session.clockIn!.id,
-                editedClockIn!.toISOString()
-              ))
-            ) {
-              return;
-            }
-            if (
-              !(await performUpdate(
-                session.clockOut!.id,
-                editedClockOut!.toISOString()
-              ))
-            ) {
-              return;
-            }
-          }
-        } else {
-          // Only one is changing (or neither) - update in standard order
-          if (clockInChanged) {
-            if (
-              !(await performUpdate(
-                session.clockIn!.id,
-                editedClockIn!.toISOString()
-              ))
-            ) {
-              return;
-            }
+        for (const workBreak of editedBreaks) {
+          if (
+            workBreak.breakStartEntry &&
+            workBreak.breakStart.getTime() !==
+              new Date(workBreak.breakStartEntry.timestamp).getTime()
+          ) {
+            updates.push({
+              entryId: workBreak.breakStartEntry.id,
+              originalTimestamp: workBreak.breakStartEntry.timestamp,
+              nextTimestamp: workBreak.breakStart.toISOString()
+            });
           }
 
-          if (clockOutChanged) {
-            if (
-              !(await performUpdate(
-                session.clockOut!.id,
-                editedClockOut!.toISOString()
-              ))
-            ) {
+          if (
+            workBreak.breakEndEntry &&
+            workBreak.breakEnd &&
+            workBreak.breakEnd.getTime() !==
+              new Date(workBreak.breakEndEntry.timestamp).getTime()
+          ) {
+            updates.push({
+              entryId: workBreak.breakEndEntry.id,
+              originalTimestamp: workBreak.breakEndEntry.timestamp,
+              nextTimestamp: workBreak.breakEnd.toISOString()
+            });
+          }
+        }
+
+        const laterUpdates = updates
+          .filter(
+            (update) =>
+              new Date(update.nextTimestamp).getTime() >
+              new Date(update.originalTimestamp).getTime()
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.originalTimestamp).getTime() -
+              new Date(a.originalTimestamp).getTime()
+          );
+
+        const earlierUpdates = updates
+          .filter(
+            (update) =>
+              new Date(update.nextTimestamp).getTime() <
+              new Date(update.originalTimestamp).getTime()
+          )
+          .sort(
+            (a, b) =>
+              new Date(a.originalTimestamp).getTime() -
+              new Date(b.originalTimestamp).getTime()
+          );
+
+        for (const update of [...laterUpdates, ...earlierUpdates]) {
+          const success = await performUpdate(
+            update.entryId,
+            update.nextTimestamp
+          );
+          if (!success) {
+            await rollbackUpdates();
+            return;
+          }
+
+          appliedUpdates.push({
+            entryId: update.entryId,
+            originalTimestamp: update.originalTimestamp
+          });
+        }
+
+        const newBreaks = editedBreaks.filter((workBreak) => workBreak.isNew);
+        if (newBreaks.length > 0) {
+          if (!entryOrganizationId || !entryUserId) {
+            setError('Die Pause konnte nicht zugeordnet werden.');
+            await rollbackUpdates();
+            return;
+          }
+
+          for (const workBreak of newBreaks) {
+            if (!workBreak.breakEnd) {
+              setError('Bitte gib für die neue Pause auch ein Pausenende an.');
+              await rollbackUpdates();
               return;
             }
+
+            const result = await addManualEntry({
+              organizationId: entryOrganizationId,
+              targetUserId: entryUserId,
+              entries: [
+                {
+                  entryType: 'break_start',
+                  timestamp: workBreak.breakStart.toISOString()
+                },
+                {
+                  entryType: 'break_end',
+                  timestamp: workBreak.breakEnd.toISOString()
+                }
+              ]
+            });
+
+            if (!result.success) {
+              setError(formatActionError(result.error));
+              await rollbackUpdates();
+              return;
+            }
+
+            createdEntries.push(...result.entries);
+          }
+        }
+
+        for (const removedBreak of removedBreaks) {
+          if (!removedBreak.breakStartEntry) continue;
+
+          const convertsBoundaryToClockOut =
+            !actualClockOutEntry &&
+            !!removedBreak.breakEndEntry &&
+            removedBreak.breakEndEntry?.id === session.clockOut?.id &&
+            removedBreak.breakEndEntry.entryType === 'break_end';
+
+          if (convertsBoundaryToClockOut && removedBreak.breakEndEntry) {
+            const convertedResult = await updateEntry(
+              removedBreak.breakEndEntry.id,
+              {
+                entryType: 'clock_out',
+                jobId: null
+              }
+            );
+
+            if (!convertedResult.success) {
+              setError(formatActionError(convertedResult.error));
+              await rollbackUpdates();
+              return;
+            }
+
+            if ('request' in convertedResult) {
+              requestCreated = true;
+            }
+
+            appliedUpdates.push({
+              entryId: removedBreak.breakEndEntry.id,
+              originalTimestamp: removedBreak.breakEndEntry.timestamp,
+              originalEntryType: removedBreak.breakEndEntry.entryType,
+              originalJobId: removedBreak.breakEndEntry.jobId
+            });
+          }
+
+          const success = await performDelete(
+            removedBreak.breakStartEntry.id,
+            convertsBoundaryToClockOut
+              ? undefined
+              : removedBreak.breakEndEntry?.id
+          );
+
+          if (!success) {
+            await rollbackUpdates();
+            return;
           }
         }
 
         if (requestCreated) {
-          // Show success message for change request
           setSuccessMessage(
             'Änderungsantrag wurde zur Genehmigung eingereicht.'
           );
           setIsEditing(false);
-          // Close dialog after short delay
           setTimeout(() => {
             onOpenChange(false);
             onRefresh();
           }, 2000);
-        } else {
-          setIsEditing(false);
-          onRefresh();
+          return;
         }
+
+        setIsEditing(false);
+        onRefresh();
       } catch (err) {
         console.error('Error updating entry:', err);
         setError('Ein Fehler ist aufgetreten.');
@@ -424,66 +1109,25 @@ export function EntryDetailsDialog({
     startTransition(async () => {
       try {
         let requestCreated = false;
+        const entryIds = [
+          ...new Set(sessionEntriesForReview.map((entry) => entry.id))
+        ];
 
-        // Check if this is a paired session (both clockIn and clockOut exist)
-        const isPairedSession =
-          session.clockIn && session.clockOut && !session.isOrphan;
-
-        if (isPairedSession) {
-          // For paired sessions, delete both entries in a single request
-          // This ensures they are treated as a single unit for approval
-          const result = await deleteEntry(
-            session.clockIn!.id,
-            session.clockOut!.id
-          );
+        if (entryIds.length > 1) {
+          const result = await deleteEntriesBatch(entryIds);
           if (!result.success) {
-            if (result.error === 'pending_request_exists') {
-              setError(
-                'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
-              );
-            } else {
-              setError(result.error);
-            }
+            setError(formatActionError(result.error));
             return;
           }
-          // Check if a request was created instead of direct delete
-          if ('request' in result) {
-            requestCreated = true;
-          }
         } else {
-          // For single entries (orphan clock_out or orphan clock_in), handle separately
+          for (const entry of [...sessionEntriesForReview].reverse()) {
+            const result = await deleteEntry(entry.id);
 
-          // Delete clock out if it exists and is an orphan
-          if (session.clockOut && (!session.clockIn || session.isOrphan)) {
-            const result = await deleteEntry(session.clockOut.id);
             if (!result.success) {
-              if (result.error === 'pending_request_exists') {
-                setError(
-                  'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
-                );
-              } else {
-                setError(result.error);
-              }
+              setError(formatActionError(result.error));
               return;
             }
-            if ('request' in result) {
-              requestCreated = true;
-            }
-          }
 
-          // Delete clock in if it exists and is an orphan
-          if (session.clockIn && (!session.clockOut || session.isOrphan)) {
-            const result = await deleteEntry(session.clockIn.id);
-            if (!result.success) {
-              if (result.error === 'pending_request_exists') {
-                setError(
-                  'Es gibt bereits einen ausstehenden Löschantrag für diesen Eintrag.'
-                );
-              } else {
-                setError(result.error);
-              }
-              return;
-            }
             if ('request' in result) {
               requestCreated = true;
             }
@@ -491,17 +1135,16 @@ export function EntryDetailsDialog({
         }
 
         if (requestCreated) {
-          // Show success message for delete request
           setSuccessMessage('Löschantrag wurde zur Genehmigung eingereicht.');
-          // Close dialog after short delay
           setTimeout(() => {
             onOpenChange(false);
             onRefresh();
           }, 2000);
-        } else {
-          onOpenChange(false);
-          onRefresh();
+          return;
         }
+
+        onOpenChange(false);
+        onRefresh();
       } catch (err) {
         console.error('Error deleting entry:', err);
         setError('Ein Fehler ist aufgetreten.');
@@ -512,16 +1155,8 @@ export function EntryDetailsDialog({
   const handleApprove = async () => {
     startTransition(async () => {
       try {
-        if (session.clockIn?.status === 'pending') {
-          const result = await reviewEntry(session.clockIn.id, 'approved');
-          if (!result.success) {
-            setError(result.error);
-            return;
-          }
-        }
-
-        if (session.clockOut?.status === 'pending') {
-          const result = await reviewEntry(session.clockOut.id, 'approved');
+        for (const entry of pendingEntries) {
+          const result = await reviewEntry(entry.id, 'approved');
           if (!result.success) {
             setError(result.error);
             return;
@@ -539,16 +1174,8 @@ export function EntryDetailsDialog({
   const handleReject = async () => {
     startTransition(async () => {
       try {
-        if (session.clockIn?.status === 'pending') {
-          const result = await reviewEntry(session.clockIn.id, 'rejected');
-          if (!result.success) {
-            setError(result.error);
-            return;
-          }
-        }
-
-        if (session.clockOut?.status === 'pending') {
-          const result = await reviewEntry(session.clockOut.id, 'rejected');
+        for (const entry of pendingEntries) {
+          const result = await reviewEntry(entry.id, 'rejected');
           if (!result.success) {
             setError(result.error);
             return;
@@ -563,89 +1190,140 @@ export function EntryDetailsDialog({
     });
   };
 
-  // Check if this is a paired session (both clock in and clock out exist)
-  const isPairedSession =
-    session.clockIn && session.clockOut && !session.isOrphan;
-
-  // Description text
-  const getDescriptionText = () => {
-    if (isOrphan) {
-      // Orphan clock_in (from previous day)
-      if (session.clockIn && !session.clockOut) {
-        return 'Einzelner Einstempel-Eintrag (unvollständig)';
-      }
-      // Orphan clock_out
-      return 'Einzelner Ausstempel-Eintrag (unvollständig)';
-    }
-    if (session.durationMinutes) {
-      return `Arbeitszeit: ${formatDuration(session.durationMinutes)}`;
-    }
-    return 'Aktive Sitzung';
-  };
+  const canAddBreak =
+    canEdit &&
+    isEditing &&
+    editedBreaks.length === 0 &&
+    !!editedClockIn &&
+    !!editedClockOut &&
+    !isOrphan;
+  const canOfferAddBreak =
+    canEdit &&
+    !isEditing &&
+    sessionBreaks.length === 0 &&
+    !!clockInDate &&
+    !!clockOutDate &&
+    !isOrphan;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Eintrag Details</DialogTitle>
           <DialogDescription>{getDescriptionText()}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Job info */}
-          {resolvedJob && !isEditing && (
-            <button
-              type="button"
-              onClick={() => {
-                if (jobDetailUrl) {
-                  onOpenChange(false);
-                  router.push(jobDetailUrl);
-                }
-              }}
-              disabled={!jobDetailUrl}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm text-left transition-colors',
-                jobDetailUrl && 'hover:bg-accent cursor-pointer'
-              )}
-            >
-              <Briefcase className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate font-medium flex-1">{resolvedJob.title}</span>
-              {jobDetailUrl && <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />}
-            </button>
+          {employeeName && (
+            <DetailCard
+              icon={<User className="size-4" />}
+              label="Mitarbeiter"
+              value={employeeName}
+              onClick={
+                employeeDetailUrl
+                  ? () => {
+                      onOpenChange(false);
+                      router.push(employeeDetailUrl);
+                    }
+                  : undefined
+              }
+              disabled={!employeeDetailUrl}
+            />
           )}
 
-          {/* Clock In - only show if exists */}
-          {session.clockIn && (
-            <div className="space-y-2">
+          {resolvedJob && (
+            <DetailCard
+              icon={<Briefcase className="size-4" />}
+              label="Auftrag"
+              value={resolvedJob.title}
+              onClick={
+                jobDetailUrl
+                  ? () => {
+                      onOpenChange(false);
+                      router.push(jobDetailUrl);
+                    }
+                  : undefined
+              }
+              disabled={!jobDetailUrl}
+            />
+          )}
+
+          {!isOrphan && totalWorkMinutes !== null && (
+            <div
+              className={cn(
+                'rounded-md border border-green-500/30 bg-green-500/8 px-3 py-3',
+                isActiveBlock && 'animate-pulse'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-medium">
+                    Arbeitszeit gesamt
+                  </span>
+                </div>
+                <span className="text-base font-semibold text-green-700 dark:text-green-300">
+                  {formatDuration(totalWorkMinutes)}
+                </span>
+              </div>
+              {showBlockScopedTotalHint && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Bezieht sich nur auf diesen geöffneten Arbeitsblock, nicht auf
+                  den gesamten Tag.
+                </p>
+              )}
+            </div>
+          )}
+
+          {isEditing && editedBlockDate && (
+            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+              <Label>Datum des Arbeitsblocks</Label>
+              <DatePicker
+                value={editedBlockDate}
+                onChange={handleBlockDateChange}
+              />
+              <p className="text-xs text-muted-foreground">
+                Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks.
+              </p>
+            </div>
+          )}
+
+          {startEntry && (
+            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
               {isEditing && editedClockIn ? (
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <DateTimePicker
                       value={editedClockIn}
                       onChange={setEditedClockIn}
-                      label="Einstempeln"
+                      label={getEntryLabel(startEntry)}
+                      dateLabel={
+                        editedBlockDate?.toLocaleDateString('de-DE') ??
+                        clockInDate?.toLocaleDateString('de-DE')
+                      }
+                      disableDateEditing
                     />
                   </div>
                   <span
                     className={cn(
                       'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                      STATUS_LABELS[session.clockIn.status].className
+                      getStatusConfig(startEntry).className
                     )}
                   >
-                    {STATUS_LABELS[session.clockIn.status].label}
+                    {getStatusConfig(startEntry).label}
                   </span>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <Label>Einstempeln</Label>
+                    <Label>{getEntryLabel(startEntry)}</Label>
                     <span
                       className={cn(
                         'rounded-full px-2 py-0.5 text-xs font-medium',
-                        STATUS_LABELS[session.clockIn.status].className
+                        getStatusConfig(startEntry).className
                       )}
                     >
-                      {STATUS_LABELS[session.clockIn.status].label}
+                      {getStatusConfig(startEntry).label}
                     </span>
                   </div>
                   <p className="text-sm">
@@ -653,7 +1331,7 @@ export function EntryDetailsDialog({
                   </p>
                 </>
               )}
-              {session.clockIn.isManual && !isEditing && (
+              {startEntry.isManual && !isEditing && (
                 <p className="text-xs text-muted-foreground">
                   Manuell eingetragen
                 </p>
@@ -661,48 +1339,280 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {/* Clock Out - show if exists OR if it's an orphan */}
-          {(session.clockOut || (isOrphan && session.clockOut)) && (
-            <div className="space-y-2">
-              {isEditing && session.clockOut && editedClockOut ? (
+          {editedBreaks.map((workBreak, index) => {
+            const breakStartStatus = getStatusConfig(workBreak.breakStartEntry);
+            const breakEndStatus = getStatusConfig(workBreak.breakEndEntry);
+            const breakStartEntry =
+              workBreak.breakStartEntry ??
+              buildDraftEntry(
+                workBreak.key,
+                'break_start',
+                workBreak.breakStart,
+                entryUserId,
+                entryOrganizationId
+              );
+            const breakEndEntry = workBreak.breakEnd
+              ? (workBreak.breakEndEntry ??
+                buildDraftEntry(
+                  `${workBreak.key}-end`,
+                  'break_end',
+                  workBreak.breakEnd,
+                  entryUserId,
+                  entryOrganizationId
+                ))
+              : null;
+
+            return (
+              <div
+                key={workBreak.key}
+                className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span>Pause</span>
+                  </div>
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    {formatDuration(getBreakDurationMinutes(workBreak))}
+                  </span>
+                  {isEditing && canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveBreak(workBreak.key)}
+                      className="h-7 px-2 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Entfernen
+                    </Button>
+                  )}
+                </div>
+
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <DateTimePicker
+                          value={workBreak.breakStart}
+                          onChange={(value) =>
+                            handleBreakChange(
+                              workBreak.key,
+                              'breakStart',
+                              value
+                            )
+                          }
+                          label={getEntryLabel(breakStartEntry, index)}
+                          dateLabel={
+                            editedBlockDate?.toLocaleDateString('de-DE') ??
+                            workBreak.breakStart.toLocaleDateString('de-DE')
+                          }
+                          disableDateEditing
+                        />
+                      </div>
+                      <span
+                        className={cn(
+                          'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                          breakStartStatus.className
+                        )}
+                      >
+                        {breakStartStatus.label}
+                      </span>
+                    </div>
+
+                    {workBreak.breakEnd ? (
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <DateTimePicker
+                            value={workBreak.breakEnd}
+                            onChange={(value) =>
+                              handleBreakChange(
+                                workBreak.key,
+                                'breakEnd',
+                                value
+                              )
+                            }
+                            label={
+                              breakEndEntry
+                                ? getEntryLabel(breakEndEntry, index)
+                                : ''
+                            }
+                            dateLabel={
+                              editedBlockDate?.toLocaleDateString('de-DE') ??
+                              workBreak.breakEnd.toLocaleDateString('de-DE')
+                            }
+                            disableDateEditing
+                          />
+                        </div>
+                        <span
+                          className={cn(
+                            'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                            breakEndStatus.className
+                          )}
+                        >
+                          {breakEndStatus.label}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label>
+                          {getEntryLabel(
+                            { ...breakStartEntry, entryType: 'break_end' },
+                            index
+                          )}
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Noch in Pause
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label>{getEntryLabel(breakStartEntry, index)}</Label>
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-xs font-medium',
+                            breakStartStatus.className
+                          )}
+                        >
+                          {breakStartStatus.label}
+                        </span>
+                      </div>
+                      <p className="text-sm">
+                        {formatDateTime(new Date(breakStartEntry.timestamp))}
+                      </p>
+                      {breakStartEntry.isManual && (
+                        <p className="text-xs text-muted-foreground">
+                          Manuell eingetragen
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label>
+                          {breakEndEntry
+                            ? getEntryLabel(breakEndEntry, index)
+                            : getEntryLabel(
+                                {
+                                  ...breakStartEntry,
+                                  entryType: 'break_end'
+                                },
+                                index
+                              )}
+                        </Label>
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-xs font-medium',
+                            breakEndStatus.className
+                          )}
+                        >
+                          {breakEndStatus.label}
+                        </span>
+                      </div>
+                      <p className="text-sm">
+                        {breakEndEntry
+                          ? formatDateTime(new Date(breakEndEntry.timestamp))
+                          : 'Noch in Pause'}
+                      </p>
+                      {breakEndEntry?.isManual && (
+                        <p className="text-xs text-muted-foreground">
+                          Manuell eingetragen
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {editedBreaks.length > 1 && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/8 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm font-medium">Pausenzeit gesamt</span>
+                </div>
+                <span className="text-base font-semibold text-amber-700 dark:text-amber-300">
+                  {formatDuration(totalBreakMinutes)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {canAddBreak && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddBreak}
+              className="w-full gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Pause hinzufügen
+            </Button>
+          )}
+
+          {canOfferAddBreak && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleStartEditWithBreak}
+              className="w-full gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Pause hinzufügen
+            </Button>
+          )}
+
+          {actualClockOutEntry && (
+            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+              {isEditing && editedClockOut ? (
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1">
                     <DateTimePicker
                       value={editedClockOut}
                       onChange={setEditedClockOut}
-                      label="Ausstempeln"
+                      label={getEntryLabel(actualClockOutEntry)}
+                      dateLabel={
+                        editedBlockDate?.toLocaleDateString('de-DE') ??
+                        clockOutDate?.toLocaleDateString('de-DE')
+                      }
+                      disableDateEditing
                     />
                   </div>
                   <span
                     className={cn(
                       'mt-7 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
-                      STATUS_LABELS[session.clockOut.status].className
+                      getStatusConfig(actualClockOutEntry).className
                     )}
                   >
-                    {STATUS_LABELS[session.clockOut.status].label}
+                    {getStatusConfig(actualClockOutEntry).label}
                   </span>
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <Label>Ausstempeln</Label>
-                    {session.clockOut && (
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium',
-                          STATUS_LABELS[session.clockOut.status].className
-                        )}
-                      >
-                        {STATUS_LABELS[session.clockOut.status].label}
-                      </span>
-                    )}
+                    <Label>{getEntryLabel(actualClockOutEntry)}</Label>
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-xs font-medium',
+                        getStatusConfig(actualClockOutEntry).className
+                      )}
+                    >
+                      {getStatusConfig(actualClockOutEntry).label}
+                    </span>
                   </div>
                   <p className="text-sm">
-                    {clockOutDate ? formatDateTime(clockOutDate) : 'Noch aktiv'}
+                    {clockOutDate ? formatDateTime(clockOutDate) : '-'}
                   </p>
                 </>
               )}
-              {session.clockOut?.isManual && !isEditing && (
+              {actualClockOutEntry.isManual && !isEditing && (
                 <p className="text-xs text-muted-foreground">
                   Manuell eingetragen
                 </p>
@@ -710,24 +1620,38 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {/* Show hint for open sessions without clock out */}
-          {!session.clockOut && !isOrphan && !isEditing && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Ausstempeln</Label>
+          {!actualClockOutEntry &&
+            !interactiveSession.isOnBreakBlock &&
+            !isOrphan &&
+            !hasActualBreaks &&
+            !isEditing && (
+              <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
+                <div className="flex items-center justify-between">
+                  <Label>Arbeitsende</Label>
+                </div>
+                <p className="text-sm text-muted-foreground">Noch aktiv</p>
               </div>
-              <p className="text-sm text-muted-foreground">Noch aktiv</p>
+            )}
+
+          {showBoundaryExplanation && (
+            <div className="rounded-md border border-blue-500/30 bg-blue-500/8 px-3 py-3">
+              <div className="flex items-start gap-2">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <p className="text-xs text-muted-foreground">
+                  Dieser Arbeitsblock endet hier, weil danach die Arbeit in
+                  einem neuen Arbeitsblock oder Auftrag weitergeführt wurde. Das
+                  ist kein Arbeitsende des gesamten Arbeitstages.
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Success message */}
           {successMessage && (
             <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-300">
               {successMessage}
             </div>
           )}
 
-          {/* Error message */}
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -736,7 +1660,6 @@ export function EntryDetailsDialog({
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">
-          {/* Approve/Reject buttons for pending entries */}
           {canApprove && !isEditing && (
             <div className="flex gap-2">
               <Button
@@ -762,7 +1685,6 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {/* Edit/Delete buttons - hide delete for pending entries (use approve/reject instead) */}
           {canEdit && !isEditing && (
             <div className="flex gap-2">
               <Button
@@ -775,7 +1697,6 @@ export function EntryDetailsDialog({
                 <Pencil className="h-4 w-4" />
                 Bearbeiten
               </Button>
-              {/* Only show delete for approved entries - pending entries should use reject */}
               {!hasPendingEntry && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -791,15 +1712,11 @@ export function EntryDetailsDialog({
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {isPairedSession
-                          ? 'Arbeitszeit löschen?'
-                          : 'Eintrag löschen?'}
-                      </AlertDialogTitle>
+                      <AlertDialogTitle>Arbeitsblock löschen?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        {isPairedSession
-                          ? 'Diese Aktion kann nicht rückgängig gemacht werden. Die gesamte Arbeitszeit (Einstempeln und Ausstempeln) wird permanent gelöscht.'
-                          : 'Diese Aktion kann nicht rückgängig gemacht werden. Dieser einzelne Eintrag wird permanent gelöscht.'}
+                        Diese Aktion kann nicht rückgängig gemacht werden. Alle
+                        zu diesem Arbeitsblock gehörenden Zeit-Einträge,
+                        inklusive eventueller Pausen, werden gelöscht.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -817,7 +1734,6 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {/* Save/Cancel buttons when editing */}
           {isEditing && (
             <div className="flex gap-2">
               <Button

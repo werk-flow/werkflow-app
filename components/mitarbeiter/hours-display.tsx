@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
-import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
 
 interface HoursDisplayProps {
+  status?: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
-  clockInTime: string | null;
-  todayMinutes: number;
+  statusStartedAt: string | null;
+  workMinutes: number;
   /** Whether the viewer has permission to see this member's progress */
   canViewStatus?: boolean;
 }
@@ -20,12 +20,15 @@ const DAILY_GOAL_MINUTES = 8 * 60; // 480 minutes
  * Calculate total minutes including live elapsed time
  */
 function calculateTotalMinutes(
-  clockInTime: string | null,
-  baseMinutes: number
+  status: 'clocked_out' | 'working' | 'on_break',
+  statusStartedAt: string | null,
+  baseMinutes: number,
+  nowMs: number
 ): number {
-  if (!clockInTime) return baseMinutes;
+  if (status !== 'working' || !statusStartedAt) return baseMinutes;
 
-  const elapsedMinutes = getNonNegativeElapsedMs(clockInTime) / (1000 * 60);
+  const startMs = new Date(statusStartedAt).getTime();
+  const elapsedMinutes = Math.max(0, (nowMs - startMs) / (1000 * 60));
 
   return baseMinutes + elapsedMinutes;
 }
@@ -47,31 +50,42 @@ function formatPercentage(percentage: number): string {
 
 export function HoursDisplay({
   isClockedIn,
-  clockInTime,
-  todayMinutes,
+  status,
+  statusStartedAt,
+  workMinutes,
   canViewStatus = true
 }: HoursDisplayProps) {
-  const [totalMinutes, setTotalMinutes] = useState(() =>
-    calculateTotalMinutes(clockInTime, todayMinutes)
+  const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
+  const [nowMs, setNowMs] = useState(() =>
+    statusStartedAt ? new Date(statusStartedAt).getTime() : 0
   );
 
   // Live update when clocked in
   useEffect(() => {
-    if (!isClockedIn || !clockInTime) {
-      setTotalMinutes(todayMinutes);
+    if (effectiveStatus !== 'working' || !statusStartedAt) {
       return;
     }
 
-    // Update immediately
-    setTotalMinutes(calculateTotalMinutes(clockInTime, todayMinutes));
+    const timeout = setTimeout(() => {
+      setNowMs(Date.now());
+    }, 0);
 
     // Then update every minute for smoother progress
     const interval = setInterval(() => {
-      setTotalMinutes(calculateTotalMinutes(clockInTime, todayMinutes));
+      setNowMs(Date.now());
     }, 60000); // Update every minute
 
-    return () => clearInterval(interval);
-  }, [isClockedIn, clockInTime, todayMinutes]);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [effectiveStatus, statusStartedAt]);
+
+  const totalMinutes = useMemo(
+    () =>
+      calculateTotalMinutes(effectiveStatus, statusStartedAt, workMinutes, nowMs),
+    [effectiveStatus, nowMs, statusStartedAt, workMinutes]
+  );
 
   const percentage = useMemo(
     () => calculatePercentage(totalMinutes),
@@ -107,7 +121,7 @@ export function HoursDisplay({
         className={cn('h-2 flex-1 bg-muted/50')}
         indicatorClassName={cn(
           getIndicatorColor(),
-          isClockedIn && 'opacity-80'
+          effectiveStatus === 'working' && 'opacity-80'
         )}
       />
       <span

@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
+  status?: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
   /** Whether the current working status is based on a pending entry */
   isPending?: boolean;
@@ -12,9 +13,12 @@ interface StatusBadgeProps {
 
 export function StatusBadge({
   isClockedIn,
+  status,
   isPending = false,
   canViewStatus = true
 }: StatusBadgeProps) {
+  const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
+
   // Show "Nicht verfügbar" for members the current user can't view
   if (!canViewStatus) {
     return (
@@ -26,7 +30,7 @@ export function StatusBadge({
   }
 
   // Pending state (working but awaiting approval)
-  if (isClockedIn && isPending) {
+  if (effectiveStatus === 'working' && isPending) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
         <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
@@ -35,11 +39,20 @@ export function StatusBadge({
     );
   }
 
+  if (effectiveStatus === 'on_break') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500 animate-pulse" />
+        Macht Pause
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium',
-        isClockedIn
+        effectiveStatus === 'working'
           ? 'bg-green-500/20 text-green-700 dark:text-green-300'
           : 'bg-muted text-muted-foreground'
       )}
@@ -47,10 +60,12 @@ export function StatusBadge({
       <span
         className={cn(
           'h-1.5 w-1.5 rounded-full',
-          isClockedIn ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground'
+          effectiveStatus === 'working'
+            ? 'bg-green-500 animate-pulse'
+            : 'bg-muted-foreground'
         )}
       />
-      {isClockedIn ? 'Arbeitet' : 'Nicht eingestempelt'}
+      {effectiveStatus === 'working' ? 'Arbeitet' : 'Nicht eingestempelt'}
     </span>
   );
 }

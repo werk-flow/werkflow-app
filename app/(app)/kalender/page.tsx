@@ -2,14 +2,13 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { toLocalDateString } from '@/lib/utils';
 
 type MemberRow = {
@@ -40,9 +39,7 @@ async function KalenderData({
 
   async function fetchMembers(): Promise<MemberRow[]> {
     if (!isAdminOrManager) return [];
-    const supabase = await createSupabaseServerClient();
-    const { data } = await supabase.rpc('get_org_members', { p_org_id: activeOrgId });
-    if (!data) return [];
+    const data = await getOrgMembersForUser(activeOrgId, userId);
     if (currentUserRole === 'buero') {
       return data;
     }

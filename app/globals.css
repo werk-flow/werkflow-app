@@ -203,6 +203,19 @@ textarea::-moz-selection,
   animation: green-glow 2s ease-in-out infinite;
 }
 
+@keyframes yellow-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 22px rgba(234, 179, 8, 0.55));
+  }
+}
+
+.animate-yellow-glow {
+  animation: yellow-glow 2s ease-in-out infinite;
+}
+
 /* Force grabbing cursor globally during any drag operation */
 body.is-dragging,
 body.is-dragging *,

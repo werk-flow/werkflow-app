@@ -2,13 +2,12 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getClientDetail } from '@/lib/clients/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
@@ -40,7 +39,6 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   }
 
   const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
 
   const [clientResult, jobsResult, clientsResult, membersResult] = await Promise.all([
     getClientDetail(clientId),
@@ -50,7 +48,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
-    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
+    getOrgMembersForUser(activeOrgId, user.id),
   ]);
 
   if (!clientResult.success) {
@@ -73,8 +71,8 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
   const allClients: Client[] = (clientsResult.data ?? []).map(toClient);
-  const members: OrgMemberOption[] = (membersResult.data ?? []).map(
-    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
+  const members: OrgMemberOption[] = membersResult.map(
+    (m) => ({
       userId: m.user_id,
       firstName: m.first_name,
       lastName: m.last_name,

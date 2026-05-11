@@ -3,7 +3,7 @@ import { AlertCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { SignOutAndRedirectButton } from './sign-out-redirect-button';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 const ERROR_MESSAGES: Record<string, { title: string; description: string }> = {
   admin_mismatch: {
@@ -66,8 +66,7 @@ export default async function InviteErrorPage({
   // Use RPC function that bypasses RLS to check auth.users
   let isExistingUser = false;
   if (isEmailMismatch && invitedEmail) {
-    const supabase = await createSupabaseServerClient();
-    const { data: userCheckResult } = await supabase.rpc(
+    const { data: userCheckResult } = await createSupabaseAdminClient().rpc(
       'check_user_exists_by_email',
       { p_email: invitedEmail.toLowerCase() }
     );

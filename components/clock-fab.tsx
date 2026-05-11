@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  Coffee,
   Play,
   Square,
   Loader2,
@@ -21,8 +22,17 @@ import { useClockState } from '@/components/clock-state-provider';
 export function ClockFAB() {
   const router = useRouter();
   const { activeOrgId, activeOrg } = useOrganization();
-  const { state, isLoading, isPending, statusError, clockIn, clockOut, switchJob } =
-    useClockState();
+  const {
+    state,
+    isLoading,
+    isPending,
+    statusError,
+    clockIn,
+    clockOut,
+    startBreak,
+    endBreak,
+    switchJob,
+  } = useClockState();
   const [banner, setBanner] = useState<null | {
     title: string;
     message: string;
@@ -31,7 +41,9 @@ export function ClockFAB() {
   const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showJobPicker, setShowJobPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'clock_in' | 'switch'>('clock_in');
+  const [pickerMode, setPickerMode] = useState<'clock_in' | 'switch' | 'resume'>(
+    'clock_in'
+  );
   const [showJobPopover, setShowJobPopover] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -39,6 +51,7 @@ export function ClockFAB() {
   const activeClockState =
     state && state.organizationId === activeOrgId ? state : null;
   const isClockedIn = activeClockState?.isClockedIn ?? false;
+  const isOnBreak = activeClockState?.isOnBreak ?? false;
   const activeJobId = activeClockState?.activeJobId ?? null;
   const activeJobInfo = activeClockState?.activeJobInfo ?? null;
 
@@ -74,7 +87,7 @@ export function ClockFAB() {
   }, [showJobPopover]);
 
   const openJobPicker = useCallback(
-    (mode: 'clock_in' | 'switch') => {
+    (mode: 'clock_in' | 'switch' | 'resume') => {
       setPickerMode(mode);
       setShowJobPicker(true);
     },
@@ -106,7 +119,7 @@ export function ClockFAB() {
         } catch (err) {
           console.error('Error clocking in:', err);
         }
-      } else {
+      } else if (pickerMode === 'switch') {
         try {
           const result = await switchJob(jobId);
           if (result.success) {
@@ -115,9 +128,18 @@ export function ClockFAB() {
         } catch (err) {
           console.error('Error switching job:', err);
         }
+      } else {
+        try {
+          const result = await endBreak(jobId);
+          if (result.success) {
+            setShowJobPicker(false);
+          }
+        } catch (err) {
+          console.error('Error ending break:', err);
+        }
       }
     },
-    [activeOrgId, pickerMode, dismissBanner, clockIn, switchJob]
+    [activeOrgId, pickerMode, dismissBanner, clockIn, endBreak, switchJob]
   );
 
   const handleClockOut = useCallback(() => {
@@ -133,6 +155,17 @@ export function ClockFAB() {
       openJobPicker('clock_in');
     }
   }, [isClockedIn, handleClockOut, openJobPicker]);
+
+  const handleBreakClick = useCallback(() => {
+    if (!isClockedIn) return;
+
+    if (isOnBreak) {
+      openJobPicker('resume');
+      return;
+    }
+
+    void startBreak();
+  }, [isClockedIn, isOnBreak, openJobPicker, startBreak]);
 
   if (!activeOrgId || !activeOrg) {
     return null;
@@ -195,7 +228,7 @@ export function ClockFAB() {
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 will-change-transform" style={{ contain: 'layout style' }}>
         {isClockedIn && (
           <div className="relative flex items-center gap-1.5">
-            {activeJobInfo && (
+            {!isOnBreak && activeJobInfo && (
               <>
                 <button
                   ref={pillRef}
@@ -261,15 +294,35 @@ export function ClockFAB() {
                 )}
               </>
             )}
+            {!isOnBreak && (
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 rounded-full shadow-md"
+                onClick={() => openJobPicker('switch')}
+                disabled={isPending}
+                title="Auftrag wechseln"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <Button
               size="icon"
               variant="outline"
-              className="h-8 w-8 rounded-full shadow-md"
-              onClick={() => openJobPicker('switch')}
+              className={cn(
+                'h-8 w-8 rounded-full shadow-md',
+                isOnBreak &&
+                  'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300'
+              )}
+              onClick={handleBreakClick}
               disabled={isPending}
-              title="Auftrag wechseln"
+              title={isOnBreak ? 'Arbeit fortsetzen' : 'Pause starten'}
             >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
+              {isOnBreak ? (
+                <Play className="h-3.5 w-3.5" />
+              ) : (
+                <Coffee className="h-3.5 w-3.5" />
+              )}
             </Button>
           </div>
         )}

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { Briefcase } from 'lucide-react';
 import { CalendarHeader } from './calendar-header';
 import { CalendarViewTabs } from './calendar-view-tabs';
@@ -13,7 +14,8 @@ import { FullCalendarSkeleton } from './fullcalendar-skeleton';
 import {
   getTimeEntries,
   getChangeRequestsForEntries,
-  reassignEntries
+  reassignEntries,
+  reassignEntryBatch
 } from '@/lib/time-tracking/actions';
 import { getJobsForCalendar, getParkedJobs, updateJob, updateJobStatus, assignEmployee, unassignEmployee } from '@/lib/jobs/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
@@ -28,11 +30,16 @@ const EntryDetailsDialog = dynamic(
   { ssr: false }
 );
 import type {
+  InteractiveCalendarSession,
   TimeEntry,
   WorkSession,
   EntryChangeRequestMap
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
+import {
+  consumeManualEntryBridge,
+  MANUAL_ENTRY_CREATED_EVENT
+} from '@/lib/time-tracking/manual-entry-bridge';
 import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -91,6 +98,7 @@ export function CalendarContainer({
   initialChangeRequestMap,
   initialJobs
 }: CalendarContainerProps) {
+  const pathname = usePathname();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
   const [entries, setEntries] = useState<TimeEntry[]>(initialEntries ?? []);
@@ -101,7 +109,7 @@ export function CalendarContainer({
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     members.map((m) => m.user_id)
   );
-  const [selectedSession, setSelectedSession] = useState<WorkSession | null>(
+  const [selectedSession, setSelectedSession] = useState<InteractiveCalendarSession | null>(
     null
   );
   const [calendarJobs, setCalendarJobs] = useState<CalendarJob[]>(initialJobs ?? []);
@@ -433,6 +441,12 @@ export function CalendarContainer({
       hasUsedInitialData.current = false;
       // Seed the fetched-range ref with the server-prefetched day range
       fetchedRangeRef.current = getDateRange();
+      // The calendar page can be revisited from a cached route after mutations
+      // happened elsewhere (e.g. manual entries created from Zeiterfassung).
+      // Do one background refetch on first mount so the mounted calendar state
+      // converges immediately instead of waiting for a manual reload.
+      fetchEntries(true);
+      fetchJobs();
       return;
     }
 
@@ -580,7 +594,8 @@ export function CalendarContainer({
   }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
 
   const handleManualEntrySuccess = useCallback(
-    async (newEntries: TimeEntry[]) => {
+    (newEntries: TimeEntry[]) => {
+      handleOperationStart();
       const { start, end } = getDateRange();
       const visibleNewEntries = newEntries.filter((entry) => {
         const timestamp = new Date(entry.timestamp).getTime();
@@ -598,15 +613,40 @@ export function CalendarContainer({
         hasDataRef.current = true;
       }
 
-      // Delay the refetch slightly to avoid a requestId race with the
-      // Realtime-triggered fetchEntries (the DB insert fires a Realtime
-      // event that also calls fetchEntries, and the two can cancel each
-      // other out via the stale-request guard).
-      await new Promise((r) => setTimeout(r, 300));
-      await Promise.all([fetchEntries(true), fetchJobs()]);
+      handleSilentRefresh();
     },
-    [fetchEntries, fetchJobs, getDateRange]
+    [getDateRange, handleOperationStart, handleSilentRefresh]
   );
+
+  useEffect(() => {
+    const handleExternalManualEntry = (event: Event) => {
+      const customEvent = event as CustomEvent<{ entries?: TimeEntry[] }>;
+      const newEntries = customEvent.detail?.entries;
+      if (!newEntries?.length) return;
+      if (newEntries.every((entry) => entry.organizationId !== organizationId)) return;
+      handleManualEntrySuccess(newEntries);
+    };
+
+    window.addEventListener(
+      MANUAL_ENTRY_CREATED_EVENT,
+      handleExternalManualEntry as EventListener
+    );
+    return () => {
+      window.removeEventListener(
+        MANUAL_ENTRY_CREATED_EVENT,
+        handleExternalManualEntry as EventListener
+      );
+    };
+  }, [handleManualEntrySuccess, organizationId]);
+
+  useEffect(() => {
+    if (pathname !== '/kalender') return;
+
+    const queuedEntries = consumeManualEntryBridge(organizationId);
+    if (queuedEntries.length > 0) {
+      handleManualEntrySuccess(queuedEntries);
+    }
+  }, [handleManualEntrySuccess, organizationId, pathname]);
 
   // Navigation handlers
   const handlePrevious = useCallback(() => {
@@ -1091,12 +1131,16 @@ export function CalendarContainer({
   }, [handleOperationStart, handleSilentRefresh]);
 
   const handleSessionWeekMove = useCallback(async (
-    clockInId: string,
-    clockOutId: string,
+    session: WorkSession,
     newDate: string,
     newMemberId: string,
     _revertFn?: () => void
   ) => {
+    const interactiveSession = session as InteractiveCalendarSession;
+    const clockInId = session.clockIn?.id;
+    const clockOutId = session.clockOut?.id;
+    if (!clockInId || !clockOutId || !session.clockIn || !session.clockOut) return;
+
     const clockIn = entriesRef.current.find((e) => e.id === clockInId);
     const clockOut = entriesRef.current.find((e) => e.id === clockOutId);
     if (!clockIn || !clockOut) return;
@@ -1114,14 +1158,43 @@ export function CalendarContainer({
     const memberChanged = clockIn.userId !== newMemberId;
     if (!dateChanged && !memberChanged) return;
 
+    const todayKey = toLocalDateString(new Date());
+    if (newDate > todayKey) {
+      setParkplatzBanner({
+        id: ++parkplatzBannerSeqRef.current,
+        variant: 'error',
+        message: 'Zeiteintraege koennen nicht in die Zukunft verschoben werden.',
+      });
+      return;
+    }
+
     const newCiTs = dateChanged ? moveTs(clockIn.timestamp, newDate) : clockIn.timestamp;
     const newCoTs = dateChanged ? moveTs(clockOut.timestamp, newDate) : clockOut.timestamp;
+    const sourceEntries = interactiveSession.sourceEntries ?? [clockIn, clockOut];
+    const deltaMs =
+      new Date(newCiTs).getTime() - new Date(clockIn.timestamp).getTime();
+    const batchUpdates = sourceEntries.map((entry) => ({
+      entryId: entry.id,
+      newUserId: newMemberId,
+      newTimestamp:
+        entry.id === clockInId
+          ? newCiTs
+          : entry.id === clockOutId
+            ? newCoTs
+            : new Date(new Date(entry.timestamp).getTime() + deltaMs).toISOString()
+    }));
 
     handleOperationStart();
     setEntries((prev) =>
       prev.map((e) => {
-        if (e.id === clockInId) return { ...e, timestamp: newCiTs, userId: newMemberId };
-        if (e.id === clockOutId) return { ...e, timestamp: newCoTs, userId: newMemberId };
+        const batchUpdate = batchUpdates.find((update) => update.entryId === e.id);
+        if (batchUpdate) {
+          return {
+            ...e,
+            timestamp: batchUpdate.newTimestamp,
+            userId: batchUpdate.newUserId
+          };
+        }
         return e;
       })
     );
@@ -1137,24 +1210,37 @@ export function CalendarContainer({
         handleOperationStart();
         setEntries((prev) =>
           prev.map((e) => {
-            if (e.id === clockInId) return origCi;
-            if (e.id === clockOutId) return origCo;
+            const originalEntry = sourceEntries.find((entry) => entry.id === e.id);
+            if (originalEntry) return originalEntry;
             return e;
           })
         );
-        await reassignEntries(clockInId, clockOutId, origCi.userId, origCi.timestamp, origCo.timestamp);
+        if (sourceEntries.length > 2) {
+          await reassignEntryBatch(
+            sourceEntries.map((entry) => ({
+              entryId: entry.id,
+              newUserId: entry.userId,
+              newTimestamp: entry.timestamp
+            }))
+          );
+        } else {
+          await reassignEntries(clockInId, clockOutId, origCi.userId, origCi.timestamp, origCo.timestamp);
+        }
         handleSilentRefresh();
       },
     });
 
-    const result = await reassignEntries(clockInId, clockOutId, newMemberId, newCiTs, newCoTs);
+    const result =
+      sourceEntries.length > 2
+        ? await reassignEntryBatch(batchUpdates)
+        : await reassignEntries(clockInId, clockOutId, newMemberId, newCiTs, newCoTs);
     if (undone.current) { handleSilentRefresh(); return; }
 
     if (!result.success) {
       setEntries((prev) =>
         prev.map((e) => {
-          if (e.id === clockInId) return origCi;
-          if (e.id === clockOutId) return origCo;
+          const originalEntry = sourceEntries.find((entry) => entry.id === e.id);
+          if (originalEntry) return originalEntry;
           return e;
         })
       );
@@ -1170,15 +1256,25 @@ export function CalendarContainer({
     handleSilentRefresh();
   }, [handleOperationStart, handleSilentRefresh]);
 
-  // Determine whether to use FullCalendar or custom views
-  // - Employees: Use FullCalendar for all views
-  // - Admin/Manager: Use FullCalendar for month view, custom for day/week
-  const useFullCalendar =
-    !isAdminOrManager || (isAdminOrManager && view === 'month');
+  // Use the custom renderers for day/week so break-aware work blocks behave
+  // consistently for every role. FullCalendar remains the month renderer.
+  const useFullCalendar = view === 'month';
 
   const handleEventClick = useCallback((session: WorkSession) => {
-    setSelectedSession(session);
-  }, []);
+    const sessionUserId = session.clockIn?.userId || session.clockOut?.userId;
+    const sessionMember = members.find((member) => member.user_id === sessionUserId);
+    const employeeName = sessionMember
+      ? sessionMember.first_name || sessionMember.last_name
+        ? `${sessionMember.first_name || ''} ${sessionMember.last_name || ''}`.trim()
+        : sessionMember.email
+      : undefined;
+
+    setSelectedSession({
+      ...(session as InteractiveCalendarSession),
+      employeeName,
+      employeeRole: sessionMember?.role as OrgRole | undefined
+    });
+  }, [members]);
 
   const isSwitchingCalendarOrg = previousOrgIdRef.current !== organizationId;
   const showLoadingSkeleton = isLoading || isSwitchingCalendarOrg;

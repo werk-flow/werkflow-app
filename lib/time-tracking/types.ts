@@ -8,9 +8,14 @@ export type TimeEntryUpdate =
   Database['public']['Tables']['time_entries']['Update'];
 
 // Entry type and status
-export type TimeEntryType = 'clock_in' | 'clock_out';
+export type TimeEntryType =
+  | 'clock_in'
+  | 'clock_out'
+  | 'break_start'
+  | 'break_end';
 export type TimeEntryStatus = Database['public']['Enums']['time_entry_status'];
 export type OrgRole = Database['public']['Enums']['org_role'];
+export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
 /**
  * Application-level time entry type with camelCase properties
@@ -40,6 +45,10 @@ export type WorkSession = {
   durationMinutes: number | null; // null if session is open or orphan
   /** Job linked to this session (derived from clockIn entry) */
   jobId: string | null;
+  /** Entry type that started this work segment (`clock_in` or `break_end`) */
+  startEntryType?: Extract<TimeEntryType, 'clock_in' | 'break_end'> | null;
+  /** Entry type that ended this work segment (`break_start` or `clock_out`) */
+  endEntryType?: Extract<TimeEntryType, 'break_start' | 'clock_out'> | null;
   /** True if this is an orphan entry (unpaired clock_out without preceding clock_in) */
   isOrphan?: boolean;
   /**
@@ -48,6 +57,29 @@ export type WorkSession = {
    * - 'partial': Some entries are pending (e.g., clock_in approved, clock_out pending)
    * - 'full': All entries are pending (awaiting approval)
    */
+  pendingState?: 'none' | 'partial' | 'full';
+};
+
+export type WorkSessionBreak = {
+  breakStart: TimeEntry;
+  breakEnd: TimeEntry | null;
+};
+
+export type InteractiveCalendarSession = WorkSession & {
+  calendarBlockId?: string;
+  sourceEntries?: TimeEntry[];
+  breaks?: WorkSessionBreak[];
+  isCompositeBlock?: boolean;
+  isOnBreakBlock?: boolean;
+  employeeName?: string | null;
+  employeeRole?: OrgRole;
+};
+
+export type BreakSession = {
+  breakStart: TimeEntry;
+  breakEnd: TimeEntry | null;
+  durationMinutes: number | null;
+  isOpen?: boolean;
   pendingState?: 'none' | 'partial' | 'full';
 };
 
@@ -107,11 +139,23 @@ export type WeeklyTimeLabel = {
   kw: string;
 };
 
+export type ClockTimelineSegment = {
+  type: 'work' | 'break';
+  minutes: number;
+};
+
 export type LiveClockState = {
   organizationId: string;
+  status: ClockStatus;
   isClockedIn: boolean;
+  isOnBreak: boolean;
   clockInTime: string | null;
+  statusStartedAt: string | null;
+  breakStartTime: string | null;
   todayMinutes: number;
+  workMinutes: number;
+  breakMinutes: number;
+  timelineSegments: ClockTimelineSegment[];
   activeJobId: string | null;
   activeJobInfo: ClockJobInfo | null;
   fetchedAt: string;

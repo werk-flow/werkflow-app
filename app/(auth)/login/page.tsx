@@ -10,10 +10,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  getSupabaseServerSession,
-  createSupabaseServerClient
-} from '@/lib/supabase/server';
+import { getSupabaseServerSession } from '@/lib/supabase/server';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 
@@ -61,10 +59,8 @@ export default async function LoginPage({
   // Use RPC function that bypasses RLS (since user might not be authenticated)
   let organizationName: string | null = null;
   if (inviteCode) {
-    const supabase = await createSupabaseServerClient();
-
     // Use the RPC function to look up invite by code (bypasses RLS)
-    const { data: inviteData, error: inviteError } = await supabase.rpc(
+    const { data: inviteData, error: inviteError } = await createSupabaseAdminClient().rpc(
       'get_invite_by_code',
       { p_invite_code: inviteCode }
     );

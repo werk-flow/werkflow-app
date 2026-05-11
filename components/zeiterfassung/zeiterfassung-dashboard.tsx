@@ -22,7 +22,10 @@ import {
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
-import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
+import type {
+  ClockTimelineSegment,
+  ZeiterfassungOverview
+} from '@/lib/time-tracking/types';
 import { ZeiterfassungDashboardSkeleton } from '@/components/loading-states/zeiterfassung-dashboard-skeleton';
 
 interface ZeiterfassungDashboardProps {
@@ -33,13 +36,13 @@ interface ZeiterfassungDashboardProps {
 
 function formatLiveTime(
   baseMinutes: number,
-  clockInTime: string | null,
+  statusStartedAt: string | null,
   isClockedIn: boolean
 ): string {
   let totalMs = baseMinutes * 60 * 1000;
 
-  if (isClockedIn && clockInTime) {
-    totalMs += getNonNegativeElapsedMs(clockInTime);
+  if (isClockedIn && statusStartedAt) {
+    totalMs += getNonNegativeElapsedMs(statusStartedAt);
   }
 
   const hours = Math.floor(totalMs / (1000 * 60 * 60));
@@ -53,13 +56,13 @@ function formatLiveTime(
 
 function calculateLiveTotalMinutes(
   baseMinutes: number,
-  clockInTime: string | null,
+  statusStartedAt: string | null,
   isClockedIn: boolean
 ): number {
   let totalMinutes = baseMinutes;
 
-  if (isClockedIn && clockInTime) {
-    totalMinutes += getNonNegativeElapsedMs(clockInTime) / (1000 * 60);
+  if (isClockedIn && statusStartedAt) {
+    totalMinutes += getNonNegativeElapsedMs(statusStartedAt) / (1000 * 60);
   }
 
   return totalMinutes;
@@ -70,7 +73,15 @@ export function ZeiterfassungDashboard({
   userId,
   initialOverview
 }: ZeiterfassungDashboardProps) {
-  const { state, isLoading, isPending, statusError, switchJob } = useClockState();
+  const {
+    state,
+    isLoading,
+    isPending,
+    statusError,
+    startBreak,
+    endBreak,
+    switchJob,
+  } = useClockState();
   const effectiveState =
     state && state.organizationId === organizationId
       ? state
@@ -91,6 +102,26 @@ export function ZeiterfassungDashboard({
   const [liveTime, setLiveTime] = useState('00:00:00');
   const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
   const [showJobPicker, setShowJobPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'switch' | 'resume'>('switch');
+
+  const liveTimelineSegments: ClockTimelineSegment[] = (() => {
+    const segments = [...(effectiveState.timelineSegments ?? [])];
+    if (!effectiveState.isClockedIn || !effectiveState.statusStartedAt) {
+      return segments;
+    }
+
+    const liveMinutes =
+      getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60);
+    if (liveMinutes <= 0) {
+      return segments;
+    }
+
+    segments.push({
+      type: effectiveState.status === 'on_break' ? 'break' : 'work',
+      minutes: liveMinutes
+    });
+    return segments;
+  })();
 
   const handlePickerConfirm = async (jobId: string | null) => {
     if (!effectiveState.isClockedIn) {
@@ -99,9 +130,13 @@ export function ZeiterfassungDashboard({
     }
 
     try {
-      await switchJob(jobId);
+      if (pickerMode === 'resume') {
+        await endBreak(jobId);
+      } else {
+        await switchJob(jobId);
+      }
     } catch (err) {
-      console.error('Error switching job:', err);
+      console.error('Error updating active job state:', err);
     } finally {
       setShowJobPicker(false);
     }
@@ -112,14 +147,14 @@ export function ZeiterfassungDashboard({
       setLiveTime(
         formatLiveTime(
           effectiveState.todayMinutes,
-          effectiveState.clockInTime,
+          effectiveState.statusStartedAt,
           effectiveState.isClockedIn
         )
       );
       setLiveTotalMinutes(
         calculateLiveTotalMinutes(
           effectiveState.todayMinutes,
-          effectiveState.clockInTime,
+          effectiveState.statusStartedAt,
           effectiveState.isClockedIn
         )
       );
@@ -131,14 +166,24 @@ export function ZeiterfassungDashboard({
     return () => clearInterval(interval);
   }, [
     effectiveState.todayMinutes,
-    effectiveState.clockInTime,
+    effectiveState.statusStartedAt,
     effectiveState.isClockedIn,
   ]);
 
-  const breakdown = computeTimeBreakdown(liveTotalMinutes);
+  const liveWorkMinutes =
+    effectiveState.workMinutes +
+    (effectiveState.status === 'working' && effectiveState.statusStartedAt
+      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
+      : 0);
+  const liveBreakMinutes =
+    effectiveState.breakMinutes +
+    (effectiveState.status === 'on_break' && effectiveState.statusStartedAt
+      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
+      : 0);
+  const breakdown = computeTimeBreakdown(liveTotalMinutes, liveBreakMinutes);
   const workPercentage = Math.min(
-    Math.round((breakdown.workMinutes / WORK_GOAL_MINUTES) * 100),
-    999
+    Math.round((liveWorkMinutes / WORK_GOAL_MINUTES) * 100),
+    100
   );
 
   if (isLoading && !effectiveState) {
@@ -164,9 +209,12 @@ export function ZeiterfassungDashboard({
       <div className="flex flex-col items-center py-8">
         <TimeProgressRing
           totalMinutes={liveTotalMinutes}
+          breakMinutes={liveBreakMinutes}
+          timelineSegments={liveTimelineSegments}
           size={260}
           strokeWidth={14}
           isActive={effectiveState.isClockedIn}
+          glowVariant={effectiveState.isOnBreak ? 'break' : 'work'}
         >
           <span className="text-4xl font-bold tabular-nums tracking-tight">
             {liveTime}
@@ -177,14 +225,18 @@ export function ZeiterfassungDashboard({
         <p
           className={cn(
             'mt-6 text-lg font-medium',
-            effectiveState.isClockedIn
+            effectiveState.status === 'working'
               ? 'text-green-600 dark:text-green-400'
-              : 'text-muted-foreground'
+              : effectiveState.status === 'on_break'
+                ? 'text-yellow-600 dark:text-yellow-300'
+                : 'text-muted-foreground'
           )}
         >
-          {effectiveState.isClockedIn
+          {effectiveState.status === 'working'
             ? 'Du arbeitest gerade.'
-            : 'Du bist nicht eingestempelt.'}
+            : effectiveState.status === 'on_break'
+              ? 'Du machst gerade Pause.'
+              : 'Du bist nicht eingestempelt.'}
         </p>
 
         <p className="mt-1 text-sm text-muted-foreground">
@@ -204,7 +256,9 @@ export function ZeiterfassungDashboard({
             <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
             <span className="text-muted-foreground">Pause</span>
             <span className="font-medium tabular-nums">
-              {breakdown.breakMinutes > 0 ? '30 Min.' : '0 Min.'}
+              {breakdown.breakMinutes > 0
+                ? formatDuration(breakdown.breakMinutes)
+                : '0 Min.'}
             </span>
           </span>
           <span className="flex items-center gap-1.5">
@@ -231,21 +285,47 @@ export function ZeiterfassungDashboard({
           subtitle={
             effectiveState.activeJobInfo?.title
               ? effectiveState.activeJobInfo.title
-              : effectiveState.isClockedIn
+              : effectiveState.status === 'on_break'
+                ? 'Während der Pause nicht aktiv'
+                : effectiveState.isClockedIn
                 ? 'Kein Auftrag gewählt'
                 : 'Auftrag für nächste Schicht'
           }
-          onClick={() => setShowJobPicker(true)}
-          active={!!effectiveState.activeJobId && effectiveState.isClockedIn}
-          disabled={!effectiveState.isClockedIn}
-          disabledHint="Stemple zuerst ein"
+          onClick={() => {
+            setPickerMode('switch');
+            setShowJobPicker(true);
+          }}
+          active={
+            !!effectiveState.activeJobId &&
+            effectiveState.isClockedIn &&
+            !effectiveState.isOnBreak
+          }
+          disabled={!effectiveState.isClockedIn || effectiveState.isOnBreak}
+          disabledHint={
+            !effectiveState.isClockedIn ? 'Stemple zuerst ein' : 'Während der Pause gesperrt'
+          }
         />
 
         <MenuCard
           icon={Coffee}
-          title="Pause"
-          subtitle="Pausenzeiten erfassen"
-          disabled
+          title={effectiveState.isOnBreak ? 'Arbeit fortsetzen' : 'Pause'}
+          subtitle={
+            effectiveState.isOnBreak
+              ? 'Auftrag für die Fortsetzung wählen'
+              : 'Pause jetzt starten'
+          }
+          active={effectiveState.isOnBreak}
+          disabled={!effectiveState.isClockedIn}
+          disabledHint="Stemple zuerst ein"
+          onClick={() => {
+            if (!effectiveState.isClockedIn) return;
+            if (effectiveState.isOnBreak) {
+              setPickerMode('resume');
+              setShowJobPicker(true);
+            } else {
+              void startBreak();
+            }
+          }}
         />
 
         <MenuCard
@@ -309,15 +389,21 @@ export function ZeiterfassungDashboard({
                 <div
                   className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-full',
-                    effectiveState.isClockedIn ? 'bg-green-500/10' : 'bg-muted'
+                    effectiveState.status === 'working'
+                      ? 'bg-green-500/10'
+                      : effectiveState.status === 'on_break'
+                        ? 'bg-yellow-500/10'
+                        : 'bg-muted'
                   )}
                 >
                   <Clock
                     className={cn(
                       'h-5 w-5',
-                      effectiveState.isClockedIn
+                      effectiveState.status === 'working'
                         ? 'text-green-600 dark:text-green-400'
-                        : 'text-muted-foreground'
+                        : effectiveState.status === 'on_break'
+                          ? 'text-yellow-600 dark:text-yellow-300'
+                          : 'text-muted-foreground'
                     )}
                   />
                 </div>
@@ -338,12 +424,18 @@ export function ZeiterfassungDashboard({
               <span
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-medium',
-                  effectiveState.isClockedIn
+                  effectiveState.status === 'working'
                     ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                    : 'bg-muted text-muted-foreground'
+                    : effectiveState.status === 'on_break'
+                      ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-300'
+                      : 'bg-muted text-muted-foreground'
                 )}
               >
-                {effectiveState.isClockedIn ? 'aktiv' : 'inaktiv'}
+                {effectiveState.status === 'working'
+                  ? 'arbeitet'
+                  : effectiveState.status === 'on_break'
+                    ? 'Pause'
+                    : 'inaktiv'}
               </span>
             </div>
 
@@ -354,6 +446,7 @@ export function ZeiterfassungDashboard({
                   weekData={weekData}
                   todayIndex={todayIndex}
                   liveTodayMinutes={liveTotalMinutes}
+                  liveTodayBreakMinutes={liveBreakMinutes}
                   narrowBars
                   weekLabel={weekLabel}
                 />
@@ -368,7 +461,7 @@ export function ZeiterfassungDashboard({
         onClose={() => setShowJobPicker(false)}
         onConfirm={handlePickerConfirm}
         organizationId={organizationId}
-        mode="switch"
+        mode={pickerMode}
         currentJobId={effectiveState.activeJobId}
         isPending={isPending}
       />

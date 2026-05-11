@@ -2,10 +2,9 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { getMemberDetail, type OrgRole } from '@/lib/members/actions';
+import { getMemberDetail, getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
@@ -43,7 +42,6 @@ async function MitarbeiterDetailData({
   }
 
   const admin = createSupabaseAdminClient();
-  const supabase = await createSupabaseServerClient();
 
   const [memberResult, jobsResult, clientsResult, membersResult, allProjectsResult, allJobsResult] = await Promise.all([
     getMemberDetail(targetUserId),
@@ -53,7 +51,7 @@ async function MitarbeiterDetailData({
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
-    supabase.rpc('get_org_members', { p_org_id: activeOrgId }),
+    getOrgMembersForUser(activeOrgId, user.id),
     admin
       .from('projects')
       .select('*')
@@ -85,8 +83,8 @@ async function MitarbeiterDetailData({
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
   const clients: Client[] = (clientsResult.data ?? []).map(toClient);
-  const members: OrgMemberOption[] = (membersResult.data ?? []).map(
-    (m: { user_id: string; first_name: string; last_name: string; role: string }) => ({
+  const members: OrgMemberOption[] = membersResult.map(
+    (m) => ({
       userId: m.user_id,
       firstName: m.first_name,
       lastName: m.last_name,

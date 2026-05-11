@@ -25,18 +25,28 @@ export function calculateBlockPosition(
   endTime: Date | null,
   hourWidth: number = HOUR_WIDTH
 ): { left: number; width: number } {
-  const startHours = startTime.getHours() + startTime.getMinutes() / 60;
+  const startHours =
+    startTime.getHours() +
+    startTime.getMinutes() / 60 +
+    startTime.getSeconds() / 3600 +
+    startTime.getMilliseconds() / 3600000;
   const left = startHours * hourWidth;
 
   if (!endTime) {
     const now = new Date();
     const isToday = startTime.toDateString() === now.toDateString();
-    const endHours = isToday ? now.getHours() + now.getMinutes() / 60 : 24;
+    const endHours = isToday
+      ? now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600
+      : 24;
     const width = Math.max((endHours - startHours) * hourWidth, 10);
     return { left, width };
   }
 
-  const endHours = endTime.getHours() + endTime.getMinutes() / 60;
+  const endHours =
+    endTime.getHours() +
+    endTime.getMinutes() / 60 +
+    endTime.getSeconds() / 3600 +
+    endTime.getMilliseconds() / 3600000;
   const width = Math.max((endHours - startHours) * hourWidth, 10);
 
   return { left, width };

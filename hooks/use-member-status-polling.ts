@@ -3,18 +3,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import {
-  hasOpenSession,
-  getLastEntry,
+  calculateBreakMinutes,
+  calculateBreakSessions,
+  deriveCurrentClockState,
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
 export type MemberStatus = {
+  status: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
+  isOnBreak: boolean;
   isPending: boolean;
   clockInTime: string | null;
+  statusStartedAt: string | null;
   todayMinutes: number;
+  workMinutes: number;
+  breakMinutes: number;
 };
 
 type MemberStatusMap = Record<string, MemberStatus>;
@@ -74,16 +80,18 @@ export function useMemberStatusPolling({
           (e) => e.userId === memberId
         );
 
-        const isClockedIn = hasOpenSession(memberEntries);
-        const lastEntry = getLastEntry(memberEntries);
-        const sessions = calculateWorkSessions(memberEntries);
-        const todayMinutes = calculateTotalMinutes(sessions);
+        const currentState = deriveCurrentClockState(memberEntries);
+        const workSessions = calculateWorkSessions(memberEntries);
+        const breakSessions = calculateBreakSessions(memberEntries);
+        const workMinutes = calculateTotalMinutes(workSessions);
+        const breakMinutes = calculateBreakMinutes(breakSessions);
+        const todayMinutes = workMinutes + breakMinutes;
 
         // If clocked in, find the last clock_in timestamp and check if it's pending
         let clockInTime: string | null = null;
         let isPending = false;
 
-        if (isClockedIn) {
+        if (currentState.isClockedIn) {
           // Find the most recent clock_in entry (include pending since they now take effect)
           // Exclude rejected and pending_delete entries
           const clockInEntry = memberEntries
@@ -104,10 +112,15 @@ export function useMemberStatusPolling({
         }
 
         newStatusMap[memberId] = {
-          isClockedIn,
+          status: currentState.status,
+          isClockedIn: currentState.isClockedIn,
+          isOnBreak: currentState.isOnBreak,
           isPending,
           clockInTime,
-          todayMinutes
+          statusStartedAt: currentState.statusStartedAt,
+          todayMinutes,
+          workMinutes,
+          breakMinutes
         };
       }
 

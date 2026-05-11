@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
@@ -12,7 +11,7 @@ import {
   getCurrentClockState,
   getTimeEntries,
 } from '@/lib/time-tracking/actions';
-import type { OrgRole } from '@/lib/members/actions';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 import {
   buildWeeklyTimeData,
@@ -44,9 +43,16 @@ async function getInitialOverview(
       ? clockStateResult.state
       : {
           organizationId: activeOrgId,
+          status: 'clocked_out',
           isClockedIn: false,
+          isOnBreak: false,
           clockInTime: null,
+          statusStartedAt: null,
+          breakStartTime: null,
           todayMinutes: 0,
+          workMinutes: 0,
+          breakMinutes: 0,
+          timelineSegments: [],
           activeJobId: null,
           activeJobInfo: null,
           fetchedAt: new Date().toISOString(),
@@ -84,12 +90,7 @@ async function ZeiterfassungData({
   }>> {
     if (!isAdminOrManager) return [];
 
-    const supabase = await createSupabaseServerClient();
-    const { data: membersData } = await supabase.rpc('get_org_members', {
-      p_org_id: activeOrgId,
-    });
-
-    return membersData ?? [];
+    return getOrgMembersForUser(activeOrgId, userId);
   }
 
   const [initialOverview, members] = await Promise.all([

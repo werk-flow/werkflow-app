@@ -10,6 +10,8 @@ export interface OverlapResult {
   totalColumns: number;
 }
 
+const OVERLAP_EPSILON = 0.5;
+
 /**
  * Greedy column-packing algorithm (Google Calendar style).
  *
@@ -35,7 +37,9 @@ export function computeOverlapLayout(blocks: OverlapBlock[]): Map<string, Overla
 
     for (let col = 0; col < columns.length; col++) {
       const hasOverlap = columns[col].some(
-        (existing) => block.left < existing.right && existing.left < right
+        (existing) =>
+          block.left < existing.right - OVERLAP_EPSILON &&
+          existing.left < right - OVERLAP_EPSILON
       );
       if (!hasOverlap) {
         columns[col].push({ id: block.id, left: block.left, right });
@@ -77,7 +81,7 @@ export function computeOverlapLayout(blocks: OverlapBlock[]): Map<string, Overla
     for (let j = i + 1; j < sorted.length; j++) {
       const a = sorted[i];
       const b = sorted[j];
-      if (b.left >= a.left + a.width) continue;
+      if (b.left >= a.left + a.width - OVERLAP_EPSILON) continue;
       union(a.id, b.id);
     }
   }

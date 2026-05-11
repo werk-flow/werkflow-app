@@ -5,17 +5,29 @@ import { Briefcase, Clock, ParkingSquare } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTimelineZoom } from './use-timeline-zoom';
-import { snapToGrid, formatTimeFromPx, pixelToTimeStr } from './timeline-grid';
+import {
+  calculateBlockPosition,
+  snapToGrid,
+  formatTimeFromPx,
+  pixelToTimeStr
+} from './timeline-grid';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { CalendarEntryDialog } from '../calendar-entry-dialog';
-import { updateEntry, cancelOwnChangeRequest, reassignEntries } from '@/lib/time-tracking/actions';
+import {
+  updateEntry,
+  cancelOwnChangeRequest,
+  reassignEntries,
+  reassignEntryBatch
+} from '@/lib/time-tracking/actions';
 import { updateJob, unassignEmployee, assignEmployee } from '@/lib/jobs/actions';
 import type { JobMoveResizeResult } from './job-block';
 import { ActionBanner, type ActionBannerState } from './undo-banner';
 import type { MoveResizeResult } from './work-session-block';
 import type {
+  InteractiveCalendarSession,
   TimeEntry,
   WorkSession,
   EntryChangeRequestMap
@@ -25,6 +37,25 @@ import type { OrgRole } from '@/lib/members/actions';
 import { JobEventPopover } from '../job-event-popover';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
 import { useCurrentTimePosition } from './use-current-time-position';
+
+type SessionCollisionBlock = {
+  id: string;
+  left: number;
+  width: number;
+};
+
+function getExactLayoutWidth(startTime: Date, endTime: Date | null, hourWidth: number): number {
+  const effectiveEnd =
+    endTime ??
+    (startTime.toDateString() === new Date().toDateString()
+      ? new Date()
+      : new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate(), 24, 0, 0, 0));
+
+  const diffHours =
+    (effectiveEnd.getTime() - startTime.getTime()) / (1000 * 60 * 60);
+
+  return Math.max(diffHours * hourWidth, 0.5);
+}
 
 interface CalendarMember {
   user_id: string;
@@ -208,6 +239,10 @@ export function DayView({
       forwardOv.set(result.clockOutEntryId!, { timestamp: result.newClockOutTimestamp });
       reverseOv.set(result.clockOutEntryId!, { timestamp: result.originalClockOutTimestamp });
     }
+    for (const update of result.additionalEntryUpdates ?? []) {
+      forwardOv.set(update.entryId, { timestamp: update.newTimestamp });
+      reverseOv.set(update.entryId, { timestamp: update.originalTimestamp });
+    }
 
     onOperationStart?.();
     setOptimisticOverrides(prev => {
@@ -268,8 +303,49 @@ export function DayView({
         updates.push({ entryId: result.clockOutEntryId!, newTs: result.newClockOutTimestamp, origTs: result.originalClockOutTimestamp });
       }
     }
+    for (const update of result.additionalEntryUpdates ?? []) {
+      updates.push({
+        entryId: update.entryId,
+        newTs: update.newTimestamp,
+        origTs: update.originalTimestamp
+      });
+    }
 
     const results: Array<{ entryId: string; success: boolean; requestId?: string }> = [];
+
+    if ((result.additionalEntryUpdates?.length ?? 0) > 0) {
+      const targetUserId =
+        entries.find((entry) => entry.id === result.clockInEntryId)?.userId ??
+        currentUserId;
+      const batchResult = await reassignEntryBatch(
+        updates.map((update) => ({
+          entryId: update.entryId,
+          newUserId: targetUserId,
+          newTimestamp: update.newTs
+        }))
+      );
+
+      if (undone.current) { silentRefresh(); return; }
+
+      if (batchResult.success) {
+        silentRefresh();
+      } else {
+        setOptimisticOverrides(prev => {
+          const next = new Map(prev);
+          for (const [id, val] of reverseOv) next.set(id, val);
+          return next;
+        });
+        silentRefresh();
+        setActiveBanner({
+          id: ++bannerSeqRef.current,
+          variant: 'error',
+          message: isMove
+            ? 'Zeiteintrag konnte nicht verschoben werden.'
+            : 'Zeiteintrag konnte nicht geändert werden.',
+        });
+      }
+      return;
+    }
 
     for (const update of updates) {
       if (undone.current) { silentRefresh(); return; }
@@ -310,6 +386,14 @@ export function DayView({
       setActiveBanner({ id: ++bannerSeqRef.current, variant: 'error', message: errorMsg });
     }
   }, [silentRefresh, onOperationStart]);
+
+  const handleInvalidSessionPlacement = useCallback((message: string) => {
+    setActiveBanner({
+      id: ++bannerSeqRef.current,
+      variant: 'error',
+      message
+    });
+  }, []);
 
   const handleJobMoveResize = useCallback(async (result: JobMoveResizeResult) => {
     const { jobId, newPlannedTime, newDurationMinutes, originalPlannedTime, originalDurationMinutes } = result;
@@ -373,7 +457,7 @@ export function DayView({
 
   // ── Cross-row drag state ──
   type DragBlockPayload =
-    | { type: 'session'; session: WorkSession }
+    | { type: 'session'; session: InteractiveCalendarSession }
     | { type: 'job'; job: CalendarJob };
 
   interface ActiveBlockDrag {
@@ -390,6 +474,7 @@ export function DayView({
     isAboveGrid?: boolean;
     pointerClientX?: number;
     pointerClientY?: number;
+    conflictTargetIds?: string[];
   }
   const [activeDrag, setActiveDrag] = useState<ActiveBlockDrag | null>(null);
   const activeDragRef = useRef<ActiveBlockDrag | null>(null);
@@ -451,6 +536,8 @@ export function DayView({
   onParkJobRef.current = onParkJob;
   const setJobDragShadowRef = useRef(setJobDragShadow);
   setJobDragShadowRef.current = setJobDragShadow;
+  const handleInvalidSessionPlacementRef = useRef(handleInvalidSessionPlacement);
+  handleInvalidSessionPlacementRef.current = handleInvalidSessionPlacement;
 
   // Stable wrapper functions for window event listeners
   const stableMoveHandler = useCallback((e: PointerEvent) => {
@@ -510,10 +597,32 @@ export function DayView({
     const clampedRow = Math.max(0, Math.min(rowIdx, curMembers.length - 1));
     const targetMember = curMembers[clampedRow];
     let canDrop = targetMember ? canDropOnMemberRef.current(targetMember) : false;
+    let conflictTargetIds: string[] = [];
 
     if (canDrop && payload.type === 'job' && clampedRow !== sourceRowIndex) {
       const target = curMembers[clampedRow];
       if (target && payload.job.assignedUserIds.includes(target.user_id)) {
+        canDrop = false;
+      }
+    }
+
+    if (canDrop && payload.type === 'session' && targetMember) {
+      const draggedBlockId = payload.session.calendarBlockId;
+      const collisionBlocks =
+        sessionCollisionBlocksByUserRef.current[targetMember.user_id] ?? [];
+      conflictTargetIds = collisionBlocks
+        .filter((block) => {
+          if (block.id === draggedBlockId) {
+            return false;
+          }
+          return (
+            block.left < clampedLeft + originalWidth &&
+            clampedLeft < block.left + block.width
+          );
+        })
+        .map((block) => block.id);
+
+      if (conflictTargetIds.length > 0) {
         canDrop = false;
       }
     }
@@ -555,6 +664,7 @@ export function DayView({
       isAboveGrid: isAboveGrid || overParkplatz,
       pointerClientX: e.clientX,
       pointerClientY: e.clientY,
+      conflictTargetIds,
     };
 
     activeDragRef.current = next;
@@ -597,6 +707,14 @@ export function DayView({
     }
 
     if (!drag.canDrop) {
+      if (
+        drag.payload.type === 'session' &&
+        (drag.conflictTargetIds?.length ?? 0) > 0
+      ) {
+        handleInvalidSessionPlacementRef.current(
+          'Arbeitszeit konnte nicht verschoben werden, weil sie sich mit einem anderen Arbeitsblock überschneiden würde.'
+        );
+      }
       setTimeout(() => { dragDidOccurRef.current = false; }, 0);
       return;
     }
@@ -654,7 +772,7 @@ export function DayView({
   handleCrossUserMoveRef.current = useCallback(
     async (drag: ActiveBlockDrag, targetMember: CalendarMember) => {
       if (drag.payload.type !== 'session') return;
-      const session = drag.payload.session;
+      const session = drag.payload.session as InteractiveCalendarSession;
       if (!session.clockIn || !session.clockOut) return;
 
       const newClockIn = pixelToTimeStr(drag.currentLeft, effectiveHourWidth, date);
@@ -673,8 +791,20 @@ export function DayView({
       onOperationStart?.();
       setOptimisticOverrides(prev => {
         const next = new Map(prev);
+        const sourceEntries = session.sourceEntries ?? [];
+        const clockInDelta =
+          new Date(newClockIn).getTime() - new Date(origClockIn).getTime();
         next.set(clockInId, { timestamp: newClockIn, userId: targetMember.user_id });
         next.set(clockOutId, { timestamp: newClockOut, userId: targetMember.user_id });
+        for (const entry of sourceEntries) {
+          if (entry.id === clockInId || entry.id === clockOutId) continue;
+          next.set(entry.id, {
+            timestamp: new Date(
+              new Date(entry.timestamp).getTime() + clockInDelta
+            ).toISOString(),
+            userId: targetMember.user_id
+          });
+        }
         return next;
       });
 
@@ -691,14 +821,50 @@ export function DayView({
             const next = new Map(prev);
             next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
             next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
+          for (const entry of session.sourceEntries ?? []) {
+            if (entry.id === clockInId || entry.id === clockOutId) continue;
+            next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
+          }
             return next;
           });
+        if ((session.sourceEntries?.length ?? 0) > 2) {
+          await reassignEntryBatch(
+            (session.sourceEntries ?? []).map((entry) => ({
+              entryId: entry.id,
+              newUserId: origUserId,
+              newTimestamp: entry.timestamp
+            }))
+          );
+        } else {
           await reassignEntries(clockInId, clockOutId, origUserId, origClockIn, origClockOut);
+        }
           silentRefresh();
         },
       });
 
-      const result = await reassignEntries(clockInId, clockOutId, targetMember.user_id, newClockIn, newClockOut);
+      const result =
+        (session.sourceEntries?.length ?? 0) > 2
+          ? await reassignEntryBatch(
+              (session.sourceEntries ?? []).map((entry) => {
+                const shiftedTimestamp =
+                  entry.id === clockInId
+                    ? newClockIn
+                    : entry.id === clockOutId
+                      ? newClockOut
+                      : new Date(
+                          new Date(entry.timestamp).getTime() +
+                            (new Date(newClockIn).getTime() -
+                              new Date(origClockIn).getTime())
+                        ).toISOString();
+
+                return {
+                  entryId: entry.id,
+                  newUserId: targetMember.user_id,
+                  newTimestamp: shiftedTimestamp
+                };
+              })
+            )
+          : await reassignEntries(clockInId, clockOutId, targetMember.user_id, newClockIn, newClockOut);
 
       if (undone.current) { silentRefresh(); return; }
 
@@ -709,6 +875,10 @@ export function DayView({
           const next = new Map(prev);
           next.set(clockInId, { timestamp: origClockIn, userId: origUserId });
           next.set(clockOutId, { timestamp: origClockOut, userId: origUserId });
+          for (const entry of session.sourceEntries ?? []) {
+            if (entry.id === clockInId || entry.id === clockOutId) continue;
+            next.set(entry.id, { timestamp: entry.timestamp, userId: entry.userId });
+          }
           return next;
         });
         silentRefresh();
@@ -993,6 +1163,33 @@ export function DayView({
     return grouped;
   }, [effectiveEntries]);
 
+  const sessionCollisionBlocksByUser = useMemo(() => {
+    const blocks: Record<string, SessionCollisionBlock[]> = {};
+
+    for (const [userId, userEntries] of Object.entries(entriesByUser)) {
+      const dayEntries = userEntries.filter((entry) => {
+        const entryDate = new Date(entry.timestamp);
+        return entryDate.toDateString() === date.toDateString();
+      });
+
+      blocks[userId] = calculateCalendarWorkBlocks(dayEntries).map((block) => {
+        const start = new Date(block.start);
+        const end = block.end ? new Date(block.end) : null;
+        const { left } = calculateBlockPosition(start, end, effectiveHourWidth);
+
+        return {
+          id: block.id,
+          left,
+          width: getExactLayoutWidth(start, end, effectiveHourWidth)
+        };
+      });
+    }
+
+    return blocks;
+  }, [entriesByUser, date, effectiveHourWidth]);
+  const sessionCollisionBlocksByUserRef = useRef(sessionCollisionBlocksByUser);
+  sessionCollisionBlocksByUserRef.current = sessionCollisionBlocksByUser;
+
   const sessionsByUser = useMemo(() => {
     const sessions: Record<
       string,
@@ -1160,7 +1357,7 @@ export function DayView({
 
             {/* Timeline rows */}
             <div className="divide-y">
-              {members.map((member) => {
+              {members.map((member, memberIndex) => {
                 const sessions = sessionsByUser[member.user_id] || [];
                 const userEntries = entriesByUser[member.user_id] || [];
                 const isHighlighted = highlightMemberId === member.user_id;
@@ -1195,8 +1392,19 @@ export function DayView({
                     onBlockMoveStart={handleBlockMoveStart}
                     activeDragSessionId={
                       activeDrag?.payload.type === 'session'
-                        ? (activeDrag.payload.session.clockIn?.id ?? activeDrag.payload.session.clockOut?.id ?? null)
+                        ? (
+                            activeDrag.payload.session.calendarBlockId ??
+                            activeDrag.payload.session.clockIn?.id ??
+                            activeDrag.payload.session.clockOut?.id ??
+                            null
+                          )
                         : null
+                    }
+                    activeConflictTargetIds={
+                      activeDrag?.payload.type === 'session' &&
+                      activeDrag.currentRowIndex === memberIndex
+                        ? (activeDrag.conflictTargetIds ?? [])
+                        : []
                     }
                     dayViewDragDidOccurRef={dragDidOccurRef}
                     jobs={memberJobs}
@@ -1216,6 +1424,7 @@ export function DayView({
                     jobDragShadow={jobDragShadow}
                     onJobDragUpdate={handleJobDragUpdate}
                     onJobDragEnd={handleJobDragEnd}
+                    onInvalidSessionPlacement={handleInvalidSessionPlacement}
                   />
                 );
               })}

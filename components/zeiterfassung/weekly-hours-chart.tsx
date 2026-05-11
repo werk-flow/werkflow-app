@@ -9,6 +9,7 @@ interface WeeklyHoursChartProps {
   weekData: DayData[];
   todayIndex: number;
   liveTodayMinutes?: number;
+  liveTodayBreakMinutes?: number;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   className?: string;
@@ -22,6 +23,7 @@ export function WeeklyHoursChart({
   weekData,
   todayIndex,
   liveTodayMinutes,
+  liveTodayBreakMinutes,
   narrowBars = false,
   weekLabel,
   className
@@ -30,12 +32,12 @@ export function WeeklyHoursChart({
     if (!weekData.length) return [];
     return weekData.map((day, i) => {
       if (i === todayIndex && liveTodayMinutes !== undefined) {
-        const bd = computeTimeBreakdown(liveTodayMinutes);
+        const bd = computeTimeBreakdown(liveTodayMinutes, liveTodayBreakMinutes);
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
       return day;
     });
-  }, [weekData, todayIndex, liveTodayMinutes]);
+  }, [weekData, todayIndex, liveTodayBreakMinutes, liveTodayMinutes]);
 
   const maxMinutes = useMemo(() => {
     const tallest = Math.max(...data.map((d) => d.totalMinutes), 0);
