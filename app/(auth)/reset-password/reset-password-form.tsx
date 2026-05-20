@@ -253,20 +253,25 @@ export function ResetPasswordForm() {
       // Immediately sign out the user for security
       await supabase.auth.signOut();
 
-      await fetch('/auth/flash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: 'password-reset-success'
-        })
-      }).catch((error) => {
+      let loginRedirectHref = '/login';
+
+      try {
+        await fetch('/auth/flash', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: 'password-reset-success'
+          })
+        });
+      } catch (error) {
         console.error('Failed to store auth flash message:', error);
-      });
+        loginRedirectHref = '/login?message=password_reset_success';
+      }
 
       // Redirect to login with a one-time server-side flash message
-      router.push('/login');
+      router.push(loginRedirectHref);
     } catch (error) {
       console.error('Unexpected error:', error);
       setFormError(

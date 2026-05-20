@@ -8,9 +8,10 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
+  type ReactNode
 } from 'react';
 import { AlertCircle, CheckCircle, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type SettingsBannerVariant = 'success' | 'error';
 
@@ -31,11 +32,7 @@ const SettingsBannerContext = createContext<SettingsBannerContextValue | null>(
 const AUTO_DISMISS_MS = 3000;
 const EXIT_ANIMATION_MS = 150;
 
-export function SettingsBannerProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function SettingsBannerProvider({ children }: { children: ReactNode }) {
   const [banner, setBanner] = useState<SettingsBanner | null>(null);
   const [isExiting, setIsExiting] = useState(false);
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -64,7 +61,7 @@ export function SettingsBannerProvider({
       setBanner({
         id: Date.now(),
         message,
-        variant,
+        variant
       });
     },
     [clearTimers]
@@ -86,7 +83,7 @@ export function SettingsBannerProvider({
 
   const value = useMemo<SettingsBannerContextValue>(
     () => ({
-      showBanner,
+      showBanner
     }),
     [showBanner]
   );
@@ -96,9 +93,10 @@ export function SettingsBannerProvider({
       {children}
       {banner ? (
         <div
-          className={`fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${
+          className={cn(
+            'fixed top-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2',
             isExiting ? 'animate-banner-out' : 'animate-banner-in'
-          }`}
+          )}
         >
           <div
             className={`flex items-center gap-3 rounded-lg p-4 shadow-lg ring-1 ${

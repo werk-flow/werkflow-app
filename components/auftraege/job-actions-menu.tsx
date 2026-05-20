@@ -36,6 +36,7 @@ import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
 import {
+  getJobDisplayTitle,
   JOB_STATUS_LABELS,
   JOB_STATUS_ORDER,
   type Client,
@@ -68,6 +69,7 @@ export function JobActionsMenu({
   onJobDeleted,
 }: JobActionsMenuProps) {
   const router = useRouter();
+  const displayTitle = getJobDisplayTitle(job);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showParkDialog, setShowParkDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -129,7 +131,7 @@ export function JobActionsMenu({
       if (onJobDeleted) {
         await onJobDeleted(job.id);
       } else {
-        router.push(`/auftraege?deleted_job=${encodeURIComponent(job.title)}`);
+        router.push(`/auftraege?deleted_job=${encodeURIComponent(displayTitle)}`);
       }
     } else {
       setError(result.error || 'Fehler beim Löschen des Auftrags');
@@ -202,7 +204,7 @@ export function JobActionsMenu({
               Bist du sicher, dass du den Auftrag{' '}
               <span className="font-medium">
                 {job.jobNumber ? `${job.jobNumber} – ` : ''}
-                {job.title}
+                {displayTitle}
               </span>{' '}
               löschen möchtest? Diese Aktion kann nicht rückgängig gemacht
               werden.
@@ -235,7 +237,7 @@ export function JobActionsMenu({
         open={showParkDialog}
         onOpenChange={setShowParkDialog}
         variant="job"
-        title={job.title}
+        title={displayTitle}
         identifier={job.jobNumber ?? undefined}
         onConfirm={handleParkConfirm}
       />

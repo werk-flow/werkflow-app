@@ -2,8 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, CheckCircle2, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -131,7 +130,6 @@ function PasswordStepIndicator({
 }
 
 export function PasswordChangeCard() {
-  const router = useRouter();
   const { profile } = useUserProfile();
   const { showBanner } = useSettingsBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -140,7 +138,7 @@ export function PasswordChangeCard() {
     []
   );
   const [step, setStep] = useState<PasswordChangeStep>('idle');
-  const [currentPassword, setCurrentPassword] = useState('');
+  const currentPasswordRef = useRef('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isCurrentPasswordSubmitting, setIsCurrentPasswordSubmitting] = useState(false);
   const [isForgotPasswordRedirecting, setIsForgotPasswordRedirecting] = useState(false);
@@ -157,11 +155,23 @@ export function PasswordChangeCard() {
     ? `/forgot-password?email=${encodeURIComponent(profile.email)}&source=settings`
     : '/forgot-password';
 
+  const clearCurrentPassword = () => {
+    currentPasswordRef.current = '';
+  };
+
   function resetFlow() {
     setStep('idle');
-    setCurrentPassword('');
+    clearCurrentPassword();
     setFormError(null);
     currentPasswordForm.reset({ currentPassword: '' });
+  }
+
+  useEffect(() => clearCurrentPassword, []);
+
+  function returnToVerificationStep() {
+    clearCurrentPassword();
+    currentPasswordForm.reset({ currentPassword: '' });
+    setStep('verify_current');
   }
 
   const onCurrentPasswordSubmit = currentPasswordForm.handleSubmit(async (values) => {
@@ -193,7 +203,7 @@ export function PasswordChangeCard() {
       }
 
       await verificationClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
-      setCurrentPassword(values.currentPassword);
+      currentPasswordRef.current = values.currentPassword;
       setStep('set_new');
     } finally {
       setIsCurrentPasswordSubmitting(false);
@@ -204,9 +214,20 @@ export function PasswordChangeCard() {
     setIsPasswordSubmitting(true);
     setFormError(null);
 
+    const currentPassword = currentPasswordRef.current;
+
     try {
+      if (!currentPassword) {
+        setFormError(
+          'Bitte bestätige zuerst erneut dein aktuelles Passwort.'
+        );
+        returnToVerificationStep();
+        return;
+      }
+
       if (values.password === currentPassword) {
         setFormError('Das neue Passwort muss sich vom alten Passwort unterscheiden.');
+        returnToVerificationStep();
         return;
       }
 
@@ -217,15 +238,16 @@ export function PasswordChangeCard() {
 
       if (error) {
         if (isCurrentPasswordError(error)) {
+          returnToVerificationStep();
           currentPasswordForm.setError('currentPassword', {
             type: 'manual',
             message: 'Dein aktuelles Passwort ist nicht korrekt.',
           });
-          setStep('verify_current');
           setFormError(null);
           return;
         }
 
+        returnToVerificationStep();
         setFormError(translateSupabasePasswordError(error));
         return;
       }
@@ -260,12 +282,7 @@ export function PasswordChangeCard() {
       return;
     }
 
-    if (typeof window !== 'undefined') {
-      window.location.replace(forgotPasswordHref);
-      return;
-    }
-
-    router.replace(forgotPasswordHref);
+    window.location.replace(forgotPasswordHref);
   }
 
   return (
@@ -419,7 +436,7 @@ export function PasswordChangeCard() {
                     onSubmit={onPasswordSubmit}
                     onBack={() => {
                       setFormError(null);
-                      setStep('verify_current');
+                      returnToVerificationStep();
                     }}
                   />
                 </div>

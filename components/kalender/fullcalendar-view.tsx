@@ -735,7 +735,9 @@ export function FullCalendarView({
       return (
         <div className="flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full text-foreground">
           <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-          <span className="font-medium truncate text-xs">{job.title}</span>
+          <span className="font-medium truncate text-xs" title={job.title}>
+            {job.title}
+          </span>
           {job.jobNumber && (
             <span className="text-[10px] text-muted-foreground truncate">
               {job.jobNumber}

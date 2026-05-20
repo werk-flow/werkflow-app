@@ -332,6 +332,26 @@ export function toJob(row: JobRow): Job {
   };
 }
 
+export function getJobDisplayTitle(
+  job: Pick<Job, 'title' | 'description'>
+): string {
+  const title = job.title.trim();
+  if (title) return title;
+
+  const description = job.description?.trim();
+  return description || '—';
+}
+
+export function getProjectDisplayTitle(
+  project: Pick<Project, 'name' | 'description'>
+): string {
+  const title = project.name.trim();
+  if (title) return title;
+
+  const description = project.description?.trim();
+  return description || '—';
+}
+
 export function toJobAssignment(row: JobAssignmentRow): JobAssignment {
   return {
     id: row.id,
@@ -796,7 +816,7 @@ function getSortValue(
     const j = entry.job;
     switch (column) {
       case 'nr': return j.jobNumber ?? '';
-      case 'bezeichnung': return j.title;
+      case 'bezeichnung': return getJobDisplayTitle(j);
       case 'kunde': return j.clientId ? (clientMap[j.clientId] ?? '') : '';
       case 'status': return STATUS_SORT_ORDER[j.status] ?? 0;
       case 'prioritaet': return PRIORITY_SORT_ORDER[j.priority] ?? 0;
@@ -806,7 +826,7 @@ function getSortValue(
   const p = entry.project;
   switch (column) {
     case 'nr': return p.projectNumber ?? '';
-    case 'bezeichnung': return p.name;
+    case 'bezeichnung': return getProjectDisplayTitle(p);
     case 'kunde': return p.clientId ? (clientMap[p.clientId] ?? '') : '';
     case 'status': {
       const eff = p.statusOverride ?? getEffectiveProjectStatusFromCounts(p);

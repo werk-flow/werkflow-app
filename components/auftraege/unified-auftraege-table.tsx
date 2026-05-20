@@ -23,6 +23,8 @@ import {
   JOB_PRIORITY_LABELS,
   PROJECT_STATUS_LABELS,
   calculateTrafficLightFromCounts,
+  getJobDisplayTitle,
+  getProjectDisplayTitle,
   getEffectiveProjectStatusFromCounts,
   type Client,
   type Job,
@@ -35,6 +37,7 @@ import {
   type SortColumn,
 } from '@/lib/jobs/types';
 import {
+  AUFTRAEGE_VISIBLE_COLUMN_LABELS,
   isAuftraegeColumnVisible,
   resolveVisibleAuftraegeColumns,
   type AuftraegeColumnId,
@@ -330,10 +333,12 @@ function StandaloneJobRow({
       )}
       {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
         <TableCell className="font-medium">
-          <span className="inline-flex items-center">
-            {job.title}
+          <div className="flex items-start gap-2">
+            <span className="line-clamp-4 break-words whitespace-pre-wrap">
+              {getJobDisplayTitle(job)}
+            </span>
             {isActive && <ActiveWorkIndicator />}
-          </span>
+          </div>
         </TableCell>
       )}
       {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
@@ -466,10 +471,12 @@ function ProjectRow({
         )}
         {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
           <TableCell className="font-medium">
-            <span className="inline-flex items-center">
-              {project.name}
-              {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+          <div className="flex items-start gap-2">
+            <span className="line-clamp-4 break-words whitespace-pre-wrap">
+              {getProjectDisplayTitle(project)}
             </span>
+            {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+          </div>
           </TableCell>
         )}
         {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
@@ -536,10 +543,12 @@ function ProjectRow({
               )}
               {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
                 <TableCell className="pl-8 font-medium">
-                  <span className="inline-flex items-center">
-                    {job.title}
+                  <div className="flex items-start gap-2">
+                    <span className="line-clamp-4 break-words whitespace-pre-wrap">
+                      {getJobDisplayTitle(job)}
+                    </span>
                     {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
-                  </span>
+                  </div>
                 </TableCell>
               )}
               {isAuftraegeColumnVisible(visibleColumns, 'kunde') && (
@@ -649,7 +658,7 @@ function JobCard({
           )}
           <MarqueeText className="flex-1 text-sm font-medium">
             <span className="inline-flex items-center">
-              {job.title}
+              {getJobDisplayTitle(job)}
               {isActive && <ActiveWorkIndicator />}
             </span>
           </MarqueeText>
@@ -780,7 +789,7 @@ function ProjectCard({
             )}
             <MarqueeText className="flex-1 text-sm font-medium">
               <span className="inline-flex items-center">
-                {project.name}
+                {getProjectDisplayTitle(project)}
                 {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
               </span>
             </MarqueeText>
@@ -992,7 +1001,7 @@ export function UnifiedAuftraegeTable({
                   <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
                 )}
                 {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
-                  <SortableHeader label="Titel" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
+                  <SortableHeader label={AUFTRAEGE_VISIBLE_COLUMN_LABELS.bezeichnung} column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
                 )}
                 {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
                   <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
@@ -1103,7 +1112,7 @@ export function UnifiedAuftraegeTable({
                 <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
               )}
               {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
-                <SortableHeader label="Titel" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
+                <SortableHeader label={AUFTRAEGE_VISIBLE_COLUMN_LABELS.bezeichnung} column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
               )}
               {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
                 <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />

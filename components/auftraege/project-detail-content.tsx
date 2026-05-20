@@ -68,6 +68,7 @@ import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import {
+  getJobDisplayTitle,
   toJob,
   toProject,
   calculateProjectProgress,
@@ -309,7 +310,7 @@ export function ProjectDetailContent({
           const result = await getTimeEntriesForJob(job.id);
           return {
             jobId: job.id,
-            jobTitle: job.title,
+            jobTitle: getJobDisplayTitle(job),
             entries: result.success ? result.entries : [],
           };
         })
@@ -1063,7 +1064,9 @@ function ChildJobRow({
             {job.jobNumber}
           </span>
           <span className="text-sm font-medium inline-flex items-center min-w-0">
-            <span className="truncate">{job.title}</span>
+            <span className="line-clamp-2 break-words" title={getJobDisplayTitle(job)}>
+              {getJobDisplayTitle(job)}
+            </span>
             {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
           </span>
         </div>

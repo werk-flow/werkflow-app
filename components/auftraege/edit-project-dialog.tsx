@@ -33,7 +33,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
-  name_required: 'Bitte gib einen Titel ein.',
+  name_or_description_required:
+    'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
   project_not_found: 'Projekt nicht gefunden.',
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
@@ -72,7 +73,7 @@ export function EditProjectDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nameError, setNameError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
   const router = useRouter();
@@ -115,7 +116,7 @@ export function EditProjectDialog({
         : undefined
     );
     setError(null);
-    setNameError(null);
+    setContentError(null);
     setSuccess(false);
     setHasAttemptedSubmit(false);
 
@@ -134,10 +135,12 @@ export function EditProjectDialog({
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setNameError(null);
+    setContentError(null);
 
-    if (!name.trim()) {
-      setNameError('Bitte gib einen Titel ein.');
+    if (!name.trim() && !description.trim()) {
+      setContentError(
+        'Bitte gib mindestens einen Titel oder eine Beschreibung ein.'
+      );
       return;
     }
 
@@ -161,9 +164,13 @@ export function EditProjectDialog({
       const result = await updateProject(project.id, input);
 
       if (!result.success && result.error !== 'no_changes') {
-        setError(
-          ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
-        );
+        if (result.error === 'name_or_description_required') {
+          setContentError(ERROR_MESSAGES[result.error]);
+        } else {
+          setError(
+            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+          );
+        }
         return;
       }
 
@@ -203,7 +210,7 @@ export function EditProjectDialog({
     }
   };
 
-  const showNameError = hasAttemptedSubmit && nameError;
+  const showContentError = hasAttemptedSubmit && contentError;
   const formDisabled = isLoading || success;
 
   return (
@@ -219,21 +226,18 @@ export function EditProjectDialog({
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-project-name">Titel *</Label>
+              <Label htmlFor="edit-project-name">Titel</Label>
               <Input
                 id="edit-project-name"
                 placeholder="z.B. Sanierung Hauptgebäude"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
-                  if (nameError) setNameError(null);
+                  if (contentError && e.target.value.trim()) setContentError(null);
                 }}
                 disabled={formDisabled}
-                aria-invalid={showNameError ? true : undefined}
+                aria-invalid={showContentError ? true : undefined}
               />
-              {showNameError && (
-                <p className="text-sm text-destructive">{nameError}</p>
-              )}
             </div>
 
             <div className="grid gap-2">
@@ -251,11 +255,18 @@ export function EditProjectDialog({
               <Label htmlFor="edit-project-description">Beschreibung</Label>
               <Textarea
                 id="edit-project-description"
-                placeholder="Optionale Beschreibung..."
+                placeholder="Optionale Beschreibung des Projekts..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (contentError && e.target.value.trim()) setContentError(null);
+                }}
                 disabled={formDisabled}
+                aria-invalid={showContentError ? true : undefined}
               />
+              {showContentError && (
+                <p className="text-sm text-destructive">{contentError}</p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -314,7 +325,7 @@ export function EditProjectDialog({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={formDisabled || !name.trim()}
+              disabled={formDisabled}
             >
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Speichern'}

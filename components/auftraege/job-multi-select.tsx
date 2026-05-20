@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 
 import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import type { Job } from '@/lib/jobs/types';
+import { getJobDisplayTitle, type Job } from '@/lib/jobs/types';
 
 interface JobMultiSelectProps {
   jobs: Job[];
@@ -22,7 +22,7 @@ export function JobMultiSelect({
     () =>
       jobs.map((j) => ({
         value: j.id,
-        label: j.title,
+        label: getJobDisplayTitle(j),
         description: j.jobNumber || undefined,
       })),
     [jobs]

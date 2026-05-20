@@ -40,6 +40,7 @@ import {
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { getAutomaticBreakRange } from '@/lib/time-tracking/settings';
 import {
@@ -499,7 +500,7 @@ export function EntryDetailsDialog({
     let cancelled = false;
     createSupabaseBrowserClient()
       .from('jobs')
-      .select('title, job_number, projects(project_number)')
+      .select('title, description, job_number, projects(project_number)')
       .eq('id', session.jobId)
       .single()
       .then(
@@ -508,13 +509,17 @@ export function EntryDetailsDialog({
         }: {
           data: {
             title: string;
+            description: string | null;
             job_number: string | null;
             projects: { project_number: string } | null;
           } | null;
         }) => {
           if (!cancelled && data) {
             setResolvedJob({
-              title: data.title,
+              title: getJobDisplayTitle({
+                title: data.title,
+                description: data.description
+              }),
               jobNumber: data.job_number,
               projectNumber: data.projects?.project_number ?? null
             });
@@ -588,7 +593,7 @@ export function EntryDetailsDialog({
       autoBreakThresholdMinutes:
         interactiveSession.autoBreakThresholdMinutes ?? 360,
       autoBreakDurationMinutes:
-        interactiveSession.autoBreakDurationMinutes ?? 30,
+        interactiveSession.autoBreakDurationMinutes ?? 30
     });
 
     if (!automaticBreak) {
@@ -603,7 +608,7 @@ export function EntryDetailsDialog({
         entryUserId,
         entryOrganizationId ?? undefined
       ),
-      isManual: false,
+      isManual: false
     };
     const breakEndEntry = {
       ...buildDraftEntry(
@@ -613,14 +618,14 @@ export function EntryDetailsDialog({
         entryUserId,
         entryOrganizationId ?? undefined
       ),
-      isManual: false,
+      isManual: false
     };
 
     return buildEditableBreaks([
       {
         breakStart: breakStartEntry,
-        breakEnd: breakEndEntry,
-      },
+        breakEnd: breakEndEntry
+      }
     ]);
   }, [
     clockInDate,
@@ -632,9 +637,11 @@ export function EntryDetailsDialog({
     interactiveSession.autoBreakDurationMinutes,
     interactiveSession.autoBreakThresholdMinutes,
     interactiveSession.breakMode,
-    isAutomaticBreakMode,
+    isAutomaticBreakMode
   ]);
-  const displayedBreaks = isAutomaticBreakMode ? automaticDisplayBreaks : editedBreaks;
+  const displayedBreaks = isAutomaticBreakMode
+    ? automaticDisplayBreaks
+    : editedBreaks;
   const hasActualBreaks = displayedBreaks.length > 0;
   const totalBreakMinutes = useMemo(
     () =>
@@ -1193,7 +1200,7 @@ export function EntryDetailsDialog({
         if (shouldConvertActiveBreakBoundaryToClockOut && startEntry) {
           const result = await updateEntry(startEntry.id, {
             entryType: 'clock_out',
-            jobId: null,
+            jobId: null
           });
 
           if (!result.success) {
@@ -1206,7 +1213,9 @@ export function EntryDetailsDialog({
           }
 
           if (requestCreated) {
-            setSuccessMessage('Änderungsantrag wurde zur Genehmigung eingereicht.');
+            setSuccessMessage(
+              'Änderungsantrag wurde zur Genehmigung eingereicht.'
+            );
             setTimeout(() => {
               onOpenChange(false);
               onRefresh();
@@ -1319,7 +1328,7 @@ export function EntryDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Eintrag Details</DialogTitle>
           <DialogDescription>{getDescriptionText()}</DialogDescription>
@@ -1641,7 +1650,8 @@ export function EntryDetailsDialog({
                       )}
                       {isAutomaticBreakMode && (
                         <p className="text-xs text-muted-foreground">
-                          Passt sich beim Bearbeiten von Arbeitsbeginn oder Arbeitsende automatisch an
+                          Passt sich beim Bearbeiten von Arbeitsbeginn oder
+                          Arbeitsende automatisch an
                         </p>
                       )}
                     </div>
@@ -1678,8 +1688,9 @@ export function EntryDetailsDialog({
                 Pause hinzufügen
               </Button>
               <p className="text-xs text-muted-foreground">
-                Pausen werden in dieser Organisation automatisch abgezogen. Deshalb
-                kann in diesem Dialog keine manuelle Pause hinzugefuegt werden.
+                Pausen werden in dieser Organisation automatisch abgezogen.
+                Deshalb kann in diesem Dialog keine manuelle Pause hinzugefügt
+                werden.
               </p>
             </div>
           )}

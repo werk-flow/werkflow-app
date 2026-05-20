@@ -38,7 +38,14 @@ import {
   getJobDetails,
   type UpdateJobInput
 } from '@/lib/jobs/actions';
-import { JOB_PRIORITY_LABELS, type Client, type Job, type JobPriority, type ProjectWithDetails } from '@/lib/jobs/types';
+import {
+  getJobDisplayTitle,
+  JOB_PRIORITY_LABELS,
+  type Client,
+  type Job,
+  type JobPriority,
+  type ProjectWithDetails
+} from '@/lib/jobs/types';
 import {
   calculatePlannedWorkingMinutes,
   formatMinutesAsHoursInput,
@@ -56,7 +63,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
-  title_required: 'Bitte gib einen Titel ein.',
+  title_or_description_required:
+    'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
   job_not_found: 'Auftrag nicht gefunden.',
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
@@ -104,7 +112,7 @@ export function EditJobDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [titleError, setTitleError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showAutoParkDialog, setShowAutoParkDialog] = useState(false);
@@ -126,7 +134,7 @@ export function EditJobDialog({
     setAutoSyncPlannedWorking(false);
     setLocation(job.location ?? '');
     setError(null);
-    setTitleError(null);
+    setContentError(null);
     setSuccess(false);
     setHasAttemptedSubmit(false);
 
@@ -155,10 +163,12 @@ export function EditJobDialog({
   const submitChanges = async (confirmedDateRemoval = false) => {
     setHasAttemptedSubmit(true);
     setError(null);
-    setTitleError(null);
+    setContentError(null);
 
-    if (!title.trim()) {
-      setTitleError('Bitte gib einen Titel ein.');
+    if (!title.trim() && !description.trim()) {
+      setContentError(
+        'Bitte gib mindestens einen Titel oder eine Beschreibung ein.'
+      );
       return;
     }
 
@@ -215,9 +225,13 @@ export function EditJobDialog({
       const result = await updateJob(job.id, input);
 
       if (!result.success && result.error !== 'no_changes') {
-        setError(
-          ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
-        );
+        if (result.error === 'title_or_description_required') {
+          setContentError(ERROR_MESSAGES[result.error]);
+        } else {
+          setError(
+            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+          );
+        }
         return;
       }
 
@@ -258,7 +272,7 @@ export function EditJobDialog({
     await submitChanges();
   };
 
-  const showTitleError = hasAttemptedSubmit && titleError;
+  const showContentError = hasAttemptedSubmit && contentError;
   const formDisabled = isLoading || success;
 
   const activeProjects = useMemo(
@@ -378,21 +392,18 @@ export function EditJobDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-job-title">Titel *</Label>
+              <Label htmlFor="edit-job-title">Titel</Label>
               <Input
                 id="edit-job-title"
                 placeholder="z.B. Heizung reparieren"
                 value={title}
                 onChange={(e) => {
                   setTitle(e.target.value);
-                  if (titleError) setTitleError(null);
+                  if (contentError && e.target.value.trim()) setContentError(null);
                 }}
                 disabled={formDisabled}
-                aria-invalid={showTitleError ? true : undefined}
+                aria-invalid={showContentError ? true : undefined}
               />
-              {showTitleError && (
-                <p className="text-sm text-destructive">{titleError}</p>
-              )}
             </div>
 
             <div className="grid gap-2">
@@ -401,9 +412,16 @@ export function EditJobDialog({
                 id="edit-job-description"
                 placeholder="Optionale Beschreibung..."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (contentError && e.target.value.trim()) setContentError(null);
+                }}
                 disabled={formDisabled}
+                aria-invalid={showContentError ? true : undefined}
               />
+              {showContentError && (
+                <p className="text-sm text-destructive">{contentError}</p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -550,7 +568,7 @@ export function EditJobDialog({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={formDisabled || !title.trim()}
+              disabled={formDisabled}
             >
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Speichern'}
@@ -562,7 +580,11 @@ export function EditJobDialog({
           open={showAutoParkDialog}
           onOpenChange={setShowAutoParkDialog}
           variant="job"
-          title={title.trim() || job.title}
+        title={
+          title.trim() || description.trim()
+            ? getJobDisplayTitle({ title, description })
+            : getJobDisplayTitle(job)
+        }
           identifier={jobNumber.trim() || job.jobNumber || undefined}
           mode="auto-park-date-removal"
           onConfirm={() => submitChanges(true)}

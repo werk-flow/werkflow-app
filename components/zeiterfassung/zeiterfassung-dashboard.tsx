@@ -539,7 +539,10 @@ function MenuCard({
           </div>
           <div>
             <p className="font-medium">{title}</p>
-            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+            <p
+              className="text-xs text-muted-foreground truncate max-w-[200px]"
+              title={disabled && disabledHint ? disabledHint : subtitle}
+            >
               {disabled && disabledHint ? disabledHint : subtitle}
             </p>
           </div>

@@ -64,8 +64,10 @@ export async function createProject(
       return { success: false, error: 'not_authorized' };
     }
 
-    if (!input.name.trim()) {
-      return { success: false, error: 'name_required' };
+    const name = input.name.trim();
+    const description = input.description?.trim() ?? '';
+    if (!name && !description) {
+      return { success: false, error: 'name_or_description_required' };
     }
 
     const projectNumber = input.projectNumber?.trim();
@@ -104,8 +106,8 @@ export async function createProject(
       .insert({
         organization_id: orgId,
         client_id: input.clientId || null,
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
+        name,
+        description: description || null,
         project_number: input.projectNumber?.trim() || null,
         planned_start_date: input.plannedStartDate || null,
         planned_end_date: input.plannedEndDate || null,
@@ -145,13 +147,24 @@ export async function updateProject(
 
     const { data: existing, error: fetchError } = await admin
       .from('projects')
-      .select('id, client_id')
+      .select('id, client_id, name, description')
       .eq('id', projectId)
       .eq('organization_id', orgId)
       .single();
 
     if (fetchError || !existing) {
       return { success: false, error: 'project_not_found' };
+    }
+
+    const resultingName =
+      input.name !== undefined ? input.name.trim() : existing.name.trim();
+    const resultingDescription =
+      input.description !== undefined
+        ? input.description?.trim() ?? ''
+        : existing.description?.trim() ?? '';
+
+    if (!resultingName && !resultingDescription) {
+      return { success: false, error: 'name_or_description_required' };
     }
 
     if (input.clientId !== undefined && input.clientId) {

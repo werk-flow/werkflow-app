@@ -1286,7 +1286,7 @@ export function DayView({
                 )}
               >
                 <Briefcase className="h-3 w-3 text-brand-purple" />
-                <span className="truncate max-w-[150px]">{job.title}</span>
+                <span className="truncate max-w-[150px]" title={job.title}>{job.title}</span>
                 {job.jobNumber && (
                   <span className="text-muted-foreground text-[10px]">
                     {job.jobNumber}
@@ -1619,7 +1619,9 @@ export function DayView({
               ) : (
                 <>
                   <Briefcase className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{activeDrag.payload.job.title}</span>
+                  <span className="truncate" title={activeDrag.payload.job.title}>
+                    {activeDrag.payload.job.title}
+                  </span>
                 </>
               )}
             </div>

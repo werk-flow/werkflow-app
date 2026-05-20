@@ -96,6 +96,7 @@ async function createCroppedAvatarBlob(
 
 export function ProfileAvatarSection() {
   const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useSettingsBanner();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -185,8 +186,6 @@ export function ProfileAvatarSection() {
     }
 
     setIsUploading(true);
-
-    const supabase = createSupabaseBrowserClient();
     const nextAvatarPath = `${profile.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
 
     try {

@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers'
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation'
 
 import { AuftraegeColumnSettingsForm } from '@/components/settings/auftraege-column-settings-form'
@@ -7,6 +7,7 @@ import {
   getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached'
+import { DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS } from '@/lib/jobs/auftraege-table-columns'
 import { resolveActiveOrgId } from '@/lib/org/cookies'
 
 export default async function JobsProjectsSettingsPage() {
@@ -30,10 +31,17 @@ export default async function JobsProjectsSettingsPage() {
     redirect('/dashboard')
   }
 
-  const { visibleColumns } = await getCachedOrganizationUserPreferences(
-    activeMembership.orgId,
-    user.id
-  )
+  let visibleColumns = [...DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS]
+
+  try {
+    const preferences = await getCachedOrganizationUserPreferences(
+      activeMembership.orgId,
+      user.id
+    )
+    visibleColumns = preferences.visibleColumns
+  } catch (error) {
+    console.error('Error loading organization user preferences:', error)
+  }
 
   return (
     <AuftraegeColumnSettingsForm

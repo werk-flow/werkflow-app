@@ -52,7 +52,10 @@ import {
   type MemberDetail,
 } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
-import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
+import {
+  useMemberStatusPolling,
+  type MemberStatus,
+} from '@/hooks/use-member-status-polling';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import {
   formatDuration,
@@ -110,6 +113,31 @@ function formatMinutesAsHours(minutes: number): string {
   if (h === 0) return `${m} Min.`;
   if (m === 0) return `${h} Std.`;
   return `${h} Std. ${m} Min.`;
+}
+
+function computeLiveBreakMinutesForMember(
+  status: MemberStatus | undefined,
+  liveTotalMinutes: number,
+  defaultBreakMode: OrgBreakMode,
+  defaultAutoBreakThresholdMinutes: number,
+  defaultAutoBreakDurationMinutes: number
+) {
+  const effectiveBreakMode = status?.breakMode ?? defaultBreakMode;
+  const trackedLiveBreakMinutes =
+    effectiveBreakMode === 'manual'
+      ? (status?.breakMinutes ?? 0) +
+        (status?.status === 'on_break' && status.statusStartedAt
+          ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
+          : 0)
+      : status?.breakMinutes ?? 0;
+
+  return computeBreakdownForSettings(liveTotalMinutes, trackedLiveBreakMinutes, {
+    breakMode: effectiveBreakMode,
+    autoBreakThresholdMinutes:
+      status?.autoBreakThresholdMinutes ?? defaultAutoBreakThresholdMinutes,
+    autoBreakDurationMinutes:
+      status?.autoBreakDurationMinutes ?? defaultAutoBreakDurationMinutes,
+  });
 }
 
 interface MitarbeiterDetailContentProps {
@@ -239,23 +267,12 @@ export function MitarbeiterDetailContent({
     return () => clearInterval(interval);
   }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);
 
-  const trackedLiveBreakMinutes =
-    (status?.breakMode ?? breakMode) === 'manual'
-      ? (status?.breakMinutes ?? 0) +
-        (status?.status === 'on_break' && status.statusStartedAt
-          ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
-          : 0)
-      : status?.breakMinutes ?? 0;
-  const memberBreakdown = computeBreakdownForSettings(
+  const memberBreakdown = computeLiveBreakMinutesForMember(
+    status,
     liveTotalMinutes,
-    trackedLiveBreakMinutes,
-    {
-      breakMode: status?.breakMode ?? breakMode,
-      autoBreakThresholdMinutes:
-        status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes,
-      autoBreakDurationMinutes:
-        status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes,
-    }
+    breakMode,
+    autoBreakThresholdMinutes,
+    autoBreakDurationMinutes
   );
   const liveBreakMinutes = memberBreakdown.breakMinutes;
   const dailyPercentage = Math.min(

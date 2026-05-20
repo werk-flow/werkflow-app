@@ -22,7 +22,7 @@ export function isAuthFlashKey(value: unknown): value is AuthFlashKey {
   );
 }
 
-export function getAuthFlashMessage(key: AuthFlashKey) {
+export function getAuthFlashMessage(key: AuthFlashKey): string {
   switch (key) {
     case 'password-reset-requested':
       return AUTH_FLASH_MESSAGES.passwordResetRequested;
@@ -30,5 +30,9 @@ export function getAuthFlashMessage(key: AuthFlashKey) {
       return AUTH_FLASH_MESSAGES.passwordResetRequestedKnownUser;
     case 'password-reset-success':
       return AUTH_FLASH_MESSAGES.passwordResetSuccess;
+    default: {
+      const exhaustiveKey: never = key;
+      throw new Error(`Unhandled auth flash key: ${exhaustiveKey}`);
+    }
   }
 }

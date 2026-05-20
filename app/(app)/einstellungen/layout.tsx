@@ -19,8 +19,18 @@ export default async function SettingsLayout({
     redirect('/login');
   }
 
-  const memberships = await getCachedMemberships(user.id);
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+  let memberships: Awaited<ReturnType<typeof getCachedMemberships>> = [];
+  let activeOrgId: string | null = null;
+
+  try {
+    [memberships, activeOrgId] = await Promise.all([
+      getCachedMemberships(user.id),
+      resolveActiveOrgId(cookieStore, user.id),
+    ]);
+  } catch (error) {
+    console.error('Error loading settings layout organization context:', error);
+  }
+
   const activeMembership =
     memberships.find((membership) => membership.orgId === activeOrgId) ?? memberships[0] ?? null;
 

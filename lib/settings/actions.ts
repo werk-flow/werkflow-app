@@ -29,7 +29,14 @@ export type RemoveProfileAvatarResult =
   | { success: false; error: 'not_authenticated' | 'update_failed' };
 
 function isValidAvatarPath(userId: string, avatarPath: string): boolean {
-  return avatarPath.startsWith(`${userId}/`) && avatarPath.length > userId.length + 5;
+  const startsWithUserId = avatarPath.startsWith(`${userId}/`);
+  const hasValidLength = avatarPath.length > userId.length + 5;
+  const hasInvalidSegments = avatarPath
+    .split('/')
+    .some((segment) => segment === '' || segment === '.' || segment === '..');
+  const hasBackslash = avatarPath.includes('\\');
+
+  return startsWithUserId && hasValidLength && !hasInvalidSegments && !hasBackslash;
 }
 
 export async function updateProfileSettings(

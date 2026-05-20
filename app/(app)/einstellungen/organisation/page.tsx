@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { OrganizationSettingsForm } from '@/components/settings/organization-settings-form';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export default async function OrganizationSettingsPage() {
   const [{ data: { user } }, cookieStore] = await Promise.all([
@@ -27,8 +27,8 @@ export default async function OrganizationSettingsPage() {
     redirect('/dashboard');
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data: organization, error } = await admin
+  const supabase = await createSupabaseServerClient();
+  const { data: organization, error } = await supabase
     .from('organizations')
     .select('id, name, unique_code, created_at')
     .eq('id', activeMembership.orgId)

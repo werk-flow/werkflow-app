@@ -18,6 +18,7 @@ import {
   type AssignEmployeeResult,
   type UnassignEmployeeResult,
   normalizeJobPlannedTime,
+  getJobDisplayTitle,
   toJob,
   toClient,
   toProject,
@@ -205,8 +206,10 @@ export async function createJob(
       return { success: false, error: 'not_authorized' };
     }
 
-    if (!input.title.trim()) {
-      return { success: false, error: 'title_required' };
+    const title = input.title.trim();
+    const description = input.description?.trim() ?? '';
+    if (!title && !description) {
+      return { success: false, error: 'title_or_description_required' };
     }
 
     const jobNumber = input.jobNumber?.trim();
@@ -265,8 +268,8 @@ export async function createJob(
             ? inheritedProjectClientId
             : input.clientId || null,
         job_number: jobNumber,
-        title: input.title.trim(),
-        description: input.description?.trim() || null,
+        title,
+        description: description || null,
         status: input.plannedDate ? 'nicht_bearbeitet' : 'geparkt',
         priority: input.priority ?? 'mittel',
         planned_date: input.plannedDate || null,
@@ -313,13 +316,24 @@ export async function updateJob(
 
     const { data: existing, error: fetchError } = await admin
       .from('jobs')
-      .select('id, project_id, client_id, status')
+      .select('id, project_id, client_id, status, title, description')
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
 
     if (fetchError || !existing) {
       return { success: false, error: 'job_not_found' };
+    }
+
+    const resultingTitle =
+      input.title !== undefined ? input.title.trim() : existing.title.trim();
+    const resultingDescription =
+      input.description !== undefined
+        ? input.description?.trim() ?? ''
+        : existing.description?.trim() ?? '';
+
+    if (!resultingTitle && !resultingDescription) {
+      return { success: false, error: 'title_or_description_required' };
     }
 
     const resultingProjectId =
@@ -1338,7 +1352,7 @@ export async function getJobsForCalendar(
 
     let query = admin
       .from('jobs')
-      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id')
+      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id')
       .eq('organization_id', orgId)
       .neq('status', 'geparkt')
       .not('planned_date', 'is', null);
@@ -1409,7 +1423,10 @@ export async function getJobsForCalendar(
     const calendarJobs: CalendarJob[] = jobs.map((j) => ({
       id: j.id,
       jobNumber: j.job_number,
-      title: j.title,
+      title: getJobDisplayTitle({
+        title: j.title,
+        description: j.description
+      }),
       status: j.status as JobStatus,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,
@@ -1447,7 +1464,7 @@ export async function getParkedJobs(): Promise<
 
     let query = admin
       .from('jobs')
-      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at')
+      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at')
       .eq('organization_id', orgId)
       .eq('status', 'geparkt')
       .order('updated_at', { ascending: true });
@@ -1515,7 +1532,10 @@ export async function getParkedJobs(): Promise<
     const calendarJobs: CalendarJob[] = jobs.map((j) => ({
       id: j.id,
       jobNumber: j.job_number,
-      title: j.title,
+      title: getJobDisplayTitle({
+        title: j.title,
+        description: j.description
+      }),
       status: j.status as JobStatus,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,

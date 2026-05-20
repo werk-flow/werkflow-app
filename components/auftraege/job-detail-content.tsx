@@ -86,6 +86,7 @@ import {
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
+  getJobDisplayTitle,
   type JobWithDetails,
   type JobStatus,
   type JobPriority,
@@ -215,6 +216,7 @@ export function JobDetailContent({
   const router = useRouter();
   const [liveJob, setLiveJob] = useState(job);
   const { activeJobIds } = useActiveJobs();
+  const displayTitle = getJobDisplayTitle(liveJob);
   const isJobActive = activeJobIds.has(liveJob.id);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -540,7 +542,7 @@ export function JobDetailContent({
     startDeleteTransition(async () => {
       const result = await deleteJob(liveJob.id);
       if (result.success) {
-        const deletedParam = `?deleted_job=${encodeURIComponent(liveJob.title)}`;
+        const deletedParam = `?deleted_job=${encodeURIComponent(displayTitle)}`;
         if (projectInfo?.projectNumber) {
           router.push(
             `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
@@ -860,7 +862,7 @@ export function JobDetailContent({
                     Wenn du das geplante Datum von{' '}
                     <span className="font-medium text-foreground">
                       {liveJob.jobNumber ? `${liveJob.jobNumber} – ` : ''}
-                      {liveJob.title}
+                      {displayTitle}
                     </span>{' '}
                     entfernst, wird der Auftrag automatisch geparkt.
                   </p>
@@ -997,8 +999,8 @@ export function JobDetailContent({
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={
-          <span className="inline-flex items-center gap-1 overflow-visible">
-            {liveJob.title}
+          <span className="inline-flex items-start gap-1 overflow-visible">
+            <span className="line-clamp-2 break-words">{displayTitle}</span>
             {isJobActive && (
               <span className="relative ml-1 mr-1 inline-flex h-3 w-3 shrink-0" title="Jemand arbeitet gerade an diesem Auftrag">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
@@ -1451,7 +1453,7 @@ export function JobDetailContent({
           <AlertDialogHeader>
             <AlertDialogTitle>Auftrag löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Möchtest du den Auftrag &ldquo;{liveJob.title}&rdquo; wirklich
+              Möchtest du den Auftrag &ldquo;{displayTitle}&rdquo; wirklich
               löschen? Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1549,7 +1551,7 @@ export function JobDetailContent({
         open={showParkDialog}
         onOpenChange={setShowParkDialog}
         variant="job"
-        title={liveJob.title}
+        title={displayTitle}
         identifier={liveJob.jobNumber ?? undefined}
         onConfirm={handleParkConfirm}
       />

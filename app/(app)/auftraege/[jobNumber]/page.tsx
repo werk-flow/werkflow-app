@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { toClient } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
@@ -33,16 +33,21 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
-  const admin = createSupabaseAdminClient();
+  const supabase = await createSupabaseServerClient();
+  const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
+  const instructionItemsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobInstructionItems(result.job.id) : null
+  );
 
-  const [result, membersResult, clientsResult] = await Promise.all([
-    getJobByNumber(decodeURIComponent(jobNumber)),
+  const [result, membersResult, clientsResult, instructionItemsResult] = await Promise.all([
+    jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
-    admin
+    supabase
       .from('clients')
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
+    instructionItemsResultPromise,
   ]);
 
   if (!result.success) {
@@ -54,14 +59,28 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   }
 
   const { job } = result;
-  const instructionItemsResult = await getJobInstructionItems(job.id);
   const members: OrgMemberOption[] = membersResult.map((member) => ({
     userId: member.user_id,
     firstName: member.first_name,
     lastName: member.last_name,
     role: member.role,
   }));
+
+  if (clientsResult.error) {
+    console.error(
+      `clients query failed for organization_id=${activeOrgId}`,
+      clientsResult.error
+    );
+    throw new Error(
+      `Failed to load clients: ${clientsResult.error.message ?? 'unknown error'}`
+    );
+  }
+
   const clients = (clientsResult.data ?? []).map(toClient);
+  const instructionItems =
+    instructionItemsResult && instructionItemsResult.success
+      ? instructionItemsResult.items
+      : [];
 
   if (job.project?.projectNumber) {
     redirect(
@@ -76,7 +95,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       members={members}
       projects={[]}
       isAdminOrManager={isAdminOrManager}
-      instructionItems={instructionItemsResult.success ? instructionItemsResult.items : []}
+      instructionItems={instructionItems}
       currentUserId={user.id}
     />
   );

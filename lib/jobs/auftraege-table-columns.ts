@@ -17,7 +17,7 @@ export type AuftraegeColumnId = (typeof AUFTRAEGE_COLUMN_IDS)[number]
 
 export const AUFTRAEGE_VISIBLE_COLUMN_LABELS: Record<AuftraegeColumnId, string> = {
   nr: 'Auftragsnummer',
-  bezeichnung: 'Titel',
+  bezeichnung: 'Titel / Beschreibung',
   kunde: 'Kunde',
   status: 'Status',
   prioritaet: 'Priorität',

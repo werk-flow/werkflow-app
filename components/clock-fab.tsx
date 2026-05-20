@@ -236,6 +236,7 @@ export function ClockFAB() {
                   type="button"
                   onClick={() => setShowJobPopover((v) => !v)}
                   className="max-w-[180px] rounded-full bg-background/95 px-3 py-1 text-xs font-medium shadow-md ring-1 ring-border truncate cursor-pointer hover:bg-accent/80 transition-colors"
+                  title={activeJobInfo.title}
                 >
                   <Briefcase className="mr-1 inline-block h-3 w-3 text-muted-foreground" />
                   {activeJobInfo.title}
@@ -248,7 +249,9 @@ export function ClockFAB() {
                   >
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold truncate">{activeJobInfo.title}</p>
+                        <p className="font-semibold line-clamp-2 break-words" title={activeJobInfo.title}>
+                          {activeJobInfo.title}
+                        </p>
                         {activeJobInfo.jobNumber && (
                           <p className="text-xs text-muted-foreground">{activeJobInfo.jobNumber}</p>
                         )}

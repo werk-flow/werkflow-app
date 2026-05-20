@@ -83,6 +83,7 @@ export function ManualEntryFormContent({
   );
   const [clockInTime, setClockInTime] = useState(preselectedClockInTime || '09:00');
   const [clockOutTime, setClockOutTime] = useState(preselectedClockOutTime || '17:00');
+  const isAdmin = activeOrg?.role === 'admin';
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
   const currentUserId = profile?.id || null;
@@ -207,7 +208,9 @@ export function ManualEntryFormContent({
         let existingEntries: TimeEntry[] = [];
         if (existingResult.success) existingEntries = existingResult.entries;
 
-        const validationResult = validateManualEntries(existingEntries, entries);
+        const validationResult = validateManualEntries(existingEntries, entries, {
+          allowFutureTimestamps: isAdmin
+        });
         if (!validationResult.valid) {
           setError(validationResult.error || 'Validierung fehlgeschlagen.');
           return;

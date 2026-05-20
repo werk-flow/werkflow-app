@@ -109,12 +109,14 @@ export function JobEventPopover({
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-72 rounded-lg border bg-background p-4 shadow-xl animate-in fade-in-0 zoom-in-95"
+      className="fixed z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-4 shadow-xl animate-in fade-in-0 zoom-in-95"
       style={{ left: position.x, top: position.y }}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-semibold truncate">{job.title}</p>
+          <p className="font-semibold line-clamp-3 break-words" title={job.title}>
+            {job.title}
+          </p>
           {job.jobNumber && (
             <p className="text-xs text-muted-foreground">{job.jobNumber}</p>
           )}

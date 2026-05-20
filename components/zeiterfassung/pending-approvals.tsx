@@ -580,7 +580,7 @@ function SessionRequestCard({
             {session.jobTitle && (
               <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                 <Briefcase className="h-3 w-3 shrink-0" />
-                <span className="truncate">{session.jobTitle}</span>
+                <span className="truncate" title={session.jobTitle}>{session.jobTitle}</span>
               </p>
             )}
           </div>

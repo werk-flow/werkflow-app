@@ -199,7 +199,12 @@ export function ParkplatzPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-1">
                       <Briefcase className="size-3.5 shrink-0 text-brand-purple" />
-                      <span className="font-medium text-sm truncate">{job.title}</span>
+                      <span
+                        className="font-medium text-sm line-clamp-2 break-words"
+                        title={job.title}
+                      >
+                        {job.title}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {job.jobNumber && (

@@ -4,7 +4,6 @@ import { updateTag } from 'next/cache'
 
 import {
   buildAuftraegePreferencesJson,
-  getAuftraegePreferencesFromJson,
   auftraegeColumnPreferencesSchema,
   type AuftraegeColumnPreferencesValues,
 } from '@/lib/jobs/auftraege-table-columns'
@@ -44,15 +43,6 @@ export async function saveAuftraegeColumnPreferences(
   const admin = createSupabaseAdminClient()
   const currentPreferences = await getCachedOrganizationUserPreferences(orgId, userId)
   const nextVisibleColumns = parsed.data.visibleColumns
-  const currentVisibleColumns = getAuftraegePreferencesFromJson(currentPreferences.preferences)
-
-  const hasChanges =
-    currentVisibleColumns.length !== nextVisibleColumns.length ||
-    currentVisibleColumns.some((column, index) => column !== nextVisibleColumns[index])
-
-  if (!hasChanges) {
-    return { success: true, visibleColumns: nextVisibleColumns }
-  }
 
   const { error } = await admin.from('organization_user_preferences').upsert(
     {
@@ -70,7 +60,9 @@ export async function saveAuftraegeColumnPreferences(
   )
 
   if (error) {
-    console.error('Error saving Auftraege column preferences:', error)
+    console.error(
+      `Error saving Auftraege column preferences (code=${error.code ?? 'unknown'})`
+    )
     return { success: false, error: 'update_failed' }
   }
 

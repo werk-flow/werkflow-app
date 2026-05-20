@@ -56,6 +56,14 @@ async function ProjectDetailData({
     );
   }
 
+  if (clientsResult.error) {
+    console.error(
+      `clients query failed for organization_id=${activeOrgId}`,
+      clientsResult.error
+    );
+    throw new Error('Failed to load clients');
+  }
+
   const { project, client, jobs, derivedStatus } = result.details;
 
   const clients: Client[] = (clientsResult.data ?? []).map(toClient);

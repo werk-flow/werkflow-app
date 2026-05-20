@@ -845,21 +845,24 @@ export function validateManualBreakPair(
  */
 export function validateManualEntries(
   existingEntries: TimeEntry[],
-  newEntries: ManualEntryInput[]
+  newEntries: ManualEntryInput[],
+  options?: { allowFutureTimestamps?: boolean }
 ): ValidationResult {
   if (newEntries.length === 0) {
     return { valid: false, error: 'Mindestens ein Eintrag ist erforderlich.' };
   }
 
-  // Validate timestamps are valid dates and not in the future
+  const allowFutureTimestamps = options?.allowFutureTimestamps ?? false;
+
+  // Validate timestamps are valid dates and, unless explicitly allowed, not in the future
   for (const entry of newEntries) {
     const ts = new Date(entry.timestamp);
     if (isNaN(ts.getTime())) {
       return { valid: false, error: 'Ungültiges Datum oder Uhrzeit.' };
     }
 
-    // Cannot add entries in the future
-    if (ts.getTime() > Date.now()) {
+    // Only admins may create future-dated manual entries.
+    if (!allowFutureTimestamps && ts.getTime() > Date.now()) {
       return {
         valid: false,
         error: 'Manuelle Einträge können nicht in der Zukunft liegen.'

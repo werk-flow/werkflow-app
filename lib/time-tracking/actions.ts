@@ -68,6 +68,7 @@ import {
 } from './validation';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { computeBreakdownForSettings } from './settings';
+import { getJobDisplayTitle } from '@/lib/jobs/types';
 
 function isWorkingEntryType(entryType: string): boolean {
   return entryType === 'clock_in' || entryType === 'break_end';
@@ -202,7 +203,7 @@ async function getClockJobInfo(
 
   const { data: job } = await admin
     .from('jobs')
-    .select('id, title, job_number, status, project_id, client_id')
+    .select('id, title, description, job_number, status, project_id, client_id')
     .eq('id', jobId)
     .single();
 
@@ -220,7 +221,10 @@ async function getClockJobInfo(
   if (!includeRelations) {
     return {
       id: job.id,
-      title: job.title,
+      title: getJobDisplayTitle({
+        title: job.title,
+        description: job.description
+      }),
       jobNumber: job.job_number,
       status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
       projectName: null,
@@ -239,7 +243,10 @@ async function getClockJobInfo(
 
   return {
     id: job.id,
-    title: job.title,
+    title: getJobDisplayTitle({
+      title: job.title,
+      description: job.description
+    }),
     jobNumber: job.job_number,
     status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
     projectName: (projectData.data as { name: string } | null)?.name ?? null,
@@ -918,7 +925,9 @@ export async function addManualEntry(
     const timeEntries = toTimeEntries(existingEntries);
 
     // Validate the new entries
-    const validationResult = validateManualEntries(timeEntries, entries);
+    const validationResult = validateManualEntries(timeEntries, entries, {
+      allowFutureTimestamps: callerRole === 'admin'
+    });
     if (!validationResult.valid) {
       return {
         success: false,
@@ -1948,11 +1957,19 @@ export async function getPendingSessions(
     if (jobIds.length > 0) {
       const { data: jobs } = await admin
         .from('jobs')
-        .select('id, title')
+        .select('id, title, description')
         .in('id', jobIds);
 
       if (jobs) {
-        const jobMap = new Map(jobs.map((j) => [j.id, j.title]));
+        const jobMap = new Map(
+          jobs.map((j) => [
+            j.id,
+            getJobDisplayTitle({
+              title: j.title,
+              description: j.description
+            })
+          ])
+        );
         for (const session of sessions) {
           const jid = session.clockIn?.jobId ?? session.clockOut?.jobId;
           if (jid) {
@@ -3351,7 +3368,7 @@ export async function getAssignedJobs(
 
     const { data: jobs, error: jobsError } = await admin
       .from('jobs')
-      .select('id, title, job_number, status, project_id')
+      .select('id, title, description, job_number, status, project_id')
       .eq('organization_id', organizationId)
       .in('id', jobIds)
       .neq('status', 'fertig')
@@ -3382,7 +3399,10 @@ export async function getAssignedJobs(
       success: true,
       jobs: (jobs || []).map((j) => ({
         id: j.id,
-        title: j.title,
+        title: getJobDisplayTitle({
+          title: j.title,
+          description: j.description
+        }),
         jobNumber: j.job_number,
         status: j.status,
         projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
@@ -3420,7 +3440,7 @@ export async function getAllOrgJobs(organizationId: string): Promise<
 
     const { data: jobs, error: jobsError } = await admin
       .from('jobs')
-      .select('id, title, job_number, status, project_id')
+      .select('id, title, description, job_number, status, project_id')
       .eq('organization_id', organizationId)
       .neq('status', 'fertig')
       .order('planned_date', { ascending: true, nullsFirst: false });
@@ -3450,7 +3470,10 @@ export async function getAllOrgJobs(organizationId: string): Promise<
       success: true,
       jobs: (jobs || []).map((j) => ({
         id: j.id,
-        title: j.title,
+        title: getJobDisplayTitle({
+          title: j.title,
+          description: j.description
+        }),
         jobNumber: j.job_number,
         status: j.status,
         projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null
@@ -3517,7 +3540,7 @@ export async function getJobsForPicker(
 
     let query = admin
       .from('jobs')
-      .select('id, title, job_number, status, project_id, client_id')
+      .select('id, title, description, job_number, status, project_id, client_id')
       .eq('organization_id', organizationId)
       .neq('status', 'fertig')
       .order('title', { ascending: true });
@@ -3573,7 +3596,10 @@ export async function getJobsForPicker(
       success: true,
       jobs: (jobs || []).map((j) => ({
         id: j.id,
-        title: j.title,
+        title: getJobDisplayTitle({
+          title: j.title,
+          description: j.description
+        }),
         jobNumber: j.job_number,
         status: j.status,
         projectName: j.project_id ? (projectMap[j.project_id] ?? null) : null,

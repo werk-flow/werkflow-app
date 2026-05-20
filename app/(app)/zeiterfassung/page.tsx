@@ -13,13 +13,38 @@ import {
   getTimeEntries,
 } from '@/lib/time-tracking/actions';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
-import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
+import type { LiveClockState, ZeiterfassungOverview } from '@/lib/time-tracking/types';
 import {
   buildWeeklyTimeData,
   computeWeekLabel,
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
+
+function createDefaultClockState(
+  activeOrgId: string,
+  organizationSettings: Awaited<ReturnType<typeof getCachedOrganizationSettings>>
+): LiveClockState {
+  return {
+    organizationId: activeOrgId,
+    breakMode: organizationSettings.breakMode,
+    autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
+    status: 'clocked_out',
+    isClockedIn: false,
+    isOnBreak: false,
+    clockInTime: null,
+    statusStartedAt: null,
+    breakStartTime: null,
+    todayMinutes: 0,
+    workMinutes: 0,
+    breakMinutes: 0,
+    timelineSegments: [],
+    activeJobId: null,
+    activeJobInfo: null,
+    fetchedAt: new Date().toISOString(),
+  };
+}
 
 async function getInitialOverview(
   activeOrgId: string,
@@ -43,25 +68,7 @@ async function getInitialOverview(
   return {
     clockState: clockStateResult.success
       ? clockStateResult.state
-      : {
-          organizationId: activeOrgId,
-          breakMode: organizationSettings.breakMode,
-          autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
-          autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
-          status: 'clocked_out',
-          isClockedIn: false,
-          isOnBreak: false,
-          clockInTime: null,
-          statusStartedAt: null,
-          breakStartTime: null,
-          todayMinutes: 0,
-          workMinutes: 0,
-          breakMinutes: 0,
-          timelineSegments: [],
-          activeJobId: null,
-          activeJobInfo: null,
-          fetchedAt: new Date().toISOString(),
-        },
+      : createDefaultClockState(activeOrgId, organizationSettings),
     weekData:
       weekEntriesResult.success && weekEntriesResult.entries
         ? buildWeeklyTimeData(weekEntriesResult.entries, monday, organizationSettings)

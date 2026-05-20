@@ -23,7 +23,7 @@ export const passwordSchema = z
 
 export const passwordWithConfirmationSchema = z.object({
   password: passwordSchema,
-  confirmPassword: z.string(),
+  confirmPassword: z.string().min(1, 'Bitte bestätige dein neues Passwort.'),
 });
 
 export type PasswordWithConfirmationValues = z.infer<

@@ -23,7 +23,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
-  name_required: 'Bitte gib einen Titel ein.',
+  name_or_description_required:
+    'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
   project_number_required: 'Bitte gib eine Projektnummer ein.',
   project_number_taken: 'Diese Projektnummer ist bereits vergeben.',
   client_not_found: 'Kunde nicht gefunden.',
@@ -60,7 +61,7 @@ export function CreateProjectFormContent({
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nameError, setNameError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [projectNumberError, setProjectNumberError] = useState<string | null>(
     null
   );
@@ -113,7 +114,7 @@ export function CreateProjectFormContent({
     setPlannedEndDate(undefined);
     setSelectedJobIds([]);
     setHasAttemptedSubmit(false);
-    setNameError(null);
+    setContentError(null);
     setProjectNumberError(null);
   };
 
@@ -121,7 +122,7 @@ export function CreateProjectFormContent({
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setNameError(null);
+    setContentError(null);
     setProjectNumberError(null);
 
     let hasValidationError = false;
@@ -129,8 +130,10 @@ export function CreateProjectFormContent({
       setProjectNumberError('Bitte gib eine Projektnummer ein.');
       hasValidationError = true;
     }
-    if (!name.trim()) {
-      setNameError('Bitte gib einen Titel ein.');
+    if (!name.trim() && !description.trim()) {
+      setContentError(
+        'Bitte gib mindestens einen Titel oder eine Beschreibung ein.'
+      );
       hasValidationError = true;
     }
     if (hasValidationError) return;
@@ -160,6 +163,8 @@ export function CreateProjectFormContent({
           result.error === 'project_number_taken'
         ) {
           setProjectNumberError(ERROR_MESSAGES[result.error]);
+        } else if (result.error === 'name_or_description_required') {
+          setContentError(ERROR_MESSAGES[result.error]);
         } else {
           setError(
             ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
@@ -197,31 +202,13 @@ export function CreateProjectFormContent({
     }
   };
 
-  const showNameError = hasAttemptedSubmit && nameError;
+  const showContentError = hasAttemptedSubmit && contentError;
   const showProjectNumberError = hasAttemptedSubmit && projectNumberError;
   const formDisabled = isLoading || success;
 
   return (
     <form onSubmit={handleSubmit} noValidate>
       <div className="grid gap-4 py-4">
-        <div className="grid gap-2">
-          <Label htmlFor="create-project-name">Titel *</Label>
-          <Input
-            id="create-project-name"
-            placeholder="z.B. Sanierung Hauptgebäude"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (nameError) setNameError(null);
-            }}
-            disabled={formDisabled}
-            aria-invalid={showNameError ? true : undefined}
-          />
-          {showNameError && (
-            <p className="text-sm text-destructive">{nameError}</p>
-          )}
-        </div>
-
         <div className="grid gap-2">
           <Label htmlFor="create-project-number">Projektnummer *</Label>
           <Input
@@ -241,14 +228,36 @@ export function CreateProjectFormContent({
         </div>
 
         <div className="grid gap-2">
+          <Label htmlFor="create-project-name">Titel</Label>
+          <Input
+            id="create-project-name"
+            placeholder="z.B. Sanierung Hauptgebäude"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (contentError && e.target.value.trim()) setContentError(null);
+            }}
+            disabled={formDisabled}
+            aria-invalid={showContentError ? true : undefined}
+          />
+        </div>
+
+        <div className="grid gap-2">
           <Label htmlFor="create-project-description">Beschreibung</Label>
           <Textarea
             id="create-project-description"
-            placeholder="Optionale Beschreibung..."
+            placeholder="Optionale Beschreibung des Projekts..."
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              if (contentError && e.target.value.trim()) setContentError(null);
+            }}
             disabled={formDisabled}
+            aria-invalid={showContentError ? true : undefined}
           />
+          {showContentError && (
+            <p className="text-sm text-destructive">{contentError}</p>
+          )}
         </div>
 
         <div className="grid gap-2">
@@ -306,10 +315,7 @@ export function CreateProjectFormContent({
       </div>
 
       <div className="flex justify-end">
-        <Button
-          type="submit"
-          disabled={formDisabled || !name.trim() || !projectNumber.trim()}
-        >
+        <Button type="submit" disabled={formDisabled}>
           {isLoading && <Loader2 className="size-4 animate-spin" />}
           {isLoading ? 'Wird erstellt...' : 'Projekt erstellen'}
         </Button>

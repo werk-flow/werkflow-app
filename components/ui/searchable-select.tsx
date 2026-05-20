@@ -203,14 +203,16 @@ export function SearchableSelect({
           aria-haspopup="listbox"
           disabled={disabled}
           className={cn(
-            'flex h-9 w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+            'flex h-9 w-full min-w-0 max-w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
             'dark:bg-input/30',
             'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
             disabled && 'pointer-events-none cursor-not-allowed opacity-50',
             !selectedOption && !value && 'text-muted-foreground'
           )}
         >
-          <span className="min-w-0 flex-1 truncate text-left">{displayLabel}</span>
+          <span className="min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+            {displayLabel}
+          </span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </button>
       </PopoverPrimitive.Trigger>
@@ -423,14 +425,16 @@ export function SearchableMultiSelect({
           aria-haspopup="listbox"
           disabled={disabled}
           className={cn(
-            'flex h-9 w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+            'flex h-9 w-full min-w-0 max-w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
             'dark:bg-input/30',
             'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
             disabled && 'pointer-events-none cursor-not-allowed opacity-50',
             selectedIds.length === 0 && 'text-muted-foreground'
           )}
         >
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+          <span className="min-w-0 max-w-full flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+            {label}
+          </span>
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </button>
       </PopoverPrimitive.Trigger>

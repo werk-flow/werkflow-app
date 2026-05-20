@@ -26,7 +26,9 @@ export const metadata: Metadata = {
 };
 
 const SUCCESS_MESSAGES: Record<string, string> = {
-  account_deleted: 'Dein Konto wurde erfolgreich gelöscht.'
+  account_deleted: 'Dein Konto wurde erfolgreich gelöscht.',
+  password_reset_success:
+    'Dein Passwort wurde erfolgreich zurückgesetzt. Bitte melde dich mit deinem neuen Passwort an.'
 };
 
 export default async function LoginPage({
@@ -60,9 +62,11 @@ export default async function LoginPage({
     : undefined;
   const successMessage =
     flashMessage ??
-    (params.message === 'account_deleted'
-      ? SUCCESS_MESSAGES.account_deleted
-      : undefined);
+    (params.message && isAuthFlashKey(params.message)
+      ? getAuthFlashMessage(params.message)
+      : params.message && params.message in SUCCESS_MESSAGES
+        ? SUCCESS_MESSAGES[params.message]
+        : undefined);
 
   // If there's an invite code, validate it and get the organization name
   // Use RPC function that bypasses RLS (since user might not be authenticated)

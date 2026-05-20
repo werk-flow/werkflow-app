@@ -388,7 +388,7 @@ export function WeekView({
                             >
                               <span className="flex items-center gap-1">
                                 <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-                                <span className="truncate text-[10px] font-medium">
+                                <span className="truncate text-[10px] font-medium" title={job.title}>
                                   {job.title}
                                 </span>
                               </span>
@@ -816,7 +816,7 @@ export function WeekView({
                                 className="week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80 bg-brand-purple/10 border border-brand-purple/30 text-foreground"
                               >
                                 <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-                                <span className="font-medium truncate text-[10px]">
+                                <span className="font-medium truncate text-[10px]" title={job.title}>
                                   {job.title}
                                 </span>
                               </button>

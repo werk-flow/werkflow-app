@@ -46,7 +46,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
-  title_required: 'Bitte gib einen Titel ein.',
+  title_or_description_required:
+    'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
   job_number_required: 'Bitte gib eine Auftragsnummer ein.',
   job_number_taken: 'Diese Auftragsnummer ist bereits vergeben.',
   client_not_found: 'Kunde nicht gefunden.',
@@ -106,7 +107,7 @@ export function CreateJobFormContent({
   const [plannedWorkingTouched, setPlannedWorkingTouched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [titleError, setTitleError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [jobNumberError, setJobNumberError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -139,7 +140,7 @@ export function CreateJobFormContent({
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setTitleError(null);
+    setContentError(null);
     setJobNumberError(null);
 
     let hasValidationError = false;
@@ -147,8 +148,10 @@ export function CreateJobFormContent({
       setJobNumberError('Bitte gib eine Auftragsnummer ein.');
       hasValidationError = true;
     }
-    if (!title.trim()) {
-      setTitleError('Bitte gib einen Titel ein.');
+    if (!title.trim() && !description.trim()) {
+      setContentError(
+        'Bitte gib mindestens einen Titel oder eine Beschreibung ein.'
+      );
       hasValidationError = true;
     }
     if (hasValidationError) return;
@@ -181,8 +184,13 @@ export function CreateJobFormContent({
       const result = await createJob(input);
 
       if (!result.success) {
-        if (result.error === 'job_number_required' || result.error === 'job_number_taken') {
+        if (
+          result.error === 'job_number_required' ||
+          result.error === 'job_number_taken'
+        ) {
           setJobNumberError(ERROR_MESSAGES[result.error]);
+        } else if (result.error === 'title_or_description_required') {
+          setContentError(ERROR_MESSAGES[result.error]);
         } else {
           setError(
             ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
@@ -217,7 +225,7 @@ export function CreateJobFormContent({
     }
   };
 
-  const showTitleError = hasAttemptedSubmit && titleError;
+  const showContentError = hasAttemptedSubmit && contentError;
   const showJobNumberError = hasAttemptedSubmit && jobNumberError;
   const formDisabled = isLoading || success;
 
@@ -316,21 +324,18 @@ export function CreateJobFormContent({
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="job-title">Titel *</Label>
+          <Label htmlFor="job-title">Titel</Label>
           <Input
             id="job-title"
             placeholder="z.B. Heizung reparieren"
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
-              if (titleError) setTitleError(null);
+              if (contentError && e.target.value.trim()) setContentError(null);
             }}
             disabled={formDisabled}
-            aria-invalid={showTitleError ? true : undefined}
+            aria-invalid={showContentError ? true : undefined}
           />
-          {showTitleError && (
-            <p className="text-sm text-destructive">{titleError}</p>
-          )}
         </div>
 
         <div className="grid gap-2">
@@ -339,9 +344,16 @@ export function CreateJobFormContent({
             id="job-description"
             placeholder="Optionale Beschreibung des Auftrags..."
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              if (contentError && e.target.value.trim()) setContentError(null);
+            }}
             disabled={formDisabled}
+            aria-invalid={showContentError ? true : undefined}
           />
+          {showContentError && (
+            <p className="text-sm text-destructive">{contentError}</p>
+          )}
         </div>
 
         <div className="grid gap-2">
@@ -478,10 +490,7 @@ export function CreateJobFormContent({
         )}
       </div>
       <div className="flex justify-end">
-        <Button
-          type="submit"
-          disabled={formDisabled || !title.trim() || !jobNumber.trim()}
-        >
+        <Button type="submit" disabled={formDisabled}>
           {isLoading && <Loader2 className="size-4 animate-spin" />}
           {isLoading ? 'Wird erstellt...' : 'Auftrag erstellen'}
         </Button>

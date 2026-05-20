@@ -48,7 +48,16 @@ async function MitarbeiterDetailData({
 
   const admin = createSupabaseAdminClient();
 
-  const [memberResult, jobsResult, clientsResult, membersResult, allProjectsResult, allJobsResult] = await Promise.all([
+  const [
+    memberResult,
+    jobsResult,
+    clientsResult,
+    membersResult,
+    allProjectsResult,
+    allJobsResult,
+    organizationSettings,
+    organizationUserPreferences,
+  ] = await Promise.all([
     getMemberDetail(targetUserId),
     getJobsForMember(targetUserId),
     admin
@@ -66,6 +75,8 @@ async function MitarbeiterDetailData({
       .from('jobs')
       .select('id, project_id, status')
       .eq('organization_id', activeOrgId),
+    getCachedOrganizationSettings(activeOrgId),
+    getCachedOrganizationUserPreferences(activeOrgId, user.id),
   ]);
 
   if (!memberResult.success) {
@@ -127,11 +138,7 @@ async function MitarbeiterDetailData({
       [...allProjects, ...jobsData.projects].map((project) => [project.id, project])
     ).values()
   );
-  const organizationSettings = await getCachedOrganizationSettings(activeOrgId)
-  const { visibleColumns } = await getCachedOrganizationUserPreferences(
-    activeOrgId,
-    user.id
-  );
+  const { visibleColumns } = organizationUserPreferences;
 
   return (
     <MitarbeiterDetailContent

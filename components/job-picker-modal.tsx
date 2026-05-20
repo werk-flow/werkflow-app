@@ -210,7 +210,9 @@ export function JobPickerModal({
                     {selectedJobId === job.id && <Check className="h-3 w-3" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{job.title}</p>
+                    <p className="line-clamp-2 break-words font-medium" title={job.title}>
+                      {job.title}
+                    </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {[job.jobNumber, job.clientName, job.projectName]
                         .filter(Boolean)

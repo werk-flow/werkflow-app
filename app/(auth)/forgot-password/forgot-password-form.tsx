@@ -70,22 +70,28 @@ export function ForgotPasswordForm({
         console.error('Password reset error:', error);
       }
 
-      await fetch('/auth/flash', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: isKnownAccountReset
-            ? 'password-reset-requested-known-user'
-            : 'password-reset-requested'
-        })
-      }).catch((error) => {
+      const fallbackMessageKey = isKnownAccountReset
+        ? 'password-reset-requested-known-user'
+        : 'password-reset-requested';
+      let loginRedirectHref = '/login';
+
+      try {
+        await fetch('/auth/flash', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: fallbackMessageKey
+          })
+        });
+      } catch (error) {
         console.error('Failed to store auth flash message:', error);
-      });
+        loginRedirectHref = `/login?message=${fallbackMessageKey}`;
+      }
 
       // Always redirect with neutral message, never reveal if email exists
-      router.push('/login');
+      router.push(loginRedirectHref);
     } finally {
       // Reset submitting state in case redirect fails or is delayed
       setIsSubmitting(false);
