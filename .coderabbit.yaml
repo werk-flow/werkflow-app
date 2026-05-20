@@ -1,0 +1,3 @@
+reviews:
+  path_filters:
+    - "!.cursor/rules/tailwind-v4-and-shadcn.md"
