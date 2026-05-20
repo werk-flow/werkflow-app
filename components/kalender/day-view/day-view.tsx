@@ -4,6 +4,12 @@ import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Briefcase, Clock, ParkingSquare } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
+import {
+  DAY_VIEW_HEADER_HEIGHT,
+  DAY_VIEW_ROW_HEIGHT,
+  DAY_VIEW_ROW_INNER_HEIGHT,
+  DAY_VIEW_ROW_PADDING
+} from './layout-constants';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,6 +40,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
+import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { JobEventPopover } from '../job-event-popover';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
 import { useCurrentTimePosition } from './use-current-time-position';
@@ -43,6 +50,8 @@ type SessionCollisionBlock = {
   left: number;
   width: number;
 };
+
+const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
 
 function getExactLayoutWidth(startTime: Date, endTime: Date | null, hourWidth: number): number {
   const effectiveEnd =
@@ -69,6 +78,7 @@ interface DayViewProps {
   date: Date;
   entries: TimeEntry[];
   members: CalendarMember[];
+  organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
@@ -82,7 +92,7 @@ interface DayViewProps {
   highlightMemberId?: string | null;
   jobs?: CalendarJob[];
   onParkJob?: (jobId: string) => void;
-  onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string) => void;
+  onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string, durationMinutes?: number) => void;
   onScheduleJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes: number) => void;
   parkplatzButtonRef?: React.RefObject<HTMLElement | null>;
   parkplatzDragJob?: CalendarJob | null;
@@ -92,8 +102,10 @@ export function DayView({
   date,
   entries,
   members,
+  organizationSettings,
   currentUserId,
   currentUserRole,
+  isAdminOrManager,
   isLoading,
   onRefresh,
   onSilentRefresh,
@@ -109,6 +121,9 @@ export function DayView({
   parkplatzButtonRef,
   parkplatzDragJob
 }: DayViewProps) {
+  const timelineContentMinHeight =
+    DAY_VIEW_HEADER_HEIGHT + members.length * DAY_VIEW_ROW_HEIGHT;
+
   const [selectedJob, setSelectedJob] = useState<{
     job: CalendarJob;
     position: { x: number; y: number };
@@ -385,7 +400,7 @@ export function DayView({
         : 'Zeiteintrag konnte nicht geändert werden.';
       setActiveBanner({ id: ++bannerSeqRef.current, variant: 'error', message: errorMsg });
     }
-  }, [silentRefresh, onOperationStart]);
+  }, [currentUserId, entries, silentRefresh, onOperationStart]);
 
   const handleInvalidSessionPlacement = useCallback((message: string) => {
     setActiveBanner({
@@ -499,8 +514,8 @@ export function DayView({
     pointerId: number;
   } | null>(null);
 
-  const HEADER_HEIGHT = 40;
-  const ROW_HEIGHT = 64;
+  const HEADER_HEIGHT = DAY_VIEW_HEADER_HEIGHT;
+  const ROW_HEIGHT = DAY_VIEW_ROW_HEIGHT;
 
   const canDropOnMember = useCallback(
     (targetMember: CalendarMember): boolean => {
@@ -681,9 +696,9 @@ export function DayView({
 
     document.body.style.cursor = (overParkplatz || canDrop) ? 'grabbing' : 'not-allowed';
     document.body.style.userSelect = 'none';
-  }, []); // stable — reads everything from refs
+  }, [HEADER_HEIGHT, ROW_HEIGHT, scrollContainerRef]); // reads all other values from refs
 
-  const stableUpHandler = useCallback((_e: PointerEvent) => {
+  const stableUpHandler = useCallback(() => {
     window.removeEventListener('pointermove', stableMoveHandler);
     window.removeEventListener('pointerup', stableUpHandler);
     document.body.style.cursor = '';
@@ -766,9 +781,9 @@ export function DayView({
     setTimeout(() => { dragDidOccurRef.current = false; }, 0);
   }, [stableMoveHandler]); // stable
 
-  const handleCrossUserMoveRef = useRef(
-    async (_drag: ActiveBlockDrag, _targetMember: CalendarMember) => {}
-  );
+  const handleCrossUserMoveRef = useRef<
+    (drag: ActiveBlockDrag, targetMember: CalendarMember) => Promise<void>
+  >(async () => {});
   handleCrossUserMoveRef.current = useCallback(
     async (drag: ActiveBlockDrag, targetMember: CalendarMember) => {
       if (drag.payload.type !== 'session') return;
@@ -894,9 +909,9 @@ export function DayView({
     [effectiveHourWidth, date, silentRefresh, onOperationStart]
   );
 
-  const handleCrossJobMoveRef = useRef(
-    async (_drag: ActiveBlockDrag, _targetMember: CalendarMember) => {}
-  );
+  const handleCrossJobMoveRef = useRef<
+    (drag: ActiveBlockDrag, targetMember: CalendarMember) => Promise<void>
+  >(async () => {});
   handleCrossJobMoveRef.current = useCallback(
     async (drag: ActiveBlockDrag, targetMember: CalendarMember) => {
       if (drag.payload.type !== 'job') return;
@@ -1026,7 +1041,7 @@ export function DayView({
       window.addEventListener('pointermove', stableMoveHandler);
       window.addEventListener('pointerup', stableUpHandler);
     },
-    [stableMoveHandler, stableUpHandler]
+    [scrollContainerRef, stableMoveHandler, stableUpHandler]
   );
 
   const handleBlockMoveStart = useCallback(
@@ -1067,9 +1082,14 @@ export function DayView({
   const { timedDayJobs, untimedDayJobs } = useMemo(() => {
     const dateStr = toLocalDateString(date);
     const forDay = effectiveJobs.filter((j) => j.plannedDate === dateStr);
+    const canPlaceOnTimeline = (job: CalendarJob) =>
+      !!job.plannedTime &&
+      !!job.estimatedDurationMinutes &&
+      job.assignedUserIds.length > 0;
+
     return {
-      timedDayJobs: forDay.filter((j) => j.plannedTime && j.estimatedDurationMinutes),
-      untimedDayJobs: forDay.filter((j) => !j.plannedTime || !j.estimatedDurationMinutes),
+      timedDayJobs: forDay.filter(canPlaceOnTimeline),
+      untimedDayJobs: forDay.filter((job) => !canPlaceOnTimeline(job)),
     };
   }, [effectiveJobs, date]);
 
@@ -1114,7 +1134,8 @@ export function DayView({
   const handleParkplatzDragOver = useCallback((memberId: string, cursorX: number) => {
     const dragJob = parkplatzDragJob ?? localChipDragJobRef.current;
     if (!dragJob) return;
-    const durationMinutes = dragJob.estimatedDurationMinutes ?? 60;
+    const durationMinutes =
+      dragJob.estimatedDurationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES;
     const width = (durationMinutes / 60) * effectiveHourWidth;
     const cursorAnchorOffset = parkplatzDragJob ? width / 2 : 0;
     const snappedLeft = Math.max(
@@ -1213,26 +1234,29 @@ export function DayView({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* All-day jobs row (only untimed jobs — timed jobs appear as blocks on the timeline) */}
+    <div className="flex min-w-0 flex-col">
+      {/* All-day jobs row (dated jobs that cannot yet be placed onto a timeline row) */}
       {untimedDayJobs.length > 0 && (
-        <div className="border-b bg-muted/20 px-4 py-2">
+        <div className="border-b bg-muted/25 px-4 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground mr-1">
-              Aufträge:
+            <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Ganztägige Aufträge:
             </span>
             {untimedDayJobs.map((job) => {
               const isChipDragging = draggingChipId === job.id;
               return (
               <button
                 key={job.id}
-                draggable
+                draggable={isAdminOrManager}
                 onDragStart={(e) => {
+                  if (!isAdminOrManager) return;
                   const payload: DragJobPayload = {
                     jobId: job.id,
                     source: 'day',
                     sourceDate: toLocalDateString(date),
-                    durationMinutes: job.estimatedDurationMinutes ?? 60,
+                    durationMinutes:
+                      job.estimatedDurationMinutes ??
+                      DEFAULT_DAY_SCHEDULE_DURATION_MINUTES,
                   };
                   e.dataTransfer.setData(PARKPLATZ_MIME, JSON.stringify(payload));
                   e.dataTransfer.effectAllowed = 'move';
@@ -1248,14 +1272,14 @@ export function DayView({
                   document.body.classList.remove('is-dragging');
                 }}
                 onClick={(e) => {
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   setSelectedJob({
                     job,
-                    position: { x: rect.right + 8, y: rect.top }
+                    position: { x: e.clientX + 12, y: e.clientY + 12 }
                   });
                 }}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border border-brand-purple/30 bg-brand-purple/10 px-2.5 py-1 text-xs font-medium transition-all cursor-grab active:cursor-grabbing',
+                  'inline-flex items-center gap-1.5 rounded-md border border-brand-purple/30 bg-brand-purple/10 px-2.5 py-1 text-xs font-medium transition-all',
+                  isAdminOrManager && 'cursor-grab active:cursor-grabbing',
                   isChipDragging
                     ? 'opacity-40 scale-[0.95] shadow-none'
                     : 'hover:bg-brand-purple/20'
@@ -1302,7 +1326,10 @@ export function DayView({
 
       <div className="flex min-h-0 flex-1">
         {/* Fixed employee names column */}
-        <div className="w-48 shrink-0 border-r bg-background z-10">
+        <div
+          className="z-10 w-48 shrink-0 border-r bg-background"
+          style={{ minHeight: timelineContentMinHeight }}
+        >
           <div className="h-10 border-b bg-muted/30 px-3 flex items-center">
             <span className="text-sm font-medium text-muted-foreground">
               Mitarbeiter
@@ -1329,6 +1356,7 @@ export function DayView({
                     member={member}
                     sessions={sessions}
                     entries={userEntries}
+                    organizationSettings={organizationSettings}
                     showNameOnly
                     isHighlighted={isHighlighted}
                     isParkplatzDragTarget={parkplatzDragHover?.hoveredMemberId === member.user_id}
@@ -1344,9 +1372,15 @@ export function DayView({
         <div
           ref={scrollContainerRef}
           data-timeline-scroll=""
-          className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden"
+          className="min-h-0 flex-1 overflow-x-auto"
         >
-          <div className="relative" style={{ width: timelineWidth }}>
+          <div
+            className="relative"
+            style={{
+              width: timelineWidth,
+              minHeight: timelineContentMinHeight
+            }}
+          >
             {/* Timeline header */}
             <TimelineHeader
               date={date}
@@ -1362,9 +1396,7 @@ export function DayView({
                 const userEntries = entriesByUser[member.user_id] || [];
                 const isHighlighted = highlightMemberId === member.user_id;
                 const memberJobs = timedDayJobs.filter(
-                  (j) =>
-                    j.assignedUserIds.length === 0 ||
-                    j.assignedUserIds.includes(member.user_id)
+                  (j) => j.assignedUserIds.includes(member.user_id)
                 );
                 const activeDragJobForRow = parkplatzDragJob ?? localChipDragJobRef.current;
                 const showParkplatzShadow = !!(parkplatzDragHover && activeDragJobForRow && (
@@ -1378,6 +1410,7 @@ export function DayView({
                     sessions={sessions}
                     entries={userEntries}
                     date={date}
+                    organizationSettings={organizationSettings}
                     currentUserRole={currentUserRole}
                     currentUserId={currentUserId}
                     onRefresh={silentRefresh}
@@ -1409,21 +1442,21 @@ export function DayView({
                     dayViewDragDidOccurRef={dragDidOccurRef}
                     jobs={memberJobs}
                     onJobClick={handleJobClick}
-                    onJobMoveResize={handleJobMoveResize}
-                    onJobBlockMoveStart={handleJobBlockMoveStart}
+                    onJobMoveResize={isAdminOrManager ? handleJobMoveResize : undefined}
+                    onJobBlockMoveStart={isAdminOrManager ? handleJobBlockMoveStart : undefined}
                     activeDragJobId={
                       activeDrag?.payload.type === 'job'
                         ? activeDrag.payload.job.id
                         : null
                     }
-                    onUnparkJob={onUnparkJob}
-                    onScheduleJob={onScheduleJob}
+                    onUnparkJob={isAdminOrManager ? onUnparkJob : undefined}
+                    onScheduleJob={isAdminOrManager ? onScheduleJob : undefined}
                     parkplatzShadow={showParkplatzShadow ? { left: parkplatzDragHover!.snappedLeft, width: parkplatzDragHover!.width } : null}
                     isParkplatzDragTarget={parkplatzDragHover?.hoveredMemberId === member.user_id}
-                    onParkplatzDragOver={handleParkplatzDragOver}
-                    jobDragShadow={jobDragShadow}
-                    onJobDragUpdate={handleJobDragUpdate}
-                    onJobDragEnd={handleJobDragEnd}
+                    onParkplatzDragOver={isAdminOrManager ? handleParkplatzDragOver : undefined}
+                    jobDragShadow={isAdminOrManager ? jobDragShadow : null}
+                    onJobDragUpdate={isAdminOrManager ? handleJobDragUpdate : undefined}
+                    onJobDragEnd={isAdminOrManager ? handleJobDragEnd : undefined}
                     onInvalidSessionPlacement={handleInvalidSessionPlacement}
                   />
                 );
@@ -1441,9 +1474,9 @@ export function DayView({
                     className="absolute rounded-md text-xs font-medium pointer-events-none z-50 flex items-center justify-center overflow-hidden bg-brand-purple/70 text-white shadow-lg"
                     style={{
                       left: parkplatzDragHover.snappedLeft,
-                      top: HEADER_HEIGHT + hovIdx * ROW_HEIGHT + 4,
+                      top: HEADER_HEIGHT + hovIdx * ROW_HEIGHT + DAY_VIEW_ROW_PADDING,
                       width: parkplatzDragHover.width,
-                      height: 56,
+                      height: DAY_VIEW_ROW_INNER_HEIGHT,
                       opacity: 0.9,
                     }}
                   >
@@ -1476,9 +1509,12 @@ export function DayView({
                   className="absolute border-2 border-dashed border-muted-foreground/30 bg-muted/20 rounded-md pointer-events-none"
                   style={{
                     left: activeDrag.originalLeft,
-                    top: HEADER_HEIGHT + activeDrag.sourceRowIndex * ROW_HEIGHT + 4,
+                    top:
+                      HEADER_HEIGHT +
+                      activeDrag.sourceRowIndex * ROW_HEIGHT +
+                      DAY_VIEW_ROW_PADDING,
                     width: activeDrag.originalWidth,
-                    height: 56,
+                    height: DAY_VIEW_ROW_INNER_HEIGHT,
                     zIndex: 5,
                   }}
                 />
@@ -1498,9 +1534,12 @@ export function DayView({
                   )}
                   style={{
                     left: activeDrag.currentLeft,
-                    top: HEADER_HEIGHT + activeDrag.currentRowIndex * ROW_HEIGHT + 4,
+                    top:
+                      HEADER_HEIGHT +
+                      activeDrag.currentRowIndex * ROW_HEIGHT +
+                      DAY_VIEW_ROW_PADDING,
                     width: activeDrag.originalWidth,
-                    height: 56,
+                    height: DAY_VIEW_ROW_INNER_HEIGHT,
                     opacity: 0.9,
                     transition: 'top 0.08s ease-out',
                   }}

@@ -22,7 +22,8 @@ export type RealtimeTable =
   | 'organization_invites'
   | 'jobs'
   | 'projects'
-  | 'job_assignments';
+  | 'job_assignments'
+  | 'job_instruction_items';
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
@@ -43,7 +44,8 @@ const TABLES: RealtimeTable[] = [
   'organization_invites',
   'jobs',
   'projects',
-  'job_assignments'
+  'job_assignments',
+  'job_instruction_items'
 ];
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -193,6 +195,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             // Consumers should be resilient to stale events; debouncing limits the impact.
             dispatch('job_assignments', p);
           }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'job_instruction_items',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_instruction_items', p)
         )
         .subscribe((status: string, err?: Error) => {
           if (isDev) {

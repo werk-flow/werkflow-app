@@ -62,6 +62,7 @@ export function CalendarEntryDialog({
 
   useEffect(() => {
     if (!open || !activeOrgId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the creation tab
     setActiveTab('job');
 
     let cancelled = false;

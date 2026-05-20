@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AuthFlashCleanup } from '@/components/auth/auth-flash-cleanup';
 import {
   Card,
   CardContent,
@@ -12,8 +14,10 @@ import {
 } from '@/components/ui/card';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { AUTH_FLASH_COOKIE, getAuthFlashMessage, isAuthFlashKey } from '@/lib/auth/flash';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
+import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 
 import { LoginForm } from './login-form';
 
@@ -22,10 +26,6 @@ export const metadata: Metadata = {
 };
 
 const SUCCESS_MESSAGES: Record<string, string> = {
-  'password-reset-success':
-    'Passwort erfolgreich aktualisiert. Bitte erneut einloggen.',
-  'password-reset-requested':
-    'Wenn eine E-Mail existiert, haben wir dir einen Link geschickt.',
   account_deleted: 'Dein Konto wurde erfolgreich gelöscht.'
 };
 
@@ -34,6 +34,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ message?: string; invite_code?: string }>;
 }) {
+  await reportAuthUsersStringColumnHealth('login-page');
+
   const { session } = await getSupabaseServerSession();
   const params = await searchParams;
   const inviteCode = params.invite_code || '';
@@ -51,9 +53,16 @@ export default async function LoginPage({
     }
   }
 
-  const successMessage = params.message
-    ? SUCCESS_MESSAGES[params.message]
+  const cookieStore = await cookies();
+  const authFlash = cookieStore.get(AUTH_FLASH_COOKIE)?.value;
+  const flashMessage = isAuthFlashKey(authFlash)
+    ? getAuthFlashMessage(authFlash)
     : undefined;
+  const successMessage =
+    flashMessage ??
+    (params.message === 'account_deleted'
+      ? SUCCESS_MESSAGES.account_deleted
+      : undefined);
 
   // If there's an invite code, validate it and get the organization name
   // Use RPC function that bypasses RLS (since user might not be authenticated)
@@ -111,6 +120,7 @@ export default async function LoginPage({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {flashMessage ? <AuthFlashCleanup /> : null}
         <LoginForm successMessage={successMessage} inviteCode={inviteCode} />
       </CardContent>
       <CardFooter className="flex justify-center">

@@ -2,7 +2,6 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { BASE_HOUR_WIDTH } from './timeline-grid';
 
 interface DragToCreateProps {
   effectiveHourWidth: number;

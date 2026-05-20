@@ -2,14 +2,18 @@
 
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { computeTimeBreakdown } from '@/lib/time-tracking/helpers';
+import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import type { DayData } from '@/hooks/use-weekly-time-data';
+import type { OrgBreakMode } from '@/lib/time-tracking/types';
 
 interface WeeklyHoursChartProps {
   weekData: DayData[];
   todayIndex: number;
   liveTodayMinutes?: number;
   liveTodayBreakMinutes?: number;
+  liveTodayBreakMode?: OrgBreakMode;
+  liveAutoBreakThresholdMinutes?: number;
+  liveAutoBreakDurationMinutes?: number;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
   className?: string;
@@ -24,6 +28,9 @@ export function WeeklyHoursChart({
   todayIndex,
   liveTodayMinutes,
   liveTodayBreakMinutes,
+  liveTodayBreakMode,
+  liveAutoBreakThresholdMinutes,
+  liveAutoBreakDurationMinutes,
   narrowBars = false,
   weekLabel,
   className
@@ -32,12 +39,24 @@ export function WeeklyHoursChart({
     if (!weekData.length) return [];
     return weekData.map((day, i) => {
       if (i === todayIndex && liveTodayMinutes !== undefined) {
-        const bd = computeTimeBreakdown(liveTodayMinutes, liveTodayBreakMinutes);
+        const bd = computeBreakdownForSettings(liveTodayMinutes, liveTodayBreakMinutes ?? 0, {
+          breakMode: liveTodayBreakMode ?? 'manual',
+          autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
+          autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
+        });
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
       return day;
     });
-  }, [weekData, todayIndex, liveTodayBreakMinutes, liveTodayMinutes]);
+  }, [
+    weekData,
+    todayIndex,
+    liveAutoBreakDurationMinutes,
+    liveAutoBreakThresholdMinutes,
+    liveTodayBreakMinutes,
+    liveTodayBreakMode,
+    liveTodayMinutes,
+  ]);
 
   const maxMinutes = useMemo(() => {
     const tallest = Math.max(...data.map((d) => d.totalMinutes), 0);

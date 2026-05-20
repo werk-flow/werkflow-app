@@ -3,7 +3,11 @@
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
+import {
+  CURRENT_ORG_COOKIE,
+  CURRENT_ORG_MAX_AGE,
+  resolveActiveOrgId,
+} from '@/lib/org/cookies';
 import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 
 export type DeleteOrgResult = {
@@ -24,7 +28,6 @@ export type DeleteOrgResult = {
  * - Users who lose their only org will be redirected to onboarding on next login
  */
 export async function deleteOrganization(
-  orgId: string,
   confirmationName: string
 ): Promise<DeleteOrgResult> {
   try {
@@ -34,11 +37,17 @@ export async function deleteOrganization(
     }
 
     const admin = createSupabaseAdminClient();
+    const cookieStore = await cookies();
+    const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
+
+    if (!activeOrgId) {
+      return { success: false, error: 'org_not_found' };
+    }
 
     const { data: org, error: orgError } = await admin
       .from('organizations')
       .select('id, name, admin_id')
-      .eq('id', orgId)
+      .eq('id', activeOrgId)
       .single();
 
     if (orgError || !org) {
@@ -59,14 +68,14 @@ export async function deleteOrganization(
     const { data: allMembers } = await admin
       .from('organization_members')
       .select('user_id')
-      .eq('organization_id', orgId);
+      .eq('organization_id', activeOrgId);
     const memberUserIds = (allMembers ?? []).map((m) => m.user_id);
 
     // Delete all organization members first (due to foreign key constraints)
     const { error: membersDeleteError } = await admin
       .from('organization_members')
       .delete()
-      .eq('organization_id', orgId);
+      .eq('organization_id', activeOrgId);
 
     if (membersDeleteError) {
       console.error('Error deleting organization members:', membersDeleteError);
@@ -77,7 +86,7 @@ export async function deleteOrganization(
     const { error: invitesDeleteError } = await admin
       .from('organization_invites')
       .delete()
-      .eq('organization_id', orgId);
+      .eq('organization_id', activeOrgId);
 
     if (invitesDeleteError) {
       console.error('Error deleting organization invites:', invitesDeleteError);
@@ -88,7 +97,7 @@ export async function deleteOrganization(
     const { error: orgDeleteError } = await admin
       .from('organizations')
       .delete()
-      .eq('id', orgId);
+      .eq('id', activeOrgId);
 
     if (orgDeleteError) {
       console.error('Error deleting organization:', orgDeleteError);
@@ -110,7 +119,6 @@ export async function deleteOrganization(
     const nextOrgId = remainingOrgs.length > 0 ? remainingOrgs[0].organization_id : null;
 
     // Update the org cookie with proper options (matching other actions)
-    const cookieStore = await cookies();
     if (nextOrgId) {
       // Set to the next available org
       cookieStore.set(CURRENT_ORG_COOKIE, nextOrgId, {
@@ -132,7 +140,7 @@ export async function deleteOrganization(
     for (const uid of memberUserIds) {
       updateTag(CACHE_TAGS.memberships(uid));
     }
-    updateTag(CACHE_TAGS.memberCount(orgId));
+    updateTag(CACHE_TAGS.memberCount(activeOrgId));
 
     return { success: true, nextOrgId };
   } catch (error) {

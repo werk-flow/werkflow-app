@@ -33,13 +33,15 @@ export function PendingApprovalCountProvider({
   initialOrganizationId?: string | null;
 }) {
   const { activeOrgId, activeOrg } = useOrganization();
+  const activeRole = activeOrg?.role;
+  const isAdmin = activeRole === 'admin';
+  const canViewPendingApprovals =
+    activeRole === 'admin' || activeRole === 'buero';
   const [pendingApprovalCount, setPendingApprovalCount] = useState(
     initialPendingApprovalCount ?? 0
   );
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const canViewPendingApprovals =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const skippedInitialRefreshRef = useRef(false);
 
   const refreshPendingApprovalCount = useCallback(async () => {
     if (!activeOrgId || !canViewPendingApprovals) {
@@ -48,12 +50,12 @@ export function PendingApprovalCountProvider({
     }
 
     try {
-      const nextCount = await getPendingApprovalCount(activeOrgId, activeOrg?.role === 'admin');
+      const nextCount = await getPendingApprovalCount(activeOrgId, isAdmin);
       setPendingApprovalCount(nextCount);
     } catch (error) {
       console.error('Error fetching pending approval count:', error);
     }
-  }, [activeOrg?.role, activeOrgId, canViewPendingApprovals]);
+  }, [activeOrgId, canViewPendingApprovals, isAdmin]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
@@ -70,12 +72,14 @@ export function PendingApprovalCountProvider({
     if (
       activeOrgId &&
       activeOrgId === initialOrganizationId &&
-      initialPendingApprovalCount !== undefined
+      initialPendingApprovalCount !== undefined &&
+      !skippedInitialRefreshRef.current
     ) {
-      setPendingApprovalCount(initialPendingApprovalCount);
+      skippedInitialRefreshRef.current = true;
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refreshing after org changes is the core responsibility of this provider effect
     void refreshPendingApprovalCount();
   }, [
     activeOrgId,

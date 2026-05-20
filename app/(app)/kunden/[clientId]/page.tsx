@@ -3,7 +3,11 @@ import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getCachedMemberships,
+  getCachedOrganizationUserPreferences,
+  getCachedUser,
+} from '@/lib/data/cached';
 import { getClientDetail } from '@/lib/clients/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
@@ -79,6 +83,10 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       role: m.role,
     })
   );
+  const { visibleColumns } = await getCachedOrganizationUserPreferences(
+    activeOrgId,
+    user.id
+  );
 
   return (
     <KundenDetailContent
@@ -90,6 +98,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       clients={allClients}
       members={members}
       isAdminOrManager={isAdminOrManager}
+      visibleColumns={visibleColumns}
     />
   );
 }

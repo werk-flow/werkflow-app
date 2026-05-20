@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { getProfileAvatarUrl } from '@/lib/profile-avatar'
 
 // Types
 export type UserProfile = {
@@ -18,6 +19,8 @@ export type UserProfile = {
   firstName: string
   lastName: string
   email: string
+  avatarPath: string | null
+  avatarUrl: string | null
 }
 
 export type UserProfileContextValue = {
@@ -74,7 +77,7 @@ export function UserProfileProvider({
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, avatar_path')
         .eq('id', user.id)
         .single()
 
@@ -89,6 +92,8 @@ export function UserProfileProvider({
           firstName: data.first_name,
           lastName: data.last_name,
           email: user.email,
+          avatarPath: data.avatar_path,
+          avatarUrl: getProfileAvatarUrl(data.avatar_path),
         })
       }
     } finally {

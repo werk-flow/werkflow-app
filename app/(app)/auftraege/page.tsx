@@ -4,7 +4,11 @@ import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getCachedMemberships,
+  getCachedOrganizationUserPreferences,
+  getCachedUser,
+} from '@/lib/data/cached';
 import {
   toJob,
   toClient,
@@ -23,12 +27,12 @@ async function AuftraegeData({
   activeOrgId,
   userId,
   isAdminOrManager,
-  currentUserRole,
+  initialVisibleColumns,
 }: {
   activeOrgId: string;
   userId: string;
   isAdminOrManager: boolean;
-  currentUserRole: OrgRole | undefined;
+  initialVisibleColumns: import('@/lib/jobs/auftraege-table-columns').AuftraegeColumnId[];
 }) {
   const admin = createSupabaseAdminClient();
 
@@ -234,6 +238,7 @@ async function AuftraegeData({
       members={memberList}
       jobAssignmentMap={jobAssignmentMap}
       isAdminOrManager={isAdminOrManager}
+      visibleColumns={initialVisibleColumns}
     />
   );
 }
@@ -268,6 +273,10 @@ export default async function AuftraegePage() {
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
+  const { visibleColumns } = await getCachedOrganizationUserPreferences(
+    activeOrgId,
+    user.id
+  );
 
   return (
     <>
@@ -288,7 +297,7 @@ export default async function AuftraegePage() {
           activeOrgId={activeOrgId}
           userId={user.id}
           isAdminOrManager={isAdminOrManager}
-          currentUserRole={currentUserRole}
+          initialVisibleColumns={visibleColumns}
         />
       </Suspense>
     </>

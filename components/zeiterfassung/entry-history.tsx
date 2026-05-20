@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   RefreshCw,
   Clock,
@@ -23,7 +23,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn, toLocalDateString } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';

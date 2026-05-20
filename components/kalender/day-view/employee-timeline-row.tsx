@@ -10,6 +10,11 @@ import {
 import { WorkSessionBlock, type MoveResizeResult } from './work-session-block';
 import { JobBlock, type JobMoveResizeResult } from './job-block';
 import { DragToCreateOverlay } from './drag-to-create';
+import {
+  DAY_VIEW_ROW_HEIGHT,
+  DAY_VIEW_ROW_INNER_HEIGHT,
+  DAY_VIEW_ROW_PADDING
+} from './layout-constants';
 import { PARKPLATZ_MIME, type DragJobPayload } from '../parkplatz-panel';
 import {
   formatDuration,
@@ -18,6 +23,7 @@ import {
 import {
   calculateCalendarWorkBlocks,
   createSessionFromCalendarBlock,
+  getCalendarBlockDisplaySegments,
 } from '@/lib/time-tracking/calendar-blocks';
 import { computeOverlapLayout } from '@/lib/calendar/overlap';
 import { cn } from '@/lib/utils';
@@ -29,6 +35,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
+import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 
 interface CalendarMember {
   user_id: string;
@@ -43,6 +50,7 @@ interface EmployeeTimelineRowProps {
   sessions: WorkSession[];
   entries: TimeEntry[];
   date?: Date;
+  organizationSettings?: OrganizationTimeTrackingSettings;
   currentUserRole?: OrgRole;
   currentUserId?: string;
   onRefresh?: () => void;
@@ -91,7 +99,7 @@ interface EmployeeTimelineRowProps {
   /** Job ID that is currently being dragged across rows. */
   activeDragJobId?: string | null;
   /** Callback when a Parkplatz job is dropped onto this row. */
-  onUnparkJob?: (jobId: string, date: string, time: string, memberId: string) => void;
+  onUnparkJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes?: number) => void;
   /** Callback when an untimed day-row job is dropped onto this row to schedule it. */
   onScheduleJob?: (jobId: string, date: string, time: string, memberId: string, durationMinutes: number) => void;
   /** Shadow pill to render for parkplatz drag preview. */
@@ -109,6 +117,8 @@ interface EmployeeTimelineRowProps {
   /** Callback when a session move/resize is rejected locally before drop. */
   onInvalidSessionPlacement?: (message: string) => void;
 }
+
+const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -148,6 +158,7 @@ export function EmployeeTimelineRow({
   sessions,
   entries,
   date,
+  organizationSettings,
   currentUserRole,
   currentUserId,
   onRefresh,
@@ -210,7 +221,7 @@ export function EmployeeTimelineRow({
         const isOnDay = referenceDate.toDateString() === date.toDateString();
         if (!isOnDay) return null;
 
-        const { left, width } = calculateBlockPosition(
+        const { left } = calculateBlockPosition(
           referenceDate,
           clockOutDate,
           effectiveHourWidth
@@ -219,7 +230,6 @@ export function EmployeeTimelineRow({
         return {
           session,
           left,
-          width: getExactLayoutWidth(referenceDate, clockOutDate, effectiveHourWidth),
           layoutWidth: getExactLayoutWidth(
             referenceDate,
             clockOutDate,
@@ -237,7 +247,7 @@ export function EmployeeTimelineRow({
       layoutWidth: number;
       isPending: boolean;
     }>;
-  }, [sessions, date, effectiveHourWidth, currentTimePosition]);
+  }, [sessions, date, effectiveHourWidth]);
 
   const dayEntries = useMemo(() => {
     if (!date) return [];
@@ -246,17 +256,22 @@ export function EmployeeTimelineRow({
       return entryDate.toDateString() === date.toDateString();
     });
   }, [entries, date]);
-
   const dayWorkBlocks = useMemo(() => {
     if (!date) return [];
+    void currentTimePosition;
+    const blockReferenceDate = new Date();
 
     return calculateCalendarWorkBlocks(dayEntries).map((block) => {
       const start = new Date(block.start);
       const end = block.end ? new Date(block.end) : null;
-      const { left, width } = calculateBlockPosition(start, end, effectiveHourWidth);
+      const { left } = calculateBlockPosition(start, end, effectiveHourWidth);
       const layoutWidth = getExactLayoutWidth(start, end, effectiveHourWidth);
-
-      const segments = block.segments.map((segment) => {
+      const displaySegments = getCalendarBlockDisplaySegments(
+        block,
+        blockReferenceDate,
+        organizationSettings
+      );
+      const segments = displaySegments.map((segment) => {
         const segmentPosition = calculateBlockPosition(
           new Date(segment.start),
           segment.end ? new Date(segment.end) : null,
@@ -279,7 +294,7 @@ export function EmployeeTimelineRow({
         segments
       };
     });
-  }, [date, dayEntries, effectiveHourWidth, currentTimePosition]);
+  }, [date, dayEntries, effectiveHourWidth, organizationSettings, currentTimePosition]);
 
   const dayJobsWithBlocks = useMemo(() => {
     if (!date || !jobs?.length) return [];
@@ -298,8 +313,6 @@ export function EmployeeTimelineRow({
       });
   }, [jobs, date, effectiveHourWidth]);
 
-  const ROW_PADDING = 4;
-  const ROW_INNER_HEIGHT = 56; // 64px row - 2*4px padding
   const sessionCollisionBlocks = useMemo(
     () =>
       dayWorkBlocks.map(({ block, left, layoutWidth }) => ({
@@ -334,11 +347,14 @@ export function EmployeeTimelineRow({
   function getLayoutProps(blockId: string) {
     const layout = blockLayout.get(blockId);
     if (!layout || layout.totalColumns <= 1) {
-      return { layoutTop: ROW_PADDING, layoutHeight: ROW_INNER_HEIGHT };
+      return {
+        layoutTop: DAY_VIEW_ROW_PADDING,
+        layoutHeight: DAY_VIEW_ROW_INNER_HEIGHT
+      };
     }
-    const colHeight = ROW_INNER_HEIGHT / layout.totalColumns;
+    const colHeight = DAY_VIEW_ROW_INNER_HEIGHT / layout.totalColumns;
     return {
-      layoutTop: ROW_PADDING + layout.columnIndex * colHeight,
+      layoutTop: DAY_VIEW_ROW_PADDING + layout.columnIndex * colHeight,
       layoutHeight: colHeight,
     };
   }
@@ -389,7 +405,7 @@ export function EmployeeTimelineRow({
     return (
       <div
         className={cn(
-          'h-16 px-3 flex flex-col justify-center transition-colors',
+          'px-3 flex flex-col justify-center transition-colors',
           isHighlighted
             ? 'animate-row-highlight bg-[rgba(123,44,191,0.15)]'
             : isParkplatzDragTarget
@@ -397,6 +413,7 @@ export function EmployeeTimelineRow({
               : 'hover:bg-muted/30',
           parkplatzShadow && !isParkplatzDragTarget && 'bg-brand-purple/[0.04]'
         )}
+        style={{ height: DAY_VIEW_ROW_HEIGHT }}
       >
         <div className="flex items-center gap-2">
           <span className="font-medium text-sm truncate">
@@ -422,7 +439,7 @@ export function EmployeeTimelineRow({
     return (
       <div
         className={cn(
-          'relative h-16 transition-colors',
+          'relative transition-colors',
           isHighlighted
             ? 'animate-row-highlight bg-[rgba(123,44,191,0.15)]'
             : isParkplatzDragTarget
@@ -430,7 +447,7 @@ export function EmployeeTimelineRow({
               : 'hover:bg-muted/30',
           parkplatzShadow && !isParkplatzDragTarget && 'bg-brand-purple/[0.03]'
         )}
-        style={{ width: timelineWidth }}
+        style={{ width: timelineWidth, height: DAY_VIEW_ROW_HEIGHT }}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes(PARKPLATZ_MIME)) {
             e.preventDefault();
@@ -449,7 +466,8 @@ export function EmployeeTimelineRow({
           try {
             const payload: DragJobPayload = JSON.parse(raw);
             const rawX = e.clientX - e.currentTarget.getBoundingClientRect().left;
-            const durationMinutes = payload.durationMinutes ?? 60;
+            const durationMinutes =
+              payload.durationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES;
             const dragWidth = (durationMinutes / 60) * effectiveHourWidth;
             const anchorOffset = payload.source === 'parkplatz' ? dragWidth / 2 : 0;
             const snappedX = Math.max(
@@ -463,9 +481,16 @@ export function EmployeeTimelineRow({
             const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
             if (payload.source === 'parkplatz' && onUnparkJob) {
-              onUnparkJob(payload.jobId, dateStr, time, member.user_id);
+              onUnparkJob(
+                payload.jobId,
+                dateStr,
+                time,
+                member.user_id,
+                durationMinutes
+              );
             } else if (payload.source === 'day' && onScheduleJob) {
-              const dur = payload.durationMinutes ?? 60;
+              const dur =
+                payload.durationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES;
               onScheduleJob(payload.jobId, dateStr, time, member.user_id, dur);
             }
           } catch { /* ignore parse errors */ }
@@ -521,7 +546,11 @@ export function EmployeeTimelineRow({
         {dayWorkBlocks.map(({ block, left, width, segments }) => {
           const layout = getLayoutProps(`work-block-${block.id}`);
           const session: InteractiveCalendarSession = {
-            ...createSessionFromCalendarBlock(block),
+            ...createSessionFromCalendarBlock(
+              block,
+              new Date(),
+              organizationSettings
+            ),
             employeeName: getMemberDisplayName(member),
             employeeRole: member.role as OrgRole
           };
@@ -643,8 +672,8 @@ export function EmployeeTimelineRow({
               style={{
                 left: jobDragShadow.left,
                 width: jobDragShadow.width,
-                top: ROW_PADDING,
-                height: ROW_INNER_HEIGHT,
+                top: DAY_VIEW_ROW_PADDING,
+                height: DAY_VIEW_ROW_INNER_HEIGHT,
               }}
             >
               <span className="text-[10px] text-brand-purple/50 font-medium truncate px-1">
@@ -663,8 +692,8 @@ export function EmployeeTimelineRow({
             style={{
               left: parkplatzShadow.left,
               width: parkplatzShadow.width,
-              top: ROW_PADDING,
-              height: ROW_INNER_HEIGHT,
+              top: DAY_VIEW_ROW_PADDING,
+              height: DAY_VIEW_ROW_INNER_HEIGHT,
             }}
           >
             <span className="text-[10px] text-brand-purple/60 font-medium truncate px-1">

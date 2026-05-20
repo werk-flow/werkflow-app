@@ -3,7 +3,12 @@ import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getCachedMemberships,
+  getCachedOrganizationSettings,
+  getCachedOrganizationUserPreferences,
+  getCachedUser,
+} from '@/lib/data/cached';
 import { getMemberDetail, getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
@@ -122,6 +127,11 @@ async function MitarbeiterDetailData({
       [...allProjects, ...jobsData.projects].map((project) => [project.id, project])
     ).values()
   );
+  const organizationSettings = await getCachedOrganizationSettings(activeOrgId)
+  const { visibleColumns } = await getCachedOrganizationUserPreferences(
+    activeOrgId,
+    user.id
+  );
 
   return (
     <MitarbeiterDetailContent
@@ -138,6 +148,10 @@ async function MitarbeiterDetailData({
       currentUserId={user.id}
       currentUserRole={currentUserRole!}
       isAdminOrManager={isAdminOrManager}
+      visibleColumns={visibleColumns}
+      breakMode={organizationSettings.breakMode}
+      autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
+      autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
     />
   );
 }

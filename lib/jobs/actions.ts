@@ -38,6 +38,7 @@ export type CreateJobInput = {
   plannedDate?: string;
   plannedTime?: string;
   estimatedDurationMinutes?: number;
+  plannedWorkingMinutes?: number | null;
   location?: string;
 };
 
@@ -46,6 +47,7 @@ export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plan
   plannedDate?: string | null;
   plannedTime?: string | null;
   estimatedDurationMinutes?: number | null;
+  plannedWorkingMinutes?: number | null;
 };
 
 type ProjectClientContext = {
@@ -265,10 +267,12 @@ export async function createJob(
         job_number: jobNumber,
         title: input.title.trim(),
         description: input.description?.trim() || null,
+        status: input.plannedDate ? 'nicht_bearbeitet' : 'geparkt',
         priority: input.priority ?? 'mittel',
         planned_date: input.plannedDate || null,
         planned_time: normalizeJobPlannedTime(input.plannedTime),
         estimated_duration_minutes: input.estimatedDurationMinutes ?? null,
+        planned_working_minutes: input.plannedWorkingMinutes ?? null,
         location: input.location?.trim() || null,
         created_by: userId,
       })
@@ -384,15 +388,20 @@ export async function updateJob(
     if (input.estimatedDurationMinutes !== undefined)
       updateData.estimated_duration_minutes =
         input.estimatedDurationMinutes ?? null;
+    if (input.plannedWorkingMinutes !== undefined)
+      updateData.planned_working_minutes = input.plannedWorkingMinutes ?? null;
     if (input.location !== undefined)
       updateData.location = input.location?.trim() || null;
 
-    if (
-      existing.status === 'geparkt' &&
-      updateData.planned_date &&
-      updateData.planned_date !== null
-    ) {
-      updateData.status = 'nicht_bearbeitet';
+    if (input.plannedDate !== undefined) {
+      if (updateData.planned_date && updateData.planned_date !== null) {
+        if (existing.status === 'geparkt') {
+          updateData.status = 'nicht_bearbeitet';
+        }
+      } else {
+        // Auto-parking due to date removal preserves all other metadata.
+        updateData.status = 'geparkt';
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -778,7 +787,7 @@ export async function getJobDetails(
       const userIds = assignmentRows.map((a) => a.user_id);
       const { data: profiles } = await admin
         .from('profiles')
-        .select('id, first_name, last_name, email')
+        .select('id, first_name, last_name, email, avatar_path')
         .in('id', userIds);
 
       const profileMap = new Map(
@@ -792,6 +801,7 @@ export async function getJobDetails(
           firstName: profile?.first_name ?? null,
           lastName: profile?.last_name ?? null,
           email: profile?.email ?? null,
+          avatarPath: profile?.avatar_path ?? null,
         });
       }
     }
@@ -877,7 +887,7 @@ export async function getJobByNumber(
       const userIds = assignmentRows.map((a) => a.user_id);
       const { data: profiles } = await admin
         .from('profiles')
-        .select('id, first_name, last_name, email')
+        .select('id, first_name, last_name, email, avatar_path')
         .in('id', userIds);
 
       const profileMap = new Map(
@@ -891,6 +901,7 @@ export async function getJobByNumber(
           firstName: profile?.first_name ?? null,
           lastName: profile?.last_name ?? null,
           email: profile?.email ?? null,
+          avatarPath: profile?.avatar_path ?? null,
         });
       }
     }
@@ -1327,8 +1338,9 @@ export async function getJobsForCalendar(
 
     let query = admin
       .from('jobs')
-      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, location, client_id, project_id')
+      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id')
       .eq('organization_id', orgId)
+      .neq('status', 'geparkt')
       .not('planned_date', 'is', null);
 
     if (from) query = query.gte('planned_date', from);
@@ -1365,8 +1377,11 @@ export async function getJobsForCalendar(
     const [assignmentsResult, clientsResult, projectsResult] = await Promise.all([
       admin.from('job_assignments').select('job_id, user_id').in('job_id', jobIds),
       clientIds.length > 0
-        ? admin.from('clients').select('id, name').in('id', clientIds)
-        : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+        ? admin.from('clients').select('id, name, address').in('id', clientIds)
+        : Promise.resolve({
+            data: [] as { id: string; name: string; address: string | null }[],
+            error: null
+          }),
       projectIds.length > 0
         ? admin.from('projects').select('id, name, project_number').in('id', projectIds)
         : Promise.resolve({ data: [] as { id: string; name: string; project_number: string | null }[], error: null }),
@@ -1378,9 +1393,12 @@ export async function getJobsForCalendar(
       assignmentMap[a.job_id].push(a.user_id);
     }
 
-    const clientMap: Record<string, string> = {};
+    const clientMap: Record<string, { name: string; address: string | null }> = {};
     for (const c of clientsResult.data || []) {
-      clientMap[c.id] = c.name;
+      clientMap[c.id] = {
+        name: c.name,
+        address: c.address
+      };
     }
 
     const projectMap: Record<string, { name: string; number: string | null }> = {};
@@ -1397,8 +1415,10 @@ export async function getJobsForCalendar(
       plannedDate: j.planned_date,
       plannedTime: normalizeJobPlannedTime(j.planned_time),
       estimatedDurationMinutes: j.estimated_duration_minutes,
+      plannedWorkingMinutes: j.planned_working_minutes,
       location: j.location,
-      clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,
+      clientName: j.client_id ? (clientMap[j.client_id]?.name ?? null) : null,
+      clientAddress: j.client_id ? (clientMap[j.client_id]?.address ?? null) : null,
       projectName: j.project_id ? (projectMap[j.project_id]?.name ?? null) : null,
       projectNumber: j.project_id ? (projectMap[j.project_id]?.number ?? null) : null,
       assignedUserIds: assignmentMap[j.id] || [],
@@ -1427,7 +1447,7 @@ export async function getParkedJobs(): Promise<
 
     let query = admin
       .from('jobs')
-      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, location, client_id, project_id, updated_at')
+      .select('id, title, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at')
       .eq('organization_id', orgId)
       .eq('status', 'geparkt')
       .order('updated_at', { ascending: true });
@@ -1463,8 +1483,11 @@ export async function getParkedJobs(): Promise<
     const [assignmentsResult, clientsResult, projectsResult] = await Promise.all([
       admin.from('job_assignments').select('job_id, user_id').in('job_id', jobIds),
       clientIds.length > 0
-        ? admin.from('clients').select('id, name').in('id', clientIds)
-        : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+        ? admin.from('clients').select('id, name, address').in('id', clientIds)
+        : Promise.resolve({
+            data: [] as { id: string; name: string; address: string | null }[],
+            error: null
+          }),
       projectIds.length > 0
         ? admin.from('projects').select('id, name, project_number').in('id', projectIds)
         : Promise.resolve({ data: [] as { id: string; name: string; project_number: string | null }[], error: null }),
@@ -1476,9 +1499,12 @@ export async function getParkedJobs(): Promise<
       assignmentMap[a.job_id].push(a.user_id);
     }
 
-    const clientMap: Record<string, string> = {};
+    const clientMap: Record<string, { name: string; address: string | null }> = {};
     for (const c of clientsResult.data || []) {
-      clientMap[c.id] = c.name;
+      clientMap[c.id] = {
+        name: c.name,
+        address: c.address
+      };
     }
 
     const projectMap: Record<string, { name: string; number: string | null }> = {};
@@ -1495,8 +1521,10 @@ export async function getParkedJobs(): Promise<
       plannedDate: j.planned_date,
       plannedTime: normalizeJobPlannedTime(j.planned_time),
       estimatedDurationMinutes: j.estimated_duration_minutes,
+      plannedWorkingMinutes: j.planned_working_minutes,
       location: j.location,
-      clientName: j.client_id ? (clientMap[j.client_id] ?? null) : null,
+      clientName: j.client_id ? (clientMap[j.client_id]?.name ?? null) : null,
+      clientAddress: j.client_id ? (clientMap[j.client_id]?.address ?? null) : null,
       projectName: j.project_id ? (projectMap[j.project_id]?.name ?? null) : null,
       projectNumber: j.project_id ? (projectMap[j.project_id]?.number ?? null) : null,
       assignedUserIds: assignmentMap[j.id] || [],

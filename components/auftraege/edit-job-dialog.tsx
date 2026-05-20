@@ -25,10 +25,12 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
+import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
 
 import { ClientSelectWithCreate } from './client-select-with-create';
+import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import {
   updateJob,
   assignEmployee,
@@ -37,6 +39,11 @@ import {
   type UpdateJobInput
 } from '@/lib/jobs/actions';
 import { JOB_PRIORITY_LABELS, type Client, type Job, type JobPriority, type ProjectWithDetails } from '@/lib/jobs/types';
+import {
+  calculatePlannedWorkingMinutes,
+  formatMinutesAsHoursInput,
+  parseHoursInputToMinutes,
+} from '@/lib/jobs/planned-working';
 import { toLocalDateString } from '@/lib/utils';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
@@ -88,6 +95,9 @@ export function EditJobDialog({
   const [plannedDate, setPlannedDate] = useState<Date | undefined>();
   const [plannedTime, setPlannedTime] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
+  const [plannedWorkingHours, setPlannedWorkingHours] = useState('');
+  const [plannedWorkingTouched, setPlannedWorkingTouched] = useState(false);
+  const [autoSyncPlannedWorking, setAutoSyncPlannedWorking] = useState(false);
   const [location, setLocation] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [originalAssignees, setOriginalAssignees] = useState<string[]>([]);
@@ -97,6 +107,7 @@ export function EditJobDialog({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showAutoParkDialog, setShowAutoParkDialog] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -109,11 +120,10 @@ export function EditJobDialog({
     setPriority(job.priority);
     setPlannedDate(job.plannedDate ? new Date(job.plannedDate + 'T00:00:00') : undefined);
     setPlannedTime(job.plannedTime ?? '');
-    setEstimatedHours(
-      job.estimatedDurationMinutes
-        ? String(job.estimatedDurationMinutes / 60)
-        : ''
-    );
+    setEstimatedHours(formatMinutesAsHoursInput(job.estimatedDurationMinutes));
+    setPlannedWorkingHours(formatMinutesAsHoursInput(job.plannedWorkingMinutes));
+    setPlannedWorkingTouched(false);
+    setAutoSyncPlannedWorking(false);
     setLocation(job.location ?? '');
     setError(null);
     setTitleError(null);
@@ -142,8 +152,7 @@ export function EditJobDialog({
     });
   }, [open, job, projects]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitChanges = async (confirmedDateRemoval = false) => {
     setHasAttemptedSubmit(true);
     setError(null);
     setTitleError(null);
@@ -153,27 +162,54 @@ export function EditJobDialog({
       return;
     }
 
+    const isRemovingPlannedDate = !!job.plannedDate && !plannedDate;
+    if (isRemovingPlannedDate && !confirmedDateRemoval) {
+      setShowAutoParkDialog(true);
+      return;
+    }
+
     setIsLoading(true);
     setSuccess(false);
 
     try {
-      const hoursNum = parseFloat(estimatedHours);
-      const durationMinutes =
-        !isNaN(hoursNum) && hoursNum > 0 ? Math.round(hoursNum * 60) : undefined;
+      const parsedEstimatedDuration = parseHoursInputToMinutes(estimatedHours);
+      const estimatedDurationMinutes = estimatedHours.trim()
+        ? parsedEstimatedDuration
+        : job.estimatedDurationMinutes !== null
+          ? null
+          : undefined;
+
+      let plannedWorkingMinutes: number | null | undefined;
+      if (plannedWorkingTouched) {
+        plannedWorkingMinutes = plannedWorkingHours.trim()
+          ? parseHoursInputToMinutes(plannedWorkingHours)
+          : job.plannedWorkingMinutes !== null
+            ? null
+            : undefined;
+      } else if (autoSyncPlannedWorking) {
+        plannedWorkingMinutes = plannedWorkingHours.trim()
+          ? parseHoursInputToMinutes(plannedWorkingHours)
+          : job.plannedWorkingMinutes !== null
+            ? null
+            : undefined;
+      }
 
       const input: UpdateJobInput = {
         title: title.trim(),
-        description: description.trim() || undefined,
+        description: description.trim() || (job.description !== null ? '' : undefined),
         clientId: clientId && clientId !== 'none' ? clientId : '',
         projectId: projectId && projectId !== 'none' ? projectId : '',
         jobNumber: jobNumber.trim() || undefined,
         priority,
         plannedDate: plannedDate
           ? toLocalDateString(plannedDate)
-          : undefined,
-        plannedTime: plannedTime || undefined,
-        estimatedDurationMinutes: durationMinutes,
-        location: location.trim() || undefined
+          : job.plannedDate !== null
+            ? null
+            : undefined,
+        plannedTime: plannedTime || (job.plannedTime !== null ? null : undefined),
+        estimatedDurationMinutes,
+        plannedWorkingMinutes,
+        location: location.trim() || (job.location !== null ? '' : undefined)
       };
 
       const result = await updateJob(job.id, input);
@@ -215,6 +251,11 @@ export function EditJobDialog({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitChanges();
   };
 
   const showTitleError = hasAttemptedSubmit && titleError;
@@ -286,6 +327,32 @@ export function EditJobDialog({
   };
 
   const noProjectsForClient = clientId && filteredProjects.length === 0;
+
+  const handleEstimatedHoursChange = (nextValue: string) => {
+    setEstimatedHours(nextValue);
+    setAutoSyncPlannedWorking(true);
+
+    if (!plannedWorkingTouched) {
+      const nextSuggestedMinutes = calculatePlannedWorkingMinutes(
+        parseHoursInputToMinutes(nextValue),
+        selectedEmployees.length
+      );
+      setPlannedWorkingHours(formatMinutesAsHoursInput(nextSuggestedMinutes));
+    }
+  };
+
+  const handleSelectedEmployeesChange = (nextSelectedEmployees: string[]) => {
+    setSelectedEmployees(nextSelectedEmployees);
+    setAutoSyncPlannedWorking(true);
+
+    if (!plannedWorkingTouched) {
+      const nextSuggestedMinutes = calculatePlannedWorkingMinutes(
+        parseHoursInputToMinutes(estimatedHours),
+        nextSelectedEmployees.length
+      );
+      setPlannedWorkingHours(formatMinutesAsHoursInput(nextSuggestedMinutes));
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -415,14 +482,11 @@ export function EditJobDialog({
               <Label htmlFor="edit-job-duration">
                 Geschätzte Dauer (Stunden)
               </Label>
-              <Input
+              <DurationHoursInput
                 id="edit-job-duration"
-                type="number"
-                min="0"
-                step="0.5"
                 placeholder="z.B. 2.5"
                 value={estimatedHours}
-                onChange={(e) => setEstimatedHours(e.target.value)}
+                onChange={handleEstimatedHoursChange}
                 disabled={formDisabled}
               />
             </div>
@@ -443,7 +507,7 @@ export function EditJobDialog({
               <EmployeeMultiSelect
                 members={members}
                 selectedIds={selectedEmployees}
-                onSelectionChange={setSelectedEmployees}
+                onSelectionChange={handleSelectedEmployeesChange}
                 disabled={formDisabled || isLoadingAssignments}
               />
               {isLoadingAssignments && (
@@ -451,6 +515,29 @@ export function EditJobDialog({
                   Zuweisungen werden geladen...
                 </p>
               )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-job-planned-working">
+                Geplanter Arbeitsaufwand (Stunden)
+              </Label>
+              <DurationHoursInput
+                id="edit-job-planned-working"
+                placeholder="z.B. 5"
+                value={plannedWorkingHours}
+                onChange={(value) => {
+                  setPlannedWorkingTouched(true);
+                  setPlannedWorkingHours(value);
+                }}
+                disabled={formDisabled || isLoadingAssignments}
+              />
+              <p className="text-xs text-muted-foreground">
+                {plannedWorkingTouched
+                  ? 'Manuell angepasst. Bis zum Schließen dieses Dialogs überschreiben weitere Änderungen an Dauer oder Mitarbeitern diesen Wert nicht.'
+                  : !autoSyncPlannedWorking
+                    ? 'Bleibt zunächst beim aktuellen Wert. Änderungen an Dauer oder Mitarbeitern berechnen ihn neu.'
+                    : 'Wird automatisch aus geschätzter Dauer × Mitarbeiter berechnet.'}
+              </p>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -470,6 +557,16 @@ export function EditJobDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        <ParkConfirmationDialog
+          open={showAutoParkDialog}
+          onOpenChange={setShowAutoParkDialog}
+          variant="job"
+          title={title.trim() || job.title}
+          identifier={jobNumber.trim() || job.jobNumber || undefined}
+          mode="auto-park-date-removal"
+          onConfirm={() => submitChanges(true)}
+        />
       </DialogContent>
     </Dialog>
   );

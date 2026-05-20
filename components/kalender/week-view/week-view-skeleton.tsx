@@ -18,10 +18,16 @@ export function WeekViewSkeleton({ memberCount = 5 }: WeekViewSkeletonProps) {
           {days.map((day, i) => (
             <div
               key={i}
-              className="p-3 border-r last:border-r-0 flex flex-col items-center gap-1"
+              className="p-3 border-r last:border-r-0 flex flex-col gap-2"
             >
-              <Skeleton className="h-4 w-6" />
-              <Skeleton className="h-6 w-6 rounded-full" />
+              <div className="flex flex-col items-center gap-1">
+                <Skeleton className="h-4 w-6" />
+                <Skeleton className="h-6 w-6 rounded-full" />
+              </div>
+              <div className="space-y-1">
+                <Skeleton className="h-6 w-full rounded" />
+                {i % 3 === 0 && <Skeleton className="h-6 w-4/5 rounded" />}
+              </div>
             </div>
           ))}
         </div>

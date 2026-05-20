@@ -52,6 +52,7 @@ export function ClockFAB() {
     state && state.organizationId === activeOrgId ? state : null;
   const isClockedIn = activeClockState?.isClockedIn ?? false;
   const isOnBreak = activeClockState?.isOnBreak ?? false;
+  const breakMode = activeClockState?.breakMode ?? 'manual';
   const activeJobId = activeClockState?.activeJobId ?? null;
   const activeJobInfo = activeClockState?.activeJobInfo ?? null;
 
@@ -306,24 +307,26 @@ export function ClockFAB() {
                 <ArrowLeftRight className="h-3.5 w-3.5" />
               </Button>
             )}
-            <Button
-              size="icon"
-              variant="outline"
-              className={cn(
-                'h-8 w-8 rounded-full shadow-md',
-                isOnBreak &&
-                  'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300'
-              )}
-              onClick={handleBreakClick}
-              disabled={isPending}
-              title={isOnBreak ? 'Arbeit fortsetzen' : 'Pause starten'}
-            >
-              {isOnBreak ? (
-                <Play className="h-3.5 w-3.5" />
-              ) : (
-                <Coffee className="h-3.5 w-3.5" />
-              )}
-            </Button>
+            {breakMode === 'manual' ? (
+              <Button
+                size="icon"
+                variant="outline"
+                className={cn(
+                  'h-8 w-8 rounded-full shadow-md',
+                  isOnBreak &&
+                    'border-yellow-500/50 bg-yellow-500/10 text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-300'
+                )}
+                onClick={handleBreakClick}
+                disabled={isPending}
+                title={isOnBreak ? 'Arbeit fortsetzen' : 'Pause starten'}
+              >
+                {isOnBreak ? (
+                  <Play className="h-3.5 w-3.5" />
+                ) : (
+                  <Coffee className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            ) : null}
           </div>
         )}
 

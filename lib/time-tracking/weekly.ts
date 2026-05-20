@@ -2,9 +2,13 @@ import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
 import {
   calculateBreakMinutes,
   calculateTotalMinutes,
-  computeTimeBreakdown,
   groupEntriesByDate,
 } from './helpers';
+import {
+  computeBreakdownForSettings,
+  resolveBreakPolicyAtTimestamp,
+  type OrganizationTimeTrackingSettings,
+} from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './validation';
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -61,7 +65,8 @@ export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
 
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
-  monday: Date
+  monday: Date,
+  settings: OrganizationTimeTrackingSettings
 ): WeeklyTimeDataPoint[] {
   const grouped = groupEntriesByDate(entries);
   const days: WeeklyTimeDataPoint[] = [];
@@ -74,9 +79,15 @@ export function buildWeeklyTimeData(
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);
     const workMinutes = calculateTotalMinutes(workSessions);
-    const breakMinutes = calculateBreakMinutes(breakSessions);
-    const totalMinutes = workMinutes + breakMinutes;
-    const breakdown = computeTimeBreakdown(totalMinutes, breakMinutes);
+    const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
+    const totalMinutes = workMinutes + trackedBreakMinutes;
+    const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
+    const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
+    const breakdown = computeBreakdownForSettings(
+      totalMinutes,
+      trackedBreakMinutes,
+      effectiveSettings
+    );
 
     days.push({
       date: key,

@@ -23,7 +23,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
-  name_required: 'Bitte gib einen Namen ein.',
+  name_required: 'Bitte gib einen Titel ein.',
   project_number_required: 'Bitte gib eine Projektnummer ein.',
   project_number_taken: 'Diese Projektnummer ist bereits vergeben.',
   client_not_found: 'Kunde nicht gefunden.',
@@ -130,7 +130,7 @@ export function CreateProjectFormContent({
       hasValidationError = true;
     }
     if (!name.trim()) {
-      setNameError('Bitte gib einen Namen ein.');
+      setNameError('Bitte gib einen Titel ein.');
       hasValidationError = true;
     }
     if (hasValidationError) return;
@@ -205,7 +205,7 @@ export function CreateProjectFormContent({
     <form onSubmit={handleSubmit} noValidate>
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
-          <Label htmlFor="create-project-name">Name *</Label>
+          <Label htmlFor="create-project-name">Titel *</Label>
           <Input
             id="create-project-name"
             placeholder="z.B. Sanierung Hauptgebäude"

@@ -16,6 +16,7 @@ import {
   getCachedSubscriptionStatus,
   getCachedUserProfile,
 } from '@/lib/data/cached';
+import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 import {
   getActiveJobIdsForOrg,
   getCurrentClockState,
@@ -68,6 +69,8 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   ]);
 
   if (!user) redirect('/login');
+
+  await reportAuthUsersStringColumnHealth('app-layout');
 
   const [memberships, isSubscribed, activeOrgId, profile] = await Promise.all([
     getCachedMemberships(user.id),

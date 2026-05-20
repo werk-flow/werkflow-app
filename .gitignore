@@ -42,6 +42,3 @@ next-env.d.ts
 
 #docs folder
 /docs/
-
-#cursor folder
-.cursor/

@@ -83,12 +83,6 @@ export function MemberActionsMenu({
   // Check if this is the current user's own row
   const isOwnRow = memberId === currentUserId;
 
-  // Check if current user can manage this member
-  const canManage =
-    (currentUserRole === 'admin' || currentUserRole === 'buero') &&
-    !isOwnRow &&
-    memberRole !== 'admin';
-
   const canBueroManage =
     currentUserRole === 'buero' &&
     ROLE_HIERARCHY[memberRole] > ROLE_HIERARCHY['buero'];

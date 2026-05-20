@@ -14,11 +14,11 @@ export function CreatedOrgBanner() {
   // Get the created org ID from URL
   const createdOrgId = searchParams.get('created');
 
-  // Track if we should show the banner
-  const [showBanner, setShowBanner] = useState(false);
-
   // Track if banner is exiting (for fade-out animation)
   const [isExiting, setIsExiting] = useState(false);
+
+  // Track if we should show the banner
+  const [showBanner, setShowBanner] = useState(false);
 
   // Track if user has dismissed the banner
   const [isDismissed, setIsDismissed] = useState(false);
@@ -26,22 +26,21 @@ export function CreatedOrgBanner() {
   // Track the org ID that was created (to persist across org switches)
   const [createdOrgIdState, setCreatedOrgIdState] = useState<string | null>(null);
 
-  // Initialize the created org ID from URL on mount
   useEffect(() => {
     if (createdOrgId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- this banner intentionally latches a one-shot URL event before removing the search param
       setCreatedOrgIdState(createdOrgId);
-      setIsDismissed(false); // Reset dismissed state for new creations
-      setIsExiting(false); // Reset exiting state
-      // Clean up the URL by removing the query param (but keep the state)
+      setIsDismissed(false);
+      setIsExiting(false);
       const url = new URL(window.location.href);
       url.searchParams.delete('created');
       router.replace(url.pathname + url.search, { scroll: false });
     }
   }, [createdOrgId, router]);
 
-  // Show/hide banner based on whether the active org matches the created org
   useEffect(() => {
     if (createdOrgIdState && activeOrgId && !isDismissed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the visible state mirrors the active org match for this latched URL event
       setShowBanner(activeOrgId === createdOrgIdState);
     } else if (!isExiting) {
       setShowBanner(false);
@@ -50,7 +49,6 @@ export function CreatedOrgBanner() {
 
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
-    // Wait for fade-out animation to complete before hiding
     setTimeout(() => {
       setIsDismissed(true);
       setShowBanner(false);

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { getCachedOrganizationSettings } from '@/lib/data/cached';
 import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
 import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
@@ -28,7 +29,7 @@ async function getInitialOverview(
   const weekLabel = computeWeekLabel(monday);
   const todayIndex = getTodayIndex();
 
-  const [clockStateResult, weekEntriesResult] = await Promise.all([
+  const [clockStateResult, weekEntriesResult, organizationSettings] = await Promise.all([
     getCurrentClockState(activeOrgId),
     getTimeEntries({
       organizationId: activeOrgId,
@@ -36,6 +37,7 @@ async function getInitialOverview(
       to: sunday.toISOString(),
       userId,
     }),
+    getCachedOrganizationSettings(activeOrgId),
   ]);
 
   return {
@@ -43,6 +45,9 @@ async function getInitialOverview(
       ? clockStateResult.state
       : {
           organizationId: activeOrgId,
+          breakMode: organizationSettings.breakMode,
+          autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
+          autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
           status: 'clocked_out',
           isClockedIn: false,
           isOnBreak: false,
@@ -59,7 +64,7 @@ async function getInitialOverview(
         },
     weekData:
       weekEntriesResult.success && weekEntriesResult.entries
-        ? buildWeeklyTimeData(weekEntriesResult.entries, monday)
+        ? buildWeeklyTimeData(weekEntriesResult.entries, monday, organizationSettings)
         : [],
     todayIndex,
     weekLabel,

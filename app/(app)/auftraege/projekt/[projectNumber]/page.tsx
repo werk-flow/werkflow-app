@@ -3,9 +3,10 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getProjectByNumber } from '@/lib/projects/actions';
-import { type Client } from '@/lib/jobs/types';
+import { toClient, type Client } from '@/lib/jobs/types';
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
@@ -36,8 +37,16 @@ async function ProjectDetailData({
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
+  const admin = createSupabaseAdminClient();
 
-  const result = await getProjectByNumber(decodeURIComponent(projectNumber));
+  const [result, clientsResult] = await Promise.all([
+    getProjectByNumber(decodeURIComponent(projectNumber)),
+    admin
+      .from('clients')
+      .select('*')
+      .eq('organization_id', activeOrgId)
+      .order('name', { ascending: true }),
+  ]);
 
   if (!result.success) {
     return (
@@ -49,7 +58,7 @@ async function ProjectDetailData({
 
   const { project, client, jobs, derivedStatus } = result.details;
 
-  const clients: Client[] = client ? [client] : [];
+  const clients: Client[] = (clientsResult.data ?? []).map(toClient);
 
   return (
     <>

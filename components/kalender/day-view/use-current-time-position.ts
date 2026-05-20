@@ -15,8 +15,6 @@ export function useCurrentTimePosition(
   useEffect(() => {
     if (!enabled) return;
 
-    setNowTimestamp(getMinuteTimestamp());
-
     const interval = window.setInterval(() => {
       setNowTimestamp(getMinuteTimestamp());
     }, 60000);

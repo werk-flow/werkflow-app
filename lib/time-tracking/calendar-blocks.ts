@@ -6,6 +6,11 @@ import type {
 import { getLocalDayEnd, isSameLocalDay } from './day-utils';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
+import {
+  getAutomaticBreakRange,
+  resolveBreakPolicyAtTimestamp,
+  type OrganizationTimeTrackingSettings,
+} from './settings';
 
 export type CalendarBlockSegment = {
   id: string;
@@ -170,6 +175,129 @@ function extractBreaks(entries: TimeEntry[]): WorkSessionBreak[] {
   return breaks;
 }
 
+function buildSyntheticBreakEntry(
+  block: CalendarWorkBlock,
+  entryType: 'break_start' | 'break_end',
+  timestamp: Date,
+  idSuffix: string
+): TimeEntry {
+  return {
+    id: `${block.id}-${idSuffix}`,
+    userId: block.userId,
+    organizationId: block.organizationId,
+    entryType,
+    timestamp: timestamp.toISOString(),
+    isManual: false,
+    jobId: block.jobId,
+    status: 'approved',
+    reviewedBy: null,
+    reviewedAt: null,
+    createdAt: timestamp.toISOString(),
+    updatedAt: timestamp.toISOString(),
+  };
+}
+
+function resolveDisplayBreakPolicy(
+  block: CalendarWorkBlock,
+  referenceDate: Date,
+  settings?: OrganizationTimeTrackingSettings | null
+) {
+  if (!settings) {
+    return null
+  }
+
+  return resolveBreakPolicyAtTimestamp(
+    settings,
+    block.end ? new Date(block.end) : referenceDate
+  )
+}
+
+export function getCalendarBlockDisplayBreaks(
+  block: CalendarWorkBlock,
+  referenceDate = new Date(),
+  settings?: OrganizationTimeTrackingSettings | null
+): WorkSessionBreak[] {
+  const actualBreaks = extractBreaks(block.sourceEntries)
+  if (actualBreaks.length > 0) {
+    return actualBreaks
+  }
+
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
+  const displayEnd = block.end ? new Date(block.end) : referenceDate
+  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy)
+
+  if (!automaticBreak) {
+    return []
+  }
+
+  const breakStartEntry = buildSyntheticBreakEntry(
+    block,
+    'break_start',
+    automaticBreak.breakStart,
+    'auto-break-start'
+  )
+  const breakEndEntry = buildSyntheticBreakEntry(
+    block,
+    'break_end',
+    automaticBreak.breakEnd,
+    'auto-break-end'
+  )
+
+  return [{ breakStart: breakStartEntry, breakEnd: breakEndEntry }]
+}
+
+export function getCalendarBlockDisplaySegments(
+  block: CalendarWorkBlock,
+  referenceDate = new Date(),
+  settings?: OrganizationTimeTrackingSettings | null
+): CalendarBlockSegment[] {
+  const actualBreaks = extractBreaks(block.sourceEntries)
+  if (actualBreaks.length > 0) {
+    return block.segments
+  }
+
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
+  const displayEnd = block.end ? new Date(block.end) : referenceDate
+  const automaticBreak = getAutomaticBreakRange(block.start, displayEnd, displayPolicy)
+
+  if (!automaticBreak) {
+    return block.segments
+  }
+
+  const blockStart = new Date(block.start)
+  const segments: CalendarBlockSegment[] = []
+
+  if (blockStart < automaticBreak.breakStart) {
+    segments.push({
+      id: `${block.id}-auto-work-before`,
+      type: 'work',
+      start: block.start,
+      end: automaticBreak.breakStart.toISOString(),
+      jobId: block.jobId,
+    })
+  }
+
+  segments.push({
+    id: `${block.id}-auto-break`,
+    type: 'break',
+    start: automaticBreak.breakStart.toISOString(),
+    end: automaticBreak.breakEnd.toISOString(),
+    jobId: block.jobId,
+  })
+
+  if (displayEnd > automaticBreak.breakEnd) {
+    segments.push({
+      id: `${block.id}-auto-work-after`,
+      type: 'work',
+      start: automaticBreak.breakEnd.toISOString(),
+      end: block.end,
+      jobId: block.jobId,
+    })
+  }
+
+  return segments
+}
+
 export function getCalendarBlockDisplayEnd(
   block: CalendarWorkBlock,
   referenceDate = new Date()
@@ -194,11 +322,13 @@ export function getCalendarBlockDurationMinutes(
 
 export function createSessionFromCalendarBlock(
   block: CalendarWorkBlock,
-  referenceDate = new Date()
+  referenceDate = new Date(),
+  settings?: OrganizationTimeTrackingSettings | null
 ): InteractiveCalendarSession {
   const durationMinutes = Math.round(
     getCalendarBlockDurationMinutes(block, referenceDate)
   );
+  const displayPolicy = resolveDisplayBreakPolicy(block, referenceDate, settings)
 
   return {
     clockIn: block.startEntry,
@@ -216,7 +346,10 @@ export function createSessionFromCalendarBlock(
     isOrphan: false,
     calendarBlockId: block.id,
     sourceEntries: block.sourceEntries,
-    breaks: extractBreaks(block.sourceEntries),
+    breaks: getCalendarBlockDisplayBreaks(block, referenceDate, settings),
+    breakMode: displayPolicy?.breakMode,
+    autoBreakThresholdMinutes: displayPolicy?.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: displayPolicy?.autoBreakDurationMinutes,
     isCompositeBlock: block.isComposite,
     isOnBreakBlock: block.isOnBreak
   };

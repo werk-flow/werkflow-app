@@ -26,6 +26,7 @@ export function ActionBanner({ paramKey, messageTemplate }: ActionBannerProps) {
 
   useEffect(() => {
     if (paramValue) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the banner message is intentionally derived once from the URL event before the param is removed
       setBannerMessage(messageTemplate.replace('{name}', paramValue));
       setShowBanner(true);
       setIsExiting(false);

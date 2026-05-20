@@ -1,43 +1,16 @@
 'use client';
 
-import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
-import { z } from 'zod';
 
-import { PasswordRequirements } from '@/components/password/PasswordRequirements';
-import { PasswordStrengthMeter } from '@/components/password/PasswordStrengthMeter';
+import { NewPasswordFieldsForm } from '@/components/password/new-password-fields-form';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
-import { PasswordInput } from '@/components/ui/password-input';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
-  getPasswordRequirements,
-  getPasswordStrengthLevel,
-  passwordSchema,
+  type PasswordWithConfirmationValues,
   translateSupabasePasswordError
 } from '@/lib/validation/password';
-
-const resetPasswordSchema = z
-  .object({
-    password: passwordSchema,
-    confirmPassword: z.string()
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: 'Die Passwörter stimmen nicht überein.',
-    path: ['confirmPassword']
-  });
-
-type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
 type TokenState = 'loading' | 'valid' | 'invalid';
 
@@ -50,34 +23,7 @@ export function ResetPasswordForm() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const isRedirectingRef = useRef(false);
-
-  const form = useForm<ResetPasswordValues>({
-    resolver: zodResolver(resetPasswordSchema),
-    mode: 'onChange',
-    reValidateMode: 'onChange',
-    defaultValues: {
-      password: '',
-      confirmPassword: ''
-    }
-  });
-
-  const passwordValue =
-    useWatch({
-      control: form.control,
-      name: 'password'
-    }) ?? '';
-  const passwordRequirements = useMemo(
-    () => getPasswordRequirements(passwordValue),
-    [passwordValue]
-  );
-  const passwordStrength = useMemo(
-    () => getPasswordStrengthLevel(passwordValue),
-    [passwordValue]
-  );
-  // Button is clickable when password meets requirements (not disabled by confirmation mismatch)
-  const canSubmit = passwordRequirements.allMet && !isSubmitting;
 
   useEffect(() => {
     let hasResolvedToken = false;
@@ -271,28 +217,8 @@ export function ResetPasswordForm() {
     };
   }, [supabase]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setHasAttemptedSubmit(true);
+  const handleSubmit = async (values: PasswordWithConfirmationValues) => {
     setFormError(null);
-    form.clearErrors('password');
-
-    const values = form.getValues();
-
-    // Check if passwords match before proceeding
-    if (values.password !== values.confirmPassword) {
-      form.setError('confirmPassword', {
-        type: 'manual',
-        message: 'Die Passwörter stimmen nicht überein.'
-      });
-      return;
-    }
-
-    // Validate password requirements
-    if (!passwordRequirements.allMet) {
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -314,19 +240,8 @@ export function ResetPasswordForm() {
           );
         } else {
           // Translate password errors to user-friendly German messages
-          // Show via formError since the password FormMessage is hidden (we show requirements checklist instead)
           const friendly = translateSupabasePasswordError(updateError);
           setFormError(friendly);
-          form.resetField('password', {
-            keepDirty: false,
-            keepError: false,
-            defaultValue: ''
-          });
-          form.resetField('confirmPassword', {
-            keepDirty: false,
-            keepError: false,
-            defaultValue: ''
-          });
         }
         return;
       }
@@ -338,8 +253,20 @@ export function ResetPasswordForm() {
       // Immediately sign out the user for security
       await supabase.auth.signOut();
 
-      // Redirect to login with success message
-      router.push('/login?message=password-reset-success');
+      await fetch('/auth/flash', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: 'password-reset-success'
+        })
+      }).catch((error) => {
+        console.error('Failed to store auth flash message:', error);
+      });
+
+      // Redirect to login with a one-time server-side flash message
+      router.push('/login');
     } catch (error) {
       console.error('Unexpected error:', error);
       setFormError(
@@ -379,59 +306,12 @@ export function ResetPasswordForm() {
 
   // Valid token - show password reset form
   return (
-    <Form {...form}>
-      <form className="grid gap-4" onSubmit={handleSubmit}>
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Neues Passwort</FormLabel>
-              <FormControl>
-                <PasswordInput {...field} autoComplete="new-password" />
-              </FormControl>
-              <PasswordStrengthMeter
-                className="mt-2"
-                level={passwordStrength}
-              />
-              <PasswordRequirements
-                className="mt-2"
-                requirements={passwordRequirements}
-              />
-              <FormMessage aria-hidden className="hidden" />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Passwort bestätigen</FormLabel>
-              <FormControl>
-                <PasswordInput
-                  {...field}
-                  autoComplete="new-password"
-                  placeholder="Passwort wiederholen"
-                />
-              </FormControl>
-              {/* Only show mismatch error after user attempts to submit */}
-              {hasAttemptedSubmit && <FormMessage />}
-            </FormItem>
-          )}
-        />
-
-        {formError ? (
-          <p className="text-sm text-destructive">{formError}</p>
-        ) : null}
-
-        <Button className="w-full" disabled={!canSubmit} type="submit">
-          {isSubmitting
-            ? 'Passwort wird gespeichert...'
-            : 'Passwort zurücksetzen'}
-        </Button>
-      </form>
-    </Form>
+    <NewPasswordFieldsForm
+      formError={formError}
+      isSubmitting={isSubmitting}
+      submitLabel="Passwort zurücksetzen"
+      submittingLabel="Passwort wird gespeichert..."
+      onSubmit={handleSubmit}
+    />
   );
 }

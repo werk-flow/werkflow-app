@@ -11,9 +11,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useOrganization } from '@/components/organization/organization-context';
-import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
 import { getRoleLabel } from '@/lib/roles';
 
 interface OrgInfoCardProps {
@@ -101,18 +99,6 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
           </div>
         )}
 
-        {/* Delete organization - only visible to admins */}
-        {activeOrg.role === 'admin' && (
-          <>
-            <Separator />
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Gefahrenzone
-              </p>
-              <DeleteOrgDialog orgId={activeOrg.orgId} orgName={activeOrg.name} />
-            </div>
-          </>
-        )}
       </CardContent>
     </Card>
   );

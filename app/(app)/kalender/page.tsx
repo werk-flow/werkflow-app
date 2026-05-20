@@ -3,7 +3,11 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getCachedMemberships,
+  getCachedOrganizationSettings,
+  getCachedUser,
+} from '@/lib/data/cached';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getJobsForCalendar } from '@/lib/jobs/actions';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
@@ -38,25 +42,25 @@ async function KalenderData({
   dayEnd.setHours(23, 59, 59, 999);
 
   async function fetchMembers(): Promise<MemberRow[]> {
-    if (!isAdminOrManager) return [];
     const data = await getOrgMembersForUser(activeOrgId, userId);
-    if (currentUserRole === 'buero') {
+    if (isAdminOrManager) {
       return data;
     }
-    return data;
+    return data.filter((member) => member.user_id === userId);
   }
 
   const fromIso = toLocalDateString(dayStart);
   const toIso = toLocalDateString(dayEnd);
 
-  const [entriesResult, members, jobsResult] = await Promise.all([
+  const [entriesResult, members, jobsResult, organizationSettings] = await Promise.all([
     getTimeEntries({
       organizationId: activeOrgId,
       from: dayStart.toISOString(),
       to: dayEnd.toISOString()
     }),
     fetchMembers(),
-    getJobsForCalendar(fromIso, toIso)
+    getJobsForCalendar(fromIso, toIso),
+    getCachedOrganizationSettings(activeOrgId),
   ]);
 
   return (
@@ -66,6 +70,7 @@ async function KalenderData({
       currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
       members={members}
+      organizationSettings={organizationSettings}
       initialEntries={entriesResult.success ? entriesResult.entries : undefined}
       initialJobs={jobsResult.success ? jobsResult.jobs : undefined}
     />

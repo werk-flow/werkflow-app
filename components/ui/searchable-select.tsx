@@ -148,6 +148,7 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const portalContainer = useDialogPortalContainer(triggerRef, open);
@@ -197,7 +198,9 @@ export function SearchableSelect({
           ref={triggerRef}
           type="button"
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
+          aria-haspopup="listbox"
           disabled={disabled}
           className={cn(
             'flex h-9 w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
@@ -252,6 +255,8 @@ export function SearchableSelect({
           </div>
 
           <div
+            id={listboxId}
+            role="listbox"
             className="overflow-y-auto overscroll-contain p-1"
             style={{ maxHeight }}
             onWheelCapture={handleListWheel}
@@ -364,6 +369,7 @@ export function SearchableMultiSelect({
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const portalContainer = useDialogPortalContainer(triggerRef, open);
@@ -412,7 +418,9 @@ export function SearchableMultiSelect({
           ref={triggerRef}
           type="button"
           role="combobox"
+          aria-controls={listboxId}
           aria-expanded={open}
+          aria-haspopup="listbox"
           disabled={disabled}
           className={cn(
             'flex h-9 w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
@@ -467,6 +475,8 @@ export function SearchableMultiSelect({
           </div>
 
           <div
+            id={listboxId}
+            role="listbox"
             className="overflow-y-auto overscroll-contain p-1"
             style={{ maxHeight }}
             onWheelCapture={handleListWheel}

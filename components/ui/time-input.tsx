@@ -16,6 +16,15 @@ interface TimeInputProps
 
 type Segment = 'hours' | 'minutes';
 
+function EmptySegmentLine() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle"
+    />
+  );
+}
+
 /**
  * Custom time input that always displays 24-hour format (HH:MM)
  * regardless of browser or system locale settings.
@@ -24,15 +33,29 @@ type Segment = 'hours' | 'minutes';
  * for consistent cross-browser behavior (especially Safari).
  */
 const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
-  ({ className, value, onChange, disabled, id, ...props }, ref) => {
+  ({ className, value, onChange, disabled, id, onBlur, onFocus, onKeyDown, ...props }, ref) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [activeSegment, setActiveSegment] = React.useState<Segment | null>(
       null
     );
     const [isFocused, setIsFocused] = React.useState(false);
+    const [useNativeInput, setUseNativeInput] = React.useState(false);
 
     // Combine refs
     React.useImperativeHandle(ref, () => containerRef.current!);
+
+    React.useEffect(() => {
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return;
+      }
+
+      const media = window.matchMedia('(pointer: coarse)');
+      const update = () => setUseNativeInput(media.matches);
+
+      update();
+      media.addEventListener?.('change', update);
+      return () => media.removeEventListener?.('change', update);
+    }, []);
 
     // Parse value into hours and minutes
     const parseValue = (val: string): { hours: number; minutes: number } => {
@@ -44,6 +67,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
     };
 
     const { hours, minutes } = parseValue(value);
+    const hasValue = !!value && /^\d{2}:\d{2}$/.test(value);
 
     // Format a number to 2 digits
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -80,7 +104,9 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
     };
 
     // Handle keyboard input
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown?.(e);
+      if (e.defaultPrevented) return;
       if (disabled || !activeSegment) return;
 
       // Arrow up/down - increment/decrement
@@ -177,6 +203,27 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
     const segmentActiveClass = 'bg-primary text-primary-foreground';
     const segmentInactiveClass = 'hover:bg-accent';
 
+    if (useNativeInput) {
+      return (
+        <div ref={containerRef} className={cn('w-full', className)}>
+          <input
+            type="time"
+            id={id}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            onKeyDown={onKeyDown}
+            disabled={disabled}
+            className={cn(
+              'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+              'dark:bg-input/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50'
+            )}
+          />
+        </div>
+      );
+    }
+
     return (
       <div
         ref={containerRef}
@@ -184,8 +231,14 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         aria-label="Uhrzeit"
         tabIndex={disabled ? -1 : 0}
         id={id}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
+        onFocus={(e) => {
+          handleFocus();
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          handleBlur(e);
+          onBlur?.(e);
+        }}
         onKeyDown={handleKeyDown}
         className={cn(
           'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
@@ -206,7 +259,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
               : segmentInactiveClass
           )}
         >
-          {pad(hours)}
+          {!hasValue && activeSegment !== 'hours' ? <EmptySegmentLine /> : pad(hours)}
         </span>
 
         {/* Separator */}
@@ -222,7 +275,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
               : segmentInactiveClass
           )}
         >
-          {pad(minutes)}
+          {!hasValue && activeSegment !== 'minutes' ? <EmptySegmentLine /> : pad(minutes)}
         </span>
       </div>
     );

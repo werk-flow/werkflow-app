@@ -79,8 +79,6 @@ export function MonthView({
   date,
   entries,
   members,
-  currentUserId,
-  currentUserRole,
   isAdminOrManager,
   isLoading,
   onDateSelect,

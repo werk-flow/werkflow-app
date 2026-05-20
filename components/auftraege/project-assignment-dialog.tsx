@@ -40,6 +40,7 @@ export function ProjectAssignmentDialog({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset the local dialog draft whenever the dialog is opened for a different project
     setSelectedProjectId(currentProjectId ?? '');
   }, [open, currentProjectId]);
 

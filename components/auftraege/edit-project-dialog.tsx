@@ -33,7 +33,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
-  name_required: 'Bitte gib einen Namen ein.',
+  name_required: 'Bitte gib einen Titel ein.',
   project_not_found: 'Projekt nicht gefunden.',
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
@@ -137,7 +137,7 @@ export function EditProjectDialog({
     setNameError(null);
 
     if (!name.trim()) {
-      setNameError('Bitte gib einen Namen ein.');
+      setNameError('Bitte gib einen Titel ein.');
       return;
     }
 
@@ -219,7 +219,7 @@ export function EditProjectDialog({
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="edit-project-name">Name *</Label>
+              <Label htmlFor="edit-project-name">Titel *</Label>
               <Input
                 id="edit-project-name"
                 placeholder="z.B. Sanierung Hauptgebäude"

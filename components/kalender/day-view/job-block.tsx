@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Building2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useBlockDrag, type DragMode } from './use-block-drag';
+import { useBlockDrag } from './use-block-drag';
 import type { CalendarJob } from '@/lib/jobs/types';
 
 export interface JobMoveResizeResult {
@@ -68,7 +68,9 @@ export function JobBlock({
   onDragUpdate,
   onDragEnd: onDragEndProp,
 }: JobBlockProps) {
-  const compact = layoutHeight <= 28;
+  const compact = layoutHeight <= 32;
+  const canShowMetadata = layoutHeight >= 72 && width >= 150;
+  const addressLine = job.location ?? job.clientAddress;
 
   const canDrag = useMemo(() => {
     if (!onMoveResize) return false;
@@ -76,7 +78,7 @@ export function JobBlock({
   }, [onMoveResize, job.plannedTime, job.estimatedDurationMinutes]);
 
   const handleDragComplete = useCallback(
-    (newLeft: number, newWidth: number, _mode: DragMode) => {
+    (newLeft: number, newWidth: number) => {
       if (!onMoveResize || !job.plannedTime || !job.estimatedDurationMinutes) return;
 
       const newTime = pixelToHHMM(newLeft, effectiveHourWidth);
@@ -117,8 +119,7 @@ export function JobBlock({
   const handleClick = (e: React.MouseEvent) => {
     if (dayViewDragDidOccurRef?.current) return;
     if (drag.didDrag.current) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    onClick(job, { x: rect.right + 8, y: rect.top });
+    onClick(job, { x: e.clientX + 12, y: e.clientY + 12 });
   };
 
   const handleMovePointerDown = (e: React.PointerEvent) => {
@@ -174,7 +175,7 @@ export function JobBlock({
             ? isResizing ? 'col-resize' : 'grabbing'
             : 'pointer',
         }}
-        title={`${job.title}${job.jobNumber ? ` (${job.jobNumber})` : ''}`}
+        title={job.title}
         onClick={handleClick}
         {...drag.handlers}
       >
@@ -192,34 +193,47 @@ export function JobBlock({
         {/* Move area */}
         <div
           className={cn(
-            'flex items-center gap-1 px-2 overflow-hidden w-full h-full',
+            'w-full h-full overflow-hidden',
             compact && 'px-1',
-            canDrag && !drag.isDragging && 'cursor-pointer',
-            drag.isDragging && 'justify-center'
+            canDrag && !drag.isDragging && 'cursor-pointer'
           )}
           onPointerDown={canDrag ? handleMovePointerDown : undefined}
         >
           {drag.isDragging ? (
-            <>
+            <div className="flex h-full w-full items-center justify-center gap-1 overflow-hidden px-2">
               <Briefcase className={cn('shrink-0 opacity-80', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
               <span className="font-medium truncate">
                 {formatTimeFromPx(displayLeft, effectiveHourWidth)}
                 {' – '}
                 {formatTimeFromPx(displayLeft + displayWidth, effectiveHourWidth)}
               </span>
-            </>
+            </div>
+          ) : canShowMetadata ? (
+            <div className="flex h-full w-full flex-col justify-center gap-1.5 overflow-hidden px-2 py-1.5">
+              <div className="flex min-w-0 items-center gap-1">
+                <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+                <span className="truncate font-medium">{job.title}</span>
+              </div>
+              {job.clientName && (
+                <div className="flex min-w-0 items-center gap-1 text-[10px]/[1.3] text-muted-foreground">
+                  <Building2 className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{job.clientName}</span>
+                </div>
+              )}
+              {addressLine && (
+                <div className="flex min-w-0 items-center gap-1 text-[10px]/[1.3] text-muted-foreground">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{addressLine}</span>
+                </div>
+              )}
+            </div>
           ) : (
-            <>
+            <div className="flex h-full w-full items-center gap-1 overflow-hidden px-2">
               <Briefcase className={cn('shrink-0 text-brand-purple', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
-              {displayWidth > 60 && (
+              {displayWidth > 48 && (
                 <span className="font-medium truncate">{job.title}</span>
               )}
-              {displayWidth > 120 && job.jobNumber && (
-                <span className="text-[10px] text-muted-foreground truncate">
-                  {job.jobNumber}
-                </span>
-              )}
-            </>
+            </div>
           )}
         </div>
 

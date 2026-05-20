@@ -21,6 +21,15 @@ export const passwordSchema = z
   )
   .regex(NUMBER_REGEX, 'Das Passwort braucht mindestens eine Zahl.');
 
+export const passwordWithConfirmationSchema = z.object({
+  password: passwordSchema,
+  confirmPassword: z.string(),
+});
+
+export type PasswordWithConfirmationValues = z.infer<
+  typeof passwordWithConfirmationSchema
+>;
+
 export type PasswordRequirementFlags = {
   length: boolean;
   uppercase: boolean;
@@ -62,6 +71,20 @@ export function getPasswordStrengthLevel(password: string): number {
   return Math.max(0, score);
 }
 
+export function getPasswordConfirmationError(
+  values: PasswordWithConfirmationValues
+) {
+  if (!values.confirmPassword) {
+    return 'Bitte bestätige dein neues Passwort.';
+  }
+
+  if (values.password !== values.confirmPassword) {
+    return 'Die Passwörter stimmen nicht überein.';
+  }
+
+  return null;
+}
+
 export function translateSupabasePasswordError(error: unknown): string {
   const message =
     typeof error === 'string'
@@ -84,7 +107,10 @@ export function translateSupabasePasswordError(error: unknown): string {
     normalized.includes('should be different') ||
     normalized.includes('must be different') ||
     normalized.includes('new password should be different') ||
-    normalized.includes('password has been used')
+    normalized.includes('password has been used') ||
+    normalized.includes('old password') ||
+    normalized.includes('reuse') ||
+    normalized.includes('previously used')
   ) {
     return 'Das neue Passwort muss sich vom alten Passwort unterscheiden.';
   }

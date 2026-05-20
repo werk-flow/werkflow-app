@@ -2,10 +2,14 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
-import type { OrgRole } from '@/lib/members/actions';
+import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
+import { toClient } from '@/lib/jobs/types';
+import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import JobDetailLoading from './loading';
 
@@ -29,8 +33,17 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
+  const admin = createSupabaseAdminClient();
 
-  const result = await getJobByNumber(decodeURIComponent(jobNumber));
+  const [result, membersResult, clientsResult] = await Promise.all([
+    getJobByNumber(decodeURIComponent(jobNumber)),
+    getOrgMembersForUser(activeOrgId, user.id),
+    admin
+      .from('clients')
+      .select('*')
+      .eq('organization_id', activeOrgId)
+      .order('name', { ascending: true }),
+  ]);
 
   if (!result.success) {
     return (
@@ -41,6 +54,14 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   }
 
   const { job } = result;
+  const instructionItemsResult = await getJobInstructionItems(job.id);
+  const members: OrgMemberOption[] = membersResult.map((member) => ({
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  }));
+  const clients = (clientsResult.data ?? []).map(toClient);
 
   if (job.project?.projectNumber) {
     redirect(
@@ -51,10 +72,12 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   return (
     <JobDetailContent
       job={job}
-      clients={[]}
-      members={[]}
+      clients={clients}
+      members={members}
       projects={[]}
       isAdminOrManager={isAdminOrManager}
+      instructionItems={instructionItemsResult.success ? instructionItemsResult.items : []}
+      currentUserId={user.id}
     />
   );
 }

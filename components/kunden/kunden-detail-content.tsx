@@ -45,6 +45,7 @@ import {
   type Job,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
+import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
 function formatDate(dateStr: string): string {
@@ -64,6 +65,7 @@ interface KundenDetailContentProps {
   clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
+  visibleColumns: AuftraegeColumnId[];
 }
 
 export function KundenDetailContent({
@@ -75,6 +77,7 @@ export function KundenDetailContent({
   clients,
   members,
   isAdminOrManager,
+  visibleColumns,
 }: KundenDetailContentProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -304,6 +307,7 @@ export function KundenDetailContent({
               defaultClientId={client.id}
               readOnlyClient
               isAdminOrManager={isAdminOrManager}
+              visibleColumns={visibleColumns}
               emptyTitle="Keine Aufträge"
               emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."
             />

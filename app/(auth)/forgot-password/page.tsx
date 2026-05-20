@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
 
 import {
   Card,
@@ -8,7 +7,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { getSupabaseServerSession } from '@/lib/supabase/server';
+import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 
 import { ForgotPasswordForm } from './forgot-password-form';
 
@@ -16,12 +15,28 @@ export const metadata: Metadata = {
   title: 'Passwort vergessen'
 };
 
-export default async function ForgotPasswordPage() {
-  const { session } = await getSupabaseServerSession();
-
-  if (session) {
-    redirect('/dashboard');
+function getErrorMessage(error: string | undefined) {
+  if (!error) {
+    return null;
   }
+
+  if (error === 'invalid_code' || error === 'invalid_token') {
+    return 'Der Link zum Zurücksetzen des Passworts ist ungültig oder abgelaufen. Bitte fordere einen neuen Link an.';
+  }
+
+  return 'Es ist ein Fehler aufgetreten. Bitte fordere einen neuen Link an.';
+}
+
+export default async function ForgotPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string; error?: string; source?: string }>;
+}) {
+  await reportAuthUsersStringColumnHealth('forgot-password-page');
+  const params = await searchParams;
+  const initialEmail = typeof params.email === 'string' ? params.email : '';
+  const errorMessage = getErrorMessage(params.error);
+  const isKnownAccountReset = params.source === 'settings';
 
   return (
     <Card>
@@ -35,7 +50,11 @@ export default async function ForgotPasswordPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ForgotPasswordForm />
+        <ForgotPasswordForm
+          initialEmail={initialEmail}
+          serverErrorMessage={errorMessage}
+          isKnownAccountReset={isKnownAccountReset}
+        />
       </CardContent>
     </Card>
   );

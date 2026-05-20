@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
 
 export const PARKPLATZ_MIME = 'application/x-werkflow-job';
+const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
 
 let _ghostEl: HTMLDivElement | null = null;
 export function getDragGhost(): HTMLDivElement {
@@ -69,9 +70,13 @@ export function ParkplatzPanel({
   // removes the card from DOM before onDragEnd can fire)
   useEffect(() => {
     if (draggingJobId && !jobs.some(j => j.id === draggingJobId)) {
-      setDraggingJobId(null);
-      onDragJobEnd?.();
-      document.body.classList.remove('is-dragging');
+      const timeoutId = window.setTimeout(() => {
+        setDraggingJobId(null);
+        onDragJobEnd?.();
+        document.body.classList.remove('is-dragging');
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
     }
   }, [jobs, draggingJobId, onDragJobEnd]);
 
@@ -150,7 +155,7 @@ export function ParkplatzPanel({
                 data-parkplatz-pill=""
                 data-job-id={job.id}
                 data-job-title={job.title}
-                data-duration={String(job.estimatedDurationMinutes ?? 60)}
+                data-duration={String(job.estimatedDurationMinutes ?? DEFAULT_DAY_SCHEDULE_DURATION_MINUTES)}
                 className={cn(
                   'group relative rounded-lg border bg-card p-3 cursor-grab active:cursor-grabbing transition-all hover:shadow-md',
                   'hover:border-brand-purple/40',
@@ -160,7 +165,9 @@ export function ParkplatzPanel({
                   const payload: DragJobPayload = {
                     jobId: job.id,
                     source: 'parkplatz',
-                    durationMinutes: job.estimatedDurationMinutes ?? 60,
+                    durationMinutes:
+                      job.estimatedDurationMinutes ??
+                      DEFAULT_DAY_SCHEDULE_DURATION_MINUTES,
                   };
                   e.dataTransfer.setData(PARKPLATZ_MIME, JSON.stringify(payload));
                   e.dataTransfer.effectAllowed = 'move';

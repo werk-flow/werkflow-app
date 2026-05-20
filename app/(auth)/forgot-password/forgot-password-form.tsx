@@ -24,7 +24,17 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 
-export function ForgotPasswordForm() {
+type ForgotPasswordFormProps = {
+  initialEmail?: string;
+  serverErrorMessage?: string | null;
+  isKnownAccountReset?: boolean;
+};
+
+export function ForgotPasswordForm({
+  initialEmail = '',
+  serverErrorMessage = null,
+  isKnownAccountReset = false,
+}: ForgotPasswordFormProps) {
   const router = useRouter();
   // Use implicit client for password reset to enable cross-browser links
   // The flow type is determined by which client sends the email request
@@ -34,7 +44,7 @@ export function ForgotPasswordForm() {
   const form = useForm<ForgotPasswordValues>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: {
-      email: ''
+      email: initialEmail
     }
   });
 
@@ -60,8 +70,22 @@ export function ForgotPasswordForm() {
         console.error('Password reset error:', error);
       }
 
+      await fetch('/auth/flash', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: isKnownAccountReset
+            ? 'password-reset-requested-known-user'
+            : 'password-reset-requested'
+        })
+      }).catch((error) => {
+        console.error('Failed to store auth flash message:', error);
+      });
+
       // Always redirect with neutral message, never reveal if email exists
-      router.push('/login?message=password-reset-requested');
+      router.push('/login');
     } finally {
       // Reset submitting state in case redirect fails or is delayed
       setIsSubmitting(false);
@@ -71,6 +95,11 @@ export function ForgotPasswordForm() {
   return (
     <Form {...form}>
       <form className="grid gap-4" onSubmit={handleSubmit}>
+        {serverErrorMessage ? (
+          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+            {serverErrorMessage}
+          </div>
+        ) : null}
         <FormField
           control={form.control}
           name="email"

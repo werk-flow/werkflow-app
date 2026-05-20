@@ -64,6 +64,7 @@ export function CreateAuftragProjectDialog({
 
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the dialog should always reopen on the default tab
     setActiveTab('job');
   }, [open]);
 

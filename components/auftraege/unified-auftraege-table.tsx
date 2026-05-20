@@ -34,6 +34,11 @@ import {
   type UnifiedListEntry,
   type SortColumn,
 } from '@/lib/jobs/types';
+import {
+  isAuftraegeColumnVisible,
+  resolveVisibleAuftraegeColumns,
+  type AuftraegeColumnId,
+} from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
@@ -191,10 +196,13 @@ function MarqueeText({ children, className }: { children: React.ReactNode; class
   }, []);
 
   useEffect(() => {
-    check();
+    const frame = window.requestAnimationFrame(check);
     const observer = new ResizeObserver(check);
     if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [check, children]);
 
   return (
@@ -213,16 +221,37 @@ function MarqueeText({ children, className }: { children: React.ReactNode; class
 // Skeletons
 // ============================================
 
-function RowSkeleton({ showActions }: { showActions: boolean }) {
+function RowSkeleton({
+  showActions,
+  visibleColumns,
+}: {
+  showActions: boolean;
+  visibleColumns: AuftraegeColumnId[];
+}) {
   return (
     <TableRow>
       <TableCell className="w-[36px]"><Skeleton className="size-4" /></TableCell>
-      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-      <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-      <TableCell><Skeleton className="h-[22px] w-32 rounded-full" /></TableCell>
-      <TableCell><Skeleton className="h-[22px] w-16 rounded-full" /></TableCell>
-      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+      {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
+        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
+        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'kunde') && (
+        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'status') && (
+        <TableCell><Skeleton className="h-[22px] w-32 rounded-full" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && (
+        <TableCell><Skeleton className="h-[22px] w-16 rounded-full" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (
+        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'datum') && (
+        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+      )}
       {showActions && <TableCell><Skeleton className="h-8 w-8 rounded" /></TableCell>}
     </TableRow>
   );
@@ -262,7 +291,7 @@ function StandaloneJobRow({
   isActive,
   memberLookup,
   assignedUserIds,
-  hideClientColumn,
+  visibleColumns,
   clients,
   members,
   projects,
@@ -275,7 +304,7 @@ function StandaloneJobRow({
   isActive: boolean;
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
-  hideClientColumn?: boolean;
+  visibleColumns: AuftraegeColumnId[];
   clients: Client[];
   members: OrgMemberOption[];
   projects: ProjectWithDetails[];
@@ -294,32 +323,44 @@ function StandaloneJobRow({
       onClick={() => router.push(detailHref)}
     >
       <TableCell className="w-[36px]" />
-      <TableCell className="font-mono text-xs text-muted-foreground">
-        {job.jobNumber || '—'}
-      </TableCell>
-      <TableCell className="font-medium">
-        <span className="inline-flex items-center">
-          {job.title}
-          {isActive && <ActiveWorkIndicator />}
-        </span>
-      </TableCell>
-      {!hideClientColumn && <TableCell>{clientName}</TableCell>}
-      <TableCell>
-        <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
-          {JOB_STATUS_LABELS[job.status]}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
-          {JOB_PRIORITY_LABELS[job.priority]}
-        </Badge>
-      </TableCell>
-      <TableCell className="hidden xl:table-cell">
-        <AvatarStack userIds={assignedUserIds} memberLookup={memberLookup} />
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        {formatDate(job.plannedDate)}
-      </TableCell>
+      {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
+        <TableCell className="font-mono text-xs text-muted-foreground">
+          {job.jobNumber || '—'}
+        </TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
+        <TableCell className="font-medium">
+          <span className="inline-flex items-center">
+            {job.title}
+            {isActive && <ActiveWorkIndicator />}
+          </span>
+        </TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
+      {isAuftraegeColumnVisible(visibleColumns, 'status') && (
+        <TableCell>
+          <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
+            {JOB_STATUS_LABELS[job.status]}
+          </Badge>
+        </TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && (
+        <TableCell>
+          <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
+            {JOB_PRIORITY_LABELS[job.priority]}
+          </Badge>
+        </TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (
+        <TableCell className="hidden xl:table-cell">
+          <AvatarStack userIds={assignedUserIds} memberLookup={memberLookup} />
+        </TableCell>
+      )}
+      {isAuftraegeColumnVisible(visibleColumns, 'datum') && (
+        <TableCell className="text-muted-foreground">
+          {formatDate(job.plannedDate)}
+        </TableCell>
+      )}
       {isAdminOrManager && (
         <TableCell onClick={(e) => e.stopPropagation()}>
           <JobActionsMenu
@@ -348,7 +389,7 @@ function ProjectRow({
   activeJobIds,
   memberLookup,
   jobAssignmentMap,
-  hideClientColumn,
+  visibleColumns,
   clients,
   jobs,
   members,
@@ -368,7 +409,7 @@ function ProjectRow({
   activeJobIds: Set<string>;
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
-  hideClientColumn?: boolean;
+  visibleColumns: AuftraegeColumnId[];
   clients: Client[];
   jobs: Job[];
   members: OrgMemberOption[];
@@ -418,41 +459,51 @@ function ProjectRow({
             />
           </button>
         </TableCell>
-        <TableCell className="font-mono text-xs text-muted-foreground">
-          {project.projectNumber || '—'}
-        </TableCell>
-        <TableCell className="font-medium">
-          <span className="inline-flex items-center">
-            {project.name}
-            {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
-          </span>
-        </TableCell>
-        {!hideClientColumn && <TableCell>{clientName}</TableCell>}
-        <TableCell>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className={cn('w-[105px] justify-center', PROJECT_STATUS_CLASSES[effectiveStatus])}>
-              {PROJECT_STATUS_LABELS[effectiveStatus]}
-            </Badge>
-            <div className="flex items-center gap-1.5">
-              <Progress value={progress} className="h-1.5 w-12" />
-              <span className="text-[10px] tabular-nums text-muted-foreground">
-                {project.completedJobCount}/{project.jobCount}
-              </span>
+        {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
+          <TableCell className="font-mono text-xs text-muted-foreground">
+            {project.projectNumber || '—'}
+          </TableCell>
+        )}
+        {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
+          <TableCell className="font-medium">
+            <span className="inline-flex items-center">
+              {project.name}
+              {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+            </span>
+          </TableCell>
+        )}
+        {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
+        {isAuftraegeColumnVisible(visibleColumns, 'status') && (
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className={cn('w-[105px] justify-center', PROJECT_STATUS_CLASSES[effectiveStatus])}>
+                {PROJECT_STATUS_LABELS[effectiveStatus]}
+              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Progress value={progress} className="h-1.5 w-12" />
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {project.completedJobCount}/{project.jobCount}
+                </span>
+              </div>
+              <TrafficLight status={trafficLight} />
             </div>
-            <TrafficLight status={trafficLight} />
-          </div>
-        </TableCell>
-        <TableCell />
-        <TableCell className="hidden xl:table-cell">
-          {!isExpanded && (
-            <AvatarStack userIds={allProjectUserIds} memberLookup={memberLookup} max={4} />
-          )}
-        </TableCell>
-        <TableCell className="text-muted-foreground">
-          {project.plannedStartDate || project.plannedEndDate
-            ? `${formatDate(project.plannedStartDate)} – ${formatDate(project.plannedEndDate)}`
-            : '—'}
-        </TableCell>
+          </TableCell>
+        )}
+        {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && <TableCell />}
+        {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (
+          <TableCell className="hidden xl:table-cell">
+            {!isExpanded && (
+              <AvatarStack userIds={allProjectUserIds} memberLookup={memberLookup} max={4} />
+            )}
+          </TableCell>
+        )}
+        {isAuftraegeColumnVisible(visibleColumns, 'datum') && (
+          <TableCell className="text-muted-foreground">
+            {project.plannedStartDate || project.plannedEndDate
+              ? `${formatDate(project.plannedStartDate)} – ${formatDate(project.plannedEndDate)}`
+              : '—'}
+          </TableCell>
+        )}
         {isAdminOrManager && (
           <TableCell onClick={(e) => e.stopPropagation()}>
             <ProjectActionsMenu
@@ -478,36 +529,48 @@ function ProjectRow({
               onClick={() => router.push(childHref)}
             >
               <TableCell className="w-[36px]" />
-              <TableCell className="pl-8 font-mono text-xs text-muted-foreground">
-                {job.jobNumber || '—'}
-              </TableCell>
-              <TableCell className="pl-8 font-medium">
-                <span className="inline-flex items-center">
-                  {job.title}
-                  {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
-                </span>
-              </TableCell>
-              {!hideClientColumn && (
+              {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
+                <TableCell className="pl-8 font-mono text-xs text-muted-foreground">
+                  {job.jobNumber || '—'}
+                </TableCell>
+              )}
+              {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
+                <TableCell className="pl-8 font-medium">
+                  <span className="inline-flex items-center">
+                    {job.title}
+                    {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
+                  </span>
+                </TableCell>
+              )}
+              {isAuftraegeColumnVisible(visibleColumns, 'kunde') && (
                 <TableCell>
                   {job.clientId ? clientMap[job.clientId] || '—' : clientName}
                 </TableCell>
               )}
-              <TableCell>
-                <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
-                  {JOB_STATUS_LABELS[job.status]}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
-                  {JOB_PRIORITY_LABELS[job.priority]}
-                </Badge>
-              </TableCell>
-              <TableCell className="hidden xl:table-cell">
-                <AvatarStack userIds={childAssigned} memberLookup={memberLookup} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(job.plannedDate)}
-              </TableCell>
+              {isAuftraegeColumnVisible(visibleColumns, 'status') && (
+                <TableCell>
+                  <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
+                    {JOB_STATUS_LABELS[job.status]}
+                  </Badge>
+                </TableCell>
+              )}
+              {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && (
+                <TableCell>
+                  <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
+                    {JOB_PRIORITY_LABELS[job.priority]}
+                  </Badge>
+                </TableCell>
+              )}
+              {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (
+                <TableCell className="hidden xl:table-cell">
+                  <AvatarStack userIds={childAssigned} memberLookup={memberLookup} />
+                </TableCell>
+              )}
+              {isAuftraegeColumnVisible(visibleColumns, 'datum') && (
+                <TableCell className="text-muted-foreground">
+                  {formatDate(job.plannedDate)}
+                </TableCell>
+              )}
               {isAdminOrManager && (
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <JobActionsMenu
@@ -842,6 +905,7 @@ interface UnifiedAuftraegeTableProps {
   clients?: Client[];
   members?: OrgMemberOption[];
   hideClientColumn?: boolean;
+  visibleColumns: AuftraegeColumnId[];
   onJobUpdated?: (payload: {
     job: Job;
     selectedEmployeeIds?: string[];
@@ -868,6 +932,7 @@ export function UnifiedAuftraegeTable({
   members = [],
   clients = [],
   hideClientColumn = false,
+  visibleColumns,
   onJobUpdated,
   onJobDeleted,
   onProjectUpdated,
@@ -893,6 +958,13 @@ export function UnifiedAuftraegeTable({
       ),
     [entries]
   );
+  const effectiveVisibleColumns = useMemo(
+    () =>
+      resolveVisibleAuftraegeColumns(visibleColumns, {
+        hideClientColumn,
+      }),
+    [hideClientColumn, visibleColumns]
+  );
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((prev) => {
@@ -916,25 +988,40 @@ export function UnifiedAuftraegeTable({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[36px]" />
-                <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
-                <SortableHeader label="Bezeichnung" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-                {!hideClientColumn && (
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'nr') && (
+                  <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
+                )}
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
+                  <SortableHeader label="Titel" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
+                )}
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
                   <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
                 )}
-                {isArchive ? (
-                  <TableHead className="min-w-[280px]">Status</TableHead>
-                ) : (
-                  <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'status') &&
+                  (isArchive ? (
+                    <TableHead className="min-w-[280px]">Status</TableHead>
+                  ) : (
+                    <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
+                  ))}
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'prioritaet') && (
+                  <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
                 )}
-                <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
-                <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
-                <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'mitarbeiter') && (
+                  <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
+                )}
+                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'datum') && (
+                  <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
+                )}
                 {isAdminOrManager && <TableHead className="w-[50px]" />}
               </TableRow>
             </TableHeader>
             <TableBody>
               {Array.from({ length: skeletonCount }).map((_, i) => (
-                <RowSkeleton key={i} showActions={isAdminOrManager} />
+                <RowSkeleton
+                  key={i}
+                  showActions={isAdminOrManager}
+                  visibleColumns={effectiveVisibleColumns}
+                />
               ))}
             </TableBody>
           </Table>
@@ -1012,19 +1099,30 @@ export function UnifiedAuftraegeTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[36px]" />
-              <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
-              <SortableHeader label="Bezeichnung" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-              {!hideClientColumn && (
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'nr') && (
+                <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
+              )}
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
+                <SortableHeader label="Titel" column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
+              )}
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
                 <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
               )}
-              {isArchive ? (
-                <TableHead className="min-w-[280px]">Status</TableHead>
-              ) : (
-                <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'status') &&
+                (isArchive ? (
+                  <TableHead className="min-w-[280px]">Status</TableHead>
+                ) : (
+                  <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
+                ))}
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'prioritaet') && (
+                <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
               )}
-              <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
-              <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
-              <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'mitarbeiter') && (
+                <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
+              )}
+              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'datum') && (
+                <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
+              )}
               {isAdminOrManager && <TableHead className="w-[50px]" />}
             </TableRow>
           </TableHeader>
@@ -1040,10 +1138,10 @@ export function UnifiedAuftraegeTable({
                     isActive={activeJobIds.has(entry.job.id)}
                     memberLookup={memberLookup}
                     assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
+                    visibleColumns={effectiveVisibleColumns}
                     clients={clients}
                     members={members}
                     projects={allProjects}
-                    hideClientColumn={hideClientColumn}
                     onJobUpdated={onJobUpdated}
                     onJobDeleted={onJobDeleted}
                   />
@@ -1062,11 +1160,11 @@ export function UnifiedAuftraegeTable({
                   activeJobIds={activeJobIds}
                   memberLookup={memberLookup}
                   jobAssignmentMap={jobAssignmentMap}
+                  visibleColumns={effectiveVisibleColumns}
                   clients={clients}
                   jobs={allJobs}
                   members={members}
                   projects={allProjects}
-                  hideClientColumn={hideClientColumn}
                   onJobUpdated={onJobUpdated}
                   onJobDeleted={onJobDeleted}
                   onProjectUpdated={onProjectUpdated}

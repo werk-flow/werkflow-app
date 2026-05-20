@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core';
-import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown, Briefcase, Coffee } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import {
   calculateCalendarWorkBlocks,
@@ -22,6 +22,7 @@ import type {
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { CalendarView } from './calendar-container';
 import { JobEventPopover } from './job-event-popover';
+import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 
 interface CalendarMember {
   user_id: string;
@@ -36,6 +37,7 @@ interface FullCalendarViewProps {
   view: CalendarView;
   entries: TimeEntry[];
   members: CalendarMember[];
+  organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
   isAdminOrManager: boolean;
   onEventClick: (session: InteractiveCalendarSession) => void;
@@ -63,6 +65,7 @@ export function FullCalendarView({
   view,
   entries,
   members,
+  organizationSettings,
   currentUserId,
   isAdminOrManager,
   onEventClick,
@@ -86,11 +89,20 @@ export function FullCalendarView({
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const onUnparkJobRef = useRef(onUnparkJob);
-  onUnparkJobRef.current = onUnparkJob;
   const onParkJobRef = useRef(onParkJob);
-  onParkJobRef.current = onParkJob;
   const onPointerOverParkplatzChangeRef = useRef(onPointerOverParkplatzChange);
-  onPointerOverParkplatzChangeRef.current = onPointerOverParkplatzChange;
+
+  useEffect(() => {
+    onUnparkJobRef.current = onUnparkJob;
+  }, [onUnparkJob]);
+
+  useEffect(() => {
+    onParkJobRef.current = onParkJob;
+  }, [onParkJob]);
+
+  useEffect(() => {
+    onPointerOverParkplatzChangeRef.current = onPointerOverParkplatzChange;
+  }, [onPointerOverParkplatzChange]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -218,7 +230,7 @@ export function FullCalendarView({
   );
 
   // Convert work sessions to FullCalendar events
-  const events = useMemo(() => {
+  const events = (() => {
     // Filter entries for the current user (for employees) or all (for admin in month view)
     const relevantEntries = isAdminOrManager
       ? entries
@@ -334,7 +346,9 @@ export function FullCalendarView({
         const durationText =
           hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
         const isPulseOpen = block.isOpen && !block.isOnBreak;
-        const session = withMemberContext(createSessionFromCalendarBlock(block));
+        const session = withMemberContext(
+          createSessionFromCalendarBlock(block, new Date(nowTick), organizationSettings)
+        );
         const canDrag = isAdminOrManager && !!session?.clockOut && !block.isOpen;
 
         return {
@@ -372,7 +386,7 @@ export function FullCalendarView({
         ...orphanEvents.filter((event): event is NonNullable<typeof event> => event !== null)
       ];
     });
-  }, [entries, currentUserId, isAdminOrManager, members, nowTick, withMemberContext]);
+  })();
 
   const jobEvents = useMemo(() => {
     return jobs.map((job) => {
@@ -734,12 +748,29 @@ export function FullCalendarView({
     const {
       isPending,
       isPendingDelete,
-      isOpen,
       isOrphan,
       isOrphanClockIn,
       durationText,
       memberName
     } = eventInfo.event.extendedProps;
+    const session = eventInfo.event.extendedProps.session as
+      | InteractiveCalendarSession
+      | undefined;
+    const breakMinutes =
+      session?.breaks?.reduce((total, workBreak) => {
+        const breakEnd = workBreak.breakEnd
+          ? new Date(workBreak.breakEnd.timestamp)
+          : new Date();
+
+        return (
+          total +
+          Math.max(
+            0,
+            (breakEnd.getTime() - new Date(workBreak.breakStart.timestamp).getTime()) /
+              60000
+          )
+        );
+      }, 0) ?? 0;
 
     // Orphan entries show differently - CSS handles vertical centering via fc-event-orphan class
     if (isOrphan) {
@@ -782,6 +813,7 @@ export function FullCalendarView({
         <Clock className="h-3 w-3 shrink-0 opacity-70" />
         <span className="font-medium truncate">{label}</span>
         <span className="opacity-70 truncate text-[10px]">{activityText}</span>
+        {breakMinutes > 0 && <Coffee className="h-3 w-3 shrink-0 opacity-70" />}
       </div>
     );
   };

@@ -20,8 +20,7 @@ import {
 import { getJobsForCalendar, getParkedJobs, updateJob, updateJobStatus, assignEmployee, unassignEmployee } from '@/lib/jobs/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { CalendarJob } from '@/lib/jobs/types';
-import { ParkplatzButton } from './parkplatz-button';
-import { ParkplatzPanel, PARKPLATZ_MIME } from './parkplatz-panel';
+import { ParkplatzPanel } from './parkplatz-panel';
 import { ActionBanner, type ActionBannerState } from './day-view/undo-banner';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +39,7 @@ import {
   consumeManualEntryBridge,
   MANUAL_ENTRY_CREATED_EVENT
 } from '@/lib/time-tracking/manual-entry-bridge';
+import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -73,6 +73,7 @@ interface CalendarContainerProps {
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
   members: CalendarMember[];
+  organizationSettings: OrganizationTimeTrackingSettings;
   initialEntries?: TimeEntry[];
   initialChangeRequestMap?: EntryChangeRequestMap;
   initialJobs?: CalendarJob[];
@@ -94,6 +95,7 @@ export function CalendarContainer({
   currentUserRole,
   isAdminOrManager,
   members,
+  organizationSettings,
   initialEntries,
   initialChangeRequestMap,
   initialJobs
@@ -116,7 +118,7 @@ export function CalendarContainer({
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
   const [filters, setFilters] = useState<CalendarFilters>({
-    showWorkingHours: true,
+    showWorkingHours: false,
     showJobs: true
   });
 
@@ -689,7 +691,7 @@ export function CalendarContainer({
     setHighlightMemberId(null);
   }, []);
 
-  const savedWorkingHoursRef = useRef(true);
+  const savedWorkingHoursRef = useRef(false);
 
   const handleViewChange = useCallback((newView: CalendarView) => {
     if (newView === 'month' && view !== 'month') {
@@ -834,17 +836,24 @@ export function CalendarContainer({
     jobId: string,
     targetDate: string,
     targetTime?: string,
-    assignToUserId?: string
+    assignToUserId?: string,
+    durationMinutes?: number
   ) => {
     const parkedList = parkedJobsRef.current;
     const jobIndex = parkedList.findIndex((j) => j.id === jobId);
     const job = jobIndex >= 0 ? parkedList[jobIndex] : null;
     if (!job) return;
 
+    const nextDurationMinutes =
+      targetTime && job.estimatedDurationMinutes == null
+        ? durationMinutes ?? 240
+        : job.estimatedDurationMinutes;
+
     const newJob: CalendarJob = {
       ...job,
       plannedDate: targetDate,
       plannedTime: targetTime ?? null,
+      estimatedDurationMinutes: nextDurationMinutes,
       status: 'nicht_bearbeitet',
     };
 
@@ -880,7 +889,13 @@ export function CalendarContainer({
     });
 
     // updateJob with a planned_date on a geparkt job auto-sets status to nicht_bearbeitet
-    const result = await updateJob(jobId, { plannedDate: targetDate, plannedTime: targetTime ?? '' });
+    const result = await updateJob(jobId, {
+      plannedDate: targetDate,
+      plannedTime: targetTime ?? '',
+      ...(nextDurationMinutes !== job.estimatedDurationMinutes
+        ? { estimatedDurationMinutes: nextDurationMinutes }
+        : {}),
+    });
     if (undone.current) { handleSilentRefresh(); return; }
 
     if (!result.success) {
@@ -920,6 +935,7 @@ export function CalendarContainer({
     const origDuration = job.estimatedDurationMinutes;
     const origAssigned = [...job.assignedUserIds];
     const needsAssign = !job.assignedUserIds.includes(memberId);
+    const nextDurationMinutes = job.estimatedDurationMinutes ?? durationMinutes ?? 240;
 
     const newAssigned = needsAssign
       ? [...job.assignedUserIds, memberId]
@@ -929,7 +945,7 @@ export function CalendarContainer({
     setCalendarJobs((prev) =>
       prev.map((j) =>
         j.id === jobId
-          ? { ...j, plannedTime: time, estimatedDurationMinutes: durationMinutes, assignedUserIds: newAssigned }
+          ? { ...j, plannedTime: time, estimatedDurationMinutes: nextDurationMinutes, assignedUserIds: newAssigned }
           : j
       )
     );
@@ -963,7 +979,7 @@ export function CalendarContainer({
 
     const result = await updateJob(jobId, {
       plannedTime: time,
-      estimatedDurationMinutes: durationMinutes,
+      estimatedDurationMinutes: nextDurationMinutes,
     });
     if (undone.current) { handleSilentRefresh(); return; }
 
@@ -991,11 +1007,78 @@ export function CalendarContainer({
     if (!undone.current) handleSilentRefresh();
   }, [handleOperationStart, handleSilentRefresh]);
 
+  const handleJobWeekHeaderMove = useCallback(async (
+    jobId: string,
+    newDate: string,
+    oldMemberId?: string
+  ) => {
+    const job = calendarJobsRef.current.find((j) => j.id === jobId);
+    if (!job) return;
+
+    const dateChanged = job.plannedDate !== newDate;
+    const memberRemoved = !!oldMemberId && job.assignedUserIds.includes(oldMemberId);
+    if (!dateChanged && !memberRemoved) return;
+
+    const origDate = job.plannedDate;
+    const origAssigned = [...job.assignedUserIds];
+    const newAssigned = memberRemoved
+      ? job.assignedUserIds.filter((uid) => uid !== oldMemberId)
+      : job.assignedUserIds;
+
+    handleOperationStart();
+    setCalendarJobs((prev) =>
+      prev.map((entry) =>
+        entry.id === jobId
+          ? { ...entry, plannedDate: newDate, assignedUserIds: newAssigned }
+          : entry
+      )
+    );
+
+    const undone = { current: false };
+
+    setParkplatzBanner({
+      id: ++parkplatzBannerSeqRef.current,
+      variant: 'success',
+      message: 'Auftrag wurde verschoben.',
+      onUndo: async () => {
+        undone.current = true;
+        handleOperationStart();
+        setCalendarJobs((prev) =>
+          prev.map((entry) =>
+            entry.id === jobId
+              ? { ...entry, plannedDate: origDate, assignedUserIds: origAssigned }
+              : entry
+          )
+        );
+        const undoPromises: Promise<unknown>[] = [];
+        if (dateChanged) {
+          undoPromises.push(updateJob(jobId, { plannedDate: origDate ?? '' }));
+        }
+        if (memberRemoved && oldMemberId) {
+          undoPromises.push(assignEmployee(jobId, oldMemberId));
+        }
+        await Promise.all(undoPromises);
+        handleSilentRefresh();
+      },
+    });
+
+    const serverPromises: Promise<unknown>[] = [];
+    if (dateChanged) {
+      serverPromises.push(updateJob(jobId, { plannedDate: newDate }));
+    }
+    if (memberRemoved && oldMemberId) {
+      serverPromises.push(unassignEmployee(jobId, oldMemberId));
+    }
+
+    await Promise.all(serverPromises);
+    if (undone.current) { handleSilentRefresh(); return; }
+    handleSilentRefresh();
+  }, [handleOperationStart, handleSilentRefresh]);
+
   const handleJobDateChange = useCallback(async (
     jobId: string,
     newDate: string,
-    newTime?: string,
-    _revertFn?: () => void
+    newTime?: string
   ) => {
     const job = calendarJobsRef.current.find((j) => j.id === jobId);
     if (!job) return;
@@ -1133,8 +1216,7 @@ export function CalendarContainer({
   const handleSessionWeekMove = useCallback(async (
     session: WorkSession,
     newDate: string,
-    newMemberId: string,
-    _revertFn?: () => void
+    newMemberId: string
   ) => {
     const interactiveSession = session as InteractiveCalendarSession;
     const clockInId = session.clockIn?.id;
@@ -1331,6 +1413,7 @@ export function CalendarContainer({
             view={view}
             entries={filteredEntries}
             members={members}
+            organizationSettings={organizationSettings}
             currentUserId={currentUserId}
             isAdminOrManager={isAdminOrManager}
             onEventClick={handleEventClick}
@@ -1352,6 +1435,7 @@ export function CalendarContainer({
                 date={currentDate}
                 entries={filteredEntries}
                 members={filteredMembers}
+                organizationSettings={organizationSettings}
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 isAdminOrManager={isAdminOrManager}
@@ -1376,6 +1460,7 @@ export function CalendarContainer({
                 date={currentDate}
                 entries={filteredEntries}
                 members={filteredMembers}
+                organizationSettings={organizationSettings}
                 currentUserId={currentUserId}
                 currentUserRole={currentUserRole}
                 isAdminOrManager={isAdminOrManager}
@@ -1389,6 +1474,7 @@ export function CalendarContainer({
                 onParkJob={handleParkJob}
                 onUnparkJob={handleUnparkJob}
                 onJobWeekMove={handleJobWeekMove}
+                onJobWeekHeaderMove={handleJobWeekHeaderMove}
                 onSessionWeekMove={handleSessionWeekMove}
               />
             )}

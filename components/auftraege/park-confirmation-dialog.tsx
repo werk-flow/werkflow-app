@@ -19,6 +19,7 @@ interface ParkConfirmationDialogProps {
   variant: 'job' | 'project';
   title: string;
   identifier?: string;
+  mode?: 'manual-park' | 'auto-park-date-removal';
   onConfirm: () => Promise<void>;
 }
 
@@ -28,6 +29,7 @@ export function ParkConfirmationDialog({
   variant,
   title,
   identifier,
+  mode = 'manual-park',
   onConfirm,
 }: ParkConfirmationDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +45,46 @@ export function ParkConfirmationDialog({
   };
 
   const displayName = identifier ? `${identifier} – ${title}` : title;
+  const isAutoParkDateRemoval = mode === 'auto-park-date-removal';
+
+  const dialogTitle = isAutoParkDateRemoval
+    ? 'Datum entfernen?'
+    : variant === 'job'
+      ? 'Auftrag parken?'
+      : 'Projekt parken?';
+
+  const description = isAutoParkDateRemoval
+    ? (
+      <>
+        Wenn du das geplante Datum von{' '}
+        <span className="font-medium text-foreground">{displayName}</span>{' '}
+        entfernst, wird der Auftrag automatisch geparkt.
+      </>
+    )
+    : variant === 'job'
+      ? (
+        <>
+          Der Auftrag{' '}
+          <span className="font-medium text-foreground">{displayName}</span>{' '}
+          wird in den Parkplatz verschoben.
+        </>
+      )
+      : (
+        <>
+          Das Projekt{' '}
+          <span className="font-medium text-foreground">{displayName}</span>{' '}
+          und alle zugehörigen Aufträge werden in den Parkplatz verschoben.
+        </>
+      );
+
+  const warningText = isAutoParkDateRemoval
+    ? 'Andere Metadaten wie Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben erhalten.'
+    : variant === 'job'
+      ? 'Das geplante Datum und die Uhrzeit werden entfernt.'
+      : 'Alle geplanten Daten und Uhrzeiten der zugehörigen Aufträge werden entfernt.';
+
+  const confirmLabel = isAutoParkDateRemoval ? 'Datum entfernen' : 'Parken';
+  const loadingLabel = isAutoParkDateRemoval ? 'Wird gespeichert...' : 'Wird geparkt...';
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -50,29 +92,13 @@ export function ParkConfirmationDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <ParkingSquare className="size-5 text-brand-purple" />
-            {variant === 'job' ? 'Auftrag parken?' : 'Projekt parken?'}
+            {dialogTitle}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2">
-              <p>
-                {variant === 'job' ? (
-                  <>
-                    Der Auftrag{' '}
-                    <span className="font-medium text-foreground">{displayName}</span>{' '}
-                    wird in den Parkplatz verschoben.
-                  </>
-                ) : (
-                  <>
-                    Das Projekt{' '}
-                    <span className="font-medium text-foreground">{displayName}</span>{' '}
-                    und alle zugehörigen Aufträge werden in den Parkplatz verschoben.
-                  </>
-                )}
-              </p>
+              <p>{description}</p>
               <p className="text-destructive/80 font-medium">
-                {variant === 'job'
-                  ? 'Das geplante Datum und die Uhrzeit werden entfernt.'
-                  : 'Alle geplanten Daten und Uhrzeiten der zugehörigen Aufträge werden entfernt.'}
+                {warningText}
               </p>
             </div>
           </AlertDialogDescription>
@@ -83,12 +109,12 @@ export function ParkConfirmationDialog({
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                Wird geparkt...
+                {loadingLabel}
               </>
             ) : (
               <>
                 <ParkingSquare className="mr-2 size-4" />
-                Parken
+                {confirmLabel}
               </>
             )}
           </Button>

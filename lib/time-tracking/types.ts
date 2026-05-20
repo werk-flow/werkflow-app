@@ -15,6 +15,7 @@ export type TimeEntryType =
   | 'break_end';
 export type TimeEntryStatus = Database['public']['Enums']['time_entry_status'];
 export type OrgRole = Database['public']['Enums']['org_role'];
+export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode'];
 export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
 /**
@@ -69,6 +70,9 @@ export type InteractiveCalendarSession = WorkSession & {
   calendarBlockId?: string;
   sourceEntries?: TimeEntry[];
   breaks?: WorkSessionBreak[];
+  breakMode?: OrgBreakMode;
+  autoBreakThresholdMinutes?: number;
+  autoBreakDurationMinutes?: number;
   isCompositeBlock?: boolean;
   isOnBreakBlock?: boolean;
   employeeName?: string | null;
@@ -146,6 +150,9 @@ export type ClockTimelineSegment = {
 
 export type LiveClockState = {
   organizationId: string;
+  breakMode: OrgBreakMode;
+  autoBreakThresholdMinutes: number;
+  autoBreakDurationMinutes: number;
   status: ClockStatus;
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -201,8 +208,20 @@ export type DeleteEntryResult =
   | { success: false; error: string };
 
 export type GetTimeEntriesResult =
-  | { success: true; entries: TimeEntry[] }
+  | {
+      success: true;
+      entries: TimeEntry[];
+      participants?: JobTimeParticipant[];
+    }
   | { success: false; error: string };
+
+export type JobTimeParticipant = {
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  avatarPath: string | null;
+};
 
 /**
  * A pending session awaiting approval (may be a single entry or a pair)

@@ -10,8 +10,15 @@ import {
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import {
+  computeBreakdownForSettings,
+  type OrgBreakMode,
+} from '@/lib/time-tracking/settings';
 
 export type MemberStatus = {
+  breakMode: OrgBreakMode;
+  autoBreakThresholdMinutes: number;
+  autoBreakDurationMinutes: number;
   status: 'clocked_out' | 'working' | 'on_break';
   isClockedIn: boolean;
   isOnBreak: boolean;
@@ -28,6 +35,9 @@ type MemberStatusMap = Record<string, MemberStatus>;
 interface UseMemberStatusPollingOptions {
   organizationId: string;
   memberIds: string[];
+  breakMode?: OrgBreakMode;
+  autoBreakThresholdMinutes?: number;
+  autoBreakDurationMinutes?: number;
   /** Enable or disable fetching. Default: true */
   enabled?: boolean;
 }
@@ -35,6 +45,9 @@ interface UseMemberStatusPollingOptions {
 export function useMemberStatusPolling({
   organizationId,
   memberIds,
+  breakMode = 'manual',
+  autoBreakThresholdMinutes = 360,
+  autoBreakDurationMinutes = 30,
   enabled = true
 }: UseMemberStatusPollingOptions): {
   statusMap: MemberStatusMap;
@@ -83,9 +96,14 @@ export function useMemberStatusPolling({
         const currentState = deriveCurrentClockState(memberEntries);
         const workSessions = calculateWorkSessions(memberEntries);
         const breakSessions = calculateBreakSessions(memberEntries);
-        const workMinutes = calculateTotalMinutes(workSessions);
-        const breakMinutes = calculateBreakMinutes(breakSessions);
-        const todayMinutes = workMinutes + breakMinutes;
+        const trackedWorkMinutes = calculateTotalMinutes(workSessions);
+        const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
+        const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
+        const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, {
+          breakMode,
+          autoBreakThresholdMinutes,
+          autoBreakDurationMinutes,
+        });
 
         // If clocked in, find the last clock_in timestamp and check if it's pending
         let clockInTime: string | null = null;
@@ -112,6 +130,9 @@ export function useMemberStatusPolling({
         }
 
         newStatusMap[memberId] = {
+          breakMode,
+          autoBreakThresholdMinutes,
+          autoBreakDurationMinutes,
           status: currentState.status,
           isClockedIn: currentState.isClockedIn,
           isOnBreak: currentState.isOnBreak,
@@ -119,8 +140,8 @@ export function useMemberStatusPolling({
           clockInTime,
           statusStartedAt: currentState.statusStartedAt,
           todayMinutes,
-          workMinutes,
-          breakMinutes
+          workMinutes: breakdown.workMinutes,
+          breakMinutes: breakdown.breakMinutes
         };
       }
 
@@ -132,7 +153,13 @@ export function useMemberStatusPolling({
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId, memberIds]);
+  }, [
+    autoBreakDurationMinutes,
+    autoBreakThresholdMinutes,
+    breakMode,
+    organizationId,
+    memberIds,
+  ]);
 
   const scheduleFetchStatus = useCallback(() => {
     if (!enabled) return;

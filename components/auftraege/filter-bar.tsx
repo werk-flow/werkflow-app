@@ -306,7 +306,7 @@ export function FilterBar({
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Suche nach Bezeichnung, Nummer, Kunde, Ort..."
+            placeholder="Suche nach Titel, Nummer, Kunde, Ort..."
             value={localSearch}
             onChange={(e) => handleSearchInput(e.target.value)}
             className="h-9 pl-9 text-sm"

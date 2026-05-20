@@ -50,13 +50,6 @@ export function RoleChangeBanner({ roleChangeInfo, onDismiss }: RoleChangeBanner
     }
   }, [roleChangeInfo, isExiting, handleDismiss]);
 
-  // Reset exiting state when new role change info comes in
-  useEffect(() => {
-    if (roleChangeInfo) {
-      setIsExiting(false);
-    }
-  }, [roleChangeInfo]);
-
   if (!roleChangeInfo) {
     return null;
   }

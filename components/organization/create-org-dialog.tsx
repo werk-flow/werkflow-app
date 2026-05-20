@@ -19,6 +19,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   name_required: 'Bitte gib einen Namen ein.',
   name_too_short: 'Der Name muss mindestens 2 Zeichen lang sein.',
   name_too_long: 'Der Name darf maximal 100 Zeichen lang sein.',
+  name_taken: 'Du hast bereits eine Organisation mit diesem Namen.',
   not_authenticated: 'Du musst angemeldet sein.',
   subscription_required:
     'Du benötigst ein aktives Abonnement, um eine Organisation zu erstellen.',

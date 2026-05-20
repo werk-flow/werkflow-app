@@ -4,12 +4,17 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getAuthenticatedUser,
+  getCachedMemberships,
+  getCachedOrganizationSettings,
+} from '@/lib/data/cached';
 import {
   type TimeEntry,
   type TimeEntryRow,
   type TimeEntryType,
   type TimeEntryInsert,
+  type JobTimeParticipant,
   type OrgRole,
   type ClockResult,
   type LiveClockState,
@@ -62,6 +67,7 @@ import {
   validateDayEntrySequence
 } from './validation';
 import { getEffectiveTimeEntries } from './effective-entries';
+import { computeBreakdownForSettings } from './settings';
 
 function isWorkingEntryType(entryType: string): boolean {
   return entryType === 'clock_in' || entryType === 'break_end';
@@ -269,7 +275,12 @@ function getManualEntryJobId(
 }
 
 function buildAutoCloseInsert(entry: TimeEntry): TimeEntryInsert {
-  const autoCloseAt = getLocalDayEnd(new Date(entry.timestamp)).toISOString();
+  const dayStart = getLocalDayStart(new Date(entry.timestamp));
+  const fivePmCutoff = new Date(dayStart.getTime() + 17 * 60 * 60 * 1000);
+  const autoCloseAt =
+    new Date(entry.timestamp).getTime() < fivePmCutoff.getTime()
+      ? fivePmCutoff.toISOString()
+      : getLocalDayEnd(new Date(entry.timestamp)).toISOString();
 
   return {
     user_id: entry.userId,
@@ -315,6 +326,7 @@ async function closeStaleOpenSessionsForUser(
   const entries = toTimeEntries(data);
   const inserts: TimeEntryInsert[] = [];
   let attendanceAnchor: TimeEntry | null = null;
+  let openWorkBlockStart: TimeEntry | null = null;
   let hasOpenAttendance = false;
 
   for (const entry of entries) {
@@ -326,31 +338,42 @@ async function closeStaleOpenSessionsForUser(
       )
     ) {
       if (hasOpenAttendance) {
-        inserts.push(buildAutoCloseInsert(attendanceAnchor));
+        inserts.push(buildAutoCloseInsert(openWorkBlockStart ?? attendanceAnchor));
       }
       attendanceAnchor = null;
+      openWorkBlockStart = null;
       hasOpenAttendance = false;
     }
 
     if (entry.entryType === 'clock_in') {
       attendanceAnchor = entry;
+      openWorkBlockStart = entry;
       hasOpenAttendance = true;
       continue;
     }
 
-    if (entry.entryType === 'break_start' || entry.entryType === 'break_end') {
+    if (entry.entryType === 'break_start') {
       hasOpenAttendance = attendanceAnchor !== null;
+      continue;
+    }
+
+    if (entry.entryType === 'break_end') {
+      hasOpenAttendance = attendanceAnchor !== null;
+      if (attendanceAnchor) {
+        openWorkBlockStart = entry;
+      }
       continue;
     }
 
     if (entry.entryType === 'clock_out') {
       attendanceAnchor = null;
+      openWorkBlockStart = null;
       hasOpenAttendance = false;
     }
   }
 
   if (attendanceAnchor && hasOpenAttendance) {
-    inserts.push(buildAutoCloseInsert(attendanceAnchor));
+    inserts.push(buildAutoCloseInsert(openWorkBlockStart ?? attendanceAnchor));
   }
 
   if (inserts.length === 0) {
@@ -623,13 +646,18 @@ export async function startBreak(
     }
 
     const admin = createSupabaseAdminClient();
-    const [userRole, todayRows] = await Promise.all([
+    const [userRole, todayRows, organizationSettings] = await Promise.all([
       verifyMembershipFromCache(user.id, orgId),
-      getUserTodayEntries(admin, user.id, orgId)
+      getUserTodayEntries(admin, user.id, orgId),
+      getCachedOrganizationSettings(orgId)
     ]);
 
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
+    }
+
+    if (organizationSettings.breakMode === 'automatic') {
+      return { success: false, error: 'break_mode_automatic' };
     }
 
     const timeEntries = toTimeEntries(todayRows);
@@ -676,13 +704,18 @@ export async function endBreak(
     }
 
     const admin = createSupabaseAdminClient();
-    const [userRole, todayRows] = await Promise.all([
+    const [userRole, todayRows, organizationSettings] = await Promise.all([
       verifyMembershipFromCache(user.id, organizationId),
-      getUserTodayEntries(admin, user.id, organizationId)
+      getUserTodayEntries(admin, user.id, organizationId),
+      getCachedOrganizationSettings(organizationId)
     ]);
 
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
+    }
+
+    if (organizationSettings.breakMode === 'automatic') {
+      return { success: false, error: 'break_mode_automatic' };
     }
 
     const timeEntries = toTimeEntries(todayRows);
@@ -838,9 +871,20 @@ export async function addManualEntry(
       return { success: false, error: 'validation_failed' };
     }
 
-    const callerRole = await verifyMembershipFromCache(user.id, organizationId);
+    const [callerRole, organizationSettings] = await Promise.all([
+      verifyMembershipFromCache(user.id, organizationId),
+      getCachedOrganizationSettings(organizationId)
+    ]);
     if (!callerRole) {
       return { success: false, error: 'not_a_member' };
+    }
+
+    const containsManualBreakEntries = entries.some(
+      (entry) => entry.entryType === 'break_start' || entry.entryType === 'break_end'
+    );
+
+    if (organizationSettings.breakMode === 'automatic' && containsManualBreakEntries) {
+      return { success: false, error: 'break_mode_automatic' };
     }
 
     const admin = createSupabaseAdminClient();
@@ -2546,7 +2590,6 @@ export async function reassignEntryBatch(
       return { success: false, error: 'entries_not_found' };
     }
 
-    const entriesById = new Map(fetchedEntries.map((entry) => [entry.id, entry]));
     const firstEntry = fetchedEntries[0];
     const orgId = firstEntry.organization_id;
 
@@ -3022,16 +3065,42 @@ export async function getTimeEntriesForJob(
       }
     }
 
+    const participantUserIds = [
+      ...new Set([...dedupedEntries.values()].map((entry) => entry.userId))
+    ];
+    let participants: JobTimeParticipant[] = [];
+
+    if (participantUserIds.length > 0) {
+      const { data: participantProfiles, error: participantProfilesError } = await admin
+        .from('profiles')
+        .select('id, first_name, last_name, email, avatar_path')
+        .in('id', participantUserIds);
+
+      if (participantProfilesError) {
+        console.error(
+          'Error fetching participant profiles for job time entries:',
+          participantProfilesError
+        );
+      } else {
+        participants = (participantProfiles ?? []).map((profile) => ({
+          userId: profile.id,
+          firstName: profile.first_name ?? null,
+          lastName: profile.last_name ?? null,
+          email: profile.email ?? null,
+          avatarPath: profile.avatar_path ?? null,
+        }));
+      }
+    }
+
     return {
       success: true,
-      entries: [...dedupedEntries.values()]
-        .filter((entry) => canViewEntries(callerRole, entry.userId, user.id))
-        .sort((a, b) => {
+      entries: [...dedupedEntries.values()].sort((a, b) => {
           const timestampDiff =
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
           if (timestampDiff !== 0) return timestampDiff;
           return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        })
+        }),
+      participants,
     };
   } catch (error) {
     console.error('Unexpected error in getTimeEntriesForJob:', error);
@@ -3137,9 +3206,10 @@ export async function getCurrentClockState(
     }
 
     const admin = createSupabaseAdminClient();
-    const [userRole, todayRows] = await Promise.all([
+    const [userRole, todayRows, organizationSettings] = await Promise.all([
       verifyMembershipFromCache(user.id, organizationId),
-      getUserTodayEntries(admin, user.id, organizationId)
+      getUserTodayEntries(admin, user.id, organizationId),
+      getCachedOrganizationSettings(organizationId)
     ]);
 
     if (!userRole) {
@@ -3154,9 +3224,14 @@ export async function getCurrentClockState(
       sameLocalDayOnly: true,
       includeOpenSegment: false
     });
-    const workMinutes = calculateTotalMinutes(workSessions);
-    const breakMinutes = calculateBreakMinutes(breakSessions);
-    const todayMinutes = workMinutes + breakMinutes;
+    const trackedWorkMinutes = calculateTotalMinutes(workSessions);
+    const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
+    const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
+    const breakdown = computeBreakdownForSettings(
+      todayMinutes,
+      trackedBreakMinutes,
+      organizationSettings
+    );
     const activeJobInfo = currentState.activeJobId
       ? await getClockJobInfo(admin, currentState.activeJobId)
       : null;
@@ -3165,6 +3240,9 @@ export async function getCurrentClockState(
       success: true,
       state: {
         organizationId,
+        breakMode: organizationSettings.breakMode,
+        autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
+        autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
         status: currentState.status,
         isClockedIn: currentState.isClockedIn,
         isOnBreak: currentState.isOnBreak,
@@ -3172,8 +3250,8 @@ export async function getCurrentClockState(
         statusStartedAt: currentState.statusStartedAt,
         breakStartTime: currentState.breakStartTime,
         todayMinutes,
-        workMinutes,
-        breakMinutes,
+        workMinutes: breakdown.workMinutes,
+        breakMinutes: breakdown.breakMinutes,
         timelineSegments,
         activeJobId: currentState.activeJobId,
         activeJobInfo,

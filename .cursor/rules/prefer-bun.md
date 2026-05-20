@@ -1,0 +1,36 @@
+## Cursor Rule: Prefer Bun for Local Development
+
+- **Scope**: Applies to all package management, script execution, dependency installation, and command examples in this workspace.
+- **Mandate**: This project uses Bun locally. Always prefer Bun commands and Bun-compatible workflows unless the user explicitly asks for something else or Bun is demonstrably incompatible with the task.
+
+### Command policy
+
+- **Installs**: Always use `bun install`. Do not use `npm install`, `yarn`, or `pnpm` commands unless the user explicitly requests them.
+- **Scripts**: Always use `bun run <script>` for package scripts.
+- **One-off binaries**: Prefer `bunx <tool>` over `npx <tool>`.
+- **Direct execution**: Prefer Bun-aware execution paths over raw `node` when running local project tooling.
+
+### Lockfile and package-manager conventions
+
+- Keep Bun as the local package manager of record.
+- Preserve `bun.lock` / `bun.lockb` when present.
+- Do not introduce or regenerate `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
+
+### Documentation and examples
+
+- When writing README snippets, setup instructions, or inline shell examples, default to Bun commands.
+- If mentioning an alternative command for compatibility reasons, clearly label it as an exception rather than the default workflow.
+
+### Allowed exceptions
+
+- The user explicitly requests `npm`, `pnpm`, `yarn`, or raw `node`.
+- A tool or platform requirement clearly forces a non-Bun command and the reason is stated.
+- Vercel runtime details may still mention Node.js when discussing deployment/runtime behavior, but local development commands should remain Bun-first.
+
+### Review checklist (must-pass)
+
+- Dependency installs use `bun install`.
+- Package scripts use `bun run`.
+- One-off binaries use `bunx` where applicable.
+- No new non-Bun lockfiles were introduced.
+- Documentation and shell examples default to Bun commands.

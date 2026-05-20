@@ -24,6 +24,10 @@ import {
   type FilterState,
   type SortColumn,
 } from '@/lib/jobs/types';
+import {
+  resolveAuftraegeSortColumn,
+  type AuftraegeColumnId,
+} from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
@@ -118,6 +122,7 @@ interface EmbeddedAuftraegeSectionProps {
   hideEmptyProjects?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
+  visibleColumns: AuftraegeColumnId[];
 }
 
 export function EmbeddedAuftraegeSection({
@@ -140,6 +145,7 @@ export function EmbeddedAuftraegeSection({
   hideEmptyProjects = false,
   emptyTitle = 'Keine Aufträge',
   emptyDescription = 'Es sind keine Aufträge vorhanden.',
+  visibleColumns,
 }: EmbeddedAuftraegeSectionProps) {
   const [activeStatusFilter, setActiveStatusFilter] =
     useState<ActiveStatusFilter>('alle');
@@ -200,6 +206,7 @@ export function EmbeddedAuftraegeSection({
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this lazy dialog bootstrap intentionally flips into a loading state before the async fetch resolves
     setIsLoadingDialogOptions(true);
     getAuftraegeDialogOptions()
       .then((result) => {
@@ -245,6 +252,7 @@ export function EmbeddedAuftraegeSection({
   }, [rawActive]);
 
   const filteredActive = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(activeSortCol, visibleColumns);
     let result = rawActive;
     if (activeStatusFilter !== 'alle') {
       result = result.filter(
@@ -255,7 +263,7 @@ export function EmbeddedAuftraegeSection({
       result = result.filter((e) => matchesSearch(e, activeSearch, clientMap));
     }
     result = applyDropdownFilters(result, activeFilters, jobAssignmentMap);
-    return sortUnifiedEntries(result, activeSortCol, activeSortDir, clientMap);
+    return sortUnifiedEntries(result, effectiveSortColumn, activeSortDir, clientMap);
   }, [
     rawActive,
     activeStatusFilter,
@@ -265,24 +273,27 @@ export function EmbeddedAuftraegeSection({
     activeSortDir,
     clientMap,
     jobAssignmentMap,
+    visibleColumns,
   ]);
 
   const filteredParked = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns);
     let result = rawParked;
     if (parkplatzSearch) {
       result = result.filter((e) => matchesSearch(e, parkplatzSearch, clientMap));
     }
     result = applyDropdownFilters(result, parkplatzFilters, jobAssignmentMap);
-    return sortUnifiedEntries(result, parkplatzSortCol, parkplatzSortDir, clientMap);
-  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap]);
+    return sortUnifiedEntries(result, effectiveSortColumn, parkplatzSortDir, clientMap);
+  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap, visibleColumns]);
 
   const filteredArchived = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(archiveSortCol, visibleColumns);
     let result = rawArchived;
     if (archiveSearch) {
       result = result.filter((e) => matchesSearch(e, archiveSearch, clientMap));
     }
     result = applyDropdownFilters(result, archiveFilters, jobAssignmentMap);
-    return sortUnifiedEntries(result, archiveSortCol, archiveSortDir, clientMap);
+    return sortUnifiedEntries(result, effectiveSortColumn, archiveSortDir, clientMap);
   }, [
     rawArchived,
     archiveSearch,
@@ -291,6 +302,7 @@ export function EmbeddedAuftraegeSection({
     archiveSortDir,
     clientMap,
     jobAssignmentMap,
+    visibleColumns,
   ]);
 
   const handleJobUpsert = useCallback((job: Job) => {
@@ -569,13 +581,14 @@ export function EmbeddedAuftraegeSection({
             entries={filteredActive}
             clientMap={clientMap}
             isAdminOrManager={isAdminOrManager}
-            sortColumn={activeSortCol}
+            sortColumn={resolveAuftraegeSortColumn(activeSortCol, visibleColumns)}
             sortDirection={activeSortDir}
             onSort={handleActiveSort}
             jobAssignmentMap={jobAssignmentMap}
             members={members}
             hideClientColumn={hideClientColumn}
             clients={clients}
+            visibleColumns={visibleColumns}
             onJobUpdated={handleJobEdited}
             onJobDeleted={handleJobDelete}
             onProjectUpdated={handleProjectEdited}
@@ -621,13 +634,14 @@ export function EmbeddedAuftraegeSection({
                 entries={filteredParked}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
-                sortColumn={parkplatzSortCol}
+                sortColumn={resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns)}
                 sortDirection={parkplatzSortDir}
                 onSort={handleParkplatzSort}
                 jobAssignmentMap={jobAssignmentMap}
                 members={members}
                 hideClientColumn={hideClientColumn}
                 clients={clients}
+                visibleColumns={visibleColumns}
                 onJobUpdated={handleJobEdited}
                 onJobDeleted={handleJobDelete}
                 onProjectUpdated={handleProjectEdited}
@@ -675,7 +689,7 @@ export function EmbeddedAuftraegeSection({
                 entries={filteredArchived}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
-                sortColumn={archiveSortCol}
+                sortColumn={resolveAuftraegeSortColumn(archiveSortCol, visibleColumns)}
                 sortDirection={archiveSortDir}
                 onSort={handleArchiveSort}
                 isArchive
@@ -683,6 +697,7 @@ export function EmbeddedAuftraegeSection({
                 members={members}
                 hideClientColumn={hideClientColumn}
                 clients={clients}
+                visibleColumns={visibleColumns}
                 onJobUpdated={handleJobEdited}
                 onJobDeleted={handleJobDelete}
                 onProjectUpdated={handleProjectEdited}

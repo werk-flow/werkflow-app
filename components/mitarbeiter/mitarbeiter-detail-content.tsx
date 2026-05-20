@@ -55,16 +55,20 @@ import { ROLE_LABELS } from '@/lib/roles';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import {
-  computeTimeBreakdown,
   formatDuration,
   getNonNegativeElapsedMs,
   WORK_GOAL_MINUTES,
 } from '@/lib/time-tracking/helpers';
+import {
+  computeBreakdownForSettings,
+  type OrgBreakMode,
+} from '@/lib/time-tracking/settings';
 import type {
   Job,
   ProjectWithDetails,
   Client,
 } from '@/lib/jobs/types';
+import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { cn } from '@/lib/utils';
 
@@ -122,6 +126,10 @@ interface MitarbeiterDetailContentProps {
   currentUserId: string;
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
+  visibleColumns: AuftraegeColumnId[];
+  breakMode: OrgBreakMode;
+  autoBreakThresholdMinutes: number;
+  autoBreakDurationMinutes: number;
 }
 
 export function MitarbeiterDetailContent({
@@ -138,6 +146,10 @@ export function MitarbeiterDetailContent({
   currentUserId,
   currentUserRole,
   isAdminOrManager,
+  visibleColumns,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
 }: MitarbeiterDetailContentProps) {
   const router = useRouter();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
@@ -149,12 +161,18 @@ export function MitarbeiterDetailContent({
   const { statusMap } = useMemberStatusPolling({
     organizationId,
     memberIds,
+    breakMode,
+    autoBreakThresholdMinutes,
+    autoBreakDurationMinutes,
   });
   const status = statusMap[member.userId];
 
   const { weekData, todayIndex, weekLabel } = useWeeklyTimeData({
     organizationId,
     userId: member.userId,
+    breakMode,
+    autoBreakThresholdMinutes,
+    autoBreakDurationMinutes,
   });
 
   const isOwnRow = member.userId === currentUserId;
@@ -221,12 +239,25 @@ export function MitarbeiterDetailContent({
     return () => clearInterval(interval);
   }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);
 
-  const liveBreakMinutes =
-    (status?.breakMinutes ?? 0) +
-    (status?.status === 'on_break' && status.statusStartedAt
-      ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
-      : 0);
-  const memberBreakdown = computeTimeBreakdown(liveTotalMinutes, liveBreakMinutes);
+  const trackedLiveBreakMinutes =
+    (status?.breakMode ?? breakMode) === 'manual'
+      ? (status?.breakMinutes ?? 0) +
+        (status?.status === 'on_break' && status.statusStartedAt
+          ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
+          : 0)
+      : status?.breakMinutes ?? 0;
+  const memberBreakdown = computeBreakdownForSettings(
+    liveTotalMinutes,
+    trackedLiveBreakMinutes,
+    {
+      breakMode: status?.breakMode ?? breakMode,
+      autoBreakThresholdMinutes:
+        status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes,
+      autoBreakDurationMinutes:
+        status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes,
+    }
+  );
+  const liveBreakMinutes = memberBreakdown.breakMinutes;
   const dailyPercentage = Math.min(
     100,
     Math.round((memberBreakdown.workMinutes / DAILY_GOAL_MINUTES) * 100)
@@ -428,6 +459,13 @@ export function MitarbeiterDetailContent({
                   todayIndex={todayIndex}
                   liveTodayMinutes={liveTotalMinutes}
                   liveTodayBreakMinutes={liveBreakMinutes}
+                  liveTodayBreakMode={status?.breakMode ?? breakMode}
+                  liveAutoBreakThresholdMinutes={
+                    status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes
+                  }
+                  liveAutoBreakDurationMinutes={
+                    status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes
+                  }
                   weekLabel={weekLabel}
                 />
               ) : (
@@ -460,6 +498,7 @@ export function MitarbeiterDetailContent({
               hideProjectCreation
               hideEmptyProjects
               allProjectsForJobCreation={allProjects}
+              visibleColumns={visibleColumns}
               emptyTitle="Keine Aufträge zugewiesen"
               emptyDescription="Diesem Mitarbeiter sind derzeit keine Aufträge zugewiesen."
             />

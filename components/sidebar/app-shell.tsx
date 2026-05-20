@@ -3,7 +3,6 @@
 import {
   useState,
   useEffect,
-  useCallback,
   createContext,
   useContext,
   useMemo
@@ -162,11 +161,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { pendingApprovalCount } = usePendingApprovalCount();
   const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
 
-  // Reset optimistic path once the real pathname catches up
-  useEffect(() => {
-    setOptimisticPath(null);
-  }, [pathname]);
-
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
 
@@ -175,7 +169,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   );
 
   // Use optimistic path for instant visual feedback; fall back to real pathname
-  const activePath = optimisticPath ?? pathname;
+  const activePath =
+    optimisticPath && optimisticPath !== pathname ? optimisticPath : pathname;
 
   function handleNavClick(href: string) {
     setOptimisticPath(href);
@@ -432,12 +427,7 @@ export function AppShell({
   initialOrganizationId?: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const pathname = usePathname();
   const { isSwitchingOrg } = useOrganization();
-
-  useEffect(() => {
-    setIsOpen(false);
-  }, [pathname]);
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>

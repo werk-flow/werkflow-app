@@ -1,0 +1,35 @@
+## Cursor Rule: Supabase via MCP and Plugin, Not Migration Files
+
+- **Scope**: Applies to all Supabase-related work in this workspace, including database schema changes, SQL, auth, storage, edge functions, RLS, logs, and project inspection.
+- **Mandate**: This codebase uses the live Supabase project as the operational source of truth. Prefer the Supabase MCP server and Supabase plugin whenever Supabase state or changes matter. Do not introduce or rely on migration-file workflows in this repository unless the user explicitly asks for that as a separate change in team process.
+
+### Required workflow
+
+- **Live inspection first**: When a task depends on current database or platform state, use the Supabase MCP tools/plugin to inspect the real project instead of guessing from code alone.
+- **Direct changes through MCP**: For schema or SQL changes, prefer Supabase MCP operations such as direct SQL execution and project inspection.
+- **Use plugin knowledge when needed**: Use the Supabase plugin/skill guidance for Supabase-specific best practices, auth/security considerations, and current product behavior when relevant.
+
+### Migration-file policy
+
+- Do not create a local `supabase/` directory, migration files, or seed files as part of normal Supabase work in this repository.
+- Do not propose a migration-first workflow by default.
+- Do not tell the user to manage schema changes through migration files unless the user explicitly wants to change the team workflow.
+
+### Repo-specific expectations
+
+- Treat the live Supabase project, MCP-accessible metadata, and generated application types as the practical source of truth for schema-aware tasks.
+- When schema changes affect app code, update the relevant TypeScript/types usage in the repo to stay aligned with the live Supabase state.
+- If a task needs confirmation of live auth, RLS, table, branch, or function state, inspect Supabase directly before making confident claims.
+
+### Allowed exceptions
+
+- The user explicitly asks to introduce or adopt migration files.
+- The user explicitly asks for a local `supabase/` project structure or a migration-based workflow.
+- A task is purely frontend or application logic and does not depend on current Supabase state.
+
+### Review checklist (must-pass)
+
+- Supabase-sensitive tasks use MCP/plugin context when live project state matters.
+- No migration files or local `supabase/` workflow were added by default.
+- Database-related claims are grounded in actual Supabase inspection when needed.
+- App code remains aligned with the live Supabase schema and auth behavior.

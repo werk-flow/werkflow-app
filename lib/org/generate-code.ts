@@ -1,17 +1,21 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import {
+  ORGANIZATION_CODE_CHARSET,
+  ORGANIZATION_CODE_LENGTH,
+} from '@/lib/org/schemas';
 
 // Characters that are unambiguous (no 0/O, 1/I/L confusion)
-const CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const CODE_LENGTH = 6;
 const MAX_RETRIES = 10;
 
 /**
  * Generates a random alphanumeric code of specified length
  */
-function generateRandomCode(length: number = CODE_LENGTH): string {
+function generateRandomCode(length: number = ORGANIZATION_CODE_LENGTH): string {
   let code = '';
   for (let i = 0; i < length; i++) {
-    code += CHARSET.charAt(Math.floor(Math.random() * CHARSET.length));
+    code += ORGANIZATION_CODE_CHARSET.charAt(
+      Math.floor(Math.random() * ORGANIZATION_CODE_CHARSET.length)
+    );
   }
   return code;
 }

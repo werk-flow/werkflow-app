@@ -8,7 +8,7 @@ import {
   buildClockTimelineSegments,
   formatDuration
 } from '@/lib/time-tracking/helpers';
-import { HOUR_WIDTH, BASE_HOUR_WIDTH } from './timeline-grid';
+import { HOUR_WIDTH } from './timeline-grid';
 import { useBlockDrag, type DragMode } from './use-block-drag';
 
 const EntryDetailsDialog = dynamic(
@@ -23,7 +23,8 @@ import type {
   WorkSession,
   EntryChangeRequestMap,
   ChangeRequest,
-  TimeEntry
+  TimeEntry,
+  WorkSessionBreak,
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
 
@@ -182,9 +183,38 @@ type SegmentSummary = {
 };
 
 function buildSegmentSummary(
+  session: WorkSession,
   entries: TimeEntry[],
-  referenceDate: Date
+  referenceDate: Date,
+  breaks?: WorkSessionBreak[]
 ): SegmentSummary | null {
+  if (session.clockIn && breaks && breaks.length > 0) {
+    const clockIn = new Date(session.clockIn.timestamp)
+    const clockOut = session.clockOut ? new Date(session.clockOut.timestamp) : referenceDate
+    const totalMinutes = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / 60000)
+    const breakMinutes = breaks.reduce((total, workBreak) => {
+      const breakEnd = workBreak.breakEnd
+        ? new Date(workBreak.breakEnd.timestamp)
+        : referenceDate
+
+      return (
+        total +
+        Math.max(
+          0,
+          (breakEnd.getTime() - new Date(workBreak.breakStart.timestamp).getTime()) / 60000
+        )
+      )
+    }, 0)
+    const workMinutes = Math.max(0, totalMinutes - breakMinutes)
+
+    return {
+      workMinutes,
+      breakMinutes,
+      workText: formatDuration(workMinutes),
+      breakText: breakMinutes > 0 ? formatDuration(breakMinutes) : null,
+    }
+  }
+
   if (entries.length === 0) {
     return null;
   }
@@ -490,7 +520,12 @@ export function WorkSessionBlock({
     () => {
       const interactiveSession = session as InteractiveCalendarSession;
       const sourceEntries = interactiveSession.sourceEntries ?? [];
-      return buildSegmentSummary(sourceEntries, new Date());
+      return buildSegmentSummary(
+        session,
+        sourceEntries,
+        new Date(),
+        interactiveSession.breaks
+      );
     },
     [session]
   );
@@ -501,6 +536,17 @@ export function WorkSessionBlock({
       .map((range) => range.id);
   }, [blockedRanges, displayLeft, displayWidth]);
   const hasDropConflict = drag.isDragging && conflictingBlockIds.length > 0;
+
+  useEffect(() => {
+    if (!blockId || !onConflictTargetsChange) return;
+
+    if (!drag.isDragging || conflictingBlockIds.length === 0) {
+      onConflictTargetsChange(blockId, []);
+      return;
+    }
+
+    onConflictTargetsChange(blockId, conflictingBlockIds);
+  }, [blockId, onConflictTargetsChange, conflictingBlockIds, drag.isDragging]);
 
   // ──── Orphan clock_out ────
   if (session.isOrphan && !session.clockIn && session.clockOut) {
@@ -617,17 +663,6 @@ export function WorkSessionBlock({
   const timeRangeText = clockOutTime
     ? `${formatTime(clockInTime)} - ${formatTime(clockOutTime)}`
     : `${formatTime(clockInTime)} - ...`;
-
-  useEffect(() => {
-    if (!blockId || !onConflictTargetsChange) return;
-
-    if (!drag.isDragging || conflictingBlockIds.length === 0) {
-      onConflictTargetsChange(blockId, []);
-      return;
-    }
-
-    onConflictTargetsChange(blockId, conflictingBlockIds);
-  }, [blockId, onConflictTargetsChange, conflictingBlockIds, drag.isDragging]);
 
   const isNewPendingEntry =
     isPending && !clockInEdit && !clockOutEdit && !isPendingDelete;

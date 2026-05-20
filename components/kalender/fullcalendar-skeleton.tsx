@@ -5,6 +5,19 @@ interface FullCalendarSkeletonProps {
   view: CalendarView;
 }
 
+const DAY_SKELETON_SEGMENTS = [null, { width: '48%' }, null, { width: '64%' }, null, null, { width: '52%' }, null, null, { width: '58%' }, null, null, { width: '43%' }, null, null, { width: '61%' }] as const;
+const WEEK_SKELETON_FILLED_CELLS = new Set([
+  '0-1',
+  '1-4',
+  '2-2',
+  '3-5',
+  '5-0',
+  '6-3',
+  '7-6',
+  '8-2',
+]);
+const MONTH_SKELETON_ENTRY_COUNTS = [2, 1, 0, 2, 1, 0, 1] as const;
+
 export function FullCalendarSkeleton({ view }: FullCalendarSkeletonProps) {
   if (view === 'day') {
     return <DayGridSkeleton />;
@@ -30,18 +43,18 @@ function DayGridSkeleton() {
 
         {/* Time slots */}
         <div className="divide-y">
-          {hours.map((hour) => (
+          {hours.map((hour, index) => (
             <div key={hour} className="flex h-11">
               <div className="w-16 shrink-0 border-r p-2 bg-muted/10">
                 <Skeleton className="h-3 w-10" />
               </div>
               <div className="flex-1 relative">
-                {Math.random() > 0.7 && (
+                {DAY_SKELETON_SEGMENTS[index] && (
                   <Skeleton
                     className="absolute top-1 h-9 rounded"
                     style={{
                       left: '8px',
-                      width: `${40 + Math.random() * 40}%`
+                      width: DAY_SKELETON_SEGMENTS[index].width
                     }}
                   />
                 )}
@@ -77,7 +90,7 @@ function WeekGridSkeleton() {
 
         {/* Time grid */}
         <div className="divide-y max-h-[500px] overflow-hidden">
-          {hours.slice(0, 10).map((hour) => (
+          {hours.slice(0, 10).map((hour, rowIdx) => (
             <div
               key={hour}
               className="grid grid-cols-[60px_repeat(7,_1fr)] h-11"
@@ -87,7 +100,7 @@ function WeekGridSkeleton() {
               </div>
               {days.map((_, dayIdx) => (
                 <div key={dayIdx} className="border-r last:border-r-0 relative">
-                  {Math.random() > 0.85 && (
+                  {WEEK_SKELETON_FILLED_CELLS.has(`${rowIdx}-${dayIdx}`) && (
                     <Skeleton className="absolute inset-1 rounded" />
                   )}
                 </div>
@@ -133,7 +146,7 @@ function MonthGridSkeleton() {
                 {/* Random entries */}
                 <div className="space-y-1">
                   {Array.from({
-                    length: Math.floor(Math.random() * 3)
+                    length: MONTH_SKELETON_ENTRY_COUNTS[(weekIdx + dayIdx) % MONTH_SKELETON_ENTRY_COUNTS.length]
                   }).map((_, entryIdx) => (
                     <Skeleton key={entryIdx} className="h-5 w-full rounded" />
                   ))}

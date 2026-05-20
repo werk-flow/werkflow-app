@@ -14,11 +14,11 @@ export function AlreadyMemberBanner() {
   // Get the already_member org ID from URL
   const alreadyMemberOrgId = searchParams.get('already_member');
 
-  // Track if we should show the banner
-  const [showBanner, setShowBanner] = useState(false);
-
   // Track if banner is exiting (for fade-out animation)
   const [isExiting, setIsExiting] = useState(false);
+
+  // Track if we should show the banner
+  const [showBanner, setShowBanner] = useState(false);
 
   // Track if user has dismissed the banner
   const [isDismissed, setIsDismissed] = useState(false);
@@ -26,22 +26,21 @@ export function AlreadyMemberBanner() {
   // Track the org ID (to persist across org switches)
   const [alreadyMemberOrgIdState, setAlreadyMemberOrgIdState] = useState<string | null>(null);
 
-  // Initialize the org ID from URL on mount
   useEffect(() => {
     if (alreadyMemberOrgId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- this banner intentionally latches a one-shot URL event before removing the search param
       setAlreadyMemberOrgIdState(alreadyMemberOrgId);
-      setIsDismissed(false); // Reset dismissed state
-      setIsExiting(false); // Reset exiting state
-      // Clean up the URL by removing the query param (but keep the state)
+      setIsDismissed(false);
+      setIsExiting(false);
       const url = new URL(window.location.href);
       url.searchParams.delete('already_member');
       router.replace(url.pathname + url.search, { scroll: false });
     }
   }, [alreadyMemberOrgId, router]);
 
-  // Show/hide banner based on whether the active org matches
   useEffect(() => {
     if (alreadyMemberOrgIdState && activeOrgId && !isDismissed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the visible state mirrors the active org match for this latched URL event
       setShowBanner(activeOrgId === alreadyMemberOrgIdState);
     } else if (!isExiting) {
       setShowBanner(false);
@@ -50,7 +49,6 @@ export function AlreadyMemberBanner() {
 
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
-    // Wait for fade-out animation to complete before hiding
     setTimeout(() => {
       setIsDismissed(true);
       setShowBanner(false);

@@ -14,10 +14,8 @@ interface QuickStatsProps {
 }
 
 export function QuickStats({
-  organizationId: _organizationId,
   totalMembers,
   activeWorkingCount,
-  isAdmin: _isAdmin = false
 }: QuickStatsProps) {
   const { pendingApprovalCount } = usePendingApprovalCount();
   const pendingCount = pendingApprovalCount;

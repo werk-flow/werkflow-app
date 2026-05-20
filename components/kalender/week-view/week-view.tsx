@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { Clock, ArrowUp, ArrowDown, Briefcase } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown, Briefcase, Coffee } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import {
   calculateCalendarWorkBlocks,
@@ -19,6 +19,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
+import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { getRoleLabel } from '@/lib/roles';
 import type { CalendarView } from '../calendar-container';
 import { JobEventPopover } from '../job-event-popover';
@@ -60,6 +61,7 @@ interface WeekViewProps {
   date: Date;
   entries: TimeEntry[];
   members: CalendarMember[];
+  organizationSettings: OrganizationTimeTrackingSettings;
   currentUserId: string;
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
@@ -73,6 +75,7 @@ interface WeekViewProps {
   onParkJob?: (jobId: string) => void;
   onUnparkJob?: (jobId: string, date: string, time?: string, memberId?: string) => void;
   onJobWeekMove?: (jobId: string, newDate: string, newMemberId: string, oldMemberId: string) => void;
+  onJobWeekHeaderMove?: (jobId: string, newDate: string, oldMemberId?: string) => void;
   onSessionWeekMove?: (session: WorkSession, newDate: string, newMemberId: string) => void;
 }
 
@@ -116,19 +119,17 @@ export function WeekView({
   date,
   entries,
   members,
-  currentUserId,
-  currentUserRole,
+  organizationSettings,
   isAdminOrManager,
   isLoading,
   onDateSelect,
   onViewChange,
   onSessionClick,
-  changeRequestMap = {},
   onMemberDayClick,
   jobs = [],
-  onParkJob,
   onUnparkJob,
   onJobWeekMove,
+  onJobWeekHeaderMove,
   onSessionWeekMove
 }: WeekViewProps) {
   const weekDays = useMemo(() => getWeekDays(date), [date]);
@@ -161,15 +162,16 @@ export function WeekView({
   }, [members]);
 
   const didDragRef = useRef(false);
-  const [dragOverCell, setDragOverCell] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
   const handleCellDrop = useCallback((
     e: React.DragEvent,
     targetDay: Date,
     targetMemberId: string
   ) => {
+    if (!isAdminOrManager) return;
     e.preventDefault();
-    setDragOverCell(null);
+    setDragOverTarget(null);
     document.body.classList.remove('is-dragging');
 
     const targetDate = toLocalDateString(targetDay);
@@ -194,7 +196,32 @@ export function WeekView({
         onSessionWeekMove?.(payload.session, targetDate, targetMemberId);
       } catch { /* ignore */ }
     }
-  }, [onUnparkJob, onJobWeekMove, onSessionWeekMove]);
+  }, [isAdminOrManager, onUnparkJob, onJobWeekMove, onSessionWeekMove]);
+
+  const handleHeaderDrop = useCallback((
+    e: React.DragEvent,
+    targetDay: Date
+  ) => {
+    if (!isAdminOrManager) return;
+    e.preventDefault();
+    setDragOverTarget(null);
+    document.body.classList.remove('is-dragging');
+
+    const targetDate = toLocalDateString(targetDay);
+    const jobRaw = e.dataTransfer.getData(JOB_MIME);
+    if (!jobRaw) return;
+
+    try {
+      const payload: DragJobPayload = JSON.parse(jobRaw);
+      if (payload.source === 'parkplatz') {
+        onUnparkJob?.(payload.jobId, targetDate);
+      } else {
+        onJobWeekHeaderMove?.(payload.jobId, targetDate, payload.sourceMemberId);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, [isAdminOrManager, onJobWeekHeaderMove, onUnparkJob]);
 
   const jobsByDay = useMemo(() => {
     const map: Record<string, CalendarJob[]> = {};
@@ -220,6 +247,8 @@ export function WeekView({
   // Pre-compute sessions for all member×day combinations in a single pass.
   // Avoids calling calculateWorkSessions per-cell inside the render loop.
   const sessionsByMemberDay = useMemo(() => {
+    // Open work blocks depend on the current time, so re-evaluate this memo every minute.
+    void nowTick;
     const map = new Map<
       string,
       {
@@ -270,25 +299,109 @@ export function WeekView({
             </div>
             {weekDays.map((day, i) => {
               const isToday = day.toDateString() === today.toDateString();
+              const dateStr = toLocalDateString(day);
+              const headerJobs = (jobsByDay[dateStr] || []).filter(
+                (job) => job.assignedUserIds.length === 0
+              );
               return (
                 <div
                   key={i}
                   className={cn(
-                    'text-center p-2 rounded-md border text-sm font-medium transition-colors cursor-pointer hover:bg-accent',
+                    'rounded-md border p-2 text-sm font-medium transition-colors cursor-pointer hover:bg-accent',
                     isToday
                       ? 'bg-[rgba(123,44,191,0.12)] border-[rgba(123,44,191,0.5)] text-[rgb(123,44,191)]'
-                      : 'bg-muted/30 border-transparent'
+                      : 'bg-muted/30 border-transparent',
+                    dragOverTarget === `header-${i}` && 'ring-2 ring-brand-purple/50 bg-brand-purple/5'
                   )}
                   onClick={() => {
                     onDateSelect(day);
                     onViewChange('day');
                   }}
+                  onDragOver={(e) => {
+                    if (!isAdminOrManager) return;
+                    if (e.dataTransfer.types.includes(JOB_MIME)) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      setDragOverTarget(`header-${i}`);
+                    }
+                  }}
+                  onDragEnter={(e) => {
+                    if (!isAdminOrManager) return;
+                    if (e.dataTransfer.types.includes(JOB_MIME)) {
+                      e.preventDefault();
+                      setDragOverTarget(`header-${i}`);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    const related = e.relatedTarget as Node | null;
+                    if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+                    setDragOverTarget(null);
+                  }}
+                  onDrop={(e) => handleHeaderDrop(e, day)}
                 >
-                  <div className="text-muted-foreground text-xs uppercase">
-                    {DAY_NAMES_SHORT[i]}
-                  </div>
-                  <div className={cn('text-lg', isToday && 'font-bold')}>
-                    {day.getDate()}
+                  <div className="flex flex-col gap-2">
+                    <div className="text-center">
+                      <div className="text-muted-foreground text-xs uppercase">
+                        {DAY_NAMES_SHORT[i]}
+                      </div>
+                      <div className={cn('text-lg', isToday && 'font-bold')}>
+                        {day.getDate()}
+                      </div>
+                    </div>
+                    {isAdminOrManager && headerJobs.length > 0 && (() => {
+                      const MAX_VISIBLE_HEADER_JOBS = 3;
+                      const visibleHeaderJobs = headerJobs.slice(0, MAX_VISIBLE_HEADER_JOBS);
+                      const extraHeaderJobs = headerJobs.length - visibleHeaderJobs.length;
+
+                      return (
+                        <div className="space-y-1 text-left" onClick={(e) => e.stopPropagation()}>
+                          {visibleHeaderJobs.map((job) => (
+                            <button
+                              key={job.id}
+                              type="button"
+                              draggable
+                              onDragStart={(e) => {
+                                didDragRef.current = true;
+                                const payload: DragJobPayload = {
+                                  jobId: job.id,
+                                  source: 'week',
+                                  sourceDate: toLocalDateString(day),
+                                };
+                                e.dataTransfer.setData(JOB_MIME, JSON.stringify(payload));
+                                e.dataTransfer.effectAllowed = 'move';
+                                document.body.classList.add('is-dragging');
+                              }}
+                              onDragEnd={() => {
+                                document.body.classList.remove('is-dragging');
+                                setTimeout(() => { didDragRef.current = false; }, 0);
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (didDragRef.current) return;
+                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setSelectedJob({
+                                  job,
+                                  position: { x: rect.right + 8, y: rect.top }
+                                });
+                              }}
+                              className="week-view-entry w-full rounded-md border border-brand-purple/30 bg-brand-purple/10 p-1 text-left text-xs text-foreground shadow-sm transition-opacity hover:opacity-80"
+                            >
+                              <span className="flex items-center gap-1">
+                                <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+                                <span className="truncate text-[10px] font-medium">
+                                  {job.title}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                          {extraHeaderJobs > 0 && (
+                            <span className="block text-[11px] font-medium text-brand-purple">
+                              +{extraHeaderJobs} mehr
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -298,8 +411,6 @@ export function WeekView({
           {/* Member Rows */}
           <div className="space-y-1">
             {members.map((member) => {
-              const memberEntries = entriesByUser[member.user_id] || [];
-
               return (
                 <div
                   key={member.user_id}
@@ -339,7 +450,7 @@ export function WeekView({
                           'week-view-day-cell min-h-[110px] p-1.5 bg-card border border-border/60 rounded-md text-left cursor-pointer',
                           isToday &&
                             'is-today bg-[rgba(123,44,191,0.08)] border-[rgba(123,44,191,0.4)]',
-                          dragOverCell === `${member.user_id}-${i}` && 'ring-2 ring-brand-purple/50 bg-brand-purple/5'
+                          dragOverTarget === `${member.user_id}-${i}` && 'ring-2 ring-brand-purple/50 bg-brand-purple/5'
                         )}
                         onClick={() => {
                           if (onMemberDayClick) {
@@ -350,22 +461,24 @@ export function WeekView({
                           }
                         }}
                         onDragOver={(e) => {
+                          if (!isAdminOrManager) return;
                           if (e.dataTransfer.types.includes(JOB_MIME) || e.dataTransfer.types.includes(SESSION_MIME)) {
                             e.preventDefault();
                             e.dataTransfer.dropEffect = 'move';
-                            setDragOverCell(`${member.user_id}-${i}`);
+                            setDragOverTarget(`${member.user_id}-${i}`);
                           }
                         }}
                         onDragEnter={(e) => {
+                          if (!isAdminOrManager) return;
                           if (e.dataTransfer.types.includes(JOB_MIME) || e.dataTransfer.types.includes(SESSION_MIME)) {
                             e.preventDefault();
-                            setDragOverCell(`${member.user_id}-${i}`);
+                            setDragOverTarget(`${member.user_id}-${i}`);
                           }
                         }}
                         onDragLeave={(e) => {
                           const related = e.relatedTarget as Node | null;
                           if (related && (e.currentTarget as HTMLElement).contains(related)) return;
-                          setDragOverCell(null);
+                          setDragOverTarget(null);
                         }}
                         onDrop={(e) => handleCellDrop(e, day, member.user_id)}
                       >
@@ -376,10 +489,35 @@ export function WeekView({
                                 Math.round(getCalendarBlockDurationMinutes(session))
                               );
                               const sessionForBlock = withMemberContext(
-                                createSessionFromCalendarBlock(session),
+                                createSessionFromCalendarBlock(
+                                  session,
+                                  new Date(nowTick),
+                                  organizationSettings
+                                ),
                                 member
                               );
+                              const breakMinutes = Math.round(
+                                (sessionForBlock.breaks ?? []).reduce((total, workBreak) => {
+                                  const breakEnd = workBreak.breakEnd
+                                    ? new Date(workBreak.breakEnd.timestamp)
+                                    : new Date(nowTick);
+                                  return (
+                                    total +
+                                    Math.max(
+                                      0,
+                                      (breakEnd.getTime() -
+                                        new Date(workBreak.breakStart.timestamp).getTime()) /
+                                        60000
+                                    )
+                                  );
+                                }, 0)
+                              );
+                              const workMinutes = Math.max(
+                                0,
+                                Math.round(getCalendarBlockDurationMinutes(session)) - breakMinutes
+                              );
                               const canDrag =
+                                isAdminOrManager &&
                                 !!sessionForBlock.clockIn &&
                                 !!sessionForBlock.clockOut &&
                                 !session.isOpen;
@@ -423,9 +561,17 @@ export function WeekView({
                                   <span className="font-medium truncate">
                                     Arbeitszeit
                                   </span>
-                                  <span className="opacity-70 truncate text-[10px]">
-                                    {durationText}
-                                  </span>
+                                  {breakMinutes > 0 ? (
+                                    <span className="flex items-center gap-1 opacity-70 truncate text-[10px]">
+                                      <span>{formatDuration(workMinutes)}</span>
+                                      <Coffee className="h-3 w-3 shrink-0" />
+                                      <span>{formatDuration(breakMinutes)}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="opacity-70 truncate text-[10px]">
+                                      {durationText}
+                                    </span>
+                                  )}
                                 </button>
                               );
                             }
@@ -565,7 +711,12 @@ export function WeekView({
                                 ? `${hours}h ${minutes}m`
                                 : `${minutes}m`;
 
-                            const canDrag = !!session.clockIn && !!session.clockOut && !session.isOrphan && !isOpen;
+                            const canDrag =
+                              isAdminOrManager &&
+                              !!session.clockIn &&
+                              !!session.clockOut &&
+                              !session.isOrphan &&
+                              !isOpen;
 
                             return (
                               <button
@@ -626,9 +777,7 @@ export function WeekView({
                             const dateStr = toLocalDateString(day);
                             const dayJobsList = jobsByDay[dateStr] || [];
                             const memberJobs = dayJobsList.filter(
-                              (j) =>
-                                j.assignedUserIds.length === 0 ||
-                                j.assignedUserIds.includes(member.user_id)
+                              (j) => j.assignedUserIds.includes(member.user_id)
                             );
                             if (memberJobs.length === 0) return null;
 
@@ -640,8 +789,9 @@ export function WeekView({
                               <button
                                 key={job.id}
                                 type="button"
-                                draggable
+                                draggable={isAdminOrManager}
                                 onDragStart={(e) => {
+                                  if (!isAdminOrManager) return;
                                   didDragRef.current = true;
                                   const payload: DragJobPayload = {
                                     jobId: job.id,

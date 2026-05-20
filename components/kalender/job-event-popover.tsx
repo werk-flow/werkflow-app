@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
@@ -62,7 +62,6 @@ export function JobEventPopover({
 }: JobEventPopoverProps) {
   const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
-  const [adjustedPos, setAdjustedPos] = useState(position);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -78,7 +77,8 @@ export function JobEventPopover({
     if (y + rect.height > vh - 16) y = position.y - rect.height - 8;
     if (y < 16) y = 16;
 
-    setAdjustedPos({ x, y });
+    ref.current.style.left = `${x}px`;
+    ref.current.style.top = `${y}px`;
   }, [position]);
 
   useEffect(() => {
@@ -110,7 +110,7 @@ export function JobEventPopover({
     <div
       ref={ref}
       className="fixed z-50 w-72 rounded-lg border bg-background p-4 shadow-xl animate-in fade-in-0 zoom-in-95"
-      style={{ left: adjustedPos.x, top: adjustedPos.y }}
+      style={{ left: position.x, top: position.y }}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">

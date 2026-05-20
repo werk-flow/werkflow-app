@@ -23,6 +23,13 @@ export type JobAssignmentInsert =
 export type JobAssignmentUpdate =
   Database['public']['Tables']['job_assignments']['Update'];
 
+export type JobInstructionItemRow =
+  Database['public']['Tables']['job_instruction_items']['Row'];
+export type JobInstructionItemInsert =
+  Database['public']['Tables']['job_instruction_items']['Insert'];
+export type JobInstructionItemUpdate =
+  Database['public']['Tables']['job_instruction_items']['Update'];
+
 // ============================================
 // Enum Types
 // ============================================
@@ -78,6 +85,7 @@ export type Job = {
   plannedDate: string | null;
   plannedTime: string | null;
   estimatedDurationMinutes: number | null;
+  plannedWorkingMinutes: number | null;
   actualCompletionDate: string | null;
   location: string | null;
   createdBy: string;
@@ -91,6 +99,28 @@ export type JobAssignment = {
   userId: string;
   assignedBy: string;
   assignedAt: string;
+};
+
+export type JobInstructionActor = {
+  userId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  avatarPath: string | null;
+};
+
+export type JobInstructionItem = {
+  id: string;
+  organizationId: string;
+  jobId: string;
+  content: string;
+  sortOrder: number;
+  isCompleted: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  lastStatusChangedBy: string | null;
+  lastStatusChangedAt: string | null;
 };
 
 // ============================================
@@ -107,6 +137,7 @@ export type JobAssignmentWithProfile = JobAssignment & {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
+  avatarPath: string | null;
 };
 
 export type ProjectWithDetails = Project & {
@@ -115,6 +146,11 @@ export type ProjectWithDetails = Project & {
   completedJobCount: number;
   inProgressJobCount: number;
   parkedJobCount: number;
+};
+
+export type JobInstructionItemWithDetails = JobInstructionItem & {
+  creator: JobInstructionActor | null;
+  lastStatusChangedByProfile: JobInstructionActor | null;
 };
 
 /**
@@ -140,8 +176,10 @@ export type CalendarJob = {
   plannedDate: string | null;
   plannedTime: string | null;
   estimatedDurationMinutes: number | null;
+  plannedWorkingMinutes: number | null;
   location: string | null;
   clientName: string | null;
+  clientAddress: string | null;
   projectName: string | null;
   projectNumber: string | null;
   assignedUserIds: string[];
@@ -192,6 +230,30 @@ export type AssignEmployeeResult =
   | { success: false; error: string };
 
 export type UnassignEmployeeResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export type GetJobInstructionItemsResult =
+  | { success: true; items: JobInstructionItemWithDetails[] }
+  | { success: false; error: string };
+
+export type CreateJobInstructionItemResult =
+  | { success: true; item: JobInstructionItemWithDetails }
+  | { success: false; error: string };
+
+export type UpdateJobInstructionItemResult =
+  | { success: true; item: JobInstructionItemWithDetails }
+  | { success: false; error: string };
+
+export type DeleteJobInstructionItemResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export type ToggleJobInstructionItemCompletionResult =
+  | { success: true; item: JobInstructionItemWithDetails }
+  | { success: false; error: string };
+
+export type ReorderJobInstructionItemsResult =
   | { success: true }
   | { success: false; error: string };
 
@@ -261,6 +323,7 @@ export function toJob(row: JobRow): Job {
     plannedDate: row.planned_date,
     plannedTime: normalizeJobPlannedTime(row.planned_time),
     estimatedDurationMinutes: row.estimated_duration_minutes,
+    plannedWorkingMinutes: row.planned_working_minutes,
     actualCompletionDate: row.actual_completion_date,
     location: row.location,
     createdBy: row.created_by,
@@ -276,6 +339,24 @@ export function toJobAssignment(row: JobAssignmentRow): JobAssignment {
     userId: row.user_id,
     assignedBy: row.assigned_by,
     assignedAt: row.assigned_at,
+  };
+}
+
+export function toJobInstructionItem(
+  row: JobInstructionItemRow
+): JobInstructionItem {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    jobId: row.job_id,
+    content: row.content,
+    sortOrder: row.sort_order,
+    isCompleted: row.is_completed,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastStatusChangedBy: row.last_status_changed_by,
+    lastStatusChangedAt: row.last_status_changed_at,
   };
 }
 

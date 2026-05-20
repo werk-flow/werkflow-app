@@ -21,6 +21,8 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +61,7 @@ import { EmployeeMultiSelect } from './employee-multi-select';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditJobDialog } from './edit-job-dialog';
+import { JobInstructionItemsCard } from './job-instruction-items-card';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -74,12 +77,19 @@ import { updateProject } from '@/lib/projects/actions';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { getProfileAvatarUrl } from '@/lib/profile-avatar';
+import {
+  calculatePlannedWorkingMinutes,
+  formatMinutesAsHoursInput,
+  parseHoursInputToMinutes,
+} from '@/lib/jobs/planned-working';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
   type JobWithDetails,
   type JobStatus,
   type JobPriority,
+  type JobInstructionItemWithDetails,
   type Project,
   type ProjectWithDetails,
   type Client,
@@ -131,7 +141,8 @@ function formatPlannedTime(plannedTime: string | null): string {
 }
 
 function formatDuration(minutes: number | null): string {
-  if (!minutes) return '—';
+  if (minutes === null || minutes === undefined) return '—';
+  if (minutes === 0) return '0 Min.';
   const h = Math.floor(minutes / 60);
   const m = Math.round(minutes % 60);
   if (h === 0) return `${m} Min.`;
@@ -145,6 +156,41 @@ function getInitials(firstName: string | null, lastName: string | null): string 
   return (f + l).toUpperCase() || '?';
 }
 
+type SessionPerson = {
+  firstName: string | null;
+  lastName: string | null;
+  email?: string | null;
+  avatarPath?: string | null;
+};
+
+function getSessionPersonName(person?: SessionPerson | null): string {
+  if (!person) return 'Mitarbeiter';
+  return (
+    [person.firstName, person.lastName].filter(Boolean).join(' ') ||
+    person.email ||
+    'Mitarbeiter'
+  );
+}
+
+function PersonAvatar({
+  person,
+  className,
+  fallbackClassName,
+}: {
+  person?: SessionPerson | null;
+  className?: string;
+  fallbackClassName?: string;
+}) {
+  return (
+    <Avatar className={className}>
+      <AvatarImage src={getProfileAvatarUrl(person?.avatarPath) ?? undefined} />
+      <AvatarFallback className={fallbackClassName}>
+        {getInitials(person?.firstName ?? null, person?.lastName ?? null)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 interface JobDetailContentProps {
   job: JobWithDetails;
   parentProject?: Pick<Project, 'id' | 'name' | 'projectNumber'>;
@@ -152,6 +198,8 @@ interface JobDetailContentProps {
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
   isAdminOrManager: boolean;
+  instructionItems: JobInstructionItemWithDetails[];
+  currentUserId: string;
 }
 
 export function JobDetailContent({
@@ -161,10 +209,13 @@ export function JobDetailContent({
   members,
   projects = [],
   isAdminOrManager,
+  instructionItems,
+  currentUserId,
 }: JobDetailContentProps) {
   const router = useRouter();
+  const [liveJob, setLiveJob] = useState(job);
   const { activeJobIds } = useActiveJobs();
-  const isJobActive = activeJobIds.has(job.id);
+  const isJobActive = activeJobIds.has(liveJob.id);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
@@ -183,19 +234,65 @@ export function JobDetailContent({
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogProjects, setDialogProjects] = useState(projects);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
-  const hasDialogOptions =
-    dialogClients.length > 0 || dialogMembers.length > 0 || dialogProjects.length > 0;
   const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
 
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [timeParticipants, setTimeParticipants] = useState<
+    Array<{
+      userId: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+      avatarPath: string | null;
+    }>
+  >([]);
   const [isLoadingTime, setIsLoadingTime] = useState(true);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    setLiveJob(job);
+  }, [job]);
+
+  useEffect(() => {
+    setDialogClients(clients);
+  }, [clients]);
+
+  useEffect(() => {
+    setDialogMembers(members);
+  }, [members]);
+
+  useEffect(() => {
+    setDialogProjects(projects);
+  }, [projects]);
+
+  const applyLiveJobPatch = useCallback((updatedJob: Partial<JobWithDetails>) => {
+    setLiveJob((current) => ({
+      ...current,
+      ...updatedJob,
+    }));
+  }, []);
 
   useEffect(() => {
     if (
       !isAdminOrManager ||
-      hasDialogOptions ||
       isLoadingDialogOptions ||
-      (!showAssignDialog && !showClientDialog && !showProjectDialog && !showEditDialog)
+      (
+        !showAssignDialog &&
+        !showClientDialog &&
+        !showProjectDialog &&
+        !showEditDialog
+      ) ||
+      (
+        !(showClientDialog && dialogClients.length === 0) &&
+        !(showAssignDialog && dialogMembers.length === 0) &&
+        !(showProjectDialog && dialogProjects.length === 0) &&
+        !(
+          showEditDialog &&
+          (dialogClients.length === 0 ||
+            dialogMembers.length === 0 ||
+            dialogProjects.length === 0)
+        )
+      )
     ) {
       return;
     }
@@ -217,7 +314,9 @@ export function JobDetailContent({
       cancelled = true;
     };
   }, [
-    hasDialogOptions,
+    dialogClients.length,
+    dialogMembers.length,
+    dialogProjects.length,
     isAdminOrManager,
     isLoadingDialogOptions,
     showAssignDialog,
@@ -229,32 +328,30 @@ export function JobDetailContent({
 
   const fetchTimeEntries = useCallback(async () => {
     try {
-      const result = await getTimeEntriesForJob(job.id);
+      const result = await getTimeEntriesForJob(liveJob.id);
       if (result.success) {
         setTimeEntries(result.entries);
+        setTimeParticipants(result.participants ?? []);
       }
     } catch (err) {
       console.error('Error fetching time entries for job:', err);
     } finally {
       setIsLoadingTime(false);
     }
-  }, [job.id]);
+  }, [liveJob.id]);
 
   useEffect(() => {
     fetchTimeEntries();
   }, [fetchTimeEntries]);
 
   useRealtimeRouterRefresh({
-    tables: ['jobs', 'projects', 'job_assignments'],
+    tables: ['jobs', 'projects', 'job_assignments', 'job_instruction_items'],
     enabled: !suspendRealtimeRefresh,
   });
   useRealtimeEvent('time_entries', () => fetchTimeEntries());
 
   const sessionPeople = useMemo(() => {
-    const people = new Map<
-      string,
-      { firstName: string | null; lastName: string | null; email?: string | null }
-    >();
+    const people = new Map<string, SessionPerson>();
 
     for (const member of members) {
       people.set(member.userId, {
@@ -263,18 +360,30 @@ export function JobDetailContent({
       });
     }
 
-    for (const assignment of job.assignments) {
+    for (const assignment of liveJob.assignments) {
       if (!people.has(assignment.userId)) {
         people.set(assignment.userId, {
           firstName: assignment.firstName,
           lastName: assignment.lastName,
           email: assignment.email,
+          avatarPath: assignment.avatarPath,
+        });
+      }
+    }
+
+    for (const participant of timeParticipants) {
+      if (!people.has(participant.userId)) {
+        people.set(participant.userId, {
+          firstName: participant.firstName,
+          lastName: participant.lastName,
+          email: participant.email,
+          avatarPath: participant.avatarPath,
         });
       }
     }
 
     return people;
-  }, [job.assignments, members]);
+  }, [liveJob.assignments, members, timeParticipants]);
 
   const allSessions = useMemo(() => {
     const entriesByUser: Record<string, TimeEntry[]> = {};
@@ -284,17 +393,12 @@ export function JobDetailContent({
     }
     return Object.values(entriesByUser)
       .flatMap((ue) => calculateWorkSessions(ue))
-      .filter((s) => s.clockIn && s.clockOut)
+      .filter((session) => session.clockIn && session.jobId === liveJob.id)
       .sort((a, b) =>
         new Date(b.clockIn!.timestamp).getTime() -
         new Date(a.clockIn!.timestamp).getTime()
       );
-  }, [timeEntries]);
-
-  const completedWorkSessions = useMemo(
-    () => allSessions.filter((session) => session.clockIn && session.clockOut),
-    [allSessions]
-  );
+  }, [liveJob.id, timeEntries]);
 
   const activeWorkSessions = useMemo(
     () =>
@@ -303,39 +407,76 @@ export function JobDetailContent({
           session.clockIn &&
           !session.clockOut &&
           !session.isOrphan &&
-          session.jobId === job.id
+          session.jobId === liveJob.id
       ),
-    [allSessions, job.id]
+    [allSessions, liveJob.id]
+  );
+
+  useEffect(() => {
+    if (activeWorkSessions.length === 0) return;
+
+    const interval = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [activeWorkSessions.length]);
+
+  const getSessionDurationMinutes = useCallback(
+    (session: {
+      clockIn: TimeEntry | null;
+      clockOut: TimeEntry | null;
+      durationMinutes: number | null;
+    }) => {
+      if (session.durationMinutes !== null) return session.durationMinutes;
+      if (!session.clockIn || session.clockOut) return 0;
+
+      const startMs = new Date(session.clockIn.timestamp).getTime();
+      return Math.max(0, Math.floor((nowTick - startMs) / 60000));
+    },
+    [nowTick]
   );
 
   const totalMinutes = useMemo(
     () =>
-      completedWorkSessions.reduce(
-        (sum, s) => sum + (s.durationMinutes ?? 0),
+      allSessions.reduce(
+        (sum, session) => sum + getSessionDurationMinutes(session),
         0
       ),
-    [completedWorkSessions]
+    [allSessions, getSessionDurationMinutes]
   );
 
   const perEmployeeMinutes = useMemo(() => {
-    const map: Record<string, { userId: string; name: string; minutes: number }> =
-      {};
-    for (const s of completedWorkSessions) {
+    const map: Record<
+      string,
+      {
+        userId: string;
+        name: string;
+        minutes: number;
+        isLive: boolean;
+        person: SessionPerson | null;
+      }
+    > = {};
+    for (const s of allSessions) {
       if (!s.clockIn) continue;
       const uid = s.clockIn.userId;
       if (!map[uid]) {
         const person = sessionPeople.get(uid);
-        const name = person
-          ? [person.firstName, person.lastName].filter(Boolean).join(' ') ||
-            person.email ||
-            'Mitarbeiter'
-          : 'Mitarbeiter';
-        map[uid] = { userId: uid, name, minutes: 0 };
+        map[uid] = {
+          userId: uid,
+          name: getSessionPersonName(person),
+          minutes: 0,
+          isLive: false,
+          person: person ?? null,
+        };
       }
-      map[uid].minutes += s.durationMinutes ?? 0;
+      map[uid].minutes += getSessionDurationMinutes(s);
+      if (!s.clockOut && !s.isOrphan) {
+        map[uid].isLive = true;
+      }
     }
     return Object.values(map).sort((a, b) => b.minutes - a.minutes);
-  }, [completedWorkSessions, sessionPeople]);
+  }, [allSessions, getSessionDurationMinutes, sessionPeople]);
 
   const activeWorkers = useMemo(
     () =>
@@ -345,25 +486,61 @@ export function JobDetailContent({
         return {
           userId,
           clockIn: session.clockIn!,
-          name:
-            (person &&
-              ([person.firstName, person.lastName].filter(Boolean).join(' ') ||
-                person.email)) ||
-            'Mitarbeiter',
-          initials: getInitials(person?.firstName ?? null, person?.lastName ?? null),
+          name: getSessionPersonName(person),
+          person: person ?? null,
           isPending: session.pendingState === 'full' || session.pendingState === 'partial',
+          liveMinutes: getSessionDurationMinutes(session),
         };
       }),
-    [activeWorkSessions, sessionPeople]
+    [activeWorkSessions, getSessionDurationMinutes, sessionPeople]
   );
+  const progressTargetMinutes = liveJob.plannedWorkingMinutes;
+  const hasProgressTarget =
+    progressTargetMinutes !== null && progressTargetMinutes > 0;
+  const progressPercentage = hasProgressTarget
+    ? Math.min(100, (totalMinutes / progressTargetMinutes) * 100)
+    : 0;
+  const overrunMinutes =
+    hasProgressTarget && totalMinutes > progressTargetMinutes
+      ? totalMinutes - progressTargetMinutes
+      : 0;
+  const hasAnySessions = allSessions.length > 0;
+  const hasAnyTimeData = hasAnySessions || hasProgressTarget;
 
-  const projectInfo = parentProject ?? job.project;
+  const projectInfo = parentProject ?? liveJob.project;
+  const currentUserActor = useMemo(() => {
+    const currentMember = members.find((member) => member.userId === currentUserId);
+
+    if (currentMember) {
+      return {
+        userId: currentMember.userId,
+        firstName: currentMember.firstName || null,
+        lastName: currentMember.lastName || null,
+        email: null,
+        avatarPath: null,
+      };
+    }
+
+    const currentAssignment = liveJob.assignments.find(
+      (assignment) => assignment.userId === currentUserId
+    );
+
+    if (!currentAssignment) return null;
+
+    return {
+      userId: currentAssignment.userId,
+      firstName: currentAssignment.firstName,
+      lastName: currentAssignment.lastName,
+      email: currentAssignment.email,
+      avatarPath: currentAssignment.avatarPath,
+    };
+  }, [currentUserId, liveJob.assignments, members]);
 
   const handleDelete = () => {
     startDeleteTransition(async () => {
-      const result = await deleteJob(job.id);
+      const result = await deleteJob(liveJob.id);
       if (result.success) {
-        const deletedParam = `?deleted_job=${encodeURIComponent(job.title)}`;
+        const deletedParam = `?deleted_job=${encodeURIComponent(liveJob.title)}`;
         if (projectInfo?.projectNumber) {
           router.push(
             `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
@@ -380,32 +557,92 @@ export function JobDetailContent({
       setShowParkDialog(true);
       return;
     }
-    await updateJobStatus(job.id, newStatus);
-    router.refresh();
+    const result = await updateJobStatus(liveJob.id, newStatus);
+    if (result.success) {
+      applyLiveJobPatch(result.job);
+    }
   };
 
   const handleParkConfirm = async () => {
-    await updateJobStatus(job.id, 'geparkt');
-    router.refresh();
+    const result = await updateJobStatus(liveJob.id, 'geparkt');
+    if (result.success) {
+      applyLiveJobPatch(result.job);
+    }
   };
 
   const handleAssignEmployees = () => {
     startAssignTransition(async () => {
       const newIds = assignSelectedIds.filter(
-        (id) => !job.assignments.some((a) => a.userId === id)
+        (id) => !liveJob.assignments.some((a) => a.userId === id)
       );
-      await Promise.allSettled(newIds.map((id) => assignEmployee(job.id, id)));
+      const results = await Promise.allSettled(
+        newIds.map((id) => assignEmployee(liveJob.id, id))
+      );
+      const successfulIds = newIds.filter((_, index) => {
+        const result = results[index];
+        return result.status === 'fulfilled' && result.value.success;
+      });
+
+      if (successfulIds.length > 0) {
+        const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
+        setLiveJob((current) => {
+          const existingIds = new Set(current.assignments.map((assignment) => assignment.userId));
+          const nextAssignments = [
+            ...current.assignments,
+            ...successfulIds
+              .filter((userId) => !existingIds.has(userId))
+              .map((userId) => {
+                const member = memberLookup.get(userId);
+                return {
+                  id: `temp-${current.id}-${userId}`,
+                  jobId: current.id,
+                  userId,
+                  assignedBy: current.createdBy,
+                  assignedAt: new Date().toISOString(),
+                  firstName: member?.firstName ?? null,
+                  lastName: member?.lastName ?? null,
+                  email: null,
+                  avatarPath: null,
+                };
+              }),
+          ];
+
+          return {
+            ...current,
+            assignments: nextAssignments,
+            plannedWorkingMinutes: calculatePlannedWorkingMinutes(
+              current.estimatedDurationMinutes,
+              nextAssignments.length
+            ),
+          };
+        });
+      }
+
       setShowAssignDialog(false);
       setAssignSelectedIds([]);
-      router.refresh();
     });
   };
 
   const handleUnassign = async (userId: string) => {
     setUnassigningUserId(userId);
-    await unassignEmployee(job.id, userId);
+    const result = await unassignEmployee(liveJob.id, userId);
     setUnassigningUserId(null);
-    router.refresh();
+    if (result.success) {
+      setLiveJob((current) => {
+        const nextAssignments = current.assignments.filter(
+          (assignment) => assignment.userId !== userId
+        );
+
+        return {
+          ...current,
+          assignments: nextAssignments,
+          plannedWorkingMinutes: calculatePlannedWorkingMinutes(
+            current.estimatedDurationMinutes,
+            nextAssignments.length
+          ),
+        };
+      });
+    }
   };
 
   const handleClientSave = async (clientId: string) => {
@@ -413,30 +650,62 @@ export function JobDetailContent({
       if (parentProject?.id) {
         await updateProject(parentProject.id, { clientId });
       } else {
-        await updateJob(job.id, {
+        const result = await updateJob(liveJob.id, {
           clientId,
         });
+        if (result.success) {
+          applyLiveJobPatch({
+            ...result.job,
+            clientId: result.job.clientId,
+            client: result.job.clientId
+              ? clients.find((client) => client.id === result.job.clientId) ?? null
+              : null,
+          });
+        }
       }
       setShowClientDialog(false);
-      router.refresh();
+      if (parentProject?.id) {
+        router.refresh();
+      }
     });
   };
 
   const handleProjectSave = async (projectId: string) => {
     startProjectUpdateTransition(async () => {
       setSuspendRealtimeRefresh(true);
-      const result = await updateJob(job.id, { projectId });
+      const result = await updateJob(liveJob.id, { projectId });
       setShowProjectDialog(false);
       if (!result.success && result.error !== 'no_changes') {
         setSuspendRealtimeRefresh(false);
-        router.refresh();
         return;
       }
 
-      const nextJobNumber = result.success ? result.job.jobNumber : job.jobNumber;
+      if (result.success) {
+        applyLiveJobPatch({
+          ...result.job,
+          project:
+            result.job.projectId && result.job.projectId !== liveJob.projectId
+              ? (() => {
+                  const nextProject = dialogProjects.find(
+                    (project) => project.id === result.job.projectId
+                  );
+                  return nextProject
+                    ? {
+                        id: nextProject.id,
+                        name: nextProject.name,
+                        projectNumber: nextProject.projectNumber ?? null,
+                      }
+                    : null;
+                })()
+              : result.job.projectId
+                ? liveJob.project
+                : null,
+        });
+      }
+
+      const nextJobNumber = result.success ? result.job.jobNumber : liveJob.jobNumber;
       if (!nextJobNumber) {
         setSuspendRealtimeRefresh(false);
-        router.refresh();
         return;
       }
 
@@ -466,44 +735,53 @@ export function JobDetailContent({
           label: projectInfo.projectNumber,
           href: `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber)}`,
         },
-        { label: job.jobNumber ?? 'Auftrag' },
+        { label: liveJob.jobNumber ?? 'Auftrag' },
       ]
     : [
         { label: 'Aufträge', href: '/auftraege' },
-        { label: job.jobNumber ?? 'Auftrag' },
+        { label: liveJob.jobNumber ?? 'Auftrag' },
       ];
 
   const metadataFields: MetadataField[] = [
     {
       label: 'Auftragsnummer',
-      value: <span className="font-mono text-xs">{job.jobNumber}</span>,
+      value: <span className="font-mono text-xs">{liveJob.jobNumber}</span>,
     },
     {
       label: 'Titel',
-      value: job.title,
+      value: liveJob.title,
       editableConfig: isAdminOrManager
         ? {
             type: 'text',
-            currentValue: job.title,
+            currentValue: liveJob.title,
             onSave: async (v) => {
-              await updateJob(job.id, { title: v });
+              const result = await updateJob(liveJob.id, { title: v });
+              if (!result.success) {
+                throw new Error('Failed to update title');
+              }
+              applyLiveJobPatch(result.job);
             },
           }
         : undefined,
     },
     {
       label: 'Beschreibung',
-      value: job.description || (
+      value: liveJob.description || (
         <span className="text-muted-foreground">Keine Beschreibung</span>
       ),
       editableConfig: isAdminOrManager
         ? {
             type: 'textarea',
-            currentValue: job.description ?? '',
+            currentValue: liveJob.description ?? '',
             onSave: async (v) => {
-              await updateJob(job.id, { description: v });
+              const result = await updateJob(liveJob.id, { description: v });
+              if (!result.success) {
+                throw new Error('Failed to update description');
+              }
+              applyLiveJobPatch(result.job);
             },
             placeholder: 'Beschreibung hinzufügen...',
+            nullable: true,
           }
         : undefined,
     },
@@ -512,21 +790,25 @@ export function JobDetailContent({
       value: (
         <Badge
           variant="secondary"
-          className={JOB_STATUS_CLASSES[job.status]}
+            className={JOB_STATUS_CLASSES[liveJob.status]}
         >
-          {JOB_STATUS_LABELS[job.status]}
+          {JOB_STATUS_LABELS[liveJob.status]}
         </Badge>
       ),
       editableConfig: isAdminOrManager
         ? {
             type: 'select',
-            currentValue: job.status,
+            currentValue: liveJob.status,
             onSave: async (v) => {
               if (v === 'geparkt') {
                 setShowParkDialog(true);
                 return;
               }
-              await updateJobStatus(job.id, v as JobStatus);
+              const result = await updateJobStatus(liveJob.id, v as JobStatus);
+              if (!result.success) {
+                throw new Error('Failed to update status');
+              }
+              applyLiveJobPatch(result.job);
             },
             options: Object.entries(JOB_STATUS_LABELS).map(([value, label]) => ({
               value,
@@ -538,16 +820,22 @@ export function JobDetailContent({
     {
       label: 'Priorität',
       value: (
-        <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
-          {JOB_PRIORITY_LABELS[job.priority]}
+        <Badge variant="secondary" className={PRIORITY_CLASSES[liveJob.priority]}>
+          {JOB_PRIORITY_LABELS[liveJob.priority]}
         </Badge>
       ),
       editableConfig: isAdminOrManager
         ? {
             type: 'select',
-            currentValue: job.priority,
+            currentValue: liveJob.priority,
             onSave: async (v) => {
-              await updateJob(job.id, { priority: v as JobPriority });
+              const result = await updateJob(liveJob.id, {
+                priority: v as JobPriority,
+              });
+              if (!result.success) {
+                throw new Error('Failed to update priority');
+              }
+              applyLiveJobPatch(result.job);
             },
             options: Object.entries(JOB_PRIORITY_LABELS).map(
               ([value, label]) => ({ value, label })
@@ -557,60 +845,150 @@ export function JobDetailContent({
     },
     {
       label: 'Geplantes Datum',
-      value: formatDate(job.plannedDate),
+      value: formatDate(liveJob.plannedDate),
       editableConfig: isAdminOrManager
         ? {
             type: 'date',
-            currentValue: job.plannedDate ?? '',
-            onSave: async (v) => {
-              await updateJob(job.id, { plannedDate: v || undefined });
+            currentValue: liveJob.plannedDate ?? '',
+            confirmBeforeSave: {
+              shouldConfirm: (newValue, currentValue) =>
+                currentValue.trim().length > 0 && newValue.trim().length === 0,
+              title: 'Datum entfernen?',
+              description: (
+                <div className="space-y-2">
+                  <p>
+                    Wenn du das geplante Datum von{' '}
+                    <span className="font-medium text-foreground">
+                      {liveJob.jobNumber ? `${liveJob.jobNumber} – ` : ''}
+                      {liveJob.title}
+                    </span>{' '}
+                    entfernst, wird der Auftrag automatisch geparkt.
+                  </p>
+                  <p className="font-medium text-destructive/80">
+                    Andere Metadaten wie Uhrzeit, Dauer und zugewiesene Mitarbeiter
+                    bleiben erhalten.
+                  </p>
+                </div>
+              ),
+              confirmLabel: 'Datum entfernen',
+              loadingLabel: 'Wird gespeichert...',
             },
+            onSave: async (v) => {
+              const result = await updateJob(liveJob.id, {
+                plannedDate: v || null,
+              });
+              if (!result.success) {
+                throw new Error('Failed to update planned date');
+              }
+              applyLiveJobPatch(result.job);
+            },
+            nullable: true,
           }
         : undefined,
     },
     {
       label: 'Geplante Uhrzeit',
-      value: formatPlannedTime(job.plannedTime),
+      value: formatPlannedTime(liveJob.plannedTime),
       editableConfig: isAdminOrManager
         ? {
-            type: 'text',
-            currentValue: normalizeJobPlannedTime(job.plannedTime) ?? '',
+            type: 'time',
+            currentValue: normalizeJobPlannedTime(liveJob.plannedTime) ?? '',
             onSave: async (v) => {
-              await updateJob(job.id, { plannedTime: v || undefined });
+              const result = await updateJob(liveJob.id, {
+                plannedTime: v || null,
+              });
+              if (!result.success) {
+                throw new Error('Failed to update planned time');
+              }
+              applyLiveJobPatch(result.job);
             },
             placeholder: 'z.B. 08:00',
+            nullable: true,
           }
         : undefined,
     },
     {
       label: 'Geschätzte Dauer',
-      value: formatDuration(job.estimatedDurationMinutes),
-    },
-    {
-      label: 'Ort',
-      value: job.location || '—',
+      value: formatDuration(liveJob.estimatedDurationMinutes),
       editableConfig: isAdminOrManager
         ? {
-            type: 'text',
-            currentValue: job.location ?? '',
+            type: 'duration',
+            currentValue: formatMinutesAsHoursInput(liveJob.estimatedDurationMinutes),
             onSave: async (v) => {
-              await updateJob(job.id, { location: v || undefined });
+              const estimatedDurationMinutes = v.trim()
+                ? parseHoursInputToMinutes(v)
+                : null;
+              const plannedWorkingMinutes = calculatePlannedWorkingMinutes(
+                estimatedDurationMinutes,
+                liveJob.assignments.length
+              );
+              const result = await updateJob(liveJob.id, {
+                estimatedDurationMinutes,
+                plannedWorkingMinutes,
+              });
+              if (!result.success) {
+                throw new Error('Failed to update estimated duration');
+              }
+              applyLiveJobPatch(result.job);
             },
-            placeholder: 'Adresse oder Ort',
+            placeholder: 'z.B. 2.5',
+            nullable: true,
           }
         : undefined,
     },
-    ...(job.actualCompletionDate
+    {
+      label: 'Geplanter Arbeitsaufwand',
+      value: formatDuration(liveJob.plannedWorkingMinutes),
+      editableConfig: isAdminOrManager
+        ? {
+            type: 'duration',
+            currentValue: formatMinutesAsHoursInput(liveJob.plannedWorkingMinutes),
+            onSave: async (v) => {
+              const result = await updateJob(liveJob.id, {
+                plannedWorkingMinutes: v.trim()
+                  ? parseHoursInputToMinutes(v)
+                  : null,
+              });
+              if (!result.success) {
+                throw new Error('Failed to update planned effort');
+              }
+              applyLiveJobPatch(result.job);
+            },
+            placeholder: 'z.B. 5',
+            nullable: true,
+          }
+        : undefined,
+    },
+    {
+      label: 'Ort',
+      value: liveJob.location || '—',
+      editableConfig: isAdminOrManager
+        ? {
+            type: 'text',
+            currentValue: liveJob.location ?? '',
+            onSave: async (v) => {
+              const result = await updateJob(liveJob.id, { location: v });
+              if (!result.success) {
+                throw new Error('Failed to update location');
+              }
+              applyLiveJobPatch(result.job);
+            },
+            placeholder: 'Adresse oder Ort',
+            nullable: true,
+          }
+        : undefined,
+    },
+    ...(liveJob.actualCompletionDate
       ? [
           {
             label: 'Abschlussdatum',
-            value: formatDate(job.actualCompletionDate),
+            value: formatDate(liveJob.actualCompletionDate),
           },
         ]
       : []),
     {
       label: 'Erstellt am',
-      value: formatDateTime(job.createdAt),
+      value: formatDateTime(liveJob.createdAt),
     },
   ];
 
@@ -620,7 +998,7 @@ export function JobDetailContent({
         breadcrumbs={breadcrumbs}
         title={
           <span className="inline-flex items-center gap-1 overflow-visible">
-            {job.title}
+            {liveJob.title}
             {isJobActive && (
               <span className="relative ml-1 mr-1 inline-flex h-3 w-3 shrink-0" title="Jemand arbeitet gerade an diesem Auftrag">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
@@ -633,15 +1011,15 @@ export function JobDetailContent({
           <>
             <Badge
               variant="secondary"
-              className={JOB_STATUS_CLASSES[job.status]}
+              className={JOB_STATUS_CLASSES[liveJob.status]}
             >
-              {JOB_STATUS_LABELS[job.status]}
+              {JOB_STATUS_LABELS[liveJob.status]}
             </Badge>
             <Badge
               variant="secondary"
-              className={PRIORITY_CLASSES[job.priority]}
+              className={PRIORITY_CLASSES[liveJob.priority]}
             >
-              {JOB_PRIORITY_LABELS[job.priority]}
+              {JOB_PRIORITY_LABELS[liveJob.priority]}
             </Badge>
           </>
         }
@@ -670,7 +1048,7 @@ export function JobDetailContent({
                       <DropdownMenuItem
                         key={value}
                         onClick={() => handleStatusChange(value)}
-                        disabled={job.status === value}
+                        disabled={liveJob.status === value}
                       >
                         {label}
                       </DropdownMenuItem>
@@ -701,22 +1079,29 @@ export function JobDetailContent({
               isEditable={isAdminOrManager}
             />
 
-            {job.client ? (
+            <JobInstructionItemsCard
+              jobId={liveJob.id}
+              initialItems={instructionItems}
+              isAdminOrManager={isAdminOrManager}
+              currentUserActor={currentUserActor}
+            />
+
+            {liveJob.client ? (
               <EntityLinkCard
-                title={job.client.name}
-                href={`/kunden/${job.client.id}`}
+                title={liveJob.client.name}
+                href={`/kunden/${liveJob.client.id}`}
                 icon={<Building2 className="size-5" />}
                 badge={
                   <Badge variant="outline" className="text-xs">
-                    {CLIENT_TYPE_LABELS[job.client.clientType]}
+                    {CLIENT_TYPE_LABELS[liveJob.client.clientType]}
                   </Badge>
                 }
                 metadata={[
-                  ...(job.client.email
-                    ? [{ label: 'E-Mail', value: job.client.email }]
+                  ...(liveJob.client.email
+                    ? [{ label: 'E-Mail', value: liveJob.client.email }]
                     : []),
-                  ...(job.client.phone
-                    ? [{ label: 'Telefon', value: job.client.phone }]
+                  ...(liveJob.client.phone
+                    ? [{ label: 'Telefon', value: liveJob.client.phone }]
                     : []),
                 ]}
               />
@@ -746,7 +1131,7 @@ export function JobDetailContent({
                     className="h-7 gap-1 text-xs"
                     onClick={() => {
                       setAssignSelectedIds(
-                        job.assignments.map((a) => a.userId)
+                        liveJob.assignments.map((a) => a.userId)
                       );
                       setShowAssignDialog(true);
                     }}
@@ -756,28 +1141,28 @@ export function JobDetailContent({
                   </Button>
                 )}
               </div>
-              {job.assignments.length === 0 ? (
+              {liveJob.assignments.length === 0 ? (
                 <p className="py-2 text-center text-sm text-muted-foreground">
                   Keine Mitarbeiter zugewiesen.
                 </p>
               ) : (
                 <div className="divide-y">
-                  {job.assignments.map((a) => (
+                  {liveJob.assignments.map((a) => (
                     <div
                       key={a.userId}
                       className="flex items-center gap-3 py-2"
                     >
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                        {getInitials(a.firstName, a.lastName)}
-                      </div>
+                      <PersonAvatar
+                        person={a}
+                        className="size-8"
+                        fallbackClassName="bg-primary/10 text-xs font-medium text-primary"
+                      />
                       <div className="min-w-0 flex-1">
                         <Link
                           href={`/mitarbeiter/${a.userId}`}
                           className="text-sm font-medium hover:underline"
                         >
-                          {[a.firstName, a.lastName]
-                            .filter(Boolean)
-                            .join(' ') || a.email}
+                          {getSessionPersonName(a)}
                         </Link>
                         {a.email && (
                           <p className="truncate text-xs text-muted-foreground">
@@ -852,10 +1237,16 @@ export function JobDetailContent({
                   <Skeleton className="h-8 w-3/4" />
                   <Skeleton className="h-8 w-1/2" />
                 </div>
-              ) : activeWorkers.length === 0 && completedWorkSessions.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
-                  Noch keine Arbeitszeiten für diesen Auftrag erfasst.
-                </p>
+              ) : !hasAnyTimeData ? (
+                <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
+                  <p className="text-sm font-medium">
+                    Noch keine Arbeitszeiten für diesen Auftrag erfasst.
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Sobald ein Mitarbeiter auf diesen Auftrag arbeitet, erscheinen
+                    die Summen und Einträge hier automatisch.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-4">
                   {activeWorkers.length > 0 && (
@@ -875,9 +1266,11 @@ export function JobDetailContent({
                             key={worker.userId}
                             className="flex items-center gap-3 rounded-md bg-background/80 px-3 py-2"
                           >
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-green-500/10 text-[10px] font-medium text-green-700 dark:text-green-300">
-                              {worker.initials}
-                            </div>
+                            <PersonAvatar
+                              person={worker.person}
+                              className="size-8"
+                              fallbackClassName="bg-green-500/10 text-[10px] font-medium text-green-700 dark:text-green-300"
+                            />
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-medium">
                                 {worker.name}
@@ -891,6 +1284,8 @@ export function JobDetailContent({
                                     minute: '2-digit',
                                   }
                                 )}
+                                {' · '}
+                                {formatDuration(Math.round(worker.liveMinutes))}
                                 {worker.isPending ? ' · ausstehend' : ''}
                               </p>
                             </div>
@@ -900,21 +1295,37 @@ export function JobDetailContent({
                     </div>
                   )}
 
-                  {/* Summary stats */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-md bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Gesamt</p>
-                      <p className="text-lg font-bold tabular-nums">
-                        {formatDuration(Math.round(totalMinutes))}
+                  {hasProgressTarget ? (
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Fortschritt nach Arbeitsaufwand
+                          </p>
+                          <p className="text-sm font-semibold tabular-nums">
+                            {formatDuration(Math.round(totalMinutes))} /{' '}
+                            {formatDuration(progressTargetMinutes)}
+                          </p>
+                        </div>
+                        <p className="text-xs font-medium text-muted-foreground tabular-nums">
+                          {Math.round((totalMinutes / progressTargetMinutes) * 100)}%
+                        </p>
+                      </div>
+                      <Progress value={progressPercentage} />
+                      {overrunMinutes > 0 && (
+                        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                          {formatDuration(overrunMinutes)} über dem geplanten
+                          Arbeitsaufwand
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed bg-muted/20 p-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Kein geplanter Arbeitsaufwand hinterlegt.
                       </p>
                     </div>
-                    <div className="rounded-md bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Abgeschlossene Einsätze</p>
-                      <p className="text-lg font-bold tabular-nums">
-                        {completedWorkSessions.length}
-                      </p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Per-employee breakdown */}
                   {perEmployeeMinutes.length > 0 && (
@@ -922,109 +1333,111 @@ export function JobDetailContent({
                       <p className="text-xs font-medium text-muted-foreground">
                         Pro Mitarbeiter
                       </p>
-                      {perEmployeeMinutes.map((emp) => {
-                        const pct =
-                          totalMinutes > 0
-                            ? (emp.minutes / totalMinutes) * 100
-                            : 0;
-                        return (
-                          <div key={emp.userId} className="space-y-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-medium truncate">
+                      <div className="divide-y rounded-md border">
+                        {perEmployeeMinutes.map((emp) => (
+                          <div
+                            key={emp.userId}
+                            className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <PersonAvatar
+                                person={emp.person}
+                                className="size-7"
+                                fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary"
+                              />
+                              <span className="truncate font-medium">
                                 {emp.name}
                               </span>
-                              <span className="text-muted-foreground tabular-nums">
-                                {formatDuration(Math.round(emp.minutes))}
-                              </span>
+                              {emp.isLive && (
+                                <span className="relative inline-flex h-2 w-2 shrink-0">
+                                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                                </span>
+                              )}
                             </div>
-                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-primary transition-all"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
+                            <span className="shrink-0 tabular-nums text-muted-foreground">
+                              {formatDuration(Math.round(emp.minutes))}
+                            </span>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
                   )}
 
                   {/* Session timeline */}
-                  <div>
-                    <button
-                      onClick={() => setShowAllSessions(!showAllSessions)}
-                      className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors"
-                    >
-                      <span>
-                        Einzelne Einträge ({completedWorkSessions.length})
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          'size-3.5 transition-transform',
-                          showAllSessions && 'rotate-180'
-                        )}
-                      />
-                    </button>
+                  {hasAnySessions && (
+                    <div>
+                      <button
+                        onClick={() => setShowAllSessions(!showAllSessions)}
+                        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
+                      >
+                        <span>Einzelne Einträge ({allSessions.length})</span>
+                        <ChevronDown
+                          className={cn(
+                            'size-3.5 transition-transform',
+                            showAllSessions && 'rotate-180'
+                          )}
+                        />
+                      </button>
 
-                    {showAllSessions && (
-                      <div className="mt-2 divide-y max-h-64 overflow-auto">
-                        {completedWorkSessions.map((s, idx) => {
-                          if (!s.clockIn || !s.clockOut) return null;
-                          const member = sessionPeople.get(s.clockIn.userId);
-                          const empName =
-                            [member?.firstName, member?.lastName]
-                              .filter(Boolean)
-                              .join(' ') ||
-                            member?.email ||
-                            'Mitarbeiter';
+                      {showAllSessions && (
+                        <div className="mt-2 max-h-64 divide-y overflow-auto rounded-md border">
+                          {allSessions.map((session) => {
+                            if (!session.clockIn) return null;
 
-                          return (
-                            <div key={idx} className="flex items-center gap-3 py-2 text-sm">
-                              <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-                                {getInitials(
-                                  member?.firstName ?? null,
-                                  member?.lastName ?? null
-                                )}
+                            const member = sessionPeople.get(session.clockIn.userId);
+                            return (
+                              <div
+                                key={session.clockIn.id}
+                                className="flex items-center gap-3 px-3 py-2.5 text-sm"
+                              >
+                                <PersonAvatar
+                                  person={member}
+                                  className="size-7"
+                                  fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium">
+                                    {getSessionPersonName(member)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(
+                                      session.clockIn.timestamp
+                                    ).toLocaleDateString('de-DE', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                    })}
+                                    {' · '}
+                                    {new Date(
+                                      session.clockIn.timestamp
+                                    ).toLocaleTimeString('de-DE', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                    {' – '}
+                                    {session.clockOut
+                                      ? new Date(
+                                          session.clockOut.timestamp
+                                        ).toLocaleTimeString('de-DE', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })
+                                      : 'offen'}
+                                  </p>
+                                </div>
+                                <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                                  {formatDuration(
+                                    Math.round(getSessionDurationMinutes(session))
+                                  )}
+                                </span>
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium truncate">
-                                  {empName}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {new Date(
-                                    s.clockIn.timestamp
-                                  ).toLocaleDateString('de-DE', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                  })}
-                                  {' · '}
-                                  {new Date(
-                                    s.clockIn.timestamp
-                                  ).toLocaleTimeString('de-DE', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                  {' – '}
-                                  {new Date(
-                                    s.clockOut.timestamp
-                                  ).toLocaleTimeString('de-DE', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                  })}
-                                </p>
-                              </div>
-                              <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                                {formatDuration(
-                                  Math.round(s.durationMinutes ?? 0)
-                                )}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1038,7 +1451,7 @@ export function JobDetailContent({
           <AlertDialogHeader>
             <AlertDialogTitle>Auftrag löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Möchtest du den Auftrag &ldquo;{job.title}&rdquo; wirklich
+              Möchtest du den Auftrag &ldquo;{liveJob.title}&rdquo; wirklich
               löschen? Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1102,7 +1515,7 @@ export function JobDetailContent({
         open={showClientDialog}
         onOpenChange={setShowClientDialog}
         clients={dialogClients}
-        currentClientId={job.clientId}
+        currentClientId={liveJob.clientId}
         title={
           parentProject?.id
             ? 'Kunde zum Projekt hinzufügen'
@@ -1116,15 +1529,15 @@ export function JobDetailContent({
         open={showProjectDialog}
         onOpenChange={setShowProjectDialog}
         projects={dialogProjects}
-        currentProjectId={job.projectId}
-        currentClientId={job.clientId}
+        currentProjectId={liveJob.projectId}
+        currentClientId={liveJob.clientId}
         title="Projekt zum Auftrag hinzufügen"
         isSaving={isUpdatingProject}
         onSave={handleProjectSave}
       />
 
       <EditJobDialog
-        job={job}
+        job={liveJob}
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
         clients={dialogClients}
@@ -1136,8 +1549,8 @@ export function JobDetailContent({
         open={showParkDialog}
         onOpenChange={setShowParkDialog}
         variant="job"
-        title={job.title}
-        identifier={job.jobNumber ?? undefined}
+        title={liveJob.title}
+        identifier={liveJob.jobNumber ?? undefined}
         onConfirm={handleParkConfirm}
       />
     </div>

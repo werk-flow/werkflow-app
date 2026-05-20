@@ -177,6 +177,77 @@ export type Database = {
           },
         ]
       }
+      job_instruction_items: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          is_completed: boolean
+          job_id: string
+          last_status_changed_at: string | null
+          last_status_changed_by: string | null
+          organization_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_completed?: boolean
+          job_id: string
+          last_status_changed_at?: string | null
+          last_status_changed_by?: string | null
+          organization_id: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_completed?: boolean
+          job_id?: string
+          last_status_changed_at?: string | null
+          last_status_changed_by?: string | null
+          organization_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_instruction_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_items_last_status_changed_by_fkey"
+            columns: ["last_status_changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           actual_completion_date: string | null
@@ -191,6 +262,7 @@ export type Database = {
           organization_id: string
           planned_date: string | null
           planned_time: string | null
+          planned_working_minutes: number | null
           priority: Database["public"]["Enums"]["job_priority"]
           project_id: string | null
           status: Database["public"]["Enums"]["job_status"]
@@ -210,6 +282,7 @@ export type Database = {
           organization_id: string
           planned_date?: string | null
           planned_time?: string | null
+          planned_working_minutes?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           project_id?: string | null
           status?: Database["public"]["Enums"]["job_status"]
@@ -229,6 +302,7 @@ export type Database = {
           organization_id?: string
           planned_date?: string | null
           planned_time?: string | null
+          planned_working_minutes?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           project_id?: string | null
           status?: Database["public"]["Enums"]["job_status"]
@@ -342,6 +416,76 @@ export type Database = {
           },
         ]
       }
+      organization_settings: {
+        Row: {
+          auto_break_duration_minutes: number
+          auto_break_threshold_minutes: number
+          break_mode: Database["public"]["Enums"]["time_tracking_break_mode"]
+          break_policy_history: Json
+          created_at: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          auto_break_duration_minutes?: number
+          auto_break_threshold_minutes?: number
+          break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"]
+          break_policy_history?: Json
+          created_at?: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          auto_break_duration_minutes?: number
+          auto_break_threshold_minutes?: number
+          break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"]
+          break_policy_history?: Json
+          created_at?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_user_preferences: {
+        Row: {
+          created_at: string
+          organization_id: string
+          preferences: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          organization_id: string
+          preferences?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          organization_id?: string
+          preferences?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_user_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           admin_id: string
@@ -371,6 +515,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_path: string | null
           created_at: string
           email: string | null
           first_name: string | null
@@ -379,6 +524,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          avatar_path?: string | null
           created_at?: string
           email?: string | null
           first_name?: string | null
@@ -387,6 +533,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          avatar_path?: string | null
           created_at?: string
           email?: string | null
           first_name?: string | null
@@ -642,6 +789,7 @@ export type Database = {
         | "geparkt"
       subscription_status: "active" | "inactive" | "canceled" | "trialing"
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete"
+      time_tracking_break_mode: "manual" | "automatic"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -784,6 +932,7 @@ export const Constants = {
       ],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
+      time_tracking_break_mode: ["manual", "automatic"],
     },
   },
 } as const

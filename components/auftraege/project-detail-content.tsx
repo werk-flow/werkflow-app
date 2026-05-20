@@ -172,10 +172,8 @@ interface ProjectDetailContentProps {
 
 export function ProjectDetailContent({
   project,
-  client,
   jobs,
   availableJobs = [],
-  derivedStatus,
   clients,
   members,
   isAdminOrManager,
@@ -194,9 +192,6 @@ export function ProjectDetailContent({
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogAvailableJobs, setDialogAvailableJobs] = useState(availableJobs);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
-  const [hasLoadedDialogOptions, setHasLoadedDialogOptions] = useState(
-    clients.length > 1 || members.length > 0 || availableJobs.length > 0
-  );
   const [liveProject, setLiveProject] = useState(project);
   const [liveJobs, setLiveJobs] = useState(jobs);
   const repairTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -214,6 +209,18 @@ export function ProjectDetailContent({
   useEffect(() => {
     setLiveJobs(jobs);
   }, [jobs]);
+
+  useEffect(() => {
+    setDialogClients(clients);
+  }, [clients]);
+
+  useEffect(() => {
+    setDialogMembers(members);
+  }, [members]);
+
+  useEffect(() => {
+    setDialogAvailableJobs(availableJobs);
+  }, [availableJobs]);
 
   useEffect(() => {
     return () => {
@@ -237,9 +244,27 @@ export function ProjectDetailContent({
   useEffect(() => {
     if (
       !isAdminOrManager ||
-      hasLoadedDialogOptions ||
       isLoadingDialogOptions ||
-      (!showCreateJob && !showEditDialog && !showClientDialog && !showAssignJobsDialog)
+      (
+        !showCreateJob &&
+        !showEditDialog &&
+        !showClientDialog &&
+        !showAssignJobsDialog
+      ) ||
+      (
+        !(showClientDialog && dialogClients.length === 0) &&
+        !(
+          showCreateJob &&
+          (dialogClients.length === 0 || dialogMembers.length === 0)
+        ) &&
+        !(
+          showEditDialog &&
+          (dialogClients.length === 0 ||
+            dialogMembers.length === 0 ||
+            dialogAvailableJobs.length === 0)
+        ) &&
+        !(showAssignJobsDialog && dialogAvailableJobs.length === 0)
+      )
     ) {
       return;
     }
@@ -252,7 +277,6 @@ export function ProjectDetailContent({
         setDialogClients(result.clients);
         setDialogMembers(result.members);
         setDialogAvailableJobs(result.jobs);
-        setHasLoadedDialogOptions(true);
       })
       .finally(() => {
         if (!cancelled) setIsLoadingDialogOptions(false);
@@ -262,7 +286,9 @@ export function ProjectDetailContent({
       cancelled = true;
     };
   }, [
-    hasLoadedDialogOptions,
+    dialogAvailableJobs.length,
+    dialogClients.length,
+    dialogMembers.length,
     isAdminOrManager,
     isLoadingDialogOptions,
     showAssignJobsDialog,
@@ -346,9 +372,15 @@ export function ProjectDetailContent({
 
   const projectTimeSummary = useMemo(() => {
     let totalMinutes = 0;
-    const perJob: { title: string; minutes: number }[] = [];
+    const perJob: Array<{
+      jobId: string;
+      title: string;
+      minutes: number;
+      plannedWorkingMinutes: number | null;
+    }> = [];
+    const jobLookup = new Map(liveJobs.map((job) => [job.id, job]));
 
-    for (const { jobTitle, entries } of projectTimeEntries) {
+    for (const { jobId, jobTitle, entries } of projectTimeEntries) {
       const entriesByUser: Record<string, TimeEntry[]> = {};
       for (const e of entries) {
         if (!entriesByUser[e.userId]) entriesByUser[e.userId] = [];
@@ -364,12 +396,17 @@ export function ProjectDetailContent({
       );
       totalMinutes += jobMin;
       if (jobMin > 0) {
-        perJob.push({ title: jobTitle, minutes: jobMin });
+        perJob.push({
+          jobId,
+          title: jobTitle,
+          minutes: jobMin,
+          plannedWorkingMinutes: jobLookup.get(jobId)?.plannedWorkingMinutes ?? null,
+        });
       }
     }
 
     return { totalMinutes, perJob: perJob.sort((a, b) => b.minutes - a.minutes) };
-  }, [projectTimeEntries]);
+  }, [liveJobs, projectTimeEntries]);
 
   function formatDurationMins(mins: number): string {
     const h = Math.floor(mins / 60);
@@ -466,7 +503,7 @@ export function ProjectDetailContent({
       ),
     },
     {
-      label: 'Name',
+      label: 'Titel',
       value: liveProject.name,
       editableConfig: isAdminOrManager
         ? {
@@ -493,6 +530,7 @@ export function ProjectDetailContent({
               if (result.success) setLiveProject(result.project);
             },
             placeholder: 'Beschreibung hinzufügen...',
+            nullable: true,
           }
         : undefined,
     },
@@ -532,10 +570,11 @@ export function ProjectDetailContent({
             currentValue: liveProject.plannedStartDate ?? '',
             onSave: async (v) => {
               const result = await updateProject(project.id, {
-                plannedStartDate: v || undefined,
+                plannedStartDate: v,
               });
               if (result.success) setLiveProject(result.project);
             },
+            nullable: true,
           }
         : undefined,
     },
@@ -548,10 +587,11 @@ export function ProjectDetailContent({
             currentValue: liveProject.plannedEndDate ?? '',
             onSave: async (v) => {
               const result = await updateProject(project.id, {
-                plannedEndDate: v || undefined,
+                plannedEndDate: v,
               });
               if (result.success) setLiveProject(result.project);
             },
+            nullable: true,
           }
         : undefined,
     },
@@ -807,30 +847,63 @@ export function ProjectDetailContent({
                       </button>
 
                       {showTimeDetails && (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2 divide-y rounded-md border">
                           {projectTimeSummary.perJob.map((pj) => {
-                            const pct =
-                              projectTimeSummary.totalMinutes > 0
-                                ? (pj.minutes /
-                                    projectTimeSummary.totalMinutes) *
-                                  100
+                            const targetMinutes =
+                              pj.plannedWorkingMinutes && pj.plannedWorkingMinutes > 0
+                                ? pj.plannedWorkingMinutes
+                                : null;
+                            const hasTarget = targetMinutes !== null;
+                            const progressPercentage = hasTarget
+                              ? Math.min(
+                                  100,
+                                  (pj.minutes / targetMinutes) * 100
+                                )
+                              : 0;
+                            const overrunMinutes =
+                              hasTarget && pj.minutes > targetMinutes
+                                ? pj.minutes - targetMinutes
                                 : 0;
                             return (
-                              <div key={pj.title} className="space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="font-medium truncate">
+                              <div key={pj.jobId} className="space-y-2 px-3 py-2.5">
+                                <div className="flex items-center justify-between gap-3 text-sm">
+                                  <span className="truncate font-medium">
                                     {pj.title}
                                   </span>
-                                  <span className="text-muted-foreground tabular-nums">
+                                  <span className="shrink-0 tabular-nums text-muted-foreground">
                                     {formatDurationMins(Math.round(pj.minutes))}
                                   </span>
                                 </div>
-                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                  <div
-                                    className="h-full rounded-full bg-primary transition-all"
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
+                                {hasTarget ? (
+                                  <>
+                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                      <span>
+                                        {formatDurationMins(Math.round(pj.minutes))} /{' '}
+                                        {formatDurationMins(targetMinutes)}
+                                      </span>
+                                      <span className="tabular-nums">
+                                        {Math.round((pj.minutes / targetMinutes) * 100)}
+                                        %
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                      <div
+                                        className="h-full rounded-full bg-primary transition-all"
+                                        style={{ width: `${progressPercentage}%` }}
+                                      />
+                                    </div>
+                                    {overrunMinutes > 0 && (
+                                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                                        {formatDurationMins(overrunMinutes)} über dem
+                                        geplanten Arbeitsaufwand
+                                      </p>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">
+                                    Kein geplanter Arbeitsaufwand hinterlegt.
+                                  </p>
+                                )}
                               </div>
                             );
                           })}

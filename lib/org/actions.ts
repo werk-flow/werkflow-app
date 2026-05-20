@@ -7,6 +7,11 @@ import { isUserSubscribed } from '@/lib/subscription/helpers';
 import { generateUniqueOrgCode } from './generate-code';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from './cookies';
 import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
+import {
+  getOrganizationNameValidationError,
+  normalizeOrganizationName,
+} from '@/lib/org/schemas';
+import { buildBreakPolicyHistoryEntry } from '@/lib/time-tracking/settings';
 
 /**
  * Sets the active organization cookie
@@ -43,17 +48,11 @@ export type CreateOrganizationResult = {
 export async function createOrganization(
   name: string
 ): Promise<CreateOrganizationResult> {
-  const trimmedName = name.trim();
-  if (!trimmedName) {
-    return { success: false, error: 'name_required' };
-  }
+  const normalizedName = normalizeOrganizationName(name);
+  const nameValidationError = getOrganizationNameValidationError(name);
 
-  if (trimmedName.length < 2) {
-    return { success: false, error: 'name_too_short' };
-  }
-
-  if (trimmedName.length > 100) {
-    return { success: false, error: 'name_too_long' };
+  if (nameValidationError) {
+    return { success: false, error: nameValidationError };
   }
 
   const user = await getAuthenticatedUser();
@@ -71,6 +70,30 @@ export async function createOrganization(
   const admin = createSupabaseAdminClient();
 
   try {
+    const { data: existingOrganizations, error: existingOrganizationsError } =
+      await admin
+        .from('organizations')
+        .select('id, name')
+        .eq('admin_id', user.id);
+
+    if (existingOrganizationsError) {
+      console.error(
+        'Error checking existing organizations for duplicate names:',
+        existingOrganizationsError
+      );
+      return { success: false, error: 'organization_creation_failed' };
+    }
+
+    const hasDuplicateName = (existingOrganizations ?? []).some(
+      (organization) =>
+        normalizeOrganizationName(organization.name).toLocaleLowerCase() ===
+        normalizedName.toLocaleLowerCase()
+    );
+
+    if (hasDuplicateName) {
+      return { success: false, error: 'name_taken' };
+    }
+
     // Generate unique code
     const uniqueCode = await generateUniqueOrgCode();
 
@@ -78,15 +101,47 @@ export async function createOrganization(
     const { data: org, error: orgError } = await admin
       .from('organizations')
       .insert({
-        name: trimmedName,
+        name: normalizedName,
         admin_id: user.id,
         unique_code: uniqueCode
       })
-      .select('id')
+      .select('id, created_at')
       .single();
 
     if (orgError) {
+      if (
+        orgError.code === '23505' &&
+        orgError.message.includes('organizations_admin_id_normalized_name_key')
+      ) {
+        return { success: false, error: 'name_taken' };
+      }
+
       console.error('Error creating organization:', orgError);
+      return { success: false, error: 'organization_creation_failed' };
+    }
+
+    const { error: settingsError } = await admin
+      .from('organization_settings')
+      .insert({
+        organization_id: org.id,
+        break_mode: 'manual',
+        auto_break_threshold_minutes: 360,
+        auto_break_duration_minutes: 30,
+        break_policy_history: [
+          buildBreakPolicyHistoryEntry(
+            {
+              breakMode: 'manual',
+              autoBreakThresholdMinutes: 360,
+              autoBreakDurationMinutes: 30,
+            },
+            org.created_at
+          ),
+        ],
+      });
+
+    if (settingsError) {
+      console.error('Error creating organization settings:', settingsError);
+      await admin.from('organizations').delete().eq('id', org.id);
       return { success: false, error: 'organization_creation_failed' };
     }
 

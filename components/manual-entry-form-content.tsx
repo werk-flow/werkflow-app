@@ -267,8 +267,6 @@ export function ManualEntryFormContent({
     });
   };
 
-  if (!activeOrgId || !activeOrg) return null;
-
   const memberOptions = useMemo(
     () =>
       members.map((m) => ({
@@ -292,6 +290,8 @@ export function ManualEntryFormContent({
       })),
     [jobOptions]
   );
+
+  if (!activeOrgId || !activeOrg) return null;
 
   return (
     <>

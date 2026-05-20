@@ -2,8 +2,20 @@ import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import { getProfileAvatarUrl } from '@/lib/profile-avatar'
 import type { User } from '@supabase/supabase-js'
 import type { UserOrg } from '@/components/organization/organization-context'
+import type { Json } from '@/lib/supabase/database.types'
+import {
+  getAuftraegePreferencesFromJson,
+  type AuftraegeColumnId,
+} from '@/lib/jobs/auftraege-table-columns'
+import {
+  getDefaultTimeTrackingSettings,
+  normalizeTimeTrackingSettings,
+  parseBreakPolicyHistory,
+  type OrganizationTimeTrackingSettings,
+} from '@/lib/time-tracking/settings'
 
 type OrganizationData = {
   id: string
@@ -17,6 +29,9 @@ export const CACHE_TAGS = {
   subscription: (userId: string) => `subscription-${userId}`,
   profile: (userId: string) => `profile-${userId}`,
   memberCount: (orgId: string) => `member-count-${orgId}`,
+  organizationSettings: (orgId: string) => `organization-settings-${orgId}`,
+  organizationUserPreferences: (orgId: string, userId: string) =>
+    `organization-user-preferences-${orgId}-${userId}`,
   clients: (orgId: string) => `clients-${orgId}`,
   jobs: (orgId: string) => `jobs-${orgId}`,
   projects: (orgId: string) => `projects-${orgId}`,
@@ -166,25 +181,115 @@ export const getCachedMemberCount = cache(async (orgId: string): Promise<number 
   return fetchMemberCount(orgId)
 })
 
+export const getCachedOrganizationSettings = cache(
+  async (orgId: string): Promise<OrganizationTimeTrackingSettings> => {
+    const fetchOrganizationSettings = unstable_cache(
+      async (oid: string): Promise<OrganizationTimeTrackingSettings> => {
+        const admin = createSupabaseAdminClient()
+
+        const { data, error } = await admin
+          .from('organization_settings')
+          .select(
+            'organization_id, break_mode, auto_break_threshold_minutes, auto_break_duration_minutes, break_policy_history'
+          )
+          .eq('organization_id', oid)
+          .maybeSingle()
+
+        if (error) {
+          console.error('Error fetching organization settings:', error)
+          return getDefaultTimeTrackingSettings(oid)
+        }
+
+        if (!data) {
+          return getDefaultTimeTrackingSettings(oid)
+        }
+
+        return normalizeTimeTrackingSettings({
+          organizationId: data.organization_id,
+          breakMode: data.break_mode,
+          autoBreakThresholdMinutes: data.auto_break_threshold_minutes,
+          autoBreakDurationMinutes: data.auto_break_duration_minutes,
+          breakPolicyHistory: parseBreakPolicyHistory(data.break_policy_history),
+        })
+      },
+      [`organization-settings-${orgId}`],
+      {
+        tags: [CACHE_TAGS.organizationSettings(orgId)],
+        revalidate: REVALIDATE_SECONDS,
+      }
+    )
+
+    return fetchOrganizationSettings(orgId)
+  }
+)
+
+export const getCachedOrganizationUserPreferences = cache(
+  async (
+    orgId: string,
+    userId: string
+  ): Promise<{ visibleColumns: AuftraegeColumnId[]; preferences: Json | null }> => {
+    const fetchPreferences = unstable_cache(
+      async (
+        oid: string,
+        uid: string
+      ): Promise<{ visibleColumns: AuftraegeColumnId[]; preferences: Json | null }> => {
+        const admin = createSupabaseAdminClient()
+
+        const { data, error } = await admin
+          .from('organization_user_preferences')
+          .select('preferences')
+          .eq('organization_id', oid)
+          .eq('user_id', uid)
+          .maybeSingle()
+
+        if (error) {
+          console.error('Error fetching organization user preferences:', error)
+          return {
+            visibleColumns: getAuftraegePreferencesFromJson(null),
+            preferences: null,
+          }
+        }
+
+        return {
+          visibleColumns: getAuftraegePreferencesFromJson(data?.preferences ?? null),
+          preferences: data?.preferences ?? null,
+        }
+      },
+      [`organization-user-preferences-${orgId}-${userId}`],
+      {
+        tags: [CACHE_TAGS.organizationUserPreferences(orgId, userId)],
+        revalidate: REVALIDATE_SECONDS,
+      }
+    )
+
+    return fetchPreferences(orgId, userId)
+  }
+)
+
 export type UserProfile = {
   id: string
   firstName: string
   lastName: string
   email: string
+  avatarPath: string | null
+  avatarUrl: string | null
 }
 
 /**
  * Cross-request cached user profile.
- * Email is passed in since it comes from auth.users (already fetched in layout).
+ * Email is passed in since it comes from auth.users.
  */
-export const getCachedUserProfile = cache(async (userId: string, email: string): Promise<UserProfile | null> => {
+export const getCachedUserProfile = cache(async (
+  userId: string,
+  email: string
+): Promise<UserProfile | null> => {
   const fetchProfile = unstable_cache(
     async (uid: string, em: string): Promise<UserProfile | null> => {
       const admin = createSupabaseAdminClient()
 
       const { data, error } = await admin
         .from('profiles')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, avatar_path')
         .eq('id', uid)
         .single()
 
@@ -198,6 +303,8 @@ export const getCachedUserProfile = cache(async (userId: string, email: string):
         firstName: data.first_name,
         lastName: data.last_name,
         email: em,
+        avatarPath: data.avatar_path,
+        avatarUrl: getProfileAvatarUrl(data.avatar_path),
       }
     },
     [`profile-${userId}`],

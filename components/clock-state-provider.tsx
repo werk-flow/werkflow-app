@@ -26,6 +26,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 
 type ClockStateContextValue = {
   state: LiveClockState | null;
@@ -66,18 +67,16 @@ function finalizeWorkMinutes(
   state: LiveClockState | null,
   endTimestamp = new Date().toISOString()
 ): number {
-  const base = state?.workMinutes ?? 0;
-  if (state?.status !== 'working') return base;
-  return base + getSegmentElapsedMinutes(state, endTimestamp);
+  const breakdown = resolveOptimisticBreakdown(state, endTimestamp)
+  return breakdown.workMinutes
 }
 
 function finalizeBreakMinutes(
   state: LiveClockState | null,
   endTimestamp = new Date().toISOString()
 ): number {
-  const base = state?.breakMinutes ?? 0;
-  if (state?.status !== 'on_break') return base;
-  return base + getSegmentElapsedMinutes(state, endTimestamp);
+  const breakdown = resolveOptimisticBreakdown(state, endTimestamp)
+  return breakdown.breakMinutes
 }
 
 function appendTimelineSegment(
@@ -90,6 +89,27 @@ function appendTimelineSegment(
   }
 
   return [...(segments ?? []), { type, minutes }];
+}
+
+function resolveOptimisticBreakdown(
+  state: LiveClockState | null,
+  endTimestamp = new Date().toISOString()
+) {
+  const totalMinutes = finalizePresenceMinutes(state, endTimestamp)
+  const trackedBreakMinutes =
+    (state?.breakMode ?? 'manual') === 'manual'
+      ? (() => {
+          const base = state?.breakMinutes ?? 0
+          if (state?.status !== 'on_break') return base
+          return base + getSegmentElapsedMinutes(state, endTimestamp)
+        })()
+      : state?.breakMinutes ?? 0
+
+  return computeBreakdownForSettings(totalMinutes, trackedBreakMinutes, {
+    breakMode: state?.breakMode ?? 'manual',
+    autoBreakThresholdMinutes: state?.autoBreakThresholdMinutes ?? 360,
+    autoBreakDurationMinutes: state?.autoBreakDurationMinutes ?? 30,
+  })
 }
 
 export function ClockStateProvider({
@@ -217,6 +237,9 @@ export function ClockStateProvider({
         setStatusError(null);
         setState((prev) => ({
           organizationId: activeOrgId,
+          breakMode: prev?.breakMode ?? 'manual',
+          autoBreakThresholdMinutes: prev?.autoBreakThresholdMinutes ?? 360,
+          autoBreakDurationMinutes: prev?.autoBreakDurationMinutes ?? 30,
           status: 'working',
           isClockedIn: true,
           clockInTime: result.entry.timestamp,
@@ -266,6 +289,9 @@ export function ClockStateProvider({
       setStatusError(null);
       setState((prev) => ({
         organizationId: activeOrgId,
+        breakMode: prev?.breakMode ?? 'manual',
+        autoBreakThresholdMinutes: prev?.autoBreakThresholdMinutes ?? 360,
+        autoBreakDurationMinutes: prev?.autoBreakDurationMinutes ?? 30,
         status: 'clocked_out',
         isClockedIn: false,
         clockInTime: null,
@@ -313,6 +339,9 @@ export function ClockStateProvider({
       setStatusError(null);
       setState((prev) => ({
         organizationId: activeOrgId,
+        breakMode: prev?.breakMode ?? 'manual',
+        autoBreakThresholdMinutes: prev?.autoBreakThresholdMinutes ?? 360,
+        autoBreakDurationMinutes: prev?.autoBreakDurationMinutes ?? 30,
         status: 'on_break',
         isClockedIn: true,
         isOnBreak: true,
@@ -361,6 +390,9 @@ export function ClockStateProvider({
         setStatusError(null);
         setState((prev) => ({
           organizationId: activeOrgId,
+          breakMode: prev?.breakMode ?? 'manual',
+          autoBreakThresholdMinutes: prev?.autoBreakThresholdMinutes ?? 360,
+          autoBreakDurationMinutes: prev?.autoBreakDurationMinutes ?? 30,
           status: 'working',
           isClockedIn: true,
           isOnBreak: false,
@@ -415,6 +447,9 @@ export function ClockStateProvider({
         setStatusError(null);
         setState((prev) => ({
           organizationId: activeOrgId,
+          breakMode: prev?.breakMode ?? 'manual',
+          autoBreakThresholdMinutes: prev?.autoBreakThresholdMinutes ?? 360,
+          autoBreakDurationMinutes: prev?.autoBreakDurationMinutes ?? 30,
           status: 'working',
           isClockedIn: true,
           clockInTime: prev?.clockInTime ?? result.entry.timestamp,

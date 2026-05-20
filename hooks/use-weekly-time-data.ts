@@ -13,12 +13,19 @@ import {
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
+import {
+  normalizeTimeTrackingSettings,
+  type OrgBreakMode,
+} from '@/lib/time-tracking/settings';
 
 export type DayData = WeeklyTimeDataPoint;
 
 interface UseWeeklyTimeDataOptions {
   organizationId: string;
   userId: string;
+  breakMode: OrgBreakMode;
+  autoBreakThresholdMinutes: number;
+  autoBreakDurationMinutes: number;
   enabled?: boolean;
   initialWeekData?: WeeklyTimeDataPoint[];
   initialTodayIndex?: number;
@@ -28,6 +35,9 @@ interface UseWeeklyTimeDataOptions {
 export function useWeeklyTimeData({
   organizationId,
   userId,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
   enabled = true,
   initialWeekData,
   initialTodayIndex,
@@ -71,7 +81,18 @@ export function useWeeklyTimeData({
         return;
       }
 
-      setWeekData(buildWeeklyTimeData(result.entries || [], monday));
+      setWeekData(
+        buildWeeklyTimeData(
+          result.entries || [],
+          monday,
+          normalizeTimeTrackingSettings({
+            organizationId,
+            breakMode,
+            autoBreakThresholdMinutes,
+            autoBreakDurationMinutes,
+          })
+        )
+      );
       setError(null);
     } catch (err) {
       console.error('Error fetching weekly time data:', err);
@@ -79,7 +100,13 @@ export function useWeeklyTimeData({
     } finally {
       setIsLoading(false);
     }
-  }, [organizationId, userId]);
+  }, [
+    autoBreakDurationMinutes,
+    autoBreakThresholdMinutes,
+    breakMode,
+    organizationId,
+    userId,
+  ]);
 
   useEffect(() => {
     if (hasUsedInitialData.current) {

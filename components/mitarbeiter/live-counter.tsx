@@ -22,13 +22,12 @@ function formatElapsedTime(startTime: Date, baseMinutes: number): string {
 }
 
 export function LiveCounter({ clockInTime, todayMinutes }: LiveCounterProps) {
-  const [elapsed, setElapsed] = useState('00:00:00');
+  const [elapsed, setElapsed] = useState(() =>
+    formatElapsedTime(new Date(clockInTime), todayMinutes)
+  );
 
   useEffect(() => {
     const startTime = new Date(clockInTime);
-
-    // Update immediately
-    setElapsed(formatElapsedTime(startTime, todayMinutes));
 
     // Then update every second
     const interval = setInterval(() => {

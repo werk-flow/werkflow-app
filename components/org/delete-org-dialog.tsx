@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Trash2, Loader2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { deleteOrganization } from '@/lib/org/delete-action';
+import { cn } from '@/lib/utils';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -31,23 +31,25 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 interface DeleteOrgDialogProps {
-  orgId: string;
   orgName: string;
+  disabled?: boolean;
 }
 
-export function DeleteOrgDialog({ orgId, orgName }: DeleteOrgDialogProps) {
+export function DeleteOrgDialog({
+  orgName,
+  disabled = false,
+}: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
   const [confirmationName, setConfirmationName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   const handleDelete = async () => {
     setError(null);
     setIsLoading(true);
 
     try {
-      const result = await deleteOrganization(orgId, confirmationName);
+      const result = await deleteOrganization(confirmationName);
 
       if (result.success) {
         setOpen(false);
@@ -89,7 +91,11 @@ export function DeleteOrgDialog({ orgId, orgName }: DeleteOrgDialogProps) {
         <Button
           variant="destructive"
           size="sm"
-          className="w-full bg-red-500 text-white hover:bg-red-400 dark:bg-red-500 dark:hover:bg-red-400"
+          className={cn(
+            'w-full bg-red-500 text-white hover:bg-red-400 dark:bg-red-500 dark:hover:bg-red-400',
+            disabled && 'cursor-not-allowed opacity-60 saturate-50 hover:bg-red-500'
+          )}
+          disabled={disabled}
         >
           <Trash2 className="size-4" />
           Organisation löschen

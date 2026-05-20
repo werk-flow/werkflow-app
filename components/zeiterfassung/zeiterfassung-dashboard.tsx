@@ -14,11 +14,11 @@ import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { JobPickerModal } from '@/components/job-picker-modal';
 import {
-  computeTimeBreakdown,
   formatDuration,
   getNonNegativeElapsedMs,
   WORK_GOAL_MINUTES,
 } from '@/lib/time-tracking/helpers';
+import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
@@ -94,6 +94,9 @@ export function ZeiterfassungDashboard({
   } = useWeeklyTimeData({
     organizationId,
     userId,
+    breakMode: effectiveState.breakMode,
+    autoBreakThresholdMinutes: effectiveState.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: effectiveState.autoBreakDurationMinutes,
     initialWeekData: initialOverview.weekData,
     initialTodayIndex: initialOverview.todayIndex,
     initialWeekLabel: initialOverview.weekLabel,
@@ -170,21 +173,26 @@ export function ZeiterfassungDashboard({
     effectiveState.isClockedIn,
   ]);
 
-  const liveWorkMinutes =
-    effectiveState.workMinutes +
-    (effectiveState.status === 'working' && effectiveState.statusStartedAt
-      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
-      : 0);
-  const liveBreakMinutes =
-    effectiveState.breakMinutes +
-    (effectiveState.status === 'on_break' && effectiveState.statusStartedAt
-      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
-      : 0);
-  const breakdown = computeTimeBreakdown(liveTotalMinutes, liveBreakMinutes);
+  const trackedLiveBreakMinutes =
+    effectiveState.breakMode === 'manual'
+      ? effectiveState.breakMinutes +
+        (effectiveState.status === 'on_break' && effectiveState.statusStartedAt
+          ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
+          : 0)
+      : effectiveState.breakMinutes;
+  const breakdown = computeBreakdownForSettings(
+    liveTotalMinutes,
+    trackedLiveBreakMinutes,
+    effectiveState
+  );
+  const liveWorkMinutes = breakdown.workMinutes;
+  const liveBreakMinutes = breakdown.breakMinutes;
   const workPercentage = Math.min(
     Math.round((liveWorkMinutes / WORK_GOAL_MINUTES) * 100),
     100
   );
+  const ringTimelineSegments =
+    effectiveState.breakMode === 'manual' ? liveTimelineSegments : undefined;
 
   if (isLoading && !effectiveState) {
     return <ZeiterfassungDashboardSkeleton />;
@@ -210,7 +218,7 @@ export function ZeiterfassungDashboard({
         <TimeProgressRing
           totalMinutes={liveTotalMinutes}
           breakMinutes={liveBreakMinutes}
-          timelineSegments={liveTimelineSegments}
+          timelineSegments={ringTimelineSegments}
           size={260}
           strokeWidth={14}
           isActive={effectiveState.isClockedIn}
@@ -238,6 +246,12 @@ export function ZeiterfassungDashboard({
               ? 'Du machst gerade Pause.'
               : 'Du bist nicht eingestempelt.'}
         </p>
+
+        {effectiveState.breakMode === 'automatic' ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Pausen werden in dieser Organisation automatisch abgezogen.
+          </p>
+        ) : null}
 
         <p className="mt-1 text-sm text-muted-foreground">
           Tagesziel: 8 Stunden Arbeitszeit ({workPercentage}% erreicht)
@@ -306,27 +320,29 @@ export function ZeiterfassungDashboard({
           }
         />
 
-        <MenuCard
-          icon={Coffee}
-          title={effectiveState.isOnBreak ? 'Arbeit fortsetzen' : 'Pause'}
-          subtitle={
-            effectiveState.isOnBreak
-              ? 'Auftrag für die Fortsetzung wählen'
-              : 'Pause jetzt starten'
-          }
-          active={effectiveState.isOnBreak}
-          disabled={!effectiveState.isClockedIn}
-          disabledHint="Stemple zuerst ein"
-          onClick={() => {
-            if (!effectiveState.isClockedIn) return;
-            if (effectiveState.isOnBreak) {
-              setPickerMode('resume');
-              setShowJobPicker(true);
-            } else {
-              void startBreak();
+        {effectiveState.breakMode === 'manual' ? (
+          <MenuCard
+            icon={Coffee}
+            title={effectiveState.isOnBreak ? 'Arbeit fortsetzen' : 'Pause'}
+            subtitle={
+              effectiveState.isOnBreak
+                ? 'Auftrag für die Fortsetzung wählen'
+                : 'Pause jetzt starten'
             }
-          }}
-        />
+            active={effectiveState.isOnBreak}
+            disabled={!effectiveState.isClockedIn}
+            disabledHint="Stemple zuerst ein"
+            onClick={() => {
+              if (!effectiveState.isClockedIn) return;
+              if (effectiveState.isOnBreak) {
+                setPickerMode('resume');
+                setShowJobPicker(true);
+              } else {
+                void startBreak();
+              }
+            }}
+          />
+        ) : null}
 
         <MenuCard
           icon={Car}
@@ -447,6 +463,9 @@ export function ZeiterfassungDashboard({
                   todayIndex={todayIndex}
                   liveTodayMinutes={liveTotalMinutes}
                   liveTodayBreakMinutes={liveBreakMinutes}
+                  liveTodayBreakMode={effectiveState.breakMode}
+                  liveAutoBreakThresholdMinutes={effectiveState.autoBreakThresholdMinutes}
+                  liveAutoBreakDurationMinutes={effectiveState.autoBreakDurationMinutes}
                   narrowBars
                   weekLabel={weekLabel}
                 />

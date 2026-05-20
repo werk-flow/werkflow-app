@@ -14,11 +14,11 @@ export function JoinedBanner() {
   // Get the joined org ID from URL
   const joinedOrgId = searchParams.get('joined');
 
-  // Track if we should show the banner
-  const [showBanner, setShowBanner] = useState(false);
-
   // Track if banner is exiting (for fade-out animation)
   const [isExiting, setIsExiting] = useState(false);
+
+  // Track if we should show the banner
+  const [showBanner, setShowBanner] = useState(false);
 
   // Track if user has dismissed the banner
   const [isDismissed, setIsDismissed] = useState(false);
@@ -26,22 +26,21 @@ export function JoinedBanner() {
   // Track the org ID that was joined (to persist across org switches)
   const [joinedOrgIdState, setJoinedOrgIdState] = useState<string | null>(null);
 
-  // Initialize the joined org ID from URL on mount
   useEffect(() => {
     if (joinedOrgId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- this banner intentionally latches a one-shot URL event before removing the search param
       setJoinedOrgIdState(joinedOrgId);
-      setIsDismissed(false); // Reset dismissed state for new joins
-      setIsExiting(false); // Reset exiting state
-      // Clean up the URL by removing the query param (but keep the state)
+      setIsDismissed(false);
+      setIsExiting(false);
       const url = new URL(window.location.href);
       url.searchParams.delete('joined');
       router.replace(url.pathname + url.search, { scroll: false });
     }
   }, [joinedOrgId, router]);
 
-  // Show/hide banner based on whether the active org matches the joined org
   useEffect(() => {
     if (joinedOrgIdState && activeOrgId && !isDismissed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the visible state mirrors the active org match for this latched URL event
       setShowBanner(activeOrgId === joinedOrgIdState);
     } else if (!isExiting) {
       setShowBanner(false);
@@ -50,7 +49,6 @@ export function JoinedBanner() {
 
   const handleDismiss = useCallback(() => {
     setIsExiting(true);
-    // Wait for fade-out animation to complete before hiding
     setTimeout(() => {
       setIsDismissed(true);
       setShowBanner(false);

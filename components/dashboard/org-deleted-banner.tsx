@@ -20,6 +20,7 @@ export function OrgDeletedBanner() {
   // Initialize from URL on mount
   useEffect(() => {
     if (orgDeleted === 'true') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- this banner intentionally latches a one-shot URL event before cleaning up the query param
       setShowBanner(true);
       setIsExiting(false);
       // Clean up the URL by removing the query param

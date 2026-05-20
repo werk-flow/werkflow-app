@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
+import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
 import { ClientSelectWithCreate } from './client-select-with-create';
@@ -28,6 +29,11 @@ import {
   type JobPriority,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
+import {
+  calculatePlannedWorkingMinutes,
+  formatMinutesAsHoursInput,
+  parseHoursInputToMinutes,
+} from '@/lib/jobs/planned-working';
 import { toLocalDateString } from '@/lib/utils';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
@@ -96,6 +102,8 @@ export function CreateJobFormContent({
   const [estimatedHours, setEstimatedHours] = useState(defaultDurationHours ?? '');
   const [location, setLocation] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>(defaultEmployeeIds ?? []);
+  const [plannedWorkingHours, setPlannedWorkingHours] = useState('');
+  const [plannedWorkingTouched, setPlannedWorkingTouched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -109,6 +117,23 @@ export function CreateJobFormContent({
       if (result.success) setJobNumber(result.jobNumber);
     });
   }, [isActive]);
+
+  const suggestedPlannedWorkingMinutes = useMemo(
+    () =>
+      calculatePlannedWorkingMinutes(
+        parseHoursInputToMinutes(estimatedHours),
+        selectedEmployees.length
+      ),
+    [estimatedHours, selectedEmployees.length]
+  );
+
+  useEffect(() => {
+    if (plannedWorkingTouched) return;
+
+    setPlannedWorkingHours(
+      formatMinutesAsHoursInput(suggestedPlannedWorkingMinutes)
+    );
+  }, [plannedWorkingTouched, suggestedPlannedWorkingMinutes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,9 +157,10 @@ export function CreateJobFormContent({
     setSuccess(false);
 
     try {
-      const hoursNum = parseFloat(estimatedHours);
-      const durationMinutes =
-        !isNaN(hoursNum) && hoursNum > 0 ? Math.round(hoursNum * 60) : undefined;
+      const durationMinutes = parseHoursInputToMinutes(estimatedHours);
+      const plannedWorkingMinutes = plannedWorkingTouched
+        ? parseHoursInputToMinutes(plannedWorkingHours)
+        : suggestedPlannedWorkingMinutes;
 
       const input: CreateJobInput = {
         title: title.trim(),
@@ -147,7 +173,8 @@ export function CreateJobFormContent({
           ? toLocalDateString(plannedDate)
           : undefined,
         plannedTime: plannedTime || undefined,
-        estimatedDurationMinutes: durationMinutes,
+        estimatedDurationMinutes: durationMinutes ?? undefined,
+        plannedWorkingMinutes,
         location: location.trim() || undefined
       };
 
@@ -392,14 +419,11 @@ export function CreateJobFormContent({
 
         <div className="grid gap-2">
           <Label htmlFor="job-duration">Geschätzte Dauer (Stunden)</Label>
-          <Input
+          <DurationHoursInput
             id="job-duration"
-            type="number"
-            min="0"
-            step="0.5"
             placeholder="z.B. 2.5"
             value={estimatedHours}
-            onChange={(e) => setEstimatedHours(e.target.value)}
+            onChange={setEstimatedHours}
             disabled={formDisabled}
           />
         </div>
@@ -423,6 +447,27 @@ export function CreateJobFormContent({
             onSelectionChange={setSelectedEmployees}
             disabled={formDisabled}
           />
+        </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="job-planned-working">
+            Geplanter Arbeitsaufwand (Stunden)
+          </Label>
+          <DurationHoursInput
+            id="job-planned-working"
+            placeholder="z.B. 5"
+            value={plannedWorkingHours}
+            onChange={(value) => {
+              setPlannedWorkingTouched(true);
+              setPlannedWorkingHours(value);
+            }}
+            disabled={formDisabled}
+          />
+          <p className="text-xs text-muted-foreground">
+            {!plannedWorkingTouched
+              ? 'Wird automatisch aus geschätzter Dauer × Mitarbeiter vorbelegt.'
+              : 'Manuell angepasst. Weitere Änderungen an Dauer oder Mitarbeitern überschreiben diesen Wert nicht.'}
+          </p>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

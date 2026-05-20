@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useTransition, useMemo } from 'react';
+import { useState, useCallback, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw, Plus, ChevronRight } from 'lucide-react';
 
@@ -19,12 +19,15 @@ import {
   type Project,
   type Client,
   type Job,
-  type UnifiedStatus,
   type ProjectWithDetails,
   type UnifiedListEntry,
   type FilterState,
   type SortColumn,
 } from '@/lib/jobs/types';
+import {
+  resolveAuftraegeSortColumn,
+  type AuftraegeColumnId,
+} from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
@@ -45,6 +48,7 @@ interface AuftraegeContentProps {
   members: OrgMemberOption[];
   jobAssignmentMap: Record<string, string[]>;
   isAdminOrManager: boolean;
+  visibleColumns: AuftraegeColumnId[];
 }
 
 function applyDropdownFilters(
@@ -106,10 +110,10 @@ export function AuftraegeContent({
   members,
   jobAssignmentMap: initialJobAssignmentMap,
   isAdminOrManager,
+  visibleColumns,
 }: AuftraegeContentProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [prevEntryCount, setPrevEntryCount] = useState(0);
   const {
     jobs,
     setJobs,
@@ -152,10 +156,6 @@ export function AuftraegeContent({
     [jobs, projects]
   );
 
-  useEffect(() => {
-    setPrevEntryCount(unifiedEntries.length);
-  }, [unifiedEntries.length]);
-
   const { active: rawActive, parked: rawParked, archived: rawArchived } = useMemo(
     () => splitEntries(unifiedEntries),
     [unifiedEntries]
@@ -172,6 +172,7 @@ export function AuftraegeContent({
   }, [rawActive]);
 
   const filteredActive = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(activeSortCol, visibleColumns);
     let result = rawActive;
     if (activeStatusFilter !== 'alle') {
       result = result.filter(
@@ -182,31 +183,33 @@ export function AuftraegeContent({
       result = result.filter((e) => matchesSearch(e, activeSearch, clientMap));
     }
     result = applyDropdownFilters(result, activeFilters, jobAssignmentMap);
-    result = sortUnifiedEntries(result, activeSortCol, activeSortDir, clientMap);
+    result = sortUnifiedEntries(result, effectiveSortColumn, activeSortDir, clientMap);
     return result;
-  }, [rawActive, activeStatusFilter, activeSearch, activeFilters, activeSortCol, activeSortDir, clientMap, jobAssignmentMap]);
+  }, [rawActive, activeStatusFilter, activeSearch, activeFilters, activeSortCol, activeSortDir, clientMap, jobAssignmentMap, visibleColumns]);
 
   // Parkplatz section pipeline: search -> dropdown filters -> sort
   const filteredParked = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns);
     let result = rawParked;
     if (parkplatzSearch) {
       result = result.filter((e) => matchesSearch(e, parkplatzSearch, clientMap));
     }
     result = applyDropdownFilters(result, parkplatzFilters, jobAssignmentMap);
-    result = sortUnifiedEntries(result, parkplatzSortCol, parkplatzSortDir, clientMap);
+    result = sortUnifiedEntries(result, effectiveSortColumn, parkplatzSortDir, clientMap);
     return result;
-  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap]);
+  }, [rawParked, parkplatzSearch, parkplatzFilters, parkplatzSortCol, parkplatzSortDir, clientMap, jobAssignmentMap, visibleColumns]);
 
   // Archive section pipeline: search -> dropdown filters -> sort
   const filteredArchived = useMemo(() => {
+    const effectiveSortColumn = resolveAuftraegeSortColumn(archiveSortCol, visibleColumns);
     let result = rawArchived;
     if (archiveSearch) {
       result = result.filter((e) => matchesSearch(e, archiveSearch, clientMap));
     }
     result = applyDropdownFilters(result, archiveFilters, jobAssignmentMap);
-    result = sortUnifiedEntries(result, archiveSortCol, archiveSortDir, clientMap);
+    result = sortUnifiedEntries(result, effectiveSortColumn, archiveSortDir, clientMap);
     return result;
-  }, [rawArchived, archiveSearch, archiveFilters, archiveSortCol, archiveSortDir, clientMap, jobAssignmentMap]);
+  }, [rawArchived, archiveSearch, archiveFilters, archiveSortCol, archiveSortDir, clientMap, jobAssignmentMap, visibleColumns]);
 
   const handleParkplatzSort = useCallback((col: SortColumn) => {
     if (col === parkplatzSortCol) {
@@ -218,9 +221,8 @@ export function AuftraegeContent({
   }, [parkplatzSortCol]);
 
   const handleRefresh = useCallback(() => {
-    setPrevEntryCount(unifiedEntries.length);
     startTransition(() => { router.refresh(); });
-  }, [router, unifiedEntries.length]);
+  }, [router]);
 
   const handleJobUpsert = useCallback((job: Job) => {
     setJobs((prev) => {
@@ -435,13 +437,14 @@ export function AuftraegeContent({
             clientMap={clientMap}
             isAdminOrManager={isAdminOrManager}
             isLoading={isPending}
-            skeletonCount={prevEntryCount}
-            sortColumn={activeSortCol}
+            skeletonCount={Math.max(filteredActive.length, rawActive.length, 1)}
+            sortColumn={resolveAuftraegeSortColumn(activeSortCol, visibleColumns)}
             sortDirection={activeSortDir}
             onSort={handleActiveSort}
             jobAssignmentMap={jobAssignmentMap}
             clients={clients}
             members={members}
+            visibleColumns={visibleColumns}
             onJobUpdated={handleJobEdited}
             onJobDeleted={handleJobDelete}
             onProjectUpdated={handleProjectEdited}
@@ -485,12 +488,13 @@ export function AuftraegeContent({
                 entries={filteredParked}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
-                sortColumn={parkplatzSortCol}
+                sortColumn={resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns)}
                 sortDirection={parkplatzSortDir}
                 onSort={handleParkplatzSort}
                 jobAssignmentMap={jobAssignmentMap}
                 clients={clients}
                 members={members}
+                visibleColumns={visibleColumns}
                 onJobUpdated={handleJobEdited}
                 onJobDeleted={handleJobDelete}
                 onProjectUpdated={handleProjectEdited}
@@ -536,13 +540,14 @@ export function AuftraegeContent({
                 entries={filteredArchived}
                 clientMap={clientMap}
                 isAdminOrManager={isAdminOrManager}
-                sortColumn={archiveSortCol}
+                sortColumn={resolveAuftraegeSortColumn(archiveSortCol, visibleColumns)}
                 sortDirection={archiveSortDir}
                 onSort={handleArchiveSort}
                 isArchive
                 jobAssignmentMap={jobAssignmentMap}
                 clients={clients}
                 members={members}
+                visibleColumns={visibleColumns}
                 onJobUpdated={handleJobEdited}
                 onJobDeleted={handleJobDelete}
                 onProjectUpdated={handleProjectEdited}
