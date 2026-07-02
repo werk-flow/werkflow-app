@@ -80,7 +80,6 @@ export type CalendarEntryDialogOptionsResult =
       members: CalendarEntryDialogMember[];
       projects: ProjectWithDetails[];
       manualEntryJobs: CalendarEntryDialogJobOption[];
-      nextJobNumber: string | null;
     }
   | { success: false; error: string };
 
@@ -189,7 +188,7 @@ export async function getCalendarEntryDialogOptions(): Promise<CalendarEntryDial
   }
 
   const admin = createSupabaseAdminClient();
-  const [clientsResult, membersResult, projectsResult, jobsResult, nextJobNumberResult] =
+  const [clientsResult, membersResult, projectsResult, jobsResult] =
     await Promise.all([
       admin
         .from('clients')
@@ -211,9 +210,6 @@ export async function getCalendarEntryDialogOptions(): Promise<CalendarEntryDial
         .eq('organization_id', auth.context.orgId)
         .order('planned_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: false }),
-      admin.rpc('generate_job_number', {
-        p_org_id: auth.context.orgId,
-      }),
     ]);
 
   if (clientsResult.error) return { success: false, error: 'clients_failed' };
@@ -303,19 +299,12 @@ export async function getCalendarEntryDialogOptions(): Promise<CalendarEntryDial
         : null,
     }));
 
-  if (nextJobNumberResult.error) {
-    console.error('Error generating calendar dialog job number:', nextJobNumberResult.error);
-  }
-
   return {
     success: true,
     clients,
     members,
     projects,
     manualEntryJobs,
-    nextJobNumber: typeof nextJobNumberResult.data === 'string'
-      ? nextJobNumberResult.data
-      : null,
   };
 }
 

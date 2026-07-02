@@ -70,6 +70,15 @@ import { getEffectiveTimeEntries } from './effective-entries';
 import { computeBreakdownForSettings } from './settings';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 
+const STALE_SESSION_LOOKBACK_DAYS = 92;
+const STALE_SESSION_LOOKUP_LIMIT = 500;
+const STALE_SESSION_USER_BATCH_SIZE = 10;
+const STALE_SESSION_OPEN_ENTRY_TYPES: TimeEntryType[] = [
+  'clock_in',
+  'break_start',
+  'break_end'
+];
+
 function isWorkingEntryType(entryType: string): boolean {
   return entryType === 'clock_in' || entryType === 'break_end';
 }
@@ -302,6 +311,14 @@ function buildAutoCloseInsert(entry: TimeEntry): TimeEntryInsert {
   };
 }
 
+function getStaleSessionLookbackStart(referenceDate: Date): string {
+  const lookbackDate = new Date(
+    referenceDate.getTime() - STALE_SESSION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  return getLocalDayStart(lookbackDate).toISOString();
+}
+
 async function closeStaleOpenSessionsForUser(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
@@ -311,12 +328,14 @@ async function closeStaleOpenSessionsForUser(
   const effectiveReferenceDate =
     referenceDate.getTime() > Date.now() ? new Date() : referenceDate;
   const staleCutoff = getLocalDayStart(effectiveReferenceDate).toISOString();
+  const staleLookbackStart = getStaleSessionLookbackStart(effectiveReferenceDate);
 
   const { data, error } = await admin
     .from('time_entries')
     .select('*')
     .eq('user_id', userId)
     .eq('organization_id', orgId)
+    .gte('timestamp', staleLookbackStart)
     .lt('timestamp', staleCutoff)
     .neq('status', 'rejected')
     .neq('status', 'pending_delete')
@@ -431,14 +450,19 @@ async function closeStaleOpenSessionsForOrg(
   const effectiveReferenceDate =
     referenceDate.getTime() > Date.now() ? new Date() : referenceDate;
   const staleCutoff = getLocalDayStart(effectiveReferenceDate).toISOString();
+  const staleLookbackStart = getStaleSessionLookbackStart(effectiveReferenceDate);
 
   const { data, error } = await admin
     .from('time_entries')
     .select('user_id')
     .eq('organization_id', orgId)
+    .gte('timestamp', staleLookbackStart)
     .lt('timestamp', staleCutoff)
+    .in('entry_type', STALE_SESSION_OPEN_ENTRY_TYPES)
     .neq('status', 'rejected')
-    .neq('status', 'pending_delete');
+    .neq('status', 'pending_delete')
+    .order('timestamp', { ascending: false })
+    .limit(STALE_SESSION_LOOKUP_LIMIT);
 
   if (error) {
     console.error('Error loading stale users for org auto-close:', error);
@@ -446,12 +470,22 @@ async function closeStaleOpenSessionsForOrg(
   }
 
   const userIds = [...new Set((data || []).map((entry) => entry.user_id))];
-  for (const staleUserId of userIds) {
-    await closeStaleOpenSessionsForUser(
-      admin,
-      staleUserId,
-      orgId,
-      effectiveReferenceDate
+  for (
+    let index = 0;
+    index < userIds.length;
+    index += STALE_SESSION_USER_BATCH_SIZE
+  ) {
+    const userBatch = userIds.slice(index, index + STALE_SESSION_USER_BATCH_SIZE);
+
+    await Promise.all(
+      userBatch.map((staleUserId) =>
+        closeStaleOpenSessionsForUser(
+          admin,
+          staleUserId,
+          orgId,
+          effectiveReferenceDate
+        )
+      )
     );
   }
 }

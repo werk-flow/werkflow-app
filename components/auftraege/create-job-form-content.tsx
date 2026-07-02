@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -94,6 +94,7 @@ export function CreateJobFormContent({
   onSuccess,
   isActive = true,
 }: CreateJobFormContentProps) {
+  const previousInitialJobNumberRef = useRef(initialJobNumber ?? '');
   const [jobNumber, setJobNumber] = useState(initialJobNumber ?? '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -115,16 +116,36 @@ export function CreateJobFormContent({
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (initialJobNumber && !jobNumber) {
-      setJobNumber(initialJobNumber);
+    const previousInitialJobNumber = previousInitialJobNumberRef.current;
+    const nextInitialJobNumber = initialJobNumber ?? '';
+
+    if (nextInitialJobNumber) {
+      setJobNumber((currentJobNumber) =>
+        !currentJobNumber || currentJobNumber === previousInitialJobNumber
+          ? nextInitialJobNumber
+          : currentJobNumber
+      );
     }
-  }, [initialJobNumber, jobNumber]);
+
+    previousInitialJobNumberRef.current =
+      nextInitialJobNumber || previousInitialJobNumber;
+  }, [initialJobNumber]);
 
   useEffect(() => {
     if (!isActive || initialJobNumber || jobNumber) return;
+    let isCurrent = true;
+
     getNextJobNumber().then((result) => {
-      if (result.success) setJobNumber(result.jobNumber);
+      if (!isCurrent || !result.success) return;
+
+      setJobNumber((currentJobNumber) =>
+        currentJobNumber || result.jobNumber
+      );
     });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [initialJobNumber, isActive, jobNumber]);
 
   const suggestedPlannedWorkingMinutes = useMemo(

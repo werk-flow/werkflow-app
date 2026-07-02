@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Briefcase, Clock } from 'lucide-react';
 import {
   Dialog,
@@ -29,7 +29,6 @@ type CalendarEntryDialogData = {
   projects: ProjectWithDetails[];
   members: CalendarEntryDialogMember[];
   manualEntryJobs: CalendarEntryDialogJobOption[];
-  nextJobNumber: string | null;
 };
 
 const dialogDataCache = new Map<string, CalendarEntryDialogData>();
@@ -62,7 +61,6 @@ async function loadCalendarEntryDialogData(
         projects: result.projects,
         members: result.members,
         manualEntryJobs: result.manualEntryJobs,
-        nextJobNumber: result.nextJobNumber,
       };
       dialogDataCache.set(organizationId, data);
       return data;
@@ -103,16 +101,25 @@ export function CalendarEntryDialog({
   onJobSuccess,
 }: CalendarEntryDialogProps) {
   const { activeOrg, activeOrgId } = useOrganization();
+  const activeOrgIdRef = useRef(activeOrgId);
   const [activeTab, setActiveTab] = useState<string>('job');
   const [loadedDialogData, setLoadedDialogData] = useState<{
     organizationId: string;
     data: CalendarEntryDialogData | null;
   } | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(
-    activeOrgId ? dialogDataPromiseCache.has(activeOrgId) : false
+  const [loadingDialogOrgId, setLoadingDialogOrgId] = useState<string | null>(
+    activeOrgId && dialogDataPromiseCache.has(activeOrgId) ? activeOrgId : null
   );
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const isLoadingData = activeOrgId
+    ? loadingDialogOrgId === activeOrgId
+    : false;
+
+  useEffect(() => {
+    activeOrgIdRef.current = activeOrgId;
+  }, [activeOrgId]);
+
   const dialogData = useMemo(() => {
     if (!activeOrgId) {
       return null;
@@ -153,11 +160,19 @@ export function CalendarEntryDialog({
   const hydrateDialogData = useCallback(
     async (organizationId: string) => {
       const hasCachedData = dialogDataCache.has(organizationId);
-      setIsLoadingData(!hasCachedData);
+      if (activeOrgIdRef.current === organizationId) {
+        setLoadingDialogOrgId(hasCachedData ? null : organizationId);
+      }
 
       const data = await loadCalendarEntryDialogData(organizationId);
+      if (activeOrgIdRef.current !== organizationId) {
+        return data;
+      }
+
       setLoadedDialogData({ organizationId, data });
-      setIsLoadingData(false);
+      setLoadingDialogOrgId((currentOrgId) =>
+        currentOrgId === organizationId ? null : currentOrgId
+      );
       return data;
     },
     []
@@ -168,9 +183,6 @@ export function CalendarEntryDialog({
 
     dialogDataCache.delete(activeOrgId);
     dialogDataPromiseCache.delete(activeOrgId);
-    setLoadedDialogData((current) =>
-      current?.organizationId === activeOrgId ? null : current
-    );
 
     if (open) {
       void hydrateDialogData(activeOrgId);
@@ -185,22 +197,20 @@ export function CalendarEntryDialog({
   useRealtimeEvent('profiles', invalidateDialogData);
 
   useEffect(() => {
-    if (!activeOrgId || !isAdminOrManager || dialogDataCache.has(activeOrgId)) {
+    if (!activeOrgId || !isAdminOrManager) {
       return;
     }
 
-    let cancelled = false;
+    if (dialogDataCache.has(activeOrgId)) {
+      return;
+    }
 
-    loadCalendarEntryDialogData(activeOrgId)
-      .then((data) => {
-        if (cancelled) return;
-        setLoadedDialogData({ organizationId: activeOrgId, data });
-      });
+    const hydrateTimer = window.setTimeout(() => {
+      void hydrateDialogData(activeOrgId);
+    }, 0);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrgId, isAdminOrManager]);
+    return () => window.clearTimeout(hydrateTimer);
+  }, [activeOrgId, hydrateDialogData, isAdminOrManager]);
 
   useEffect(() => {
     if (!open || !activeOrgId || !isAdminOrManager) return;
@@ -211,7 +221,11 @@ export function CalendarEntryDialog({
       return;
     }
 
-    void hydrateDialogData(activeOrgId);
+    const hydrateTimer = window.setTimeout(() => {
+      void hydrateDialogData(activeOrgId);
+    }, 0);
+
+    return () => window.clearTimeout(hydrateTimer);
   }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
 
   return (
@@ -251,7 +265,6 @@ export function CalendarEntryDialog({
               clients={dialogData?.clients ?? []}
               members={jobMembers}
               projects={dialogData?.projects ?? []}
-              initialJobNumber={dialogData?.nextJobNumber}
               defaultDate={preselectedDate}
               defaultTime={preselectedClockInTime}
               defaultDurationHours={defaultDurationHours}
