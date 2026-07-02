@@ -7,7 +7,6 @@ import {
   Building2,
   FolderOpen,
   Users,
-  FileText,
   Clock,
   Trash2,
   MoreVertical,
@@ -56,7 +55,7 @@ import {
   type MetadataField,
 } from '@/components/shared/metadata-section';
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
-import { PlaceholderSection } from '@/components/shared/placeholder-section';
+import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
@@ -100,6 +99,7 @@ import {
   normalizeJobPlannedTime,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
+import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
@@ -200,6 +200,7 @@ interface JobDetailContentProps {
   projects?: ProjectWithDetails[];
   isAdminOrManager: boolean;
   instructionItems: JobInstructionItemWithDetails[];
+  documents: OrganizationDocument[];
   currentUserId: string;
 }
 
@@ -211,6 +212,7 @@ export function JobDetailContent({
   projects = [],
   isAdminOrManager,
   instructionItems,
+  documents,
   currentUserId,
 }: JobDetailContentProps) {
   const router = useRouter();
@@ -1220,10 +1222,14 @@ export function JobDetailContent({
               />
             )}
 
-            <PlaceholderSection
-              title="Dokumente"
-              description="Dokumente und Dateien werden hier in einer zukünftigen Version verfügbar sein."
-              icon={<FileText className="size-8" />}
+            <ContextualDocumentsSection
+              title="Dokumente & Bilder"
+              description="Lade Dateien zu diesem Auftrag hoch oder verknüpfe vorhandene Dokumente."
+              documents={documents}
+              jobId={liveJob.id}
+              contextLabel={liveJob.title}
+              canUpload
+              canManage={isAdminOrManager}
             />
 
             {/* Zeiterfassung und Aktivität */}

@@ -20,10 +20,19 @@ export type RealtimeTable =
   | 'time_entries'
   | 'entry_change_requests'
   | 'organization_invites'
+  | 'organization_members'
+  | 'organization_settings'
+  | 'profiles'
+  | 'clients'
   | 'jobs'
   | 'projects'
   | 'job_assignments'
-  | 'job_instruction_items';
+  | 'job_instruction_items'
+  | 'document_folders'
+  | 'documents'
+  | 'document_links'
+  | 'document_audit_events'
+  | 'document_versions';
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
@@ -42,10 +51,19 @@ const TABLES: RealtimeTable[] = [
   'time_entries',
   'entry_change_requests',
   'organization_invites',
+  'organization_members',
+  'organization_settings',
+  'profiles',
+  'clients',
   'jobs',
   'projects',
   'job_assignments',
-  'job_instruction_items'
+  'job_instruction_items',
+  'document_folders',
+  'documents',
+  'document_links',
+  'document_audit_events',
+  'document_versions'
 ];
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -166,6 +184,49 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           {
             event: '*',
             schema: 'public',
+            table: 'organization_members',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_members', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_settings',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_settings', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'profiles'
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('profiles', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'clients',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('clients', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
             table: 'jobs',
             filter: `organization_id=eq.${activeOrgId}`
           },
@@ -206,6 +267,61 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('job_instruction_items', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'document_folders',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('document_folders', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'documents',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('documents', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'document_links',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('document_links', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'document_audit_events',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('document_audit_events', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'document_versions',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('document_versions', p)
         )
         .subscribe((status: string, err?: Error) => {
           if (isDev) {

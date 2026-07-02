@@ -5,6 +5,7 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
+import { getJobDocuments } from '@/lib/documents/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { toClient } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
@@ -45,6 +46,9 @@ async function NestedJobDetailData({
   const instructionItemsResultPromise = jobResultPromise.then((result) =>
     result.success ? getJobInstructionItems(result.job.id) : null
   );
+  const documentsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobDocuments(result.job.id) : null
+  );
 
   const [
     projectResult,
@@ -52,6 +56,7 @@ async function NestedJobDetailData({
     membersResult,
     clientsResult,
     instructionItemsResult,
+    documentsResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -62,6 +67,7 @@ async function NestedJobDetailData({
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
     instructionItemsResultPromise,
+    documentsResultPromise,
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -96,6 +102,8 @@ async function NestedJobDetailData({
     instructionItemsResult && instructionItemsResult.success
       ? instructionItemsResult.items
       : [];
+  const documents =
+    documentsResult && documentsResult.success ? documentsResult.documents : [];
 
   if (job.project?.id !== project.id) {
     return (
@@ -118,6 +126,7 @@ async function NestedJobDetailData({
       projects={[]}
       isAdminOrManager={isAdminOrManager}
       instructionItems={instructionItems}
+      documents={documents}
       currentUserId={user.id}
     />
   );

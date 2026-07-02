@@ -9,6 +9,7 @@ import {
   getCachedUser,
 } from '@/lib/data/cached';
 import { getClientDetail } from '@/lib/clients/actions';
+import { getClientDocuments } from '@/lib/documents/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
@@ -44,9 +45,16 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
 
   const admin = createSupabaseAdminClient();
 
-  const [clientResult, jobsResult, clientsResult, membersResult] = await Promise.all([
+  const [
+    clientResult,
+    jobsResult,
+    clientDocumentsResult,
+    clientsResult,
+    membersResult,
+  ] = await Promise.all([
     getClientDetail(clientId),
     getJobsForClient(clientId),
+    getClientDocuments(clientId),
     admin
       .from('clients')
       .select('*')
@@ -91,6 +99,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   return (
     <KundenDetailContent
       client={client}
+      documents={clientDocumentsResult.success ? clientDocumentsResult.documents : []}
       jobs={jobsData.jobs}
       projects={jobsData.projects}
       clientMap={jobsData.clientMap}

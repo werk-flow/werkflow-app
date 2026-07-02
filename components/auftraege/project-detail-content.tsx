@@ -13,7 +13,6 @@ import Link from 'next/link';
 import {
   Plus,
   Building2,
-  FileText,
   Clock,
   ChevronDown,
   Trash2,
@@ -50,7 +49,7 @@ import {
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
-import { PlaceholderSection } from '@/components/shared/placeholder-section';
+import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
@@ -88,6 +87,7 @@ import {
   CLIENT_TYPE_LABELS,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
+import type { OrganizationDocument, ProjectJobDocumentGroup } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
 
 const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
@@ -169,6 +169,8 @@ interface ProjectDetailContentProps {
   clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
+  projectDocuments: OrganizationDocument[];
+  jobDocumentGroups: ProjectJobDocumentGroup[];
 }
 
 export function ProjectDetailContent({
@@ -178,6 +180,8 @@ export function ProjectDetailContent({
   clients,
   members,
   isAdminOrManager,
+  projectDocuments,
+  jobDocumentGroups,
 }: ProjectDetailContentProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -795,10 +799,15 @@ export function ProjectDetailContent({
               )}
             </div>
 
-            <PlaceholderSection
+            <ContextualDocumentsSection
               title="Dokumente"
-              description="Dokumente und Dateien werden hier in einer zukünftigen Version verfügbar sein."
-              icon={<FileText className="size-8" />}
+              description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
+              documents={projectDocuments}
+              jobDocumentGroups={jobDocumentGroups}
+              projectId={liveProject.id}
+              contextLabel={liveProject.name}
+              canUpload={isAdminOrManager}
+              canManage={isAdminOrManager}
             />
 
             {/* Project Time Summary */}

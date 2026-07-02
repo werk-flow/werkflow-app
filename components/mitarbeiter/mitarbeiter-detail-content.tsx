@@ -42,6 +42,7 @@ import {
   type MetadataField,
 } from '@/components/shared/metadata-section';
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
+import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 
@@ -71,6 +72,7 @@ import type {
   ProjectWithDetails,
   Client,
 } from '@/lib/jobs/types';
+import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { cn } from '@/lib/utils';
@@ -155,6 +157,7 @@ interface MitarbeiterDetailContentProps {
   currentUserRole: OrgRole;
   isAdminOrManager: boolean;
   visibleColumns: AuftraegeColumnId[];
+  documents: OrganizationDocument[];
   breakMode: OrgBreakMode;
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
@@ -175,6 +178,7 @@ export function MitarbeiterDetailContent({
   currentUserRole,
   isAdminOrManager,
   visibleColumns,
+  documents,
   breakMode,
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
@@ -383,6 +387,18 @@ export function MitarbeiterDetailContent({
               fields={metadataFields}
               isEditable={canManage}
             />
+
+            <div className="min-w-0 md:col-span-2 2xl:col-span-1">
+              <ContextualDocumentsSection
+                title="Dokumente & Bilder"
+                description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
+                documents={documents}
+                employeeId={member.userId}
+                contextLabel={fullName}
+                canUpload={isAdminOrManager}
+                canManage={isAdminOrManager}
+              />
+            </div>
 
             {/* Live Status Card (compact) */}
             <div className="rounded-lg border bg-card p-3 sm:p-4">

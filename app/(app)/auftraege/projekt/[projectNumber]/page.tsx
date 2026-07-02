@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { getProjectDocumentsOverview } from '@/lib/documents/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
 import { ActionBanner } from '@/components/shared/action-banner';
@@ -39,13 +40,20 @@ async function ProjectDetailData({
     currentUserRole === 'admin' || currentUserRole === 'buero';
   const admin = createSupabaseAdminClient();
 
-  const [result, clientsResult] = await Promise.all([
-    getProjectByNumber(decodeURIComponent(projectNumber)),
+  const projectResultPromise = getProjectByNumber(decodeURIComponent(projectNumber));
+  const documentsResultPromise = projectResultPromise.then(async (result) => {
+    if (!result.success) return null;
+    return getProjectDocumentsOverview(result.details.project.id, result.details.jobs);
+  });
+
+  const [result, clientsResult, documentsResult] = await Promise.all([
+    projectResultPromise,
     admin
       .from('clients')
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
+    documentsResultPromise,
   ]);
 
   if (!result.success) {
@@ -67,6 +75,10 @@ async function ProjectDetailData({
   const { project, client, jobs, derivedStatus } = result.details;
 
   const clients: Client[] = (clientsResult.data ?? []).map(toClient);
+  const projectDocuments =
+    documentsResult && documentsResult.success ? documentsResult.projectDocuments : [];
+  const jobDocumentGroups =
+    documentsResult && documentsResult.success ? documentsResult.jobDocumentGroups : [];
 
   return (
     <>
@@ -85,6 +97,8 @@ async function ProjectDetailData({
         clients={clients}
         members={[]}
         isAdminOrManager={isAdminOrManager}
+        projectDocuments={projectDocuments}
+        jobDocumentGroups={jobDocumentGroups}
       />
     </>
   );

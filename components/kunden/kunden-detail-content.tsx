@@ -34,8 +34,8 @@ import {
   MetadataSection,
   type MetadataField,
 } from '@/components/shared/metadata-section';
-import { PlaceholderSection } from '@/components/shared/placeholder-section';
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
+import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 
 import { updateClient, deleteClient } from '@/lib/clients/actions';
 import {
@@ -45,6 +45,7 @@ import {
   type Job,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
+import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
@@ -58,6 +59,7 @@ function formatDate(dateStr: string): string {
 
 interface KundenDetailContentProps {
   client: Client;
+  documents: OrganizationDocument[];
   jobs: Job[];
   projects: ProjectWithDetails[];
   clientMap: Record<string, string>;
@@ -70,6 +72,7 @@ interface KundenDetailContentProps {
 
 export function KundenDetailContent({
   client,
+  documents,
   jobs,
   projects,
   clientMap,
@@ -279,10 +282,14 @@ export function KundenDetailContent({
                 </p>
               </div>
 
-              <PlaceholderSection
+              <ContextualDocumentsSection
                 title="Dokumente"
-                description="Verträge, Angebote und andere Dokumente werden hier in einer zukünftigen Version angezeigt."
-                icon={<Receipt className="size-8" />}
+                description="Verträge, Angebote, Rechnungen und weitere Kundendokumente."
+                documents={documents}
+                clientId={client.id}
+                contextLabel={client.name}
+                canUpload={isAdminOrManager}
+                canManage={isAdminOrManager}
               />
             </div>
           </div>

@@ -4,6 +4,10 @@ import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
+  getEmployeeDocuments,
+} from '@/lib/documents/actions';
+import type { OrganizationDocument } from '@/lib/documents/types';
+import {
   getCachedMemberships,
   getCachedOrganizationSettings,
   getCachedOrganizationUserPreferences,
@@ -55,6 +59,7 @@ async function MitarbeiterDetailData({
     membersResult,
     allProjectsResult,
     allJobsResult,
+    documentsResult,
     organizationSettings,
     organizationUserPreferences,
   ] = await Promise.all([
@@ -75,6 +80,7 @@ async function MitarbeiterDetailData({
       .from('jobs')
       .select('id, project_id, status')
       .eq('organization_id', activeOrgId),
+    getEmployeeDocuments(targetUserId),
     getCachedOrganizationSettings(activeOrgId),
     getCachedOrganizationUserPreferences(activeOrgId, user.id),
   ]);
@@ -139,6 +145,9 @@ async function MitarbeiterDetailData({
     ).values()
   );
   const { visibleColumns } = organizationUserPreferences;
+  const documents: OrganizationDocument[] = documentsResult.success
+    ? documentsResult.documents
+    : [];
 
   return (
     <MitarbeiterDetailContent
@@ -156,6 +165,7 @@ async function MitarbeiterDetailData({
       currentUserRole={currentUserRole!}
       isAdminOrManager={isAdminOrManager}
       visibleColumns={visibleColumns}
+      documents={documents}
       breakMode={organizationSettings.breakMode}
       autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
       autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}

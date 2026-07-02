@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-
 import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfassung-page-skeleton';
 import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
+import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   PendingApprovalCountProvider,
@@ -71,6 +72,12 @@ const navItems: NavItem[] = [
     href: '/auftraege',
     label: 'Aufträge',
     icon: Briefcase
+  },
+  {
+    href: '/dokumente',
+    label: 'Dokumente',
+    icon: FileText,
+    managerOrAbove: true
   },
   {
     href: '/mitarbeiter',
@@ -159,7 +166,6 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
   const { pendingApprovalCount } = usePendingApprovalCount();
-  const [optimisticPath, setOptimisticPath] = useState<string | null>(null);
 
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
@@ -168,12 +174,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     (item) => !item.managerOrAbove || isAdminOrManager
   );
 
-  // Use optimistic path for instant visual feedback; fall back to real pathname
-  const activePath =
-    optimisticPath && optimisticPath !== pathname ? optimisticPath : pathname;
+  const activePath = pathname;
 
-  function handleNavClick(href: string) {
-    setOptimisticPath(href);
+  function handleNavClick() {
     onNavigate?.();
   }
 
@@ -184,7 +187,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Link
           href="/dashboard"
           className="flex items-center"
-          onClick={() => handleNavClick('/dashboard')}
+          onClick={handleNavClick}
         >
           <Image
             src="/logo-text-light.svg"
@@ -230,7 +233,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={() => handleNavClick(item.href)}
+                  onClick={handleNavClick}
                   className={cn(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                     isActive
@@ -404,6 +407,7 @@ function OrgSwitchOverlay() {
     if (pathname.startsWith('/zeiterfassung')) return <ZeiterfassungPageSkeleton />;
     if (pathname.startsWith('/kunden')) return <KundenPageSkeleton />;
     if (pathname.startsWith('/auftraege')) return <AuftraegePageSkeleton />;
+    if (pathname.startsWith('/dokumente')) return <DokumentePageSkeleton />;
     return null;
   }, [pathname]);
 
