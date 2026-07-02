@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -77,6 +77,18 @@ export function DocumentUploadDialog({
   const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
+  const closeTimeoutRef = useRef<number | null>(null);
+  const startedItemsKeyRef = useRef<string | null>(null);
+  const itemsKey = useMemo(
+    () =>
+      items
+        .map(
+          (item) =>
+            `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`
+        )
+        .join('|'),
+    [items]
+  );
 
   const activeRows: UploadRow[] =
     rows.length > 0
@@ -139,6 +151,13 @@ export function DocumentUploadDialog({
     );
   }
 
+  const clearCloseTimeout = useCallback(() => {
+    if (closeTimeoutRef.current === null) return;
+
+    window.clearTimeout(closeTimeoutRef.current);
+    closeTimeoutRef.current = null;
+  }, []);
+
   function handleStartUpload() {
     const initialRows: UploadRow[] = items.map((item) => ({
       ...item,
@@ -148,6 +167,8 @@ export function DocumentUploadDialog({
 
     setRows(initialRows);
     setHasStarted(true);
+    startedItemsKeyRef.current = itemsKey;
+    clearCloseTimeout();
 
     startTransition(async () => {
       let failures = initialRows.filter((row) => row.status === 'error').length;
@@ -191,7 +212,9 @@ export function DocumentUploadDialog({
 
       onComplete(failures);
       if (failures === 0) {
-        window.setTimeout(() => {
+        clearCloseTimeout();
+        closeTimeoutRef.current = window.setTimeout(() => {
+          closeTimeoutRef.current = null;
           handleOpenChange(false);
         }, 650);
       }
@@ -203,13 +226,26 @@ export function DocumentUploadDialog({
     handleStartUpload();
     // handleStartUpload intentionally owns the mutable upload queue for this dialog.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, hasStarted, isPending, items.length]);
+  }, [open, hasStarted, isPending, items.length, itemsKey]);
+
+  useEffect(() => {
+    if (!open || isPending || items.length === 0) return;
+    if (!hasStarted || startedItemsKeyRef.current === itemsKey) return;
+
+    setRows([]);
+    setHasStarted(false);
+    clearCloseTimeout();
+  }, [clearCloseTimeout, hasStarted, isPending, items.length, itemsKey, open]);
+
+  useEffect(() => () => clearCloseTimeout(), [clearCloseTimeout]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (isPending && !isComplete) return;
     if (!nextOpen) {
+      clearCloseTimeout();
       setRows([]);
       setHasStarted(false);
+      startedItemsKeyRef.current = null;
     }
     onOpenChange(nextOpen);
   }

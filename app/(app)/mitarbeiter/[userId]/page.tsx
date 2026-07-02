@@ -145,6 +145,10 @@ async function MitarbeiterDetailData({
     ).values()
   );
   const { visibleColumns } = organizationUserPreferences;
+  if (!documentsResult.success) {
+    console.error('Failed to load employee documents:', documentsResult.error);
+  }
+
   const documents: OrganizationDocument[] = documentsResult.success
     ? documentsResult.documents
     : [];

@@ -38,6 +38,8 @@ export function FeedbackBanner({ feedback, onDismiss }: FeedbackBannerProps) {
         'fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-lg',
         'animate-banner-in'
       )}
+      role="alert"
+      aria-live="assertive"
     >
       <div
         className={cn(

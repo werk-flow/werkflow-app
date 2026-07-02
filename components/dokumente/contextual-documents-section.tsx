@@ -410,6 +410,7 @@ export function ContextualDocumentsSection({
                       document={document}
                       indented
                       {...rowProps}
+                      context={{ jobId: group.jobId }}
                     />
                   ))}
                 </div>

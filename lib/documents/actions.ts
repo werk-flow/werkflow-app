@@ -943,9 +943,14 @@ function applyDocumentSearch<T extends { ilike: (column: string, pattern: string
   const search = searchQuery?.trim();
   if (!search) return query;
 
-  const escapedSearch = search.replace(/[%_]/g, '\\$&');
+  const escapedSearch = search
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/[%_]/g, '\\$&');
+  const pattern = `"%${escapedSearch}%"`;
+
   return query.or(
-    `display_name.ilike.%${escapedSearch}%,original_file_name.ilike.%${escapedSearch}%`
+    `display_name.ilike.${pattern},original_file_name.ilike.${pattern}`
   );
 }
 
@@ -3135,7 +3140,7 @@ export async function uploadDocumentVersion(
     return { success: false, error: 'upload_failed' };
   }
 
-  const { error: versionInsertError } = await auth.context.admin
+  const { data: archivedVersion, error: versionInsertError } = await auth.context.admin
     .from('document_versions')
     .insert({
       organization_id: auth.context.orgId,
@@ -3147,7 +3152,9 @@ export async function uploadDocumentVersion(
       mime_type: existing.document.mime_type,
       size_bytes: existing.document.size_bytes,
       uploaded_by: existing.document.uploaded_by,
-    });
+    })
+    .select('id')
+    .single();
 
   if (versionInsertError) {
     await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
@@ -3173,6 +3180,13 @@ export async function uploadDocumentVersion(
 
   if (updateError || !updatedDocument) {
     await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
+    if (archivedVersion?.id) {
+      await auth.context.admin
+        .from('document_versions')
+        .delete()
+        .eq('id', archivedVersion.id)
+        .eq('organization_id', auth.context.orgId);
+    }
     console.error('Failed to update document latest version:', updateError);
     return { success: false, error: 'version_failed' };
   }
