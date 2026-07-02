@@ -1,3 +1,5 @@
+import { unstable_rethrow } from 'next/navigation';
+
 import { AccountSecuritySettings } from '@/components/settings/account-security-settings';
 import { getInitialEmailChangeWizardState } from '@/lib/settings/email-change-state';
 import type { EmailChangeWizardState } from '@/lib/settings/email-change.types';
@@ -17,6 +19,7 @@ export default async function AccountSecuritySettingsPage() {
   try {
     initialEmailChangeState = await getInitialEmailChangeWizardState();
   } catch (error) {
+    unstable_rethrow(error);
     console.error('Error loading initial email change wizard state:', error);
   }
 
