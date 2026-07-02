@@ -443,8 +443,11 @@ export function calculateCalendarWorkBlocks(
   }
 
   if (current) {
-    current = addOpenSegment(current);
-    blocks.push(cloneBlock(current, null, current.segmentType === 'break'));
+    const startDate = new Date(current.segmentStart.timestamp);
+    if (isSameLocalDay(startDate, new Date())) {
+      current = addOpenSegment(current);
+      blocks.push(cloneBlock(current, null, current.segmentType === 'break'));
+    }
   }
 
   return blocks;

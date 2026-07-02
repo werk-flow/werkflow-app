@@ -12,6 +12,8 @@ import {
   type JobAssignmentWithProfile,
   type ProjectWithDetails,
   type CalendarJob,
+  type CalendarEntryDialogMember,
+  type CalendarEntryDialogJobOption,
   type CreateJobResult,
   type UpdateJobResult,
   type DeleteJobResult,
@@ -68,6 +70,17 @@ export type AuftraegeDialogOptionsResult =
       }>;
       projects: ProjectWithDetails[];
       jobs: Job[];
+    }
+  | { success: false; error: string };
+
+export type CalendarEntryDialogOptionsResult =
+  | {
+      success: true;
+      clients: ReturnType<typeof toClient>[];
+      members: CalendarEntryDialogMember[];
+      projects: ProjectWithDetails[];
+      manualEntryJobs: CalendarEntryDialogJobOption[];
+      nextJobNumber: string | null;
     }
   | { success: false; error: string };
 
@@ -165,6 +178,144 @@ export async function getAuftraegeDialogOptions(): Promise<AuftraegeDialogOption
       };
     }),
     jobs: (jobsResult.data ?? []).map(toJob),
+  };
+}
+
+export async function getCalendarEntryDialogOptions(): Promise<CalendarEntryDialogOptionsResult> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return { success: false, error: auth.error };
+  if (!auth.context.isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const [clientsResult, membersResult, projectsResult, jobsResult, nextJobNumberResult] =
+    await Promise.all([
+      admin
+        .from('clients')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .order('name', { ascending: true }),
+      admin.rpc('get_org_members_for_user', {
+        p_org_id: auth.context.orgId,
+        p_user_id: auth.context.userId,
+      }),
+      admin
+        .from('projects')
+        .select('*')
+        .eq('organization_id', auth.context.orgId)
+        .order('created_at', { ascending: false }),
+      admin
+        .from('jobs')
+        .select('id, title, description, job_number, status, project_id, planned_date, created_at')
+        .eq('organization_id', auth.context.orgId)
+        .order('planned_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: false }),
+      admin.rpc('generate_job_number', {
+        p_org_id: auth.context.orgId,
+      }),
+    ]);
+
+  if (clientsResult.error) return { success: false, error: 'clients_failed' };
+  if (membersResult.error) return { success: false, error: 'members_failed' };
+  if (projectsResult.error) return { success: false, error: 'projects_failed' };
+  if (jobsResult.error) return { success: false, error: 'jobs_failed' };
+
+  const clients = (clientsResult.data ?? []).map(toClient);
+  const clientLookup = new Map(clients.map((client) => [client.id, client]));
+  const projectRows = projectsResult.data ?? [];
+  const projectJobCounts = new Map<
+    string,
+    { total: number; completed: number; inProgress: number; parked: number }
+  >();
+
+  for (const job of jobsResult.data ?? []) {
+    if (!job.project_id) continue;
+    const counts = projectJobCounts.get(job.project_id) ?? {
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      parked: 0,
+    };
+    counts.total++;
+    if (job.status === 'fertig') counts.completed++;
+    if (job.status === 'in_bearbeitung') counts.inProgress++;
+    if (job.status === 'geparkt') counts.parked++;
+    projectJobCounts.set(job.project_id, counts);
+  }
+
+  const projectLookup = new Map(
+    projectRows.map((row) => [row.id, toProject(row)])
+  );
+
+  const rawMembers = (membersResult.data ?? []) as Array<{
+    user_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string;
+    role: string;
+  }>;
+  const members = rawMembers
+    .filter((member) =>
+      auth.context.role === 'buero'
+        ? member.role === 'employee' || member.user_id === auth.context.userId
+        : true
+    )
+    .map((member) => ({
+      userId: member.user_id,
+      firstName: member.first_name ?? '',
+      lastName: member.last_name ?? '',
+      email: member.email,
+      role: member.role,
+    }));
+
+  const projects = projectRows.map((row) => {
+    const project = toProject(row);
+    const counts = projectJobCounts.get(project.id) ?? {
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      parked: 0,
+    };
+
+    return {
+      ...project,
+      client: project.clientId ? clientLookup.get(project.clientId) ?? null : null,
+      jobCount: counts.total,
+      completedJobCount: counts.completed,
+      inProgressJobCount: counts.inProgress,
+      parkedJobCount: counts.parked,
+    };
+  });
+
+  const manualEntryJobs = (jobsResult.data ?? [])
+    .filter((job) => job.status !== 'fertig')
+    .map((job) => ({
+      id: job.id,
+      title: getJobDisplayTitle({
+        title: job.title,
+        description: job.description,
+      }),
+      jobNumber: job.job_number,
+      status: job.status,
+      projectName: job.project_id
+        ? projectLookup.get(job.project_id)?.name ?? null
+        : null,
+    }));
+
+  if (nextJobNumberResult.error) {
+    console.error('Error generating calendar dialog job number:', nextJobNumberResult.error);
+  }
+
+  return {
+    success: true,
+    clients,
+    members,
+    projects,
+    manualEntryJobs,
+    nextJobNumber: typeof nextJobNumberResult.data === 'string'
+      ? nextJobNumberResult.data
+      : null,
   };
 }
 

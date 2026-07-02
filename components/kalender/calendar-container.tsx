@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Briefcase } from 'lucide-react';
 import { CalendarHeader } from './calendar-header';
 import { CalendarViewTabs } from './calendar-view-tabs';
@@ -21,6 +21,7 @@ import { getJobsForCalendar, getParkedJobs, updateJob, updateJobStatus, assignEm
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { ParkplatzPanel } from './parkplatz-panel';
+import { clearCalendarDragState } from './drag-state';
 import { ActionBanner, type ActionBannerState } from './day-view/undo-banner';
 import { cn } from '@/lib/utils';
 
@@ -101,6 +102,7 @@ export function CalendarContainer({
   initialJobs
 }: CalendarContainerProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
   const [entries, setEntries] = useState<TimeEntry[]>(initialEntries ?? []);
@@ -171,7 +173,7 @@ export function CalendarContainer({
     };
 
     const endHandler = () => {
-      document.body.classList.remove('is-dragging');
+      clearCalendarDragState();
     };
 
     window.addEventListener('dragover', handler);
@@ -229,7 +231,9 @@ export function CalendarContainer({
   const jobsRequestIdRef = useRef(0);
   const parkedJobsRequestIdRef = useRef(0);
   const jobsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverPropsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parkedJobsLoadedRef = useRef(false);
+  const previousMemberIdsRef = useRef(new Set(members.map((member) => member.user_id)));
 
   // Track which member to highlight when navigating from week view cell click
   // We use two states: pendingHighlight stores the ID while loading,
@@ -439,6 +443,32 @@ export function CalendarContainer({
   }, [organizationId, members]);
 
   useEffect(() => {
+    const previousMemberIds = previousMemberIdsRef.current;
+    const memberIds = members.map((member) => member.user_id);
+    const memberIdSet = new Set(memberIds);
+
+    setSelectedMembers((current) => {
+      const next = current.filter((memberId) => memberIdSet.has(memberId));
+      for (const memberId of memberIds) {
+        if (!previousMemberIds.has(memberId) && !next.includes(memberId)) {
+          next.push(memberId);
+        }
+      }
+
+      if (
+        next.length === current.length &&
+        next.every((memberId, index) => memberId === current[index])
+      ) {
+        return current;
+      }
+
+      return next;
+    });
+
+    previousMemberIdsRef.current = memberIdSet;
+  }, [members]);
+
+  useEffect(() => {
     if (hasUsedInitialData.current) {
       hasUsedInitialData.current = false;
       // Seed the fetched-range ref with the server-prefetched day range
@@ -482,12 +512,12 @@ export function CalendarContainer({
     organizationId,
   ]);
 
-  // Fetch parked jobs only once the panel is opened.
+  // Keep parked jobs loaded for admins so the header count and panel stay fresh.
   useEffect(() => {
-    if (isAdminOrManager && parkplatzOpen && !parkedJobsLoadedRef.current) {
+    if (isAdminOrManager && !parkedJobsLoadedRef.current) {
       fetchParkedJobs();
     }
-  }, [isAdminOrManager, fetchParkedJobs, parkplatzOpen]);
+  }, [isAdminOrManager, fetchParkedJobs]);
 
   const scheduleJobsRefresh = useCallback(() => {
     if (jobsRefreshTimerRef.current) {
@@ -497,16 +527,30 @@ export function CalendarContainer({
     jobsRefreshTimerRef.current = setTimeout(() => {
       jobsRefreshTimerRef.current = null;
       fetchJobs();
-      if (isAdminOrManager && parkplatzOpen) {
+      if (isAdminOrManager) {
         fetchParkedJobs();
       }
     }, 150);
-  }, [fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
+  }, [fetchJobs, fetchParkedJobs, isAdminOrManager]);
+
+  const scheduleServerPropsRefresh = useCallback(() => {
+    if (serverPropsRefreshTimerRef.current) {
+      clearTimeout(serverPropsRefreshTimerRef.current);
+    }
+
+    serverPropsRefreshTimerRef.current = setTimeout(() => {
+      serverPropsRefreshTimerRef.current = null;
+      router.refresh();
+    }, 200);
+  }, [router]);
 
   useEffect(() => {
     return () => {
       if (jobsRefreshTimerRef.current) {
         clearTimeout(jobsRefreshTimerRef.current);
+      }
+      if (serverPropsRefreshTimerRef.current) {
+        clearTimeout(serverPropsRefreshTimerRef.current);
       }
       if (silentRefreshTimerRef.current) {
         clearTimeout(silentRefreshTimerRef.current);
@@ -535,9 +579,26 @@ export function CalendarContainer({
     if (Date.now() < realtimePausedUntilRef.current) return;
     scheduleJobsRefresh();
   });
+  useRealtimeEvent('clients', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
+  });
   useRealtimeEvent('job_assignments', () => {
     if (Date.now() < realtimePausedUntilRef.current) return;
     scheduleJobsRefresh();
+  });
+  useRealtimeEvent('organization_members', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
+    scheduleServerPropsRefresh();
+  });
+  useRealtimeEvent('profiles', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleServerPropsRefresh();
+  });
+  useRealtimeEvent('organization_settings', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleServerPropsRefresh();
   });
 
   // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
@@ -546,8 +607,8 @@ export function CalendarContainer({
     setIsLoading(true);
     fetchEntries();
     fetchJobs();
-    if (isAdminOrManager && parkplatzOpen) fetchParkedJobs();
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
+    if (isAdminOrManager) fetchParkedJobs();
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
 
   const handleOperationStart = useCallback(() => {
     inflightRef.current++;
@@ -591,9 +652,9 @@ export function CalendarContainer({
       if (inflightRef.current > 0) return;
       fetchEntries(true);
       fetchJobs();
-      if (isAdminOrManager && parkplatzOpen) fetchParkedJobs();
+      if (isAdminOrManager) fetchParkedJobs();
     }, 300);
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, parkplatzOpen]);
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
 
   const handleManualEntrySuccess = useCallback(
     (newEntries: TimeEntry[]) => {
@@ -788,6 +849,7 @@ export function CalendarContainer({
   }, [members]);
 
   const handleParkJob = useCallback(async (jobId: string) => {
+    clearCalendarDragState();
     const job = calendarJobsRef.current.find((j) => j.id === jobId);
     if (!job) return;
 
@@ -839,6 +901,7 @@ export function CalendarContainer({
     assignToUserId?: string,
     durationMinutes?: number
   ) => {
+    clearCalendarDragState();
     const parkedList = parkedJobsRef.current;
     const jobIndex = parkedList.findIndex((j) => j.id === jobId);
     const job = jobIndex >= 0 ? parkedList[jobIndex] : null;
@@ -928,6 +991,7 @@ export function CalendarContainer({
     memberId: string,
     durationMinutes: number
   ) => {
+    clearCalendarDragState();
     const job = calendarJobsRef.current.find((j) => j.id === jobId);
     if (!job) return;
 
@@ -1397,7 +1461,7 @@ export function CalendarContainer({
         />
       </div>
 
-      <div className="flex-1 overflow-auto overscroll-none">
+      <div className="flex-1 overflow-auto overscroll-none" data-calendar-scroll-container="">
         {showLoadingSkeleton ? (
           // Show appropriate skeleton based on view and user role
           useFullCalendar ? (

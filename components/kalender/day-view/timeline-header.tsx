@@ -1,11 +1,13 @@
 'use client';
 
 import { memo, useMemo } from 'react';
+import { cn } from '@/lib/utils';
 import { BASE_HOUR_WIDTH } from './timeline-grid';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 interface TimelineHeaderProps {
+  className?: string;
   date?: Date;
   effectiveHourWidth?: number;
   timelineWidth?: number;
@@ -13,6 +15,7 @@ interface TimelineHeaderProps {
 }
 
 export const TimelineHeader = memo(function TimelineHeader({
+  className,
   date,
   effectiveHourWidth = BASE_HOUR_WIDTH,
   timelineWidth: totalWidth,
@@ -45,7 +48,7 @@ export const TimelineHeader = memo(function TimelineHeader({
 
   return (
     <div
-      className="relative h-10 border-b bg-muted/30"
+      className={cn('relative h-10 border-b bg-muted/30', className)}
       style={{ width: timelineWidth }}
     >
       {HOURS.map((hour) => (

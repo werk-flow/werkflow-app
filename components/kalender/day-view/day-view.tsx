@@ -5,7 +5,6 @@ import { Briefcase, Clock, ParkingSquare } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
 import {
-  DAY_VIEW_HEADER_HEIGHT,
   DAY_VIEW_ROW_HEIGHT,
   DAY_VIEW_ROW_INNER_HEIGHT,
   DAY_VIEW_ROW_PADDING
@@ -42,6 +41,7 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { JobEventPopover } from '../job-event-popover';
+import { clearCalendarDragState, startCalendarDragState } from '../drag-state';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
 import { useCurrentTimePosition } from './use-current-time-position';
 
@@ -121,8 +121,7 @@ export function DayView({
   parkplatzButtonRef,
   parkplatzDragJob
 }: DayViewProps) {
-  const timelineContentMinHeight =
-    DAY_VIEW_HEADER_HEIGHT + members.length * DAY_VIEW_ROW_HEIGHT;
+  const timelineContentMinHeight = members.length * DAY_VIEW_ROW_HEIGHT;
 
   const [selectedJob, setSelectedJob] = useState<{
     job: CalendarJob;
@@ -153,6 +152,12 @@ export function DayView({
     timelineWidth,
     resetZoom
   } = useTimelineZoom();
+  const dayViewRootRef = useRef<HTMLDivElement>(null)
+  const customScrollbarRef = useRef<HTMLDivElement>(null)
+  const syncingScrollbarRef = useRef(false)
+  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
+  const [useViewportScrollbarOverlay, setUseViewportScrollbarOverlay] = useState(false)
+  const [timelineScrollLeft, setTimelineScrollLeft] = useState(0)
 
   const dateKey = date.toISOString();
   const isToday = date.toDateString() === new Date().toDateString();
@@ -514,7 +519,6 @@ export function DayView({
     pointerId: number;
   } | null>(null);
 
-  const HEADER_HEIGHT = DAY_VIEW_HEADER_HEIGHT;
   const ROW_HEIGHT = DAY_VIEW_ROW_HEIGHT;
 
   const canDropOnMember = useCallback(
@@ -606,7 +610,7 @@ export function DayView({
     const snapped = snapToGrid(rawLeft, ehw);
     const clampedLeft = Math.max(0, Math.min(snapped, tlw - originalWidth));
 
-    const relativeY = e.clientY - containerRect.top + scrollTop - HEADER_HEIGHT;
+    const relativeY = e.clientY - containerRect.top + scrollTop;
     const rowIdx = Math.floor(relativeY / ROW_HEIGHT);
     const curMembers = membersRef.current;
     const clampedRow = Math.max(0, Math.min(rowIdx, curMembers.length - 1));
@@ -696,13 +700,12 @@ export function DayView({
 
     document.body.style.cursor = (overParkplatz || canDrop) ? 'grabbing' : 'not-allowed';
     document.body.style.userSelect = 'none';
-  }, [HEADER_HEIGHT, ROW_HEIGHT, scrollContainerRef]); // reads all other values from refs
+  }, [ROW_HEIGHT, scrollContainerRef]); // reads all other values from refs
 
   const stableUpHandler = useCallback(() => {
     window.removeEventListener('pointermove', stableMoveHandler);
     window.removeEventListener('pointerup', stableUpHandler);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
+    clearCalendarDragState();
     dragPendingRef.current = null;
 
     const drag = activeDragRef.current;
@@ -1038,6 +1041,8 @@ export function DayView({
         pointerId: e.pointerId,
       };
 
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
       window.addEventListener('pointermove', stableMoveHandler);
       window.addEventListener('pointerup', stableUpHandler);
     },
@@ -1063,8 +1068,7 @@ export function DayView({
     return () => {
       window.removeEventListener('pointermove', stableMoveHandler);
       window.removeEventListener('pointerup', stableUpHandler);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      clearCalendarDragState();
     };
   }, [stableMoveHandler, stableUpHandler]);
 
@@ -1092,6 +1096,13 @@ export function DayView({
       untimedDayJobs: forDay.filter((job) => !canPlaceOnTimeline(job)),
     };
   }, [effectiveJobs, date]);
+  const selectedJobDisplay = useMemo(() => {
+    if (!selectedJob) return null;
+    return (
+      effectiveJobs.find((job) => job.id === selectedJob.job.id) ??
+      selectedJob.job
+    );
+  }, [effectiveJobs, selectedJob]);
 
   // ── Parkplatz / untimed-chip drag hover state (for showing shadow pills) ──
   interface ParkplatzDragHover {
@@ -1114,8 +1125,83 @@ export function DayView({
     if (draggingChipId && !untimedDayJobs.some((j) => j.id === draggingChipId)) {
       setDraggingChipId(null);
       localChipDragJobRef.current = null;
+      clearCalendarDragState();
     }
   }, [draggingChipId, untimedDayJobs]);
+
+  useEffect(() => {
+    const root = dayViewRootRef.current
+    const timeline = scrollContainerRef.current
+    if (!root || !timeline) return
+
+    const scrollParent = timeline.closest('[data-calendar-scroll-container]') as HTMLElement | null
+    const overlayHysteresisPx = 24
+    const updateScrollbarMetrics = () => {
+      const rootRect = root.getBoundingClientRect()
+      const nextHasHorizontalOverflow = timeline.scrollWidth > timeline.clientWidth + 1
+      setHasHorizontalOverflow(nextHasHorizontalOverflow)
+      setUseViewportScrollbarOverlay((prev) => {
+        if (!nextHasHorizontalOverflow) return false
+        if (prev) {
+          return rootRect.bottom > window.innerHeight - overlayHysteresisPx
+        }
+        return rootRect.bottom > window.innerHeight + overlayHysteresisPx
+      })
+      setTimelineScrollLeft(timeline.scrollLeft)
+
+      if (customScrollbarRef.current) {
+        customScrollbarRef.current.scrollLeft = timeline.scrollLeft
+      }
+    }
+
+    updateScrollbarMetrics()
+
+    const observer = new ResizeObserver(updateScrollbarMetrics)
+    observer.observe(root)
+    observer.observe(timeline)
+
+    scrollParent?.addEventListener('scroll', updateScrollbarMetrics, { passive: true })
+    window.addEventListener('resize', updateScrollbarMetrics)
+
+    return () => {
+      observer.disconnect()
+      scrollParent?.removeEventListener('scroll', updateScrollbarMetrics)
+      window.removeEventListener('resize', updateScrollbarMetrics)
+    }
+  }, [scrollContainerRef, timelineWidth, members.length, untimedDayJobs.length])
+
+  useEffect(() => {
+    const timeline = scrollContainerRef.current
+    const customScrollbar = customScrollbarRef.current
+    if (!timeline) return
+
+    const syncScroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
+      if (!target) return
+      if (syncingScrollbarRef.current) return
+      syncingScrollbarRef.current = true
+      target.scrollLeft = source.scrollLeft
+      setTimelineScrollLeft(source.scrollLeft)
+      requestAnimationFrame(() => {
+        syncingScrollbarRef.current = false
+      })
+    }
+
+    const handleTimelineScroll = () => syncScroll(timeline, customScrollbar)
+    const handleCustomScrollbarScroll = () => syncScroll(customScrollbar!, timeline)
+
+    if (customScrollbar) {
+      customScrollbar.scrollLeft = timeline.scrollLeft
+    }
+    timeline.addEventListener('scroll', handleTimelineScroll, { passive: true })
+    customScrollbar?.addEventListener('scroll', handleCustomScrollbarScroll, {
+      passive: true,
+    })
+
+    return () => {
+      timeline.removeEventListener('scroll', handleTimelineScroll)
+      customScrollbar?.removeEventListener('scroll', handleCustomScrollbarScroll)
+    }
+  }, [scrollContainerRef, hasHorizontalOverflow])
 
   // Track cursor position during untimed chip drag for floating preview
   useEffect(() => {
@@ -1234,70 +1320,97 @@ export function DayView({
   }
 
   return (
-    <div className="flex min-w-0 flex-col">
-      {/* All-day jobs row (dated jobs that cannot yet be placed onto a timeline row) */}
-      {untimedDayJobs.length > 0 && (
-        <div className="border-b bg-muted/25 px-4 py-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Ganztägige Aufträge:
+    <div ref={dayViewRootRef} className="flex min-w-0 flex-col">
+      <div className="sticky top-0 z-20 bg-background">
+        {/* All-day jobs row (dated jobs that cannot yet be placed onto a timeline row) */}
+        {untimedDayJobs.length > 0 && (
+          <div className="border-b bg-muted/25 px-4 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Ganztägige Aufträge:
+              </span>
+              {untimedDayJobs.map((job) => {
+                const isChipDragging = draggingChipId === job.id;
+                return (
+                  <button
+                    key={job.id}
+                    draggable={isAdminOrManager}
+                    onDragStart={(e) => {
+                      if (!isAdminOrManager) return;
+                      const payload: DragJobPayload = {
+                        jobId: job.id,
+                        source: 'day',
+                        sourceDate: toLocalDateString(date),
+                        durationMinutes:
+                          job.estimatedDurationMinutes ??
+                          DEFAULT_DAY_SCHEDULE_DURATION_MINUTES,
+                      };
+                      e.dataTransfer.setData(PARKPLATZ_MIME, JSON.stringify(payload));
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setDragImage(getDragGhost(), 0, 0);
+                      localChipDragJobRef.current = job;
+                      setDraggingChipId(job.id);
+                      startCalendarDragState();
+                    }}
+                    onDragEnd={() => {
+                      localChipDragJobRef.current = null;
+                      setDraggingChipId(null);
+                      setParkplatzDragHover(null);
+                      clearCalendarDragState();
+                    }}
+                    onClick={(e) => {
+                      setSelectedJob({
+                        job,
+                        position: { x: e.clientX + 12, y: e.clientY + 12 }
+                      });
+                    }}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md border border-brand-purple/30 bg-brand-purple/10 px-2.5 py-1 text-xs font-medium transition-all',
+                      isAdminOrManager && 'cursor-grab active:cursor-grabbing',
+                      isChipDragging
+                        ? 'opacity-40 scale-[0.95] shadow-none'
+                        : 'hover:bg-brand-purple/20'
+                    )}
+                  >
+                    <Briefcase className="h-3 w-3 text-brand-purple" />
+                    <span className="truncate max-w-[150px]" title={job.title}>{job.title}</span>
+                    {job.jobNumber && (
+                      <span className="text-muted-foreground text-[10px]">
+                        {job.jobNumber}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex border-b bg-background">
+          <div className="z-10 flex h-10 w-48 shrink-0 items-center border-r bg-muted/30 px-3">
+            <span className="text-sm font-medium text-muted-foreground">
+              Mitarbeiter
             </span>
-            {untimedDayJobs.map((job) => {
-              const isChipDragging = draggingChipId === job.id;
-              return (
-              <button
-                key={job.id}
-                draggable={isAdminOrManager}
-                onDragStart={(e) => {
-                  if (!isAdminOrManager) return;
-                  const payload: DragJobPayload = {
-                    jobId: job.id,
-                    source: 'day',
-                    sourceDate: toLocalDateString(date),
-                    durationMinutes:
-                      job.estimatedDurationMinutes ??
-                      DEFAULT_DAY_SCHEDULE_DURATION_MINUTES,
-                  };
-                  e.dataTransfer.setData(PARKPLATZ_MIME, JSON.stringify(payload));
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setDragImage(getDragGhost(), 0, 0);
-                  localChipDragJobRef.current = job;
-                  setDraggingChipId(job.id);
-                  document.body.classList.add('is-dragging');
-                }}
-                onDragEnd={() => {
-                  localChipDragJobRef.current = null;
-                  setDraggingChipId(null);
-                  setParkplatzDragHover(null);
-                  document.body.classList.remove('is-dragging');
-                }}
-                onClick={(e) => {
-                  setSelectedJob({
-                    job,
-                    position: { x: e.clientX + 12, y: e.clientY + 12 }
-                  });
-                }}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md border border-brand-purple/30 bg-brand-purple/10 px-2.5 py-1 text-xs font-medium transition-all',
-                  isAdminOrManager && 'cursor-grab active:cursor-grabbing',
-                  isChipDragging
-                    ? 'opacity-40 scale-[0.95] shadow-none'
-                    : 'hover:bg-brand-purple/20'
-                )}
-              >
-                <Briefcase className="h-3 w-3 text-brand-purple" />
-                <span className="truncate max-w-[150px]" title={job.title}>{job.title}</span>
-                {job.jobNumber && (
-                  <span className="text-muted-foreground text-[10px]">
-                    {job.jobNumber}
-                  </span>
-                )}
-              </button>
-              );
-            })}
+          </div>
+
+          <div className="min-w-0 flex-1 overflow-hidden bg-background">
+            <div
+              style={{
+                width: timelineWidth,
+                transform: `translateX(-${timelineScrollLeft}px)`,
+              }}
+            >
+              <TimelineHeader
+                className="border-b-0"
+                date={date}
+                effectiveHourWidth={effectiveHourWidth}
+                timelineWidth={timelineWidth}
+                currentTimePosition={currentTimePosition}
+              />
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Floating preview for untimed chip drag (hidden when over timeline rows — purple block takes over) */}
       {draggingChipId && chipDragCursor && !parkplatzDragHover && (() => {
@@ -1330,11 +1443,6 @@ export function DayView({
           className="z-10 w-48 shrink-0 border-r bg-background"
           style={{ minHeight: timelineContentMinHeight }}
         >
-          <div className="h-10 border-b bg-muted/30 px-3 flex items-center">
-            <span className="text-sm font-medium text-muted-foreground">
-              Mitarbeiter
-            </span>
-          </div>
           <div className="divide-y">
             {members.length === 0 ? (
               <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
@@ -1372,7 +1480,7 @@ export function DayView({
         <div
           ref={scrollContainerRef}
           data-timeline-scroll=""
-          className="min-h-0 flex-1 overflow-x-auto"
+          className="min-h-0 flex-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           <div
             className="relative"
@@ -1381,14 +1489,6 @@ export function DayView({
               minHeight: timelineContentMinHeight
             }}
           >
-            {/* Timeline header */}
-            <TimelineHeader
-              date={date}
-              effectiveHourWidth={effectiveHourWidth}
-              timelineWidth={timelineWidth}
-              currentTimePosition={currentTimePosition}
-            />
-
             {/* Timeline rows */}
             <div className="divide-y">
               {members.map((member, memberIndex) => {
@@ -1474,7 +1574,7 @@ export function DayView({
                     className="absolute rounded-md text-xs font-medium pointer-events-none z-50 flex items-center justify-center overflow-hidden bg-brand-purple/70 text-white shadow-lg"
                     style={{
                       left: parkplatzDragHover.snappedLeft,
-                      top: HEADER_HEIGHT + hovIdx * ROW_HEIGHT + DAY_VIEW_ROW_PADDING,
+                      top: hovIdx * ROW_HEIGHT + DAY_VIEW_ROW_PADDING,
                       width: parkplatzDragHover.width,
                       height: DAY_VIEW_ROW_INNER_HEIGHT,
                       opacity: 0.9,
@@ -1491,7 +1591,7 @@ export function DayView({
                   <div
                     className="absolute left-0 right-0 pointer-events-none bg-brand-purple/5 ring-1 ring-inset ring-brand-purple/20"
                     style={{
-                      top: HEADER_HEIGHT + hovIdx * ROW_HEIGHT,
+                      top: hovIdx * ROW_HEIGHT,
                       height: ROW_HEIGHT,
                       width: timelineWidth,
                       zIndex: 4,
@@ -1504,21 +1604,6 @@ export function DayView({
             {/* Floating preview + ghost during cross-row drag */}
             {activeDrag && !activeDrag.isAboveGrid && (
               <>
-                {/* Ghost at original position */}
-                <div
-                  className="absolute border-2 border-dashed border-muted-foreground/30 bg-muted/20 rounded-md pointer-events-none"
-                  style={{
-                    left: activeDrag.originalLeft,
-                    top:
-                      HEADER_HEIGHT +
-                      activeDrag.sourceRowIndex * ROW_HEIGHT +
-                      DAY_VIEW_ROW_PADDING,
-                    width: activeDrag.originalWidth,
-                    height: DAY_VIEW_ROW_INNER_HEIGHT,
-                    zIndex: 5,
-                  }}
-                />
-
                 {/* Floating preview at target position */}
                 <div
                   className={cn(
@@ -1535,7 +1620,6 @@ export function DayView({
                   style={{
                     left: activeDrag.currentLeft,
                     top:
-                      HEADER_HEIGHT +
                       activeDrag.currentRowIndex * ROW_HEIGHT +
                       DAY_VIEW_ROW_PADDING,
                     width: activeDrag.originalWidth,
@@ -1575,7 +1659,7 @@ export function DayView({
                         : 'bg-red-500/5 ring-1 ring-inset ring-red-500/20'
                     )}
                     style={{
-                      top: HEADER_HEIGHT + activeDrag.currentRowIndex * ROW_HEIGHT,
+                      top: activeDrag.currentRowIndex * ROW_HEIGHT,
                       height: ROW_HEIGHT,
                       width: timelineWidth,
                       zIndex: 4,
@@ -1587,6 +1671,19 @@ export function DayView({
           </div>
         </div>
       </div>
+
+      {hasHorizontalOverflow && (
+        <div
+          ref={customScrollbarRef}
+          className={cn(
+            'z-30 ml-48 overflow-x-auto overflow-y-hidden border-t bg-background',
+            useViewportScrollbarOverlay ? 'sticky bottom-0' : 'relative'
+          )}
+          aria-label="Horizontale Kalendernavigation"
+        >
+          <div style={{ width: timelineWidth, height: 1 }} />
+        </div>
+      )}
 
       {/* Free-floating preview when job block is dragged above the calendar grid */}
       {activeDrag && activeDrag.isAboveGrid && activeDrag.payload.type === 'job' && (
@@ -1631,7 +1728,7 @@ export function DayView({
 
       {selectedJob && (
         <JobEventPopover
-          job={selectedJob.job}
+          job={selectedJobDisplay ?? selectedJob.job}
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}

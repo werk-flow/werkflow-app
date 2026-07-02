@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import { X, Briefcase, ParkingSquare, GripVertical, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { clearCalendarDragState, startCalendarDragState } from './drag-state';
 import { cn } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
 
@@ -73,7 +74,7 @@ export function ParkplatzPanel({
       const timeoutId = window.setTimeout(() => {
         setDraggingJobId(null);
         onDragJobEnd?.();
-        document.body.classList.remove('is-dragging');
+        clearCalendarDragState();
       }, 0);
 
       return () => window.clearTimeout(timeoutId);
@@ -109,7 +110,7 @@ export function ParkplatzPanel({
       onDrop={(e) => {
         e.preventDefault();
         setIsDragOver(false);
-        document.body.classList.remove('is-dragging');
+        clearCalendarDragState();
         const raw = e.dataTransfer.getData(PARKPLATZ_MIME);
         if (!raw || !onParkJob) return;
         try {
@@ -174,12 +175,12 @@ export function ParkplatzPanel({
                   e.dataTransfer.setDragImage(getDragGhost(), 0, 0);
                   setDraggingJobId(job.id);
                   onDragJobStart?.(job);
-                  document.body.classList.add('is-dragging');
+                  startCalendarDragState();
                 }}
                 onDragEnd={() => {
                   setDraggingJobId(null);
                   onDragJobEnd?.();
-                  document.body.classList.remove('is-dragging');
+                  clearCalendarDragState();
                 }}
               >
                 {/* Detail page link icon — hidden during drag */}

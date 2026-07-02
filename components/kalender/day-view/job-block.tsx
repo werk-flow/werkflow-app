@@ -140,19 +140,6 @@ export function JobBlock({
 
   return (
     <>
-      {/* Ghost outline at original position during resize */}
-      {drag.isDragging && (
-        <div
-          className="absolute rounded-md border-2 border-dashed border-brand-purple/30 bg-brand-purple/5 pointer-events-none"
-          style={{
-            left,
-            width,
-            top: layoutTop,
-            height: layoutHeight,
-          }}
-        />
-      )}
-
       <div
         className={cn(
           'absolute rounded-md text-xs font-medium transition-shadow z-10',

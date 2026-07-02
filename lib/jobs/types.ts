@@ -185,6 +185,22 @@ export type CalendarJob = {
   assignedUserIds: string[];
 };
 
+export type CalendarEntryDialogMember = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+};
+
+export type CalendarEntryDialogJobOption = {
+  id: string;
+  title: string;
+  jobNumber: string | null;
+  status: string;
+  projectName: string | null;
+};
+
 // ============================================
 // Result Types
 // ============================================

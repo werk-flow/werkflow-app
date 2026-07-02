@@ -15,6 +15,7 @@ import {
   DAY_VIEW_ROW_INNER_HEIGHT,
   DAY_VIEW_ROW_PADDING
 } from './layout-constants';
+import { clearCalendarDragState } from '../drag-state';
 import { PARKPLATZ_MIME, type DragJobPayload } from '../parkplatz-panel';
 import {
   formatDuration,
@@ -459,7 +460,7 @@ export function EmployeeTimelineRow({
           }
         }}
         onDrop={(e) => {
-          document.body.classList.remove('is-dragging');
+          clearCalendarDragState();
           const raw = e.dataTransfer.getData(PARKPLATZ_MIME);
           if (!raw || !date) return;
           e.preventDefault();

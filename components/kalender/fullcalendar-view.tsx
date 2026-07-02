@@ -22,6 +22,7 @@ import type {
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { CalendarView } from './calendar-container';
 import { JobEventPopover } from './job-event-popover';
+import { clearCalendarDragState, startCalendarDragState } from './drag-state';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 
 interface CalendarMember {
@@ -203,6 +204,10 @@ export function FullCalendarView({
     }
     return map;
   }, [members]);
+  const selectedJobDisplay = useMemo(() => {
+    if (!selectedJob) return null;
+    return jobs.find((job) => job.id === selectedJob.job.id) ?? selectedJob.job;
+  }, [jobs, selectedJob]);
 
   // Helper to get member name
   const getMemberName = (userId: string) => {
@@ -633,7 +638,7 @@ export function FullCalendarView({
   };
 
   const handleEventDragStart = useCallback((info: { event: { extendedProps: Record<string, unknown> } }) => {
-    document.body.classList.add('is-dragging');
+    startCalendarDragState();
 
     if (!info.event.extendedProps.isJobEvent) return;
 
@@ -666,7 +671,7 @@ export function FullCalendarView({
   }, [parkplatzZoneRef, parkplatzPanelOpen]);
 
   const handleEventDragStop = (info: { event: { extendedProps: Record<string, unknown>; remove: () => void }; el: HTMLElement; jsEvent: MouseEvent }) => {
-    document.body.classList.remove('is-dragging');
+    clearCalendarDragState();
 
     if (fcDragMoveRef.current) {
       window.removeEventListener('mousemove', fcDragMoveRef.current);
@@ -706,7 +711,7 @@ export function FullCalendarView({
   };
 
   const handleEventReceive = (info: { event: { start: Date | null; allDay: boolean; extendedProps: Record<string, unknown>; remove: () => void } }) => {
-    document.body.classList.remove('is-dragging');
+    clearCalendarDragState();
     const jobId = info.event.extendedProps.jobId as string | undefined;
     if (!jobId) {
       info.event.remove();
@@ -1631,7 +1636,7 @@ export function FullCalendarView({
 
       {selectedJob && (
         <JobEventPopover
-          job={selectedJob.job}
+          job={selectedJobDisplay ?? selectedJob.job}
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}

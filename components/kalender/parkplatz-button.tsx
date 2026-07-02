@@ -3,6 +3,7 @@
 import { useState, forwardRef } from 'react';
 import { ParkingSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { clearCalendarDragState } from './drag-state';
 import { cn } from '@/lib/utils';
 
 const MIME_TYPE = 'application/x-werkflow-job';
@@ -48,6 +49,7 @@ export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProp
         onDrop={(e) => {
           e.preventDefault();
           setIsDragOver(false);
+          clearCalendarDragState();
           const raw = e.dataTransfer.getData(MIME_TYPE);
           if (!raw) return;
           try {

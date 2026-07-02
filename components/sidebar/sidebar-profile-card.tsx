@@ -44,7 +44,9 @@ export function SidebarProfileCard() {
 
   const fullName = `${profile.firstName} ${profile.lastName}`.trim() || 'Benutzerkonto'
   const initials = `${profile.firstName?.[0] ?? ''}${profile.lastName?.[0] ?? ''}`.trim()
-  const isSettingsRoute = pathname.startsWith('/einstellungen')
+  const isSettingsRoute =
+    pathname === '/einstellungen' || pathname.startsWith('/einstellungen/')
+  const isActive = isSettingsRoute || isMenuOpen
 
   return (
     <div className="mx-2 my-2">
@@ -54,8 +56,8 @@ export function SidebarProfileCard() {
             type="button"
             className={cn(
               'flex w-full cursor-pointer items-center gap-3 rounded-lg p-3 text-left transition-colors outline-none',
-              'hover:bg-accent/70 focus-visible:bg-accent/70',
-              isSettingsRoute && 'bg-accent/60'
+              isActive ? 'bg-accent/60 hover:bg-accent/70' : 'hover:bg-accent/70',
+              'focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0'
             )}
             aria-label="Kontomenü öffnen"
           >

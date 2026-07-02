@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberCount } from '@/lib/data/cached';
-import { SignOutButton } from '@/components/sign-out-button';
 import { JoinedBanner } from '@/components/dashboard/joined-banner';
 import { CreatedOrgBanner } from '@/components/dashboard/created-org-banner';
 import { AlreadyMemberBanner } from '@/components/dashboard/already-member-banner';
@@ -32,9 +31,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
+      <header className="sticky top-0 z-10 flex items-center border-b bg-background px-4 py-3 sm:px-6 sm:py-4 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Dashboard</h1>
-        <SignOutButton />
       </header>
 
       <Suspense fallback={null}>

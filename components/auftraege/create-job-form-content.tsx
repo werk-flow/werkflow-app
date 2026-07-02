@@ -61,6 +61,7 @@ export interface CreateJobFormContentProps {
   clients: Client[];
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
+  initialJobNumber?: string | null;
   defaultProjectId?: string;
   defaultClientId?: string;
   defaultEmployeeIds?: string[];
@@ -81,6 +82,7 @@ export function CreateJobFormContent({
   clients,
   members,
   projects = [],
+  initialJobNumber,
   defaultProjectId,
   defaultClientId,
   defaultEmployeeIds,
@@ -92,7 +94,7 @@ export function CreateJobFormContent({
   onSuccess,
   isActive = true,
 }: CreateJobFormContentProps) {
-  const [jobNumber, setJobNumber] = useState('');
+  const [jobNumber, setJobNumber] = useState(initialJobNumber ?? '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
@@ -113,11 +115,17 @@ export function CreateJobFormContent({
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (initialJobNumber && !jobNumber) {
+      setJobNumber(initialJobNumber);
+    }
+  }, [initialJobNumber, jobNumber]);
+
+  useEffect(() => {
+    if (!isActive || initialJobNumber || jobNumber) return;
     getNextJobNumber().then((result) => {
       if (result.success) setJobNumber(result.jobNumber);
     });
-  }, [isActive]);
+  }, [initialJobNumber, isActive, jobNumber]);
 
   const suggestedPlannedWorkingMinutes = useMemo(
     () =>

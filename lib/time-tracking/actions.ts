@@ -423,6 +423,39 @@ async function closeStaleOpenSessionsForUser(
   }
 }
 
+async function closeStaleOpenSessionsForOrg(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  orgId: string,
+  referenceDate = new Date()
+): Promise<void> {
+  const effectiveReferenceDate =
+    referenceDate.getTime() > Date.now() ? new Date() : referenceDate;
+  const staleCutoff = getLocalDayStart(effectiveReferenceDate).toISOString();
+
+  const { data, error } = await admin
+    .from('time_entries')
+    .select('user_id')
+    .eq('organization_id', orgId)
+    .lt('timestamp', staleCutoff)
+    .neq('status', 'rejected')
+    .neq('status', 'pending_delete');
+
+  if (error) {
+    console.error('Error loading stale users for org auto-close:', error);
+    return;
+  }
+
+  const userIds = [...new Set((data || []).map((entry) => entry.user_id))];
+  for (const staleUserId of userIds) {
+    await closeStaleOpenSessionsForUser(
+      admin,
+      staleUserId,
+      orgId,
+      effectiveReferenceDate
+    );
+  }
+}
+
 type OpenSessionOrg = { organizationId: string; organizationName: string };
 
 async function getOpenSessionOrgsForUserOnDay(
@@ -1638,6 +1671,14 @@ export async function getTimeEntries(
       !canViewEntries(callerRole, userId, user.id)
     ) {
       return { success: false, error: 'not_authorized' };
+    }
+
+    if (userId) {
+      await closeStaleOpenSessionsForUser(admin, userId, organizationId);
+    } else if (callerRole === 'admin' || callerRole === 'buero') {
+      await closeStaleOpenSessionsForOrg(admin, organizationId);
+    } else {
+      await closeStaleOpenSessionsForUser(admin, user.id, organizationId);
     }
 
     let query = admin

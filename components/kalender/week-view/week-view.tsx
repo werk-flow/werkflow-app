@@ -23,6 +23,7 @@ import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/setti
 import { getRoleLabel } from '@/lib/roles';
 import type { CalendarView } from '../calendar-container';
 import { JobEventPopover } from '../job-event-popover';
+import { clearCalendarDragState, startCalendarDragState } from '../drag-state';
 import type { DragJobPayload } from '../parkplatz-panel';
 
 const JOB_MIME = 'application/x-werkflow-job';
@@ -172,7 +173,7 @@ export function WeekView({
     if (!isAdminOrManager) return;
     e.preventDefault();
     setDragOverTarget(null);
-    document.body.classList.remove('is-dragging');
+    clearCalendarDragState();
 
     const targetDate = toLocalDateString(targetDay);
 
@@ -205,7 +206,7 @@ export function WeekView({
     if (!isAdminOrManager) return;
     e.preventDefault();
     setDragOverTarget(null);
-    document.body.classList.remove('is-dragging');
+    clearCalendarDragState();
 
     const targetDate = toLocalDateString(targetDay);
     const jobRaw = e.dataTransfer.getData(JOB_MIME);
@@ -231,6 +232,10 @@ export function WeekView({
     }
     return map;
   }, [jobs, weekDays]);
+  const selectedJobDisplay = useMemo(() => {
+    if (!selectedJob) return null;
+    return jobs.find((job) => job.id === selectedJob.job.id) ?? selectedJob.job;
+  }, [jobs, selectedJob]);
 
   // Group entries by user
   const entriesByUser = useMemo(() => {
@@ -369,10 +374,10 @@ export function WeekView({
                                 };
                                 e.dataTransfer.setData(JOB_MIME, JSON.stringify(payload));
                                 e.dataTransfer.effectAllowed = 'move';
-                                document.body.classList.add('is-dragging');
+                                startCalendarDragState();
                               }}
                               onDragEnd={() => {
-                                document.body.classList.remove('is-dragging');
+                                clearCalendarDragState();
                                 setTimeout(() => { didDragRef.current = false; }, 0);
                               }}
                               onClick={(e) => {
@@ -536,10 +541,10 @@ export function WeekView({
                                     };
                                     e.dataTransfer.setData(SESSION_MIME, JSON.stringify(payload));
                                     e.dataTransfer.effectAllowed = 'move';
-                                    document.body.classList.add('is-dragging');
+                                    startCalendarDragState();
                                   } : undefined}
                                   onDragEnd={canDrag ? () => {
-                                    document.body.classList.remove('is-dragging');
+                                    clearCalendarDragState();
                                     setTimeout(() => { didDragRef.current = false; }, 0);
                                   } : undefined}
                                   onClick={(e) => {
@@ -732,9 +737,9 @@ export function WeekView({
                                   };
                                   e.dataTransfer.setData(SESSION_MIME, JSON.stringify(payload));
                                   e.dataTransfer.effectAllowed = 'move';
-                                  document.body.classList.add('is-dragging');
+                                  startCalendarDragState();
                                 } : undefined}
-                                onDragEnd={canDrag ? () => { document.body.classList.remove('is-dragging'); setTimeout(() => { didDragRef.current = false; }, 0); } : undefined}
+                                onDragEnd={canDrag ? () => { clearCalendarDragState(); setTimeout(() => { didDragRef.current = false; }, 0); } : undefined}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (didDragRef.current) return;
@@ -801,9 +806,9 @@ export function WeekView({
                                   };
                                   e.dataTransfer.setData(JOB_MIME, JSON.stringify(payload));
                                   e.dataTransfer.effectAllowed = 'move';
-                                  document.body.classList.add('is-dragging');
+                                  startCalendarDragState();
                                 }}
-                                onDragEnd={() => { document.body.classList.remove('is-dragging'); setTimeout(() => { didDragRef.current = false; }, 0); }}
+                                onDragEnd={() => { clearCalendarDragState(); setTimeout(() => { didDragRef.current = false; }, 0); }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (didDragRef.current) return;
@@ -845,7 +850,7 @@ export function WeekView({
 
       {selectedJob && (
         <JobEventPopover
-          job={selectedJob.job}
+          job={selectedJobDisplay ?? selectedJob.job}
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}

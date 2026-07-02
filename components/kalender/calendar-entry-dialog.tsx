@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Briefcase, Clock } from 'lucide-react';
 import {
   Dialog,
@@ -12,13 +12,72 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CreateJobFormContent } from '@/components/auftraege/create-job-form-content';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
-import { getOrgClients } from '@/lib/clients/actions';
-import { getOrgProjects } from '@/lib/projects/actions';
-import { getOrgMembersAction } from '@/lib/members/actions';
+import { getCalendarEntryDialogOptions } from '@/lib/jobs/actions';
 import { useOrganization } from '@/components/organization/organization-context';
-import type { Client, ProjectWithDetails } from '@/lib/jobs/types';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import type {
+  CalendarEntryDialogJobOption,
+  CalendarEntryDialogMember,
+  Client,
+  ProjectWithDetails,
+} from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+
+type CalendarEntryDialogData = {
+  clients: Client[];
+  projects: ProjectWithDetails[];
+  members: CalendarEntryDialogMember[];
+  manualEntryJobs: CalendarEntryDialogJobOption[];
+  nextJobNumber: string | null;
+};
+
+const dialogDataCache = new Map<string, CalendarEntryDialogData>();
+const dialogDataPromiseCache = new Map<
+  string,
+  Promise<CalendarEntryDialogData | null>
+>();
+
+async function loadCalendarEntryDialogData(
+  organizationId: string
+): Promise<CalendarEntryDialogData | null> {
+  const cached = dialogDataCache.get(organizationId);
+  if (cached) {
+    return cached;
+  }
+
+  const pending = dialogDataPromiseCache.get(organizationId);
+  if (pending) {
+    return pending;
+  }
+
+  const promise = getCalendarEntryDialogOptions()
+    .then((result) => {
+      if (!result.success) {
+        return null;
+      }
+
+      const data: CalendarEntryDialogData = {
+        clients: result.clients,
+        projects: result.projects,
+        members: result.members,
+        manualEntryJobs: result.manualEntryJobs,
+        nextJobNumber: result.nextJobNumber,
+      };
+      dialogDataCache.set(organizationId, data);
+      return data;
+    })
+    .catch((error) => {
+      console.error('Error loading calendar dialog options:', error);
+      return null;
+    })
+    .finally(() => {
+      dialogDataPromiseCache.delete(organizationId);
+    });
+
+  dialogDataPromiseCache.set(organizationId, promise);
+  return promise;
+}
 
 interface CalendarEntryDialogProps {
   open: boolean;
@@ -43,13 +102,33 @@ export function CalendarEntryDialog({
   onManualEntrySuccess,
   onJobSuccess,
 }: CalendarEntryDialogProps) {
-  const { activeOrgId } = useOrganization();
+  const { activeOrg, activeOrgId } = useOrganization();
   const [activeTab, setActiveTab] = useState<string>('job');
+  const [loadedDialogData, setLoadedDialogData] = useState<{
+    organizationId: string;
+    data: CalendarEntryDialogData | null;
+  } | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(
+    activeOrgId ? dialogDataPromiseCache.has(activeOrgId) : false
+  );
+  const isAdminOrManager =
+    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+  const dialogData = useMemo(() => {
+    if (!activeOrgId) {
+      return null;
+    }
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [projects, setProjects] = useState<ProjectWithDetails[]>([]);
-  const [members, setMembers] = useState<OrgMemberOption[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
+    const cached = dialogDataCache.get(activeOrgId);
+    if (cached) {
+      return cached;
+    }
+
+    if (loadedDialogData?.organizationId === activeOrgId) {
+      return loadedDialogData.data;
+    }
+
+    return null;
+  }, [activeOrgId, loadedDialogData]);
 
   const defaultDurationHours = useMemo(() => {
     if (!preselectedClockInTime || !preselectedClockOutTime) return undefined;
@@ -60,37 +139,80 @@ export function CalendarEntryDialog({
     return String(totalMin / 60);
   }, [preselectedClockInTime, preselectedClockOutTime]);
 
+  const jobMembers = useMemo<OrgMemberOption[]>(
+    () =>
+      (dialogData?.members ?? []).map((member) => ({
+        userId: member.userId,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        role: member.role,
+      })),
+    [dialogData]
+  );
+
+  const hydrateDialogData = useCallback(
+    async (organizationId: string) => {
+      const hasCachedData = dialogDataCache.has(organizationId);
+      setIsLoadingData(!hasCachedData);
+
+      const data = await loadCalendarEntryDialogData(organizationId);
+      setLoadedDialogData({ organizationId, data });
+      setIsLoadingData(false);
+      return data;
+    },
+    []
+  );
+
+  const invalidateDialogData = useCallback(() => {
+    if (!activeOrgId || !isAdminOrManager) return;
+
+    dialogDataCache.delete(activeOrgId);
+    dialogDataPromiseCache.delete(activeOrgId);
+    setLoadedDialogData((current) =>
+      current?.organizationId === activeOrgId ? null : current
+    );
+
+    if (open) {
+      void hydrateDialogData(activeOrgId);
+    }
+  }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
+
+  useRealtimeEvent('jobs', invalidateDialogData);
+  useRealtimeEvent('projects', invalidateDialogData);
+  useRealtimeEvent('clients', invalidateDialogData);
+  useRealtimeEvent('job_assignments', invalidateDialogData);
+  useRealtimeEvent('organization_members', invalidateDialogData);
+  useRealtimeEvent('profiles', invalidateDialogData);
+
   useEffect(() => {
-    if (!open || !activeOrgId) return;
+    if (!activeOrgId || !isAdminOrManager || dialogDataCache.has(activeOrgId)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    loadCalendarEntryDialogData(activeOrgId)
+      .then((data) => {
+        if (cancelled) return;
+        setLoadedDialogData({ organizationId: activeOrgId, data });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrgId, isAdminOrManager]);
+
+  useEffect(() => {
+    if (!open || !activeOrgId || !isAdminOrManager) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the creation tab
     setActiveTab('job');
 
-    let cancelled = false;
-    setIsLoadingData(true);
+    if (dialogDataCache.has(activeOrgId)) {
+      return;
+    }
 
-    Promise.all([
-      getOrgClients(),
-      getOrgProjects(),
-      getOrgMembersAction(activeOrgId),
-    ]).then(([clientsResult, projectsResult, membersResult]) => {
-      if (cancelled) return;
-      if (clientsResult.success) setClients(clientsResult.clients);
-      if (projectsResult.success) setProjects(projectsResult.projects);
-      if (membersResult.success) {
-        setMembers(
-          (membersResult.members || []).map((m: { user_id: string; first_name: string | null; last_name: string | null; role: string }) => ({
-            userId: m.user_id,
-            firstName: m.first_name || '',
-            lastName: m.last_name || '',
-            role: m.role,
-          }))
-        );
-      }
-      setIsLoadingData(false);
-    });
-
-    return () => { cancelled = true; };
-  }, [open, activeOrgId]);
+    void hydrateDialogData(activeOrgId);
+  }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,27 +239,29 @@ export function CalendarEntryDialog({
             </TabsTrigger>
           </TabsList>
 
+          {isLoadingData && !dialogData && (
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Referenzdaten werden geladen. Die vorausgefüllten Felder kannst du
+              schon direkt anpassen.
+            </div>
+          )}
+
           <TabsContent value="job">
-            {isLoadingData ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                Daten werden geladen...
-              </div>
-            ) : (
-              <CreateJobFormContent
-                clients={clients}
-                members={members}
-                projects={projects}
-                defaultDate={preselectedDate}
-                defaultTime={preselectedClockInTime}
-                defaultDurationHours={defaultDurationHours}
-                defaultEmployeeIds={preselectedUserId ? [preselectedUserId] : undefined}
-                isActive={activeTab === 'job'}
-                onSuccess={() => {
-                  onOpenChange(false);
-                  onJobSuccess?.();
-                }}
-              />
-            )}
+            <CreateJobFormContent
+              clients={dialogData?.clients ?? []}
+              members={jobMembers}
+              projects={dialogData?.projects ?? []}
+              initialJobNumber={dialogData?.nextJobNumber}
+              defaultDate={preselectedDate}
+              defaultTime={preselectedClockInTime}
+              defaultDurationHours={defaultDurationHours}
+              defaultEmployeeIds={preselectedUserId ? [preselectedUserId] : undefined}
+              isActive={activeTab === 'job'}
+              onSuccess={() => {
+                onOpenChange(false);
+                onJobSuccess?.();
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="entry">
@@ -146,6 +270,8 @@ export function CalendarEntryDialog({
               preselectedUserId={preselectedUserId}
               preselectedClockInTime={preselectedClockInTime}
               preselectedClockOutTime={preselectedClockOutTime}
+              prefetchedMembers={dialogData?.members}
+              prefetchedJobs={dialogData?.manualEntryJobs}
               lockEntryMode={lockEntryMode}
               isActive={activeTab === 'entry'}
               onSuccess={async (entries) => {

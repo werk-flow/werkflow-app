@@ -27,6 +27,10 @@ import {
   getAllOrgJobs
 } from '@/lib/time-tracking/actions';
 import { getOrgMembersAction } from '@/lib/members/actions';
+import type {
+  CalendarEntryDialogJobOption,
+  CalendarEntryDialogMember,
+} from '@/lib/jobs/types';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
 import type {
   ManualEntryInput,
@@ -37,21 +41,8 @@ import { toLocalDateString } from '@/lib/utils';
 
 type EntryMode = 'clock_in' | 'clock_out' | 'both';
 
-type OrgMember = {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-};
-
-type JobOption = {
-  id: string;
-  title: string;
-  jobNumber: string | null;
-  status: string;
-  projectName: string | null;
-};
+type OrgMember = CalendarEntryDialogMember;
+type JobOption = CalendarEntryDialogJobOption;
 
 export interface ManualEntryFormContentProps {
   onSuccess?: (entries: TimeEntry[]) => void | Promise<void>;
@@ -59,6 +50,8 @@ export interface ManualEntryFormContentProps {
   preselectedDate?: Date;
   preselectedClockInTime?: string;
   preselectedClockOutTime?: string;
+  prefetchedMembers?: OrgMember[];
+  prefetchedJobs?: JobOption[];
   lockEntryMode?: boolean;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean;
@@ -70,6 +63,8 @@ export function ManualEntryFormContent({
   preselectedDate,
   preselectedClockInTime,
   preselectedClockOutTime,
+  prefetchedMembers,
+  prefetchedJobs,
   lockEntryMode,
   isActive = true,
 }: ManualEntryFormContentProps) {
@@ -91,9 +86,9 @@ export function ManualEntryFormContent({
     preselectedUserId || (isAdminOrManager ? '' : currentUserId || '')
   );
 
-  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [members, setMembers] = useState<OrgMember[]>(prefetchedMembers ?? []);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
-  const [jobOptions, setJobOptions] = useState<JobOption[]>([]);
+  const [jobOptions, setJobOptions] = useState<JobOption[]>(prefetchedJobs ?? []);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const canAssignJob =
@@ -109,12 +104,28 @@ export function ManualEntryFormContent({
   const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!isActive || !isAdminOrManager || !activeOrgId) return;
+    if (!prefetchedMembers) return;
+    setMembers(prefetchedMembers);
+    setIsLoadingMembers(false);
+  }, [prefetchedMembers]);
+
+  useEffect(() => {
+    if (!isActive || !isAdminOrManager || !activeOrgId || prefetchedMembers) return;
     const fetchMembers = async () => {
       setIsLoadingMembers(true);
       try {
         const result = await getOrgMembersAction(activeOrgId!);
-        if (result.success) setMembers(result.members || []);
+        if (result.success) {
+          setMembers(
+            (result.members || []).map((member) => ({
+              userId: member.user_id,
+              firstName: member.first_name ?? '',
+              lastName: member.last_name ?? '',
+              email: member.email,
+              role: member.role,
+            }))
+          );
+        }
       } catch (err) {
         console.error('Error fetching members:', err);
       } finally {
@@ -122,10 +133,16 @@ export function ManualEntryFormContent({
       }
     };
     fetchMembers();
-  }, [isActive, isAdminOrManager, activeOrgId]);
+  }, [isActive, isAdminOrManager, activeOrgId, prefetchedMembers]);
 
   useEffect(() => {
-    if (!isActive || !activeOrgId) return;
+    if (!prefetchedJobs) return;
+    setJobOptions(prefetchedJobs);
+    setIsLoadingJobs(false);
+  }, [prefetchedJobs]);
+
+  useEffect(() => {
+    if (!isActive || !activeOrgId || prefetchedJobs) return;
     const fetchJobs = async () => {
       setIsLoadingJobs(true);
       try {
@@ -140,7 +157,7 @@ export function ManualEntryFormContent({
       }
     };
     fetchJobs();
-  }, [isActive, activeOrgId, isAdminOrManager]);
+  }, [isActive, activeOrgId, isAdminOrManager, prefetchedJobs]);
 
   useEffect(() => {
     if (canAssignJob) return;
@@ -273,10 +290,10 @@ export function ManualEntryFormContent({
   const memberOptions = useMemo(
     () =>
       members.map((m) => ({
-        value: m.user_id,
+        value: m.userId,
         label:
-          m.first_name || m.last_name
-            ? `${m.first_name || ''} ${m.last_name || ''}`.trim()
+          m.firstName || m.lastName
+            ? `${m.firstName || ''} ${m.lastName || ''}`.trim()
             : m.email,
         description: m.email
       })),
