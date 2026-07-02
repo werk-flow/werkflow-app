@@ -15,7 +15,7 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Central manager library (`/dokumente`) | Implemented |
 | Manual folder tree | Implemented |
 | Logical linked-target overview (`Verknüpfungen`) | Implemented |
-| File upload (single, batch, folder drag/drop) | Implemented |
+| File upload (single, batch, folder, mixed file/folder drag/drop) | Implemented |
 | Contextual sections on job/project/customer/employee detail pages | Implemented |
 | Metadata links to jobs, projects, customers, employees | Implemented |
 | Drive-like library navigation + filters | Implemented |
@@ -25,7 +25,7 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Audit history | Implemented |
 | Versioning for selected business categories | Implemented |
 | In-app PDF/image viewer | Implemented (large overlay viewer; no generated thumbnails yet) |
-| Storage orphan cleanup report + guarded delete | Implemented |
+| Storage orphan cleanup report + guarded delete | Implemented as server-side maintenance helpers; not exposed in the `/dokumente` UI |
 | Advanced move/copy destination modal | Implemented |
 | Auto folder creation on job/project/customer/employee create | **Not implemented** (deliberate) |
 | OCR / invoice parsing / AI classification | **Not implemented** (Stage 5) |
@@ -68,10 +68,10 @@ Visible in the sidebar for `admin` and `buero` only (`managerOrAbove` in `app-sh
 Capabilities:
 
 - Browse manual folder tree with breadcrumbs.
-- Drive-like library header with `Ordner`, `Verknüpfungen`, `Alle Dokumente`, a separated `Papierkorb`, and compact category/link filters.
+- Drive-like library header with `Dokumente`, `Verknüpfungen`, `Alle Dateien`, a separated `Papierkorb`, and compact category/link filters.
 - Search; table sorting happens from sortable table headers (name, uploader/creator, date, size, type, linked target).
 - Create/rename/move/copy/delete folders.
-- Upload files or entire folders from the top-right `Hochladen oder Erstellen` action (with progress modal).
+- Upload files or entire folders from the top-right `Hochladen oder Erstellen` action (with progress modal). This action is disabled in `Verknüpfungen`; `Alle Dateien` supports file/folder upload to the root library, while manual folder creation is only offered in `Dokumente`.
 - Rename, move, copy, delete (soft), batch move/copy/delete, multi-select, rectangle select, and drag-to-folder movement in the manager table.
 - Move/copy uses a miniature folder browser modal with breadcrumbs, invalid target disabling for selected folders/their descendants, and on-the-fly folder creation via the same create-folder dialog as the main library.
 - SharePoint/Drive-style desktop table interactions: single row click selects, double-click opens, name click opens directly, selection circles stay visible for selected rows, Ctrl/Cmd-click adds to selection, Shift-click adds the range to the nearest selected row, and lasso selection works from empty table/body space.
@@ -79,7 +79,7 @@ Capabilities:
 - Link a file to one or more jobs/projects/customers/employees from the library row actions; existing links are highlighted when reopening the link modal.
 - Open files in a large in-app viewer (PDF/image) or download fallback.
 - Details dialog: metadata, links, category edit, versions, audit history.
-- Storage cleanup dry-run report and explicit orphan deletion, intentionally demoted to the `Weitere Aktionen` maintenance menu.
+- Storage cleanup server actions exist for maintenance, but the normal user-facing library no longer exposes a storage cleanup modal.
 
 ### Contextual sections — job / project / customer / employee detail pages
 
@@ -216,7 +216,7 @@ Authorization is enforced at two layers:
 | Trash restore / permanent delete | Yes | No |
 | Upload new version | Yes | No |
 | View audit history / versions in details | Yes (library) | No (not exposed in contextual UI) |
-| Storage cleanup tools | Yes | No |
+| Storage cleanup helpers | Server-side maintenance only; no normal library UI | No |
 
 ### Employee access path
 
@@ -233,7 +233,7 @@ Project-only, customer-only, or employee-only links do **not** grant field-worke
 
 ### Decision: one document row, many views — no auto physical mirroring
 
-Documents exist once in `documents`. Contextual pages show documents **linked** to that job/project/customer/employee. The library shows org documents through manual folders, `Alle Dokumente`, search, category filters, and link filters.
+Documents exist once in `documents`. Contextual pages show documents **linked** to that job/project/customer/employee. The library shows org documents through manual folders, `Alle Dateien`, search, category filters, and link filters.
 
 Upload from a job page:
 
@@ -244,7 +244,7 @@ Upload from a job page:
 The same file immediately appears in:
 
 - The job's contextual section (via link).
-- The central library, where it can be found through `Alle Dokumente`, search, category filters, and link filters.
+- The central library, where it can be found through `Alle Dateien`, search, category filters, and link filters.
 
 **Why:** Avoids duplicate Storage objects and sync bugs. Matches how users think: "this photo belongs to Auftrag 123" is a relationship, not a second file.
 
@@ -283,7 +283,7 @@ When a job, project, customer, or employee is created, automatically create a ma
 ### Downsides / open product questions
 
 - Some users expect a ready-made folder per Auftrag.
-- `Alle Dokumente` may grow large if office staff never adopts manual folders or filters.
+- `Alle Dateien` may grow large if office staff never adopts manual folders or filters.
 - Onboarding may need guidance: "upload on the job page" vs "organize in library".
 
 ### Possible future direction (Stage 5 consideration)
@@ -312,7 +312,7 @@ Categories are **organizational labels**, not separate database entities. There 
 - Uploads use Server Actions; `next.config.ts` sets `experimental.serverActions.bodySizeLimit` to `50mb` so Office/PDF uploads above Next's default 1 MB limit are accepted up to the app limit.
 - Upload dialog shows per-file progress and errors.
 - Folder upload creates nested folders when allowed (`allowFolderCreation`).
-- OS drag/drop supports folder uploads. The manager table also supports dragging existing files/folders onto folders, breadcrumb path pills, or `Papierkorb`. Existing-file DnD uses a custom drag pill and suppresses the browser's native dashed drag ghost.
+- OS drag/drop supports single files, multiple files, folders, and mixed file/folder drops. Dropping on `Dokumente` uploads into the current folder; dropping on `Alle Dateien` uploads to the root library. The manager table also supports dragging existing files/folders onto folders, breadcrumb path pills, or `Papierkorb`. Existing-file DnD uses a custom drag pill and suppresses the browser's native dashed drag ghost.
 
 ### Folder CRUD
 
@@ -341,7 +341,7 @@ Copy creates new rows and does **not** copy links automatically:
 ### Delete / trash / restore
 
 - Normal delete → soft delete (`deleted_at`, `deleted_by`, `delete_reason`); Storage retained.
-- Papierkorb view → restore or permanent delete.
+- Papierkorb view → restore or permanent delete. Restoring a document keeps its folder when that folder still exists; if the original folder was deleted, restore moves the file to the root library and resolves display-name collisions there.
 - Permanent delete → removes Storage objects (current + version paths) and document row.
 
 ### Versioning
@@ -368,13 +368,13 @@ Previous versions: download via signed URL. Rollback UI not implemented (optiona
 
 ### Storage cleanup
 
-Manager-only `getDocumentStorageCleanupReport` compares:
+Server-side maintenance helpers `getDocumentStorageCleanupReport` and `deleteOrphanedStorageObjects` compare:
 
 - Orphaned Storage objects (bytes without metadata reference).
 - Missing Storage objects (metadata without bytes).
 - Deleted document paths still in Storage (Papierkorb candidates).
 
-Orphan deletion requires explicit confirmation and only deletes paths validated as orphaned.
+Orphan deletion only deletes paths validated as orphaned by the report. These helpers are not currently exposed in the normal `/dokumente` user interface; add a dedicated admin/maintenance surface before using them as a product feature.
 
 ---
 
@@ -406,7 +406,7 @@ Audit is exposed in the manager details dialog (not in field-worker contextual U
 | --- | --- | --- | --- |
 | Metadata links instead of duplicate files per context | Single source of truth | Attach-existing, consistent trash/version/audit | Users must learn links vs folders |
 | No auto folder on job/project/customer/employee create | Avoid rename/sync pain | Flexible office taxonomy; less magic | No default per-Auftrag folder |
-| Manual folders separate from links | Office structure ≠ operational links | Cross-link same file to multiple contexts | `Alle Dokumente` can grow without folder/filter discipline |
+| Manual folders separate from links | Office structure ≠ operational links | Cross-link same file to multiple contexts | `Alle Dateien` can grow without folder/filter discipline |
 | Employees: job-context only, no library | Least privilege for Handwerker/in | Simple field UX; fewer permission bugs | Employees cannot browse org library |
 | Soft delete before Storage delete | Recoverability | Papierkorb, audit trail | Storage used until permanent delete |
 | Versioning only for business categories | Focus on contracts/invoices/offers/reports | Less noise for photos | Inconsistent versioning UX across categories |

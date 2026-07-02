@@ -1049,7 +1049,7 @@ export async function getDocumentLibrary(
       : documentsQuery.is('folder_id', null);
   }
 
-  if (view === 'unorganized' || linkFilter === 'unlinked') {
+  if (view === 'unorganized') {
     documentsQuery = documentsQuery.is('folder_id', null);
   }
 
@@ -3004,9 +3004,29 @@ export async function restoreDocument(
   const existing = await getDeletedDocumentForManager(auth.context, documentId);
   if (!existing.success) return existing;
 
+  let restoreFolderId = existing.document.folder_id;
+  if (restoreFolderId) {
+    const folder = await getFolderById(
+      auth.context.admin,
+      auth.context.orgId,
+      restoreFolderId
+    );
+    restoreFolderId = folder ? restoreFolderId : null;
+  }
+
+  const displayName = await getAvailableDisplayName({
+    admin: auth.context.admin,
+    orgId: auth.context.orgId,
+    folderId: restoreFolderId,
+    preferredName: existing.document.display_name,
+  });
+  const restoredToRoot = Boolean(existing.document.folder_id && !restoreFolderId);
+
   const { error } = await auth.context.admin
     .from('documents')
     .update({
+      folder_id: restoreFolderId,
+      display_name: displayName,
       deleted_at: null,
       deleted_by: null,
       delete_reason: null,
@@ -3021,12 +3041,15 @@ export async function restoreDocument(
 
   await recordDocumentAuditEvent(auth.context, {
     documentId: existing.document.id,
-    folderId: existing.document.folder_id,
+    folderId: restoreFolderId,
     eventType: 'restored',
     eventPayload: {
       deletedAt: existing.document.deleted_at,
       deletedBy: existing.document.deleted_by,
       deleteReason: existing.document.delete_reason,
+      originalFolderId: existing.document.folder_id,
+      restoredToRoot,
+      displayNameChanged: displayName !== existing.document.display_name,
     },
   });
 

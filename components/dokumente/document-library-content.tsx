@@ -25,11 +25,9 @@ import {
   Folder,
   FolderPlus,
   Loader2,
-  MoreHorizontal,
   MoveRight,
   Plus,
   Search,
-  Settings2,
   SlidersHorizontal,
   Trash2,
   Undo2,
@@ -81,7 +79,6 @@ import {
   deleteDocument,
   deleteDocumentFolder,
   getDocumentDetails,
-  getDocumentStorageCleanupReport,
   getDocumentVersionSignedUrl,
   getDocumentSignedUrl,
   permanentlyDeleteDocument,
@@ -92,7 +89,6 @@ import {
   restoreDocument,
   updateDocumentCategory,
   uploadDocumentVersion,
-  deleteOrphanedStorageObjects,
 } from '@/lib/documents/actions';
 import {
   DOCUMENT_CATEGORY_LABELS,
@@ -104,7 +100,6 @@ import {
   type DocumentFolder,
   type DocumentDetailsResult,
   type OrganizationDocument,
-  type StorageCleanupReport,
 } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
 import {
@@ -364,9 +359,22 @@ function readFileEntry(entry: BrowserFileSystemFileEntry): Promise<File> {
 function readDirectoryEntries(
   entry: BrowserFileSystemDirectoryEntry
 ): Promise<BrowserFileSystemEntry[]> {
-  return new Promise((resolve) => {
-    entry.createReader().readEntries(resolve);
-  });
+  const reader = entry.createReader();
+  const entries: BrowserFileSystemEntry[] = [];
+
+  async function readNextBatch(): Promise<BrowserFileSystemEntry[]> {
+    return new Promise((resolve) => {
+      reader.readEntries(resolve);
+    });
+  }
+
+  return (async () => {
+    while (true) {
+      const batch = await readNextBatch();
+      if (batch.length === 0) return entries;
+      entries.push(...batch);
+    }
+  })();
 }
 
 async function collectFilesFromEntry(
@@ -885,9 +893,6 @@ export function DocumentLibraryContent({
   >(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [viewerDocument, setViewerDocument] = useState<OrganizationDocument | null>(null);
-  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
-  const [cleanupReport, setCleanupReport] = useState<StorageCleanupReport | null>(null);
-  const [isCleanupLoading, setIsCleanupLoading] = useState(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -910,6 +915,9 @@ export function DocumentLibraryContent({
   const visibleView = pendingNavigation?.view ?? view;
   const isTrashView = visibleView === 'trash';
   const isWorkView = visibleView === 'work';
+  const canUseUploadActions = visibleView === 'folders' || visibleView === 'all';
+  const uploadTargetFolderId = visibleView === 'folders' ? currentFolderId : null;
+  const allowUploadFolderCreation = canUseUploadActions;
   const showNavigationSkeleton = pendingNavigation !== null;
   const linkDialogCatalogIsPrefetched =
     view === 'work' &&
@@ -1325,7 +1333,7 @@ export function DocumentLibraryContent({
   }
 
   function openUploadDialog(files: Array<{ file: File; relativePath?: string }>) {
-    if (isTrashView) return;
+    if (!canUseUploadActions) return;
     if (files.length === 0) return;
     setUploadItems(buildUploadItems(files));
     setUploadDialogOpen(true);
@@ -1608,51 +1616,6 @@ export function DocumentLibraryContent({
     });
   }
 
-  function openCleanupDialog() {
-    setCleanupDialogOpen(true);
-    setIsCleanupLoading(true);
-    setCleanupReport(null);
-
-    startTransition(async () => {
-      const result = await getDocumentStorageCleanupReport();
-      if (!result.success) {
-        showFeedback('error', 'Der Speicherbericht konnte nicht erstellt werden.');
-        setIsCleanupLoading(false);
-        return;
-      }
-
-      setCleanupReport(result.report);
-      setIsCleanupLoading(false);
-    });
-  }
-
-  function handleDeleteOrphanedObjects() {
-    if (!cleanupReport?.orphanedStoragePaths.length) return;
-
-    setConfirmDialog({
-      title: 'Verwaiste Speicherobjekte löschen?',
-      description: `${cleanupReport.orphanedStoragePaths.length} verwaiste Speicherobjekt(e) werden endgültig gelöscht.`,
-      confirmLabel: 'Objekte löschen',
-      onConfirm: () => {
-        startTransition(async () => {
-          const result = await deleteOrphanedStorageObjects(
-            cleanupReport.orphanedStoragePaths
-          );
-          if (!result.success) {
-            showFeedback(
-              'error',
-              'Verwaiste Speicherobjekte konnten nicht gelöscht werden.'
-            );
-            return;
-          }
-
-          showFeedback('success', 'Verwaiste Speicherobjekte wurden gelöscht.');
-          openCleanupDialog();
-        });
-      },
-    });
-  }
-
   function hasExternalFileDrag(dataTransfer: DataTransfer): boolean {
     return (
       Array.from(dataTransfer.types).includes('Files') ||
@@ -1768,7 +1731,7 @@ export function DocumentLibraryContent({
 
     event.preventDefault();
     setIsDragActive(false);
-    if (isTrashView) return;
+    if (!canUseUploadActions || isNavigationPending) return;
 
     const entries = Array.from(event.dataTransfer.items)
       .map((item) => {
@@ -1777,20 +1740,11 @@ export function DocumentLibraryContent({
       })
       .filter((entry): entry is BrowserFileSystemEntry => Boolean(entry));
 
-    const directoryEntries = entries.filter(isDirectoryEntry);
-    if (view === 'folders' && directoryEntries.length === 0) {
-      showFeedback(
-        'error',
-        'Ziehe hier einen Ordner hinein oder nutze Hochladen.'
+    if (entries.length > 0) {
+      const collectedFiles = await Promise.all(
+        entries.map((entry) => collectFilesFromEntry(entry))
       );
-      return;
-    }
-
-    if (directoryEntries.length > 0) {
-      const nestedFiles = await Promise.all(
-        directoryEntries.map((entry) => collectFilesFromEntry(entry))
-      );
-      openUploadDialog(nestedFiles.flat());
+      openUploadDialog(collectedFiles.flat());
       return;
     }
 
@@ -2067,7 +2021,7 @@ export function DocumentLibraryContent({
           'bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80'
       )}
       onDragOver={(event) => {
-        if (isTrashView) return;
+        if (!canUseUploadActions || isNavigationPending) return;
         if (hasInternalRowDrag(event.dataTransfer)) {
           event.preventDefault();
           return;
@@ -2092,7 +2046,7 @@ export function DocumentLibraryContent({
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                disabled={isPending || isNavigationPending}
+                disabled={isPending || isNavigationPending || !canUseUploadActions}
                 className="sm:mt-1"
               >
                 <Plus className="size-4" />
@@ -2100,11 +2054,17 @@ export function DocumentLibraryContent({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => openCreateFolderDialog(currentFolderId)}>
-                <FolderPlus className="size-4" />
-                Neuer Ordner
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {visibleView === 'folders' && (
+                <>
+                  <DropdownMenuItem
+                    onClick={() => openCreateFolderDialog(currentFolderId)}
+                  >
+                    <FolderPlus className="size-4" />
+                    Neuer Ordner
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                 <Upload className="size-4" />
                 Dateien hochladen
@@ -2212,24 +2172,6 @@ export function DocumentLibraryContent({
               <Trash2 className="size-4" />
               Papierkorb
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isPending || isNavigationPending}
-                >
-                  <MoreHorizontal className="size-4" />
-                  Weitere Aktionen
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={openCleanupDialog}>
-                  <Settings2 className="size-4" />
-                  Speicher prüfen
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
 
@@ -2683,8 +2625,8 @@ export function DocumentLibraryContent({
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         items={uploadItems}
-        target={{ folderId: currentFolderId }}
-        allowFolderCreation={view === 'folders'}
+        target={{ folderId: uploadTargetFolderId }}
+        allowFolderCreation={allowUploadFolderCreation}
         onComplete={(failedCount) => {
           if (failedCount > 0) {
             showFeedback(
@@ -2788,79 +2730,6 @@ export function DocumentLibraryContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Dialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Speicher prüfen</DialogTitle>
-            <DialogDescription>
-              Prüft Metadaten und Supabase Storage auf fehlende oder verwaiste Dateien.
-            </DialogDescription>
-          </DialogHeader>
-          {isCleanupLoading ? (
-            <p className="text-sm text-muted-foreground">
-              Speicherbericht wird erstellt...
-            </p>
-          ) : cleanupReport ? (
-            <div className="space-y-3 text-sm">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border p-3">
-                  <p className="text-2xl font-bold">
-                    {cleanupReport.orphanedStoragePaths.length}
-                  </p>
-                  <p className="text-muted-foreground">Verwaiste Objekte</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-2xl font-bold">
-                    {cleanupReport.missingStoragePaths.length}
-                  </p>
-                  <p className="text-muted-foreground">Fehlende Objekte</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-2xl font-bold">
-                    {cleanupReport.deletedDocumentStoragePaths.length}
-                  </p>
-                  <p className="text-muted-foreground">Dateien im Papierkorb</p>
-                </div>
-              </div>
-              {cleanupReport.orphanedStoragePaths.length > 0 && (
-                <div className="max-h-40 overflow-auto rounded-md border p-2 text-xs text-muted-foreground">
-                  {cleanupReport.orphanedStoragePaths.map((path) => (
-                    <p key={path} className="break-all">
-                      {path}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Noch kein Speicherbericht geladen.
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCleanupDialogOpen(false)}
-            >
-              Schließen
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDeleteOrphanedObjects}
-              disabled={
-                isPending ||
-                isCleanupLoading ||
-                !cleanupReport?.orphanedStoragePaths.length
-              }
-            >
-              Verwaiste Objekte löschen
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={folderDialogOpen}

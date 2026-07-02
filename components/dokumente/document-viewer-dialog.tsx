@@ -217,7 +217,6 @@ export function DocumentViewerDialog({
             <iframe
               src={getPdfPreviewUrl(signedUrl)}
               title={document.displayName}
-              sandbox="allow-same-origin allow-scripts"
               className="h-full w-full bg-neutral-800"
             />
           ) : (

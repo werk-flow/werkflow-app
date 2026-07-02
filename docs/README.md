@@ -19,6 +19,7 @@ docs/
   README.md
   technical/
     architecture.md
+    coderabbit.md
     data-model.md
     realtime-and-caching.md
   features/
