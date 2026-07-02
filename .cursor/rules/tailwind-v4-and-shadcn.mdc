@@ -1,3 +1,8 @@
+---
+description: Tailwind CSS v4 and ShadCN conventions—use v4 APIs only, treat v3 patterns as bugs, and follow ShadCN MCP guidance for frontend/UI work.
+alwaysApply: false
+---
+
 ## Cursor Rule: Tailwind CSS v4 Only (with ShadCN)
 
 - **Scope**: Applies to all frontend/UI tasks (Next.js + TypeScript) in this workspace. Especially relevant when using ShadCN components via the ShadCN MCP server.

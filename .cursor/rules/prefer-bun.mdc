@@ -1,3 +1,8 @@
+---
+description: Prefer Bun for local package management, script execution, dependency installs, and command examples in this workspace.
+alwaysApply: true
+---
+
 ## Cursor Rule: Prefer Bun for Local Development
 
 - **Scope**: Applies to all package management, script execution, dependency installation, and command examples in this workspace.

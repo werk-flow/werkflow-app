@@ -1,3 +1,8 @@
+---
+description: Supabase MCP workflow—inspect and change the live project via MCP/plugin for schema, auth, RLS, SQL, and storage; do not use migration files unless explicitly requested.
+alwaysApply: false
+---
+
 ## Cursor Rule: Supabase via MCP and Plugin, Not Migration Files
 
 - **Scope**: Applies to all Supabase-related work in this workspace, including database schema changes, SQL, auth, storage, edge functions, RLS, logs, and project inspection.

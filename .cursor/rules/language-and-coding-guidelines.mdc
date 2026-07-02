@@ -1,3 +1,8 @@
+---
+description: German UI copy and English code standards—TypeScript/Next.js conventions, a11y, i18n, and coding quality for this repo.
+alwaysApply: true
+---
+
 ## Cursor Rule: Language & Coding Standards (German UI, English Code)
 
 - **Scope**: Applies to all applications and the website in this repository (Next.js + TypeScript). Covers all UI copy, examples, code, and developer communication.

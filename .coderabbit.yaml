@@ -1,4 +1,86 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+tone_instructions: "Be direct and practical. Prioritize correctness, security, data integrity, accessibility, and production-risk findings over style nits."
+
 reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  changed_files_summary: true
+  poem: false
+  in_progress_fortune: false
+  enable_prompt_for_ai_agents: true
   path_filters:
-    - "!.cursor/rules/tailwind-v4-and-shadcn.md"
-    - "!.cursor/rules/prefer-bun.md"
+    - "!bun.lock"
+    - "!**/*.lock"
+    - "!lib/supabase/database.types.ts"
+    - "!.agents/**"
+    - "!.cursor/rules/**"
+    - "!docs/**"
+  path_instructions:
+    - path: "app/**"
+      instructions: |
+        Review Next.js App Router code for correct server/client boundaries, auth handling, redirects, cache behavior, and data loading. User-facing copy, aria labels, tooltips, and errors must be natural German; code and identifiers stay English.
+    - path: "components/**"
+      instructions: |
+        Review React components for correctness, accessibility, keyboard/focus behavior, mobile usability, unnecessary client-side work, and consistency with WerkFlow's practical German SHK operations UI. Prioritize findings that could confuse field workers, office staff, or admins.
+    - path: "lib/**"
+      instructions: |
+        Review shared logic, server actions, and Supabase access for input validation, tenant isolation, role checks, RLS-safe assumptions, PII-safe error handling, cache invalidation, realtime freshness, and timezone-sensitive behavior.
+    - path: "lib/documents/**"
+      instructions: |
+        This is WerkFlow document management. Check organization scoping, admin/buero versus employee access, contextual links to jobs/projects/customers/employees, versioning/audit behavior, trash behavior, and guarded Supabase Storage cleanup. Flag any path that could expose or delete another organization's documents.
+    - path: "components/dokumente/**"
+      instructions: |
+        Review document UI for clear German labels, safe upload/download/delete flows, accessible dialogs and tables, correct role-specific affordances, and practical handling of empty, loading, error, and permission-denied states.
+    - path: "app/(app)/dokumente/**"
+      instructions: |
+        Managers use the document library, while employees should rely on contextual job detail documents. Flag route or data access changes that weaken this role separation.
+    - path: "components/kalender/**"
+      instructions: |
+        Review calendar behavior for drag/drop correctness, parked job handling, realtime update loops, assignment conflicts, mobile ergonomics, and Europe/Berlin date/time edge cases.
+    - path: "lib/time-tracking/**"
+      instructions: |
+        Review time tracking for break handling, manual corrections, overlap/conflict behavior, timezone correctness, role permissions, and auditability of employee working-time changes.
+    - path: "lib/jobs/**"
+      instructions: |
+        Review job and project changes for assignment integrity, state transitions, validation, organization scoping, realtime/cache consistency, and clear operational semantics for planned, in-progress, parked, blocked, and complete work.
+    - path: "components/auftraege/**"
+      instructions: |
+        Review job/project UI for practical German SHK workflows, clear state and assignment controls, safe form validation, accessible dialogs/menus, and mobile-friendly field-worker usage.
+    - path: "proxy.ts"
+      instructions: |
+        Review authentication/session middleware carefully. Flag redirect loops, public-route leaks, stale sessions, cookie misuse, and any behavior that could expose protected organization data.
+    - path: "next.config.ts"
+      instructions: |
+        Review Next.js configuration for production safety, image/security settings, experimental flags, and compatibility with the app's deployment/runtime assumptions.
+  auto_review:
+    enabled: true
+    drafts: false
+  pre_merge_checks:
+    custom_checks:
+      - mode: "warning"
+        name: "Tenant and role safety"
+        instructions: |
+          Changed code must preserve organization boundaries and intentional role behavior for admin, buero, and employee users. Warn if a data read/write, server action, route, realtime subscription, document access, or storage cleanup can affect another organization or expose manager-only data to employees.
+      - mode: "warning"
+        name: "WerkFlow product fit"
+        instructions: |
+          Changed user-facing behavior should reduce paperwork, improve organization, or save time for German SHK businesses. Warn when new UI or workflow complexity is not justified by those product goals.
+      - mode: "warning"
+        name: "German user-facing copy"
+        instructions: |
+          User-visible labels, empty states, toast messages, validation errors, aria labels, and tooltips must be natural German with proper German characters where appropriate. Developer-facing code, identifiers, comments, and logs should remain English.
+
+chat:
+  auto_reply: true
+  art: false
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+  learnings:
+    scope: "local"

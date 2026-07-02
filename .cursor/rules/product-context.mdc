@@ -1,0 +1,23 @@
+---
+description: Product context and decision principles for WerkFlow
+alwaysApply: true
+---
+
+# WerkFlow Product Context
+
+Before making product-facing changes, read `AGENTS.md` for the current broad product context.
+
+WerkFlow is a German-language operations app for German HVAC / SHK businesses (`Sanitär-Heizungs-Klima`) first. Adjacent trades such as roofing or tiling may become relevant later, but the current product focus is SHK. It should become the digital backbone for these businesses by reducing paperwork, organizing work digitally, replacing slow legacy tools, and saving time for business owners, office staff, managers, field workers, and apprentices.
+
+Product-facing decisions should follow these principles:
+
+- Before adding a feature, ask whether it reduces paperwork, makes work more organized, or saves time for employees or the business owner.
+- Keep workflows practical for non-technical German SHK users.
+- Keep field-worker (`Handwerker/in`) flows extremely simple, clear, mobile-friendly, and hard to misuse.
+- Keep owner, office, and manager flows efficient for planning, assignment, documents, inventory, time, and operational oversight.
+- Preserve organization boundaries and role-specific behavior.
+- Use natural German for user-facing copy; keep code and developer artifacts in English.
+- Prefer speed, simple defaults, excellent UI/UX, and operational usefulness over broad generic SaaS features.
+- The intended product scope includes employee/time management, projects/jobs, document management, future AI automations, and inventory as a major near-term planned module; distinguish current implementation from planned scope.
+- Do not invent offer, pricing, acquisition, or avatar details; ask or leave TODOs until product docs exist.
+- When schema details matter, treat live Supabase inspection and generated types as more reliable than potentially outdated architecture docs.
