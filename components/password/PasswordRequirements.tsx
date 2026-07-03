@@ -45,9 +45,9 @@ export function PasswordRequirements({
               )}
             >
               {met ? (
-                <Check aria-hidden className="h-3 w-3" strokeWidth={3} />
+                <Check aria-hidden className="h-3 w-3 [stroke-width:3]" />
               ) : (
-                <X aria-hidden className="h-3 w-3" strokeWidth={3} />
+                <X aria-hidden className="h-3 w-3 [stroke-width:3]" />
               )}
             </span>
             <span

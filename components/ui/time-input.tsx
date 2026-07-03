@@ -243,7 +243,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         className={cn(
           'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
           'border-input dark:bg-input/30',
-          isFocused && 'border-ring ring-ring/50 ring-[3px]',
+          isFocused && 'border-ring ring-ring/50 ring-2',
           disabled && 'pointer-events-none cursor-not-allowed opacity-50',
           className
         )}

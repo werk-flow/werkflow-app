@@ -26,7 +26,7 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        'bg-muted/50 inline-flex h-10 w-fit items-center justify-center rounded-md p-1 gap-1',
+        'bg-muted/50 inline-flex h-9 w-fit items-center justify-center rounded-md p-0.5 gap-1',
         className
       )}
       {...props}
@@ -44,7 +44,7 @@ function TabsTrigger({
       className={cn(
         'inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all',
         'text-muted-foreground hover:text-foreground',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         'disabled:pointer-events-none disabled:opacity-50',
         'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
         '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',

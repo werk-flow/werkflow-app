@@ -205,7 +205,7 @@ export function SearchableSelect({
           className={cn(
             'flex h-9 w-full min-w-0 max-w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
             'dark:bg-input/30',
-            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
             disabled && 'pointer-events-none cursor-not-allowed opacity-50',
             !selectedOption && !value && 'text-muted-foreground'
           )}
@@ -427,7 +427,7 @@ export function SearchableMultiSelect({
           className={cn(
             'flex h-9 w-full min-w-0 max-w-full items-center justify-between overflow-hidden rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
             'dark:bg-input/30',
-            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
             disabled && 'pointer-events-none cursor-not-allowed opacity-50',
             selectedIds.length === 0 && 'text-muted-foreground'
           )}
