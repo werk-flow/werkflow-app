@@ -136,9 +136,9 @@ The following topics should likely become separate docs instead of making this f
 
 When those files exist, agents should read them for tasks that touch positioning, onboarding, monetization, growth, or sales-driven product changes.
 
-## Codex Repo-Level Rules Mirrored From Cursor
+## Repo-Level Rules Mirrored From Cursor
 
-This section mirrors the Cursor rules that were marked as always apply in `.cursor/rules`. The `.cursor` folder remains Cursor-specific; Codex expects durable repository-level agent guidance in `AGENTS.md`, so these rules live here to make Codex follow the same always-on project expectations.
+This section mirrors the Cursor rules that were marked as always apply in `.cursor/rules`. The `.cursor` folder remains Cursor-specific; Codex and Claude expect durable repository-level agent guidance in `AGENTS.md`, so these rules live here to make Codex and Claude follow the same always-on project expectations.
 
 ### Language And Coding Standards
 
@@ -169,6 +169,7 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 - Do not introduce or regenerate `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
 - Documentation and shell examples should default to Bun commands.
 - Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
+- Also important: this app uses bun for local development but is hosted on Vercel and uses the node runtime on Vercel so the existance of a package-lock.json file is completely fine.
 
 ### Product Context Reminder
 
@@ -186,13 +187,14 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 
 ### Styling And Brand Color Rules
 
-- WerkFlow uses orange as the primary action color and purple as the secondary/supporting brand color.
-- Use orange (`#ff7900`) for submit buttons, CTAs, important links, success states, and elements that should draw immediate attention.
-- Use purple shades for navigation highlights, non-critical hover states, borders, dividers, background tints, secondary buttons, tags, badges, and general UI polish.
-- Never mix purple and orange in the same component in a way that places purple text on an orange background or orange text on a purple background.
-- Valid pairings include orange background with white/neutral text, purple background with white/neutral/purple text, and neutral background with orange or purple text.
-- Apply the same color pairing rules in dark mode.
-- Use slightly desaturated purples in dark mode backgrounds and make the orange primary color bright enough for visibility.
+- WerkFlow looks calm, professional, and deliberately understated. Clarity and trust beat visual excitement; the Aufträge and Dokumente tables show the intended feel.
+- Source of truth for all theme values is `app/globals.css` (tokens + `@theme inline`). Change the look by editing tokens there; never hardcode hex values, radii, or one-off styles in components. The full design language lives in the `werkflow-design` skill (`.claude/skills/` mirrored in `.agents/skills/`).
+- Orange (`primary`, `#ff7900`) is the only attention color. Use it selectively and functionally: submit/CTA buttons, focus rings, selection states, important links. If orange stops being rare, it stops working.
+- Purple is a soft, desaturated undertone via the `--brand-purple*` tokens and purple-tinted neutrals — never a loud accent. Do not reintroduce vivid violet in UI; only the logo SVGs keep vivid purple. Purple also semantically marks parked/planning entities (`geparkt`, Kalender blocks).
+- Status colors stay semantic (green success, red destructive, yellow warning) — never rebrand them orange or purple.
+- Never place purple text on an orange background or orange text on a purple background. Valid pairings: orange background with white/neutral text, purple background with white/neutral/purple text, neutral background with orange or purple text. Same rules in dark mode.
+- Shape and depth: modest radius (containers `rounded-lg`, controls `rounded-md`, never `rounded-2xl`+), cards as `border` + `shadow-xs`, heavy shadows only on floating elements, 2px focus rings without offsets, Lucide icons at the global 1.75 stroke (no `strokeWidth` props).
+- Keep controls slim (tabs `h-9`, sidebar items `py-1.5`, quiet neutral active states) and prefer sections with headings/dividers over wrapping every block in a card.
 - Logo usage: light mode should use `/logo-text-light.svg` or `/logo-icon-light.svg`; dark mode should use `/logo-text-dark.svg` or `/logo-icon-dark.svg`.
 - Use `dark:hidden` and `hidden dark:block` when swapping light/dark logo assets.
 

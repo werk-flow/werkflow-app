@@ -4,71 +4,42 @@ alwaysApply: true
 
 # WerkFlow Styling Guidelines
 
-## Brand Color Philosophy
+WerkFlow looks calm, professional, and deliberately understated. Clarity and trust beat visual excitement; the Aufträge and Dokumente tables are the reference for the intended feel.
 
-WerkFlow uses a **purple and orange** color scheme with clear semantic meaning:
+**Source of truth:** all theme values live in `app/globals.css` (`:root` tokens + `@theme inline`). Change the look by editing tokens there; never hardcode hex values or one-off styles in components. The detailed design language lives in `.claude/skills/werkflow-design/SKILL.md` (mirrored in `.agents/skills/`).
 
-### Color Roles
+## Color Roles
 
-| Role                   | Color         | Usage                                                                           |
-| ---------------------- | ------------- | ------------------------------------------------------------------------------- |
-| **Primary (Orange)**   | `#ff7900`     | Action buttons, CTAs, elements that need to pop and stand out                   |
-| **Secondary (Purple)** | Purple shades | General UI enhancement, backgrounds, borders, non-critical interactive elements |
+| Role                 | Token(s)                                        | Usage                                                                                     |
+| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Orange (primary)** | `primary`, `--brand-orange` (`#ff7900`)         | The only attention color: submit/CTA buttons, focus rings, selection, important links      |
+| **Purple (support)** | `--brand-purple*` scale, purple-tinted neutrals | Soft desaturated undertone; semantic hue for parked/planning entities (`geparkt`, Kalender) |
+| **Neutrals**         | `background`, `card`, `muted`, `border`, …      | Most surfaces — they carry only a faint purple cast                                        |
 
-### Rule: Never Mix Purple and Orange in the Same Component
+- Orange must stay rare to keep its attention-grabbing role.
+- Purple is deliberately desaturated (grayish). Do not reintroduce vivid violet (the old `#7b2cbf` family) in UI — only the logo SVGs keep vivid purple.
+- Status colors stay semantic (green/red/yellow) — never rebrand them orange or purple.
 
-**CRITICAL**: Purple text should never appear on an orange background, and orange text should never appear on a purple background.
-
-Valid combinations:
+## Pairing Rules (critical)
 
 - ✅ Orange background + white/neutral text
 - ✅ Purple background + white/neutral/purple text
 - ✅ Neutral background + orange OR purple text
 - ❌ Orange background + purple text
 - ❌ Purple background + orange text
+- Same rules apply in dark mode.
 
-### When to Use Each Color
+## Shape, Depth, Focus, Icons
 
-**Use Orange (`primary`) for:**
-
-- Submit buttons
-- Call-to-action buttons
-- Important links that need attention
-- Success states
-- Elements that should draw immediate user attention
-
-**Use Purple (`secondary`, `accent`, `muted`) for:**
-
-- Navigation highlights
-- Hover states on non-critical elements
-- Borders and dividers
-- Background tints for visual interest
-- Secondary buttons
-- Tags and badges
-- General UI polish
-
-### Tailwind Classes Reference
-
-### Brand Color Variables (for custom usage)
-
-```css
---brand-orange: #ff7900; /* Main orange */
---brand-orange-light: #ff9e00; /* Lighter orange */
---brand-orange-dark: #cc6100; /* Darker orange */
---brand-purple: #7b2cbf; /* Main purple */
---brand-purple-light: #9d4edd; /* Lighter purple */
---brand-purple-dark: #5a189a; /* Darker purple */
---brand-purple-deep: #3c096c; /* Deepest purple */
-```
-
-### Dark Mode Considerations
-
-- Dark mode uses slightly desaturated purples for backgrounds to avoid harsh saturation
-- Orange primary color is slightly brightened in dark mode for better visibility
-- All color pairing rules apply equally to dark mode
+- Modest radius (`--radius: 8px`): containers `rounded-lg`, controls `rounded-md`. Never `rounded-2xl`+; `rounded-full` only for avatars/dots/badges.
+- Cards: `border` + `shadow-xs`. Heavy shadows only on floating elements (dialogs, popovers, toasts, drag previews).
+- Focus: 2px orange ring (`focus-visible:ring-2`), no ring offsets, never 3px+ rings.
+- Icons: Lucide with a global 1.75 stroke (set in `globals.css`) — do not pass `strokeWidth` props.
+- Slim controls: tabs `h-9`, sidebar items `py-1.5`, active nav = quiet neutral fill, not a colored pill.
+- Prefer sections with headings/dividers over wrapping every block in a card.
 
 ## Logo Usage
 
 - Light mode: `/logo-text-light.svg` or `/logo-icon-light.svg`
 - Dark mode: `/logo-text-dark.svg` or `/logo-icon-dark.svg`
-- Use `dark:hidden` and `hidden dark:block` classes to swap between them
+- Swap with `dark:hidden` and `hidden dark:block`.
