@@ -29,7 +29,7 @@ export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProp
         size="default"
         className={cn(
           'gap-2 relative transition-all',
-          showHighlight && 'ring-2 ring-brand-purple ring-offset-2 bg-brand-purple/10 scale-105'
+          showHighlight && 'ring-2 ring-brand-purple/60 bg-brand-purple/10 scale-105'
         )}
         onClick={onToggle}
         onDragOver={(e) => {

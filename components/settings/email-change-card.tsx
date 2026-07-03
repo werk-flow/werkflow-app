@@ -518,7 +518,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
       </CardHeader>
       <CardContent className="space-y-6">
         {completionState ? (
-          <div className="rounded-xl border bg-primary/5 p-5">
+          <div className="rounded-lg border bg-primary/5 p-5">
             <div className="flex items-start gap-3">
               <div className="rounded-full bg-primary/10 p-2 text-primary">
                 <CheckCircle2 className="size-5" />
@@ -558,7 +558,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
           </div>
         ) : null}
 
-        <div className="rounded-xl border bg-muted/30 p-4">
+        <div className="rounded-lg border bg-muted/30 p-4">
           <p className="text-sm font-medium text-foreground">
             Aktuelle E-Mail-Adresse
           </p>
@@ -600,7 +600,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
               isComplete={completionState !== null}
             />
 
-            <div className="space-y-5 rounded-xl border bg-background p-5">
+            <div className="space-y-5 rounded-lg border bg-background p-5">
               {formError ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                   {formError}

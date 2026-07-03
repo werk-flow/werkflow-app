@@ -370,7 +370,7 @@ export function ProfileAvatarSection() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="relative h-80 overflow-hidden rounded-xl bg-black">
+            <div className="relative h-80 overflow-hidden rounded-lg bg-black">
               {cropSource ? (
                 <Cropper
                   image={cropSource}

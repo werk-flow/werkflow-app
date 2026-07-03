@@ -66,7 +66,7 @@ const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
   in_bearbeitung: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   fertig: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  geparkt: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+  geparkt: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const PRIORITY_CLASSES: Record<JobPriority, string> = {
@@ -79,7 +79,7 @@ const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   nicht_begonnen: 'bg-secondary text-secondary-foreground',
   in_bearbeitung: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   abgeschlossen: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  geparkt: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+  geparkt: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 function TrafficLight({ status }: { status: 'green' | 'yellow' | 'red' }) {

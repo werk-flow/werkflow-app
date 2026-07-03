@@ -35,7 +35,7 @@ function DayGridSkeleton() {
 
   return (
     <div className="p-4">
-      <div className="rounded-2xl border bg-card overflow-hidden shadow-lg">
+      <div className="rounded-lg border bg-card overflow-hidden shadow-xs">
         {/* Header */}
         <div className="bg-muted/30 p-3 border-b">
           <Skeleton className="h-5 w-32 mx-auto" />
@@ -73,7 +73,7 @@ function WeekGridSkeleton() {
 
   return (
     <div className="p-4">
-      <div className="rounded-2xl border bg-card overflow-hidden shadow-lg">
+      <div className="rounded-lg border bg-card overflow-hidden shadow-xs">
         {/* Header with days */}
         <div className="grid grid-cols-[60px_repeat(7,_1fr)] bg-muted/30 border-b">
           <div className="p-2 border-r" />
@@ -119,7 +119,7 @@ function MonthGridSkeleton() {
 
   return (
     <div className="p-4">
-      <div className="rounded-2xl border bg-card overflow-hidden shadow-lg">
+      <div className="rounded-lg border bg-card overflow-hidden shadow-xs">
         {/* Header with day names */}
         <div className="grid grid-cols-7 bg-muted/30 border-b">
           {days.map((day, i) => (

@@ -41,12 +41,12 @@ const dayCellStyles = `
     transition: background-color 0.15s, border-color 0.15s;
   }
   .week-view-day-cell:hover:not(:has(.week-view-entry:hover)) {
-    background-color: rgba(123, 44, 191, 0.06) !important;
-    border-color: rgba(123, 44, 191, 0.3) !important;
+    background-color: rgba(111, 95, 148, 0.06) !important;
+    border-color: rgba(111, 95, 148, 0.3) !important;
   }
   .week-view-day-cell.is-today:hover:not(:has(.week-view-entry:hover)) {
-    background-color: rgba(123, 44, 191, 0.12) !important;
-    border-color: rgba(123, 44, 191, 0.5) !important;
+    background-color: rgba(111, 95, 148, 0.12) !important;
+    border-color: rgba(111, 95, 148, 0.5) !important;
   }
 `;
 

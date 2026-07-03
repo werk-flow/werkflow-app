@@ -24,14 +24,16 @@
   --selection: #d8d2e4;
   --selection-foreground: #1a1523;
 
-  /* Brand colors */
+  /* Brand colors. Purple is deliberately desaturated for UI use so it reads
+     as a soft undertone next to the orange primary; the logo keeps its own
+     vivid purple inside the SVG assets. */
   --brand-orange: #ff7900;
   --brand-orange-light: #ff9e00;
   --brand-orange-dark: #cc6100;
-  --brand-purple: #7b2cbf;
-  --brand-purple-light: #9d4edd;
-  --brand-purple-dark: #5a189a;
-  --brand-purple-deep: #3c096c;
+  --brand-purple: #6f5f94;
+  --brand-purple-light: #948ab3;
+  --brand-purple-dark: #544a78;
+  --brand-purple-deep: #3e3659;
 }
 
 @theme inline {
@@ -177,7 +179,7 @@ textarea::-moz-selection,
 /* Row highlight animation (for calendar day view navigation from week view) */
 @keyframes row-highlight {
   0% {
-    background-color: rgba(123, 44, 191, 0.25);
+    background-color: rgba(111, 95, 148, 0.25);
   }
   100% {
     background-color: transparent;

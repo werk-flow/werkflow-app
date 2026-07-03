@@ -830,14 +830,14 @@ export function FullCalendarView({
       <style jsx global>{`
         /* Parkplatz drop highlight for month view cells */
         .fc-daygrid-day.fc-parkplatz-drop-highlight {
-          box-shadow: inset 0 0 0 2px rgba(123, 44, 191, 0.5);
-          background-color: rgba(123, 44, 191, 0.05) !important;
+          box-shadow: inset 0 0 0 2px rgba(111, 95, 148, 0.5);
+          background-color: rgba(111, 95, 148, 0.05) !important;
         }
         /* ===== BASE VARIABLES ===== */
         .fullcalendar-wrapper {
           background: transparent;
           --fc-border-color: var(--border);
-          --fc-today-bg-color: rgba(123, 44, 191, 0.08);
+          --fc-today-bg-color: rgba(111, 95, 148, 0.08);
           --fc-page-bg-color: transparent;
           --fc-neutral-bg-color: color-mix(
             in srgb,
@@ -984,7 +984,7 @@ export function FullCalendarView({
 
         /* Column frame highlight when JS adds .column-hovered class */
         .fullcalendar-wrapper .fc-timegrid-col-frame.column-hovered {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Header highlight when JS adds .column-hovered class */
@@ -1002,7 +1002,7 @@ export function FullCalendarView({
         .fullcalendar-wrapper
           .fc-timegrid-col.fc-day-today
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.06) !important;
+          background-color: rgba(111, 95, 148, 0.06) !important;
         }
 
         /* Today header base (week + day views) */
@@ -1012,7 +1012,7 @@ export function FullCalendarView({
         .fullcalendar-wrapper
           .fc-timeGridDay-view
           .fc-day-today.fc-col-header-cell {
-          background-color: rgba(123, 44, 191, 0.06) !important;
+          background-color: rgba(111, 95, 148, 0.06) !important;
         }
 
         /* Week view: hovering a column sets .column-hovered on the header via JS */
@@ -1027,7 +1027,7 @@ export function FullCalendarView({
         .fullcalendar-wrapper
           .fc-timegrid-col.fc-day-today
           .fc-timegrid-col-frame.column-hovered {
-          background-color: rgba(123, 44, 191, 0.1) !important;
+          background-color: rgba(111, 95, 148, 0.1) !important;
         }
 
         /* === DAY VIEW: Disable hover/click interactions on column/header === */
@@ -1067,7 +1067,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-mon.fc-col-header-cell:hover)
           .fc-day-mon.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Tuesday */
@@ -1080,7 +1080,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-tue.fc-col-header-cell:hover)
           .fc-day-tue.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Wednesday */
@@ -1093,7 +1093,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-wed.fc-col-header-cell:hover)
           .fc-day-wed.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Thursday */
@@ -1106,7 +1106,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-thu.fc-col-header-cell:hover)
           .fc-day-thu.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Friday */
@@ -1119,7 +1119,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-fri.fc-col-header-cell:hover)
           .fc-day-fri.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Saturday */
@@ -1132,7 +1132,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-sat.fc-col-header-cell:hover)
           .fc-day-sat.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Sunday */
@@ -1145,7 +1145,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-sun.fc-col-header-cell:hover)
           .fc-day-sun.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.04) !important;
+          background-color: rgba(111, 95, 148, 0.04) !important;
         }
 
         /* Today header hover -> column highlight (week view only) */
@@ -1153,7 +1153,7 @@ export function FullCalendarView({
           .fc-timeGridWeek-view:has(.fc-day-today.fc-col-header-cell:hover)
           .fc-day-today.fc-timegrid-col
           .fc-timegrid-col-frame {
-          background-color: rgba(123, 44, 191, 0.1) !important;
+          background-color: rgba(111, 95, 148, 0.1) !important;
         }
 
         .fullcalendar-wrapper .fc-timegrid-axis {
@@ -1245,8 +1245,8 @@ export function FullCalendarView({
           .fc-daygrid-day:hover:not(
             :has(.fc-event:hover, .fc-daygrid-more-link:hover)
           ) {
-          background: rgba(123, 44, 191, 0.06) !important;
-          border-color: rgba(123, 44, 191, 0.3) !important;
+          background: rgba(111, 95, 148, 0.06) !important;
+          border-color: rgba(111, 95, 148, 0.3) !important;
         }
 
         /* Fixed height for day cells */
@@ -1272,8 +1272,8 @@ export function FullCalendarView({
 
         /* Today cell styling - matches weekly view */
         .fullcalendar-wrapper .fc-daygrid-day.fc-day-today {
-          background: rgba(123, 44, 191, 0.08) !important;
-          border-color: rgba(123, 44, 191, 0.4) !important;
+          background: rgba(111, 95, 148, 0.08) !important;
+          border-color: rgba(111, 95, 148, 0.4) !important;
         }
 
         /* Only highlight today cell when hovering on empty space */
@@ -1281,8 +1281,8 @@ export function FullCalendarView({
           .fc-daygrid-day.fc-day-today:hover:not(
             :has(.fc-event:hover, .fc-daygrid-more-link:hover)
           ) {
-          background: rgba(123, 44, 191, 0.12) !important;
-          border-color: rgba(123, 44, 191, 0.5) !important;
+          background: rgba(111, 95, 148, 0.12) !important;
+          border-color: rgba(111, 95, 148, 0.5) !important;
         }
 
         .fullcalendar-wrapper
@@ -1540,7 +1540,7 @@ export function FullCalendarView({
           .fc-daygrid-day:hover:not(
             :has(.fc-event:hover, .fc-daygrid-more-link:hover)
           ) {
-          background: rgba(123, 44, 191, 0.08) !important;
+          background: rgba(111, 95, 148, 0.08) !important;
         }
 
         .dark .fullcalendar-wrapper .fc-daygrid-day.fc-day-other {

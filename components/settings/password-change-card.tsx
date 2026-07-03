@@ -296,7 +296,7 @@ export function PasswordChangeCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="rounded-xl border bg-muted/30 p-4">
+        <div className="rounded-lg border bg-muted/30 p-4">
           <p className="text-sm font-medium text-foreground">Sicherheit</p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
@@ -322,7 +322,7 @@ export function PasswordChangeCard() {
           <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
             <PasswordStepIndicator currentStep={step} />
 
-            <div className="space-y-5 rounded-xl border bg-background p-5">
+            <div className="space-y-5 rounded-lg border bg-background p-5">
               {formError ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                   {formError}

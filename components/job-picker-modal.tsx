@@ -110,7 +110,7 @@ export function JobPickerModal({
       {/* Centering wrapper */}
       <div className="fixed inset-0 z-[101] flex items-center justify-center pointer-events-none p-4">
       {/* Modal card */}
-      <div className="pointer-events-auto w-full max-w-md flex-col rounded-2xl bg-background shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-200 flex">
+      <div className="pointer-events-auto w-full max-w-md flex-col rounded-lg bg-background shadow-xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-200 flex">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-2.5">

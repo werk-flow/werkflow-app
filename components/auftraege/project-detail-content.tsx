@@ -97,7 +97,7 @@ const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   abgeschlossen:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   geparkt:
-    'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+    'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
@@ -107,7 +107,7 @@ const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   fertig:
     'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   geparkt:
-    'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+    'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
 
 const PRIORITY_CLASSES: Record<string, string> = {
