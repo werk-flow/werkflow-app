@@ -1,8 +1,10 @@
 # Inventory Management
 
-Inventory management is a major near-term planned module for WerkFlow. It is not currently implemented in the app.
+Inventory management is a major WerkFlow module for tracking SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
-This document captures the intended product direction and the important open decisions before implementation begins. It should be updated as soon as the first inventory architecture and schema decisions are made.
+This document captures the intended product direction, current V1 behavior, and future reference points for later inventory iterations.
+
+The current V1 planning source is `docs/plans/inventory-v1-implementation-plan.md`. It captures the first confirmed product decisions for native WerkFlow inventory, including locations, planned-vs-actual job material usage, tools/assets, barcode-ready item identifiers, CSV import with column mapping, and the recommendation not to build the module on top of Snipe-IT as the core system.
 
 ## Product Goal
 
@@ -16,10 +18,13 @@ Inventory work should pass the same product filter as other major features:
 
 ## Current Status
 
-- No inventory module currently exists in the app.
-- No inventory database model should be assumed from existing code.
-- Inventory should be designed as a new product area, not as an extension guessed from jobs/projects alone.
-- Before schema work, inspect live Supabase and generated types to avoid conflicting with current database state.
+- V1 is implemented as a native WerkFlow module at `/inventar` for `admin` and `buero` users.
+- V1 has organization-scoped Supabase tables for categories, Lager locations, suppliers, items, barcodes, stock levels, import batches, job material lines, stock movements, asset instances, and audit events.
+- Existing organizations are seeded with default SHK categories only. Lager locations are created by the user so the app reflects the real rooms, shelves, vehicles, or warehouses of the business.
+- Job and project detail pages include `Material & Inventar`, where office users can plan material without changing stock and users can explicitly book taking or returning existing inventory items.
+- CSV import exists in V1 with a column-mapping dialog; Excel import remains a later iteration.
+- Tools and assets exist from day one as item types with initial asset-instance infrastructure, while deeper checkout, maintenance, and lifecycle workflows are future scope.
+- Before future schema work, inspect live Supabase and generated types to avoid conflicting with current database state.
 
 ## Intended Scope
 
@@ -48,7 +53,7 @@ The intended module should eventually support:
 
 Users should be able to maintain a list of items the business stores or uses. Item details should likely include a clear name, category, unit, stock count, and optional metadata such as barcode, supplier, article number, location, and notes.
 
-Exact fields are not decided yet and should be designed before implementation.
+V1 fields include item type, name, category, unit, SKU, barcode, manufacturer, supplier metadata, purchase/sale price infrastructure, billable flag, global low-stock thresholds, notes, and active status.
 
 ### Stock Changes
 
@@ -79,7 +84,7 @@ Inventory should eventually support low-stock thresholds and reorder workflows. 
 
 ### Initial Inventory Audit
 
-The broader product/service offer may include helping customers establish their initial inventory baseline. The app should support importing or efficiently entering that baseline, but the exact import format and workflow are not decided yet.
+The broader product/service offer may include helping customers establish their initial inventory baseline. V1 supports CSV upload with column mapping, preview/validation, duplicate matching, and initial quantities recorded as stock movements. Excel import and a more guided onboarding/audit service remain future iterations.
 
 ## Non-Goals For First Implementation
 
@@ -98,13 +103,14 @@ These may become relevant later, but the first implementation should establish a
 
 ## Role And Permission Considerations
 
-Permissions are not finalized. A sensible starting point to confirm before implementation:
+Current V1 permissions are:
 
-- Admins can configure and manage all inventory.
-- Büro/office users can manage catalog, stock, and job/project materials.
-- Employees/field workers can record simple add/remove/use actions where allowed.
+- `admin` and `buero` can open the central `/inventar` route and manage the catalog, locations, suppliers, imports, prices, corrections, and job/project material planning.
+- `employee` users do not receive the central inventory route and cannot manage catalog data, prices, imports, locations, or general stock corrections.
+- Employees can view material for jobs assigned to them and take or return existing inventory items through those job pages. They cannot use project-level inventory workflows.
+- Server actions derive the active organization and role from authenticated server context. Inventory identifiers must be checked inside that organization even when an admin Supabase client is used.
 
-Do not hard-code this permission model without confirming requirements for the specific implementation task.
+Future role expansion should be driven by user feedback and confirmed before implementation.
 
 ## Data Model Considerations
 
@@ -116,27 +122,27 @@ The first schema design should likely consider separate concepts for:
 - Job/project material links.
 - Barcode or supplier identifiers.
 
-Do not document exact table or column names here until they are implemented and verified against live Supabase.
+Exact tables, columns, RLS policies, functions, constraints, and triggers must still be verified against live Supabase and generated types before schema-aware changes.
 
-## Open Decisions
+## Open Decisions After V1 Feedback
 
-- Which inventory item fields are required for the first release?
-- Should stock be tracked globally per organization first, or by physical storage location from day one?
-- What item categories and units are needed for SHK businesses?
-- How should job/project material usage affect current stock?
-- Should material usage require approval or be immediately applied?
-- Which roles can create items, change counts, and attach materials to jobs?
-- What import format should support the initial inventory audit?
+- Which catalog fields, categories, units, and table columns do real SHK users actually use or miss?
+- How should vehicles, nested locations, and multi-location transfers work in daily operation?
+- Should any employee stock action need approval, correction windows, or additional audit detail?
+- How should tools/assets progress from basic item tracking into assignment, checkout, maintenance, and lifecycle workflows?
+- Which improvements are needed for CSV onboarding, and when is direct Excel import valuable?
 - Which German wholesalers matter for future ordering integrations?
 - How should inventory connect to invoices, offers, and contracts once those modules exist?
+- Which barcode-scanning workflows belong in the future mobile app?
 
-## Implementation Guidance
+## Guidance For Future Inventory Work
 
-Before implementing inventory:
+Before extending inventory:
 
-1. Confirm first-release scope and permissions with the product owner.
-2. Inspect live Supabase and generated types.
-3. Design the minimal schema needed for catalog, stock, movement history, and job/project links.
+1. Start with concrete feedback from users testing the current V1 flows.
+2. Inspect live Supabase and generated types before making schema-aware changes.
+3. Preserve organization boundaries, current role separation, and cross-table organization validation.
 4. Keep field-worker flows extremely simple and mobile-friendly.
-5. Preserve enough history to diagnose stock changes.
-6. Avoid coupling the first version too tightly to future supplier automation or invoicing.
+5. Preserve the append-only stock movement history and atomic stock updates needed to diagnose every count change.
+6. Keep planning separate from physical stock changes unless product requirements explicitly change.
+7. Avoid coupling the inventory foundation too tightly to future supplier automation or invoicing.

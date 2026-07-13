@@ -1,0 +1,21 @@
+Bezeichnung / Produkt;Typ / Art;Warengruppe;Lagerort / Raum;Einheit;Aktueller Bestand;Mindestmenge;Soll Bestand;Artikel Nr intern;EAN / Code;Fabrikat;Händler / Lieferant;Lieferantenartikel;EK netto;VK netto;Wird berechnet?;Kommentar;Letzte Inventur;Regal/Fach;Alt-ID
+"Kupferrohr 15 x 1 mm, Ring";Material;Rohre & Fittings;Lager A;Meter;48,5;20;80;MAT-ROHR-015;4006381333931;KME;GC Gruppe;KUP-15X1-R;3,42;7,90;ja;"Standardrohr, oft für Heizungsleitungen";2026-06-14;A-02;old-1001
+"Pressfitting Bogen 90 Grad 22 mm";Material;Rohre & Fittings;Lager A;Stück;36;15;60;MAT-FIT-022-B90;4012345678901;Viega;Richter+Frenzel;VIE-2226;2,85;6,50;ja;"gemischte Kartons prüfen";2026-06-14;A-04;old-1002
+"Kugelhahn DN20 3/4 Zoll";Material;Armaturen;Lager B;Stück;14;8;30;MAT-ARM-DN20;4030001122334;Oventrop;Pfeiffer & May;OV-KH-DN20;11,20;24,90;ja;"Messing, voller Durchgang";2026-06-12;B-01;old-1003
+"Thermostatkopf Standard";Verbrauch;Heizung;Lager B;Stück;27;10;50;VER-THK-STD;4024052000012;Heimeier;GC Gruppe;HEI-6000;8,75;19,90;ja;"alte Charge zuerst verbrauchen";2026-06-12;B-03;old-1004
+"Dichtband PTFE 12 mm";Verbrauchsmaterial;Dichtungen & Befestigung;Lager A;Rolle;93;30;120;VER-PTFE-12;4260123456782;Loctite;Sanitär Heinze;PTFE-12-W;0,48;1,90;ja;"kleine Verbrauchsartikel";2026-06-10;A-08;old-1005
+"Hanfdichtung Spender 80 g";Verbrauch;Dichtungen & Befestigung;Lager A;Packung;18;10;35;VER-HANF-080;4011111222233;Neo-Fermit;Richter+Frenzel;HANF-80;2,10;5,40;ja;"mit Paste zusammen lagern";2026-06-10;A-09;old-1006
+"Montageschiene 30/30 gelocht";Material;Montage;Lager C;Meter;62;25;100;MAT-SCH-3030;4059988776655;Walraven;Pfeiffer & May;SCH-3030-G;1,65;4,20;ja;"Längen sind teilweise angeschnitten";2026-06-08;C-02;old-1007
+"Rohrschelle M8/M10 18-22 mm";Material;Dichtungen & Befestigung;Lager C;Stück;210;80;300;MAT-SCHL-1822;4033300011223;Mupro;GC Gruppe;RS-1822;0,38;1,15;ja;"lose und in Beuteln gemischt";2026-06-08;C-05;old-1008
+"Kondensatpumpe Mini";Gerät / Anlage;Klima & Lüftung;Lager B;Stück;4;2;6;AST-KON-PUMP-MINI;4260555012349;Sauermann;Sanitär Heinze;SI-10;54,00;129,00;ja;"Seriennummern später separat erfassen";2026-06-05;B-07;old-1009
+"Vakuumpumpe 2-stufig";Werkzeug;Werkzeuge;Werkzeugraum;Stück;2;1;3;WRK-VAK-2ST;4042146000001;Rothenberger;Pfeiffer & May;RO-VAC-2;189,00;0;nein;"Werkzeug, nicht als Material abrechnen";2026-06-03;W-01;old-1010
+"Pressmaschine Akku";Tool;Werkzeuge;Werkzeugraum;Stück;3;1;4;WRK-PRESS-AKKU;4025092000009;Novopress;GC Gruppe;ACO203;1280,00;0;nein;"Akkus und Backen getrennt prüfen";2026-06-03;W-02;old-1011
+"Pressbacke M-Profil 22 mm";Werkzeug;Werkzeuge;Werkzeugraum;Stück;5;2;6;WRK-PB-M22;4025092000023;Novopress;GC Gruppe;PB-M22;145,00;0;nein;"Zubehör zu Pressmaschine";2026-06-03;W-03;old-1012
+"Gas-Brennwerttherme 24 kW";Anlage;Heizung;Lager C;Stück;1;1;2;AST-THERME-24;4051516777777;Vaillant;Richter+Frenzel;VCW-24;1180,00;2490,00;ja;"großes Gerät, nur nach Auftrag entnehmen";2026-06-01;C-09;old-1013
+"Sicherheitsventil 3 bar";Material;Armaturen;Lager B;Stück;22;8;40;MAT-SV-3BAR;4014433111000;Syr;Pfeiffer & May;SV-3BAR;6,95;16,50;ja;"für Heizungsanlagen";2026-06-12;B-04;old-1014
+"Ausdehnungsgefäß 18 l";Gerät / Anlage;Heizung;Lager C;Stück;6;2;10;AST-AG-18L;4001234500180;Reflex;GC Gruppe;REF-18;28,90;69,00;ja;"Kartons teilweise beschädigt";2026-06-01;C-06;old-1015
+"HT-Rohr DN50 500 mm";Material;Sanitär;Lager A;Stück;44;20;80;MAT-HT50-500;4024709005008;Ostendorf;Sanitär Heinze;HT50-500;1,08;3,20;ja;"Abflussmaterial";2026-06-11;A-11;old-1016
+"HT-Bogen DN50 45 Grad";Material;Sanitär;Lager A;Stück;57;25;100;MAT-HT50-B45;4024709005459;Ostendorf;Sanitär Heinze;HT50-B45;0,72;2,40;ja;"Abflussmaterial";2026-06-11;A-12;old-1017
+"Silikon Sanitär weiß 310 ml";Verbrauchsmaterial;Sanitär;Lager B;Kartusche;31;12;48;VER-SIL-W310;4015000123456;Soudal;Richter+Frenzel;SIL-W-310;2,65;7,50;ja;"Ablaufdatum beachten";2026-06-09;B-08;old-1018
+"Wand-WC Montageelement";Material;Sanitär;Lager C;Stück;7;3;12;MAT-WC-ELEM;4025416000001;Geberit;GC Gruppe;DUOFIX-WC;129,00;289,00;ja;"sperrig, nur C-Regal";2026-06-01;C-10;old-1019
+"Kabelbinder 200 x 4,8 schwarz";Verbrauch;Montage;Lager A;Packung;16;8;25;VER-KB-200S;4260789002004;Fischer;Pfeiffer & May;KB-200-S;3,10;6,90;ja;"Packung mit 100 Stück";2026-06-10;A-07;old-1020

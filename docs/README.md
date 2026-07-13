@@ -33,6 +33,8 @@ docs/
     offer.md
     acquisition.md
     avatar.md
+  plans/
+    inventory-v1-implementation-plan.md
   decisions/
     0001-example-decision.md
 ```
@@ -60,6 +62,10 @@ Use `docs/features/` for intended behavior of major feature areas. These docs sh
 ### Product Docs
 
 Use `docs/product/` for business context that should not always be loaded into every coding task: offer, acquisition process, deeper avatar/persona notes, onboarding services, pricing assumptions, and positioning.
+
+### Implementation Plans
+
+Use `docs/plans/` for detailed implementation plans that are too concrete for broad feature specs, especially when a large feature needs a handoff anchor across multiple sessions. Plans should link back to the relevant feature spec and be updated or archived after implementation decisions are finalized.
 
 ### Decision Records
 

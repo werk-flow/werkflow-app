@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface SignOutAndRedirectButtonProps {
@@ -24,6 +25,15 @@ export function SignOutAndRedirectButton({
     setIsLoading(true);
 
     try {
+      try {
+        const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
+        if (!cleanupResult.success) {
+          console.error('Failed to clear email change challenge before sign out.');
+        }
+      } catch {
+        console.error('Failed to clear email change challenge before sign out.');
+      }
+
       // Sign out the current user
       await supabase.auth.signOut();
 

@@ -6,6 +6,7 @@ import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getJobDocuments } from '@/lib/documents/actions';
+import { getInventoryPickerOptions, getJobMaterialLines } from '@/lib/inventory/actions';
 import { toClient } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -42,6 +43,10 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const documentsResultPromise = jobResultPromise.then((result) =>
     result.success ? getJobDocuments(result.job.id) : null
   );
+  const materialLinesResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobMaterialLines(result.job.id) : null
+  );
+  const inventoryOptionsResultPromise = getInventoryPickerOptions();
 
   const [
     result,
@@ -49,6 +54,8 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     clientsResult,
     instructionItemsResult,
     documentsResult,
+    materialLinesResult,
+    inventoryOptionsResult,
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
@@ -59,6 +66,8 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       .order('name', { ascending: true }),
     instructionItemsResultPromise,
     documentsResultPromise,
+    materialLinesResultPromise,
+    inventoryOptionsResultPromise,
   ]);
 
   if (!result.success) {
@@ -94,6 +103,18 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       : [];
   const documents =
     documentsResult && documentsResult.success ? documentsResult.documents : [];
+  const materialLines =
+    materialLinesResult && materialLinesResult.success
+      ? materialLinesResult.lines
+      : [];
+  const inventoryItems =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.items
+      : [];
+  const inventoryLocations =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.locations
+      : [];
 
   if (job.project?.projectNumber) {
     redirect(
@@ -110,6 +131,9 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       isAdminOrManager={isAdminOrManager}
       instructionItems={instructionItems}
       documents={documents}
+      materialLines={materialLines}
+      inventoryItems={inventoryItems}
+      inventoryLocations={inventoryLocations}
       currentUserId={user.id}
     />
   );

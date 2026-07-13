@@ -6,6 +6,7 @@ import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getJobDocuments } from '@/lib/documents/actions';
+import { getInventoryPickerOptions, getJobMaterialLines } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { toClient } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
@@ -49,6 +50,10 @@ async function NestedJobDetailData({
   const documentsResultPromise = jobResultPromise.then((result) =>
     result.success ? getJobDocuments(result.job.id) : null
   );
+  const materialLinesResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobMaterialLines(result.job.id) : null
+  );
+  const inventoryOptionsResultPromise = getInventoryPickerOptions();
 
   const [
     projectResult,
@@ -57,6 +62,8 @@ async function NestedJobDetailData({
     clientsResult,
     instructionItemsResult,
     documentsResult,
+    materialLinesResult,
+    inventoryOptionsResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -68,6 +75,8 @@ async function NestedJobDetailData({
       .order('name', { ascending: true }),
     instructionItemsResultPromise,
     documentsResultPromise,
+    materialLinesResultPromise,
+    inventoryOptionsResultPromise,
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -104,6 +113,18 @@ async function NestedJobDetailData({
       : [];
   const documents =
     documentsResult && documentsResult.success ? documentsResult.documents : [];
+  const materialLines =
+    materialLinesResult && materialLinesResult.success
+      ? materialLinesResult.lines
+      : [];
+  const inventoryItems =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.items
+      : [];
+  const inventoryLocations =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.locations
+      : [];
 
   if (job.project?.id !== project.id) {
     return (
@@ -127,6 +148,9 @@ async function NestedJobDetailData({
       isAdminOrManager={isAdminOrManager}
       instructionItems={instructionItems}
       documents={documents}
+      materialLines={materialLines}
+      inventoryItems={inventoryItems}
+      inventoryLocations={inventoryLocations}
       currentUserId={user.id}
     />
   );

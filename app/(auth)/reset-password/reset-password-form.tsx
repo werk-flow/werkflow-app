@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { NewPasswordFieldsForm } from '@/components/password/new-password-fields-form';
 import { Button } from '@/components/ui/button';
+import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   type PasswordWithConfirmationValues,
@@ -249,6 +250,15 @@ export function ResetPasswordForm() {
       // Mark that we're redirecting to prevent token state updates
       // Use ref instead of state to avoid closure issues in the auth listener
       isRedirectingRef.current = true;
+
+      try {
+        const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
+        if (!cleanupResult.success) {
+          console.error('Failed to clear email change challenge before sign out.');
+        }
+      } catch {
+        console.error('Failed to clear email change challenge before sign out.');
+      }
 
       // Immediately sign out the user for security
       await supabase.auth.signOut();

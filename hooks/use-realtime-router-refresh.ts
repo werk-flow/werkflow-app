@@ -91,4 +91,37 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('document_versions', () => {
     if (tableSet.has('document_versions')) scheduleRefresh();
   });
+  useRealtimeEvent('inventory_categories', () => {
+    if (tableSet.has('inventory_categories')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_locations', () => {
+    if (tableSet.has('inventory_locations')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_suppliers', () => {
+    if (tableSet.has('inventory_suppliers')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_items', () => {
+    if (tableSet.has('inventory_items')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_item_barcodes', () => {
+    if (tableSet.has('inventory_item_barcodes')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_stock_levels', () => {
+    if (tableSet.has('inventory_stock_levels')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_import_batches', () => {
+    if (tableSet.has('inventory_import_batches')) scheduleRefresh();
+  });
+  useRealtimeEvent('job_material_lines', () => {
+    if (tableSet.has('job_material_lines')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_movements', () => {
+    if (tableSet.has('inventory_movements')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_asset_instances', () => {
+    if (tableSet.has('inventory_asset_instances')) scheduleRefresh();
+  });
+  useRealtimeEvent('inventory_audit_events', () => {
+    if (tableSet.has('inventory_audit_events')) scheduleRefresh();
+  });
 }

@@ -33,6 +33,19 @@ reviews:
     - path: "lib/documents/**"
       instructions: |
         This is WerkFlow document management. Check organization scoping, admin/buero versus employee access, contextual links to jobs/projects/customers/employees, versioning/audit behavior, trash behavior, and guarded Supabase Storage cleanup. Flag any path that could expose or delete another organization's documents.
+    - path: "lib/inventory/**"
+      instructions: |
+        This is WerkFlow inventory V1. Server actions use a Supabase admin client, so every read and write must authenticate first, derive the active organization and user on the server, and explicitly enforce either admin/buero manager access or assigned-job employee access before bypassing RLS. Re-resolve item, location, material-line, job, project, supplier, category, barcode, and import identifiers inside the active organization; never trust client-provided tenant, role, actor, price, or stock data.
+
+        Preserve the stock ledger model: planning a job/project material line must not change stock; every real stock change must go through the atomic `record_inventory_movement` RPC, keep stock non-negative, and create one append-only movement with matching before/after quantities. Taking and returning material must keep `job_material_lines` taken/returned quantities and status consistent, returns must not exceed the outstanding taken quantity, corrections need a reason, and CSV initial quantities must be recorded as `initial_count` movements. Flag direct stock-level writes, split non-transactional stock/ledger updates, cross-organization references, lost audit history, or retry paths that can double-book stock.
+
+        Current role boundary: admin and buero manage the central catalog, locations, suppliers, imports, prices, corrections, and project material planning. Employees do not get central `/inventar`, catalog editing, prices, imports, corrections, or project-level inventory; they may only view and take/return existing items for jobs assigned to them. Keep future barcode scanning, automated reordering, supplier APIs, invoicing, advanced asset lifecycle, and transfer UX out of V1 unless the diff explicitly implements them.
+    - path: "components/inventar/**"
+      instructions: |
+        Review the inventory UI for practical German SHK workflows, natural German copy, accessible dialogs/tables/comboboxes, keyboard and focus behavior, mobile usability, precise decimal quantity handling, clear loading/empty/error states, and protection against duplicate submissions. Keep planned quantities visually and behaviorally distinct from physical stock movements. Do not expose purchase/sale prices or manager controls to employees.
+    - path: "app/(app)/inventar/**"
+      instructions: |
+        The central inventory route is for admin and buero only. Flag missing server-side role enforcement, redirects that leak data, client-only authorization, stale manager data, or error handling that exposes internal Supabase details.
     - path: "components/dokumente/**"
       instructions: |
         Review document UI for clear German labels, safe upload/download/delete flows, accessible dialogs and tables, correct role-specific affordances, and practical handling of empty, loading, error, and permission-denied states.
@@ -42,6 +55,9 @@ reviews:
     - path: "components/kalender/**"
       instructions: |
         Review calendar behavior for drag/drop correctness, parked job handling, realtime update loops, assignment conflicts, mobile ergonomics, and Europe/Berlin date/time edge cases.
+    - path: "components/realtime/**"
+      instructions: |
+        Review Supabase Realtime subscriptions for organization filtering, duplicate channels/listeners, cleanup on organization or auth changes, reconnect behavior, refresh storms, and stale cross-organization events. Inventory table changes should refresh inventory and connected job/project material views without loops or excessive full-route refreshes.
     - path: "lib/time-tracking/**"
       instructions: |
         Review time tracking for break handling, manual corrections, overlap/conflict behavior, timezone correctness, role permissions, and auditability of employee working-time changes.
@@ -74,6 +90,10 @@ reviews:
         name: "German user-facing copy"
         instructions: |
           User-visible labels, empty states, toast messages, validation errors, aria labels, and tooltips must be natural German with proper German characters where appropriate. Developer-facing code, identifiers, comments, and logs should remain English.
+      - mode: "warning"
+        name: "Inventory ledger integrity"
+        instructions: |
+          Inventory changes must preserve an organization-scoped, auditable stock ledger. Planning material must not change stock. Physical stock changes must be atomic, prevent negative stock, append a matching movement, and keep related job/project material quantities consistent. Employee access is limited to assigned-job take/return workflows without prices or catalog controls; admin and buero retain central inventory management. Warn about direct stock writes, cross-tenant identifiers, non-idempotent retry risks, lost movement history, or future-scope assumptions presented as current V1 behavior.
 
 chat:
   auto_reply: true

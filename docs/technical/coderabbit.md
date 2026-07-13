@@ -1,6 +1,6 @@
 # CodeRabbit Reviews
 
-Last reviewed: 2026-07-02
+Last reviewed: 2026-07-13
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -33,8 +33,8 @@ Current important settings:
 - `reviews.profile: "assertive"` asks CodeRabbit to be more thorough.
 - `reviews.enable_prompt_for_ai_agents: true` asks CodeRabbit to include agent-friendly fix prompts in review comments.
 - `reviews.path_filters` excludes low-signal files such as lock files, generated Supabase types, `.agents/**`, `.cursor/rules/**`, and `docs/**`.
-- `reviews.path_instructions` gives targeted review guidance for `app/**`, `components/**`, `lib/**`, document management, calendar, time tracking, jobs, middleware, and Next config.
-- `reviews.pre_merge_checks.custom_checks` adds repo-specific warnings for tenant/role safety, product fit, and German user-facing copy.
+- `reviews.path_instructions` gives targeted review guidance for `app/**`, `components/**`, `lib/**`, inventory, document management, realtime, calendar, time tracking, jobs, middleware, and Next config.
+- `reviews.pre_merge_checks.custom_checks` adds repo-specific warnings for tenant/role safety, product fit, German user-facing copy, and inventory ledger integrity.
 - `knowledge_base.code_guidelines.enabled: true` allows CodeRabbit to use repo instruction files such as `AGENTS.md` and Cursor rules as review criteria.
 - `knowledge_base.learnings.scope: "local"` keeps CodeRabbit learnings scoped locally for this repository.
 
@@ -62,11 +62,18 @@ For this repo, the most important context files are:
 
 - `AGENTS.md` for product direction, coding standards, Bun-first workflow, German UI language, and role/organization principles.
 - `.coderabbit.yaml` for CodeRabbit-specific scope and review behavior.
+- `docs/features/inventory.md` when reviewing inventory catalog, stock, import, or job/project material changes.
 - `docs/features/document-management.md` when reviewing document-management changes.
 - `docs/technical/realtime-and-caching.md` when reviewing cache, realtime, or freshness behavior.
 - Generated Supabase types and live Supabase inspection when schema details matter.
 
 Run CodeRabbit from the repository root so it can resolve the Git repo, `.coderabbit.yaml`, and guideline files correctly.
+
+### Persistent Versus Review-Specific Context
+
+Do not rewrite `.coderabbit.yaml` for every feature review. Keep durable review behavior and stable path-level invariants there, such as tenant boundaries, role rules, inventory ledger integrity, or document storage safety. Keep broad product and coding guidance in root `AGENTS.md`, which CodeRabbit auto-detects as a code-guideline file.
+
+Use the CLI `-c` / `--config` option to attach the smallest set of feature documents that explains the current review. This keeps temporary or highly specific context out of the persistent YAML. Feature docs must clearly distinguish implemented behavior from future scope so CodeRabbit does not recommend building a future workflow or removing deliberate V1 infrastructure.
 
 ## CLI Installation And Auth
 
@@ -86,7 +93,7 @@ Install using the official script when the CLI is missing:
 curl -fsSL https://cli.coderabbit.ai/install.sh | sh
 ```
 
-On Windows, the PATH may not refresh in the current terminal after installation. Restart the shell, Codex, or the PC if `coderabbit` is installed but still not found.
+On this Windows workstation, run the Linux CLI through Ubuntu in WSL. The native PowerShell PATH may not contain a CodeRabbit binary even when the WSL workflow is available.
 
 Authenticate interactively:
 
@@ -123,6 +130,10 @@ coderabbit --light
 # Only committed or uncommitted changes
 coderabbit --agent --type committed
 coderabbit --agent --type uncommitted
+
+# Uncommitted inventory review with durable repo and feature context
+coderabbit --agent --type uncommitted \
+  -c AGENTS.md .coderabbit.yaml docs/features/inventory.md docs/technical/realtime-and-caching.md
 
 # Review against a base branch or commit
 coderabbit --agent --base main
@@ -184,6 +195,7 @@ When asking CodeRabbit for a review, remind it indirectly through config and con
 - Document storage, trash, restore, versioning, audit, and cleanup safety.
 - Calendar drag/drop correctness, parked job workflows, and Europe/Berlin date/time behavior.
 - Time-tracking correctness for breaks, manual entries, approvals, stale sessions, and auditability.
+- Inventory organization/role boundaries, atomic stock ledger updates, job/project material consistency, and import retry safety.
 - Cache invalidation and Supabase Realtime freshness.
 - Next.js server/client boundaries, Server Actions, redirects, cookies, and cache behavior.
 

@@ -56,6 +56,7 @@ import {
 } from '@/components/shared/metadata-section';
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
+import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
@@ -100,6 +101,11 @@ import {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
 import type { OrganizationDocument } from '@/lib/documents/types';
+import type {
+  InventoryLocation,
+  InventoryPickerOption,
+  JobMaterialLine,
+} from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
@@ -201,6 +207,9 @@ interface JobDetailContentProps {
   isAdminOrManager: boolean;
   instructionItems: JobInstructionItemWithDetails[];
   documents: OrganizationDocument[];
+  materialLines: JobMaterialLine[];
+  inventoryItems: InventoryPickerOption[];
+  inventoryLocations: InventoryLocation[];
   currentUserId: string;
 }
 
@@ -213,6 +222,9 @@ export function JobDetailContent({
   isAdminOrManager,
   instructionItems,
   documents,
+  materialLines,
+  inventoryItems,
+  inventoryLocations,
   currentUserId,
 }: JobDetailContentProps) {
   const router = useRouter();
@@ -349,7 +361,17 @@ export function JobDetailContent({
   }, [fetchTimeEntries]);
 
   useRealtimeRouterRefresh({
-    tables: ['jobs', 'projects', 'job_assignments', 'job_instruction_items'],
+    tables: [
+      'jobs',
+      'projects',
+      'job_assignments',
+      'job_instruction_items',
+      'job_material_lines',
+      'inventory_stock_levels',
+      'inventory_movements',
+      'inventory_items',
+      'inventory_locations',
+    ],
     enabled: !suspendRealtimeRefresh,
   });
   useRealtimeEvent('time_entries', () => fetchTimeEntries());
@@ -1221,6 +1243,14 @@ export function JobDetailContent({
                 }
               />
             )}
+
+            <JobMaterialsSection
+              jobId={liveJob.id}
+              initialLines={materialLines}
+              inventoryItems={inventoryItems}
+              locations={inventoryLocations}
+              isAdminOrManager={isAdminOrManager}
+            />
 
             <ContextualDocumentsSection
               title="Dokumente & Bilder"

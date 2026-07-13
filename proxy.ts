@@ -12,6 +12,7 @@ const PROTECTED_PREFIXES = [
   '/kunden',
   '/auftraege',
   '/dokumente',
+  '/inventar',
   '/einstellungen',
   '/onboarding',
   '/upgrade'
@@ -124,6 +125,7 @@ export const config = {
     '/kunden/:path*',
     '/auftraege/:path*',
     '/dokumente/:path*',
+    '/inventar/:path*',
     '/einstellungen/:path*',
     '/onboarding/:path*',
     '/upgrade',

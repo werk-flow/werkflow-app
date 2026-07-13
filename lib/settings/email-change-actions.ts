@@ -570,7 +570,41 @@ export async function resetEmailChangeWizard(): Promise<EmailChangeActionResult>
   const admin = createSupabaseAdminClient();
   // Our custom wizard state lives only in public.email_change_challenges.
   // Resetting the flow must never mutate native auth.users email-change fields.
-  await admin.from('email_change_challenges').delete().eq('user_id', user.id);
+  const { error } = await admin
+    .from('email_change_challenges')
+    .delete()
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Failed to reset email change challenge.', {
+      code: error.code ?? 'unknown',
+    });
+    return buildResult(false, 'unexpected_error');
+  }
 
   return buildResult(true);
+}
+
+export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{
+  success: boolean;
+}> {
+  const user = await getAuthenticatedUser();
+  if (!user) {
+    return { success: true };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
+    .from('email_change_challenges')
+    .delete()
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Failed to clear email change challenge before sign out.', {
+      code: error.code ?? 'unknown',
+    });
+    return { success: false };
+  }
+
+  return { success: true };
 }

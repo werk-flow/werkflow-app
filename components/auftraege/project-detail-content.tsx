@@ -50,6 +50,7 @@ import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
+import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
@@ -66,6 +67,7 @@ import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
   getJobDisplayTitle,
   toJob,
@@ -88,6 +90,11 @@ import {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
 import type { OrganizationDocument, ProjectJobDocumentGroup } from '@/lib/documents/types';
+import type {
+  InventoryLocation,
+  InventoryPickerOption,
+  ProjectMaterialSummary,
+} from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
 
 const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
@@ -171,6 +178,9 @@ interface ProjectDetailContentProps {
   isAdminOrManager: boolean;
   projectDocuments: OrganizationDocument[];
   jobDocumentGroups: ProjectJobDocumentGroup[];
+  materialSummary: ProjectMaterialSummary;
+  inventoryItems: InventoryPickerOption[];
+  inventoryLocations: InventoryLocation[];
 }
 
 export function ProjectDetailContent({
@@ -182,6 +192,9 @@ export function ProjectDetailContent({
   isAdminOrManager,
   projectDocuments,
   jobDocumentGroups,
+  materialSummary,
+  inventoryItems,
+  inventoryLocations,
 }: ProjectDetailContentProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -330,6 +343,17 @@ export function ProjectDetailContent({
   useEffect(() => {
     fetchProjectTime();
   }, [fetchProjectTime]);
+
+  useRealtimeRouterRefresh({
+    tables: [
+      'job_material_lines',
+      'inventory_stock_levels',
+      'inventory_movements',
+      'inventory_items',
+      'inventory_locations',
+    ],
+    enabled: isAdminOrManager,
+  });
 
   useRealtimeEvent('time_entries', () => fetchProjectTime());
   useRealtimeEvent('projects', (event) => {
@@ -798,6 +822,18 @@ export function ProjectDetailContent({
                 </div>
               )}
             </div>
+
+            {isAdminOrManager ? (
+              <JobMaterialsSection
+                projectId={liveProject.id}
+                initialLines={materialSummary.directLines}
+                inheritedJobGroups={materialSummary.jobGroups}
+                totals={materialSummary.totals}
+                inventoryItems={inventoryItems}
+                locations={inventoryLocations}
+                isAdminOrManager
+              />
+            ) : null}
 
             <ContextualDocumentsSection
               title="Dokumente"

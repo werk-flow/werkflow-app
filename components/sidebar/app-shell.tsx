@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfas
 import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
+import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   PendingApprovalCountProvider,
@@ -77,6 +78,12 @@ const navItems: NavItem[] = [
     href: '/dokumente',
     label: 'Dokumente',
     icon: FileText,
+    managerOrAbove: true
+  },
+  {
+    href: '/inventar',
+    label: 'Inventar',
+    icon: Boxes,
     managerOrAbove: true
   },
   {
@@ -408,6 +415,9 @@ function OrgSwitchOverlay() {
     if (pathname.startsWith('/kunden')) return <KundenPageSkeleton />;
     if (pathname.startsWith('/auftraege')) return <AuftraegePageSkeleton />;
     if (pathname.startsWith('/dokumente')) return <DokumentePageSkeleton />;
+    if (pathname === '/inventar' || pathname.startsWith('/inventar/')) {
+      return <InventarPageSkeleton />;
+    }
     return null;
   }, [pathname]);
 

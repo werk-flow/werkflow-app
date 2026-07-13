@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/actions';
 
@@ -22,8 +23,17 @@ export function useSignOut() {
       // Best-effort: ensure any open working session is clocked out before sign-out.
       try {
         await clockOutBeforeSignOut();
-      } catch (error) {
-        console.error('Failed to clock out before sign out:', error);
+      } catch {
+        console.error('Failed to clock out before sign out.');
+      }
+
+      try {
+        const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
+        if (!cleanupResult.success) {
+          console.error('Failed to clear email change challenge before sign out.');
+        }
+      } catch {
+        console.error('Failed to clear email change challenge before sign out.');
       }
 
       await supabase.auth.signOut();

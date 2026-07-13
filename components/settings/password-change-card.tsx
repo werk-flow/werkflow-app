@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
+import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import {
@@ -271,6 +272,15 @@ export function PasswordChangeCard() {
   async function handleForgotPassword() {
     setFormError(null);
     setIsForgotPasswordRedirecting(true);
+
+    try {
+      const cleanupResult = await clearEmailChangeChallengeBeforeSignOut();
+      if (!cleanupResult.success) {
+        console.error('Failed to clear email change challenge before sign out.');
+      }
+    } catch {
+      console.error('Failed to clear email change challenge before sign out.');
+    }
 
     const { error } = await supabase.auth.signOut();
 

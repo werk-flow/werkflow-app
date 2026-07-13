@@ -6,6 +6,10 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getProjectDocumentsOverview } from '@/lib/documents/actions';
+import {
+  getInventoryPickerOptions,
+  getProjectMaterialSummary,
+} from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
 import { ActionBanner } from '@/components/shared/action-banner';
@@ -45,8 +49,17 @@ async function ProjectDetailData({
     if (!result.success) return null;
     return getProjectDocumentsOverview(result.details.project.id, result.details.jobs);
   });
+  const materialResultPromise = isAdminOrManager
+    ? projectResultPromise.then(async (result) => {
+        if (!result.success) return null;
+        return getProjectMaterialSummary(result.details.project.id);
+      })
+    : Promise.resolve(null);
+  const inventoryOptionsResultPromise = isAdminOrManager
+    ? getInventoryPickerOptions()
+    : Promise.resolve(null);
 
-  const [result, clientsResult, documentsResult] = await Promise.all([
+  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult] = await Promise.all([
     projectResultPromise,
     admin
       .from('clients')
@@ -54,6 +67,8 @@ async function ProjectDetailData({
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
     documentsResultPromise,
+    materialResultPromise,
+    inventoryOptionsResultPromise,
   ]);
 
   if (!result.success) {
@@ -79,6 +94,18 @@ async function ProjectDetailData({
     documentsResult && documentsResult.success ? documentsResult.projectDocuments : [];
   const jobDocumentGroups =
     documentsResult && documentsResult.success ? documentsResult.jobDocumentGroups : [];
+  const materialSummary =
+    materialResult && materialResult.success
+      ? materialResult.summary
+      : { directLines: [], jobGroups: [], totals: [] };
+  const inventoryItems =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.items
+      : [];
+  const inventoryLocations =
+    inventoryOptionsResult && inventoryOptionsResult.success
+      ? inventoryOptionsResult.locations
+      : [];
 
   return (
     <>
@@ -99,6 +126,9 @@ async function ProjectDetailData({
         isAdminOrManager={isAdminOrManager}
         projectDocuments={projectDocuments}
         jobDocumentGroups={jobDocumentGroups}
+        materialSummary={materialSummary}
+        inventoryItems={inventoryItems}
+        inventoryLocations={inventoryLocations}
       />
     </>
   );

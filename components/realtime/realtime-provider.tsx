@@ -32,7 +32,18 @@ export type RealtimeTable =
   | 'documents'
   | 'document_links'
   | 'document_audit_events'
-  | 'document_versions';
+  | 'document_versions'
+  | 'inventory_categories'
+  | 'inventory_locations'
+  | 'inventory_suppliers'
+  | 'inventory_items'
+  | 'inventory_item_barcodes'
+  | 'inventory_stock_levels'
+  | 'inventory_import_batches'
+  | 'job_material_lines'
+  | 'inventory_movements'
+  | 'inventory_asset_instances'
+  | 'inventory_audit_events';
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
@@ -63,7 +74,18 @@ const TABLES: RealtimeTable[] = [
   'documents',
   'document_links',
   'document_audit_events',
-  'document_versions'
+  'document_versions',
+  'inventory_categories',
+  'inventory_locations',
+  'inventory_suppliers',
+  'inventory_items',
+  'inventory_item_barcodes',
+  'inventory_stock_levels',
+  'inventory_import_batches',
+  'job_material_lines',
+  'inventory_movements',
+  'inventory_asset_instances',
+  'inventory_audit_events'
 ];
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -322,6 +344,127 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('document_versions', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_categories',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_categories', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_locations',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_locations', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_suppliers',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_suppliers', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_items',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_items', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_item_barcodes',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_item_barcodes', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_stock_levels',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_stock_levels', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_import_batches',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_import_batches', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'job_material_lines',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_material_lines', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_movements',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_movements', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_asset_instances',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_asset_instances', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inventory_audit_events',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('inventory_audit_events', p)
         )
         .subscribe((status: string, err?: Error) => {
           if (isDev) {

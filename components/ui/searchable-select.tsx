@@ -123,6 +123,7 @@ function useDialogAwareDropdownLayout(
 }
 
 interface SearchableSelectProps extends SearchableSelectBaseProps {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -133,6 +134,7 @@ interface SearchableSelectProps extends SearchableSelectBaseProps {
 }
 
 export function SearchableSelect({
+  id,
   options,
   value,
   onChange,
@@ -181,6 +183,7 @@ export function SearchableSelect({
   if (readOnly) {
     return (
       <div
+        id={id}
         className={cn(
           'flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-1 text-base md:text-sm',
           'cursor-default select-none text-muted-foreground'
@@ -195,6 +198,7 @@ export function SearchableSelect({
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <button
+          id={id}
           ref={triggerRef}
           type="button"
           role="combobox"

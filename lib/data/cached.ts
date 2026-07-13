@@ -36,6 +36,7 @@ export const CACHE_TAGS = {
   jobs: (orgId: string) => `jobs-${orgId}`,
   projects: (orgId: string) => `projects-${orgId}`,
   documents: (orgId: string) => `documents-${orgId}`,
+  inventory: (orgId: string) => `inventory-${orgId}`,
 } as const
 
 const REVALIDATE_SECONDS = 300 // 5 minutes safety net

@@ -498,9 +498,15 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
       applyResultError(result, setWizardState, setFormError);
 
       if (result.success) {
+        setCompletionState(null);
         setCurrentOtpCode('');
         setNewEmailOtpCode('');
         emailForm.reset({ email: '' });
+        showBanner({
+          message:
+            'Die E-Mail-Änderung wurde abgebrochen. Deine bisherige E-Mail-Adresse bleibt unverändert.',
+          variant: 'success',
+        });
       }
     } finally {
       setIsResetting(false);
@@ -641,7 +647,9 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                       <button
                         type="button"
                         onClick={handleResendCurrentEmailCode}
-                        disabled={isCurrentOtpResending || currentOtpResendLocked}
+                        disabled={
+                          isResetting || isCurrentOtpResending || currentOtpResendLocked
+                        }
                         className="text-primary underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
                       >
                         {isCurrentOtpResending
@@ -658,13 +666,24 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                       type="button"
                       variant="outline"
                       onClick={handleResetFlow}
-                      disabled={isResetting}
+                      disabled={
+                        isResetting ||
+                        isCurrentOtpSubmitting ||
+                        isCurrentOtpResending
+                      }
                     >
-                      {isResetting ? 'Bricht ab...' : 'Abbrechen'}
+                      {isResetting ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Wird abgebrochen...
+                        </>
+                      ) : (
+                        'E-Mail-Änderung abbrechen'
+                      )}
                     </Button>
                     <Button
                       type="submit"
-                      disabled={isCurrentOtpSubmitting}
+                      disabled={isCurrentOtpSubmitting || isResetting}
                     >
                       {isCurrentOtpSubmitting ? (
                         <>
@@ -699,9 +718,26 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                   </div>
 
                   {currentEmailVerificationWindowExpired ? (
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                      Das Zeitfenster für diesen Schritt ist abgelaufen. Bitte
-                      starte den Änderungsprozess erneut.
+                    <div className="space-y-4">
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                        Das Zeitfenster für diesen Schritt ist abgelaufen. Bitte
+                        brich die E-Mail-Änderung ab und starte sie erneut.
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleResetFlow}
+                        disabled={isResetting}
+                      >
+                        {isResetting ? (
+                          <>
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Wird abgebrochen...
+                          </>
+                        ) : (
+                          'E-Mail-Änderung abbrechen'
+                        )}
+                      </Button>
                     </div>
                   ) : (
                     <Form {...emailForm}>
@@ -733,11 +769,21 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                             type="button"
                             variant="outline"
                             onClick={handleResetFlow}
-                            disabled={isResetting}
+                            disabled={isResetting || isSavingNewEmail}
                           >
-                            {isResetting ? 'Bricht ab...' : 'Abbrechen'}
+                            {isResetting ? (
+                              <>
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                                Wird abgebrochen...
+                              </>
+                            ) : (
+                              'E-Mail-Änderung abbrechen'
+                            )}
                           </Button>
-                          <Button type="submit" disabled={isSavingNewEmail}>
+                          <Button
+                            type="submit"
+                            disabled={isSavingNewEmail || isResetting}
+                          >
                             {isSavingNewEmail ? (
                               <>
                                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -802,7 +848,9 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                       <button
                         type="button"
                         onClick={handleResendNewEmailCode}
-                        disabled={isNewEmailOtpResending || newEmailResendLocked}
+                        disabled={
+                          isResetting || isNewEmailOtpResending || newEmailResendLocked
+                        }
                         className="text-primary underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline"
                       >
                         {isNewEmailOtpResending
@@ -817,19 +865,40 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                     </span>
                   </div>
 
-                  <Button
-                    type="submit"
-                    disabled={isNewEmailOtpSubmitting}
-                  >
-                    {isNewEmailOtpSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 size-4 animate-spin" />
-                        Neue Adresse wird bestätigt...
-                      </>
-                    ) : (
-                      'Neue E-Mail-Adresse bestätigen'
-                    )}
-                  </Button>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleResetFlow}
+                      disabled={
+                        isResetting ||
+                        isNewEmailOtpSubmitting ||
+                        isNewEmailOtpResending
+                      }
+                    >
+                      {isResetting ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Wird abgebrochen...
+                        </>
+                      ) : (
+                        'E-Mail-Änderung abbrechen'
+                      )}
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isNewEmailOtpSubmitting || isResetting}
+                    >
+                      {isNewEmailOtpSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          Neue Adresse wird bestätigt...
+                        </>
+                      ) : (
+                        'Neue E-Mail-Adresse bestätigen'
+                      )}
+                    </Button>
+                  </div>
                 </form>
               ) : null}
             </div>
