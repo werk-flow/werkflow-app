@@ -35,6 +35,7 @@ import {
   parseHoursInputToMinutes,
 } from '@/lib/jobs/planned-working';
 import { toLocalDateString } from '@/lib/utils';
+import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'niedrig', label: JOB_PRIORITY_LABELS.niedrig },
@@ -74,6 +75,7 @@ export interface CreateJobFormContentProps {
     job: Job;
     assignedUserIds: string[];
   }) => void | Promise<void>;
+  onDraftChange?: (draft: CalendarEntryDraft | null) => void;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean;
 }
@@ -92,6 +94,7 @@ export function CreateJobFormContent({
   defaultTime,
   defaultDurationHours,
   onSuccess,
+  onDraftChange,
   isActive = true,
 }: CreateJobFormContentProps) {
   const previousInitialJobNumberRef = useRef(initialJobNumber ?? '');
@@ -164,6 +167,35 @@ export function CreateJobFormContent({
       formatMinutesAsHoursInput(suggestedPlannedWorkingMinutes)
     );
   }, [plannedWorkingTouched, suggestedPlannedWorkingMinutes]);
+
+  useEffect(() => {
+    if (!isActive || !onDraftChange) return;
+
+    const durationMinutes = parseHoursInputToMinutes(estimatedHours);
+    if (
+      !plannedDate ||
+      !plannedTime ||
+      !durationMinutes ||
+      selectedEmployees.length === 0
+    ) {
+      onDraftChange(null);
+      return;
+    }
+
+    onDraftChange({
+      date: plannedDate,
+      startTime: plannedTime,
+      durationMinutes,
+      userIds: selectedEmployees
+    });
+  }, [
+    estimatedHours,
+    isActive,
+    onDraftChange,
+    plannedDate,
+    plannedTime,
+    selectedEmployees
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

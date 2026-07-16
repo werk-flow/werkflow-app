@@ -4,6 +4,7 @@ import { useMemo, useCallback, useState } from 'react';
 import {
   calculateBlockPosition,
   BASE_HOUR_WIDTH,
+  getVisibleGridSubdivisions,
   snapToGrid,
   formatTimeFromPx
 } from './timeline-grid';
@@ -67,6 +68,8 @@ interface EmployeeTimelineRowProps {
   currentTimePosition?: number | null;
   /** Callback when user drags to create a new entry on this member's row. */
   onDragCreate?: (memberId: string, startTime: string, endTime: string) => void;
+  /** Live creation draft shown while the calendar entry dialog is open. */
+  draftPreview?: { left: number; width: number } | null;
   /** Callback when user drags to move/resize a work session block. */
   onMoveResize?: (result: MoveResizeResult) => void;
   /** Called when user starts a whole-block move drag (for cross-row support). */
@@ -171,6 +174,7 @@ export function EmployeeTimelineRow({
   timelineWidth: totalWidth,
   currentTimePosition = null,
   onDragCreate,
+  draftPreview,
   onMoveResize,
   onBlockMoveStart,
   activeDragSessionId,
@@ -192,6 +196,10 @@ export function EmployeeTimelineRow({
   onInvalidSessionPlacement
 }: EmployeeTimelineRowProps) {
   const timelineWidth = totalWidth ?? 24 * effectiveHourWidth;
+  const visibleGridSubdivisions = useMemo(
+    () => getVisibleGridSubdivisions(effectiveHourWidth),
+    [effectiveHourWidth]
+  );
 
   const totalMinutes = useMemo(() => {
     return calculateTotalMinutes(sessions);
@@ -498,26 +506,25 @@ export function EmployeeTimelineRow({
         }}
       >
         {/* Hour + sub grid lines */}
-        {HOURS.map((hour) => {
-          const subs: number[] =
-            effectiveHourWidth >= 200 ? [15, 30, 45] :
-            effectiveHourWidth >= 120 ? [30] : [];
-          return (
-            <div key={hour}>
+        {HOURS.map((hour) => (
+          <div key={hour}>
+            <div
+              className="absolute top-0 h-full border-l border-border/30"
+              style={{ left: hour * effectiveHourWidth }}
+            />
+            {visibleGridSubdivisions.map((minute) => (
               <div
-                className="absolute top-0 h-full border-l border-border/30"
-                style={{ left: hour * effectiveHourWidth }}
+                key={minute}
+                className="absolute top-0 h-full border-l border-border/15"
+                style={{
+                  left:
+                    hour * effectiveHourWidth +
+                    (minute / 60) * effectiveHourWidth
+                }}
               />
-              {subs.map((m) => (
-                <div
-                  key={m}
-                  className="absolute top-0 h-full border-l border-border/15"
-                  style={{ left: hour * effectiveHourWidth + (m / 60) * effectiveHourWidth }}
-                />
-              ))}
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        ))}
 
         {/* Current time indicator */}
         {isToday && currentTimePosition !== null && (
@@ -541,6 +548,25 @@ export function EmployeeTimelineRow({
               ))
             }
           />
+        )}
+
+        {draftPreview && draftPreview.width > 0 && (
+          <div
+            className="pointer-events-none absolute top-1 bottom-1 z-[7] flex items-center justify-center rounded-md border-2 border-dashed border-yellow-500/60 bg-yellow-400/40"
+            style={{
+              left: draftPreview.left,
+              width: draftPreview.width
+            }}
+          >
+            <span className="rounded bg-yellow-400/60 px-1 text-[11px] font-medium whitespace-nowrap text-yellow-800 dark:text-yellow-200">
+              {formatTimeFromPx(draftPreview.left, effectiveHourWidth)}
+              {' – '}
+              {formatTimeFromPx(
+                draftPreview.left + draftPreview.width,
+                effectiveHourWidth
+              )}
+            </span>
+          </div>
         )}
 
         {/* Attendance blocks — merged across breaks when the work block continues */}

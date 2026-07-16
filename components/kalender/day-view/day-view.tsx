@@ -1,6 +1,13 @@
 'use client';
 
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef
+} from 'react';
 import { Briefcase, Clock, ParkingSquare } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
@@ -44,6 +51,7 @@ import { JobEventPopover } from '../job-event-popover';
 import { clearCalendarDragState, startCalendarDragState } from '../drag-state';
 import { PARKPLATZ_MIME, getDragGhost, type DragJobPayload } from '../parkplatz-panel';
 import { useCurrentTimePosition } from './use-current-time-position';
+import type { CalendarEntryDraft } from '../calendar-entry-draft';
 
 type SessionCollisionBlock = {
   id: string;
@@ -52,6 +60,27 @@ type SessionCollisionBlock = {
 };
 
 const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
+
+function parseTimeToMinutes(time: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 24 ||
+    minutes < 0 ||
+    minutes > 59 ||
+    (hours === 24 && minutes !== 0)
+  ) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
 
 function getExactLayoutWidth(startTime: Date, endTime: Date | null, hourWidth: number): number {
   const effectiveEnd =
@@ -133,15 +162,35 @@ export function DayView({
   const [dragCreateMemberId, setDragCreateMemberId] = useState<string>('');
   const [dragCreateClockIn, setDragCreateClockIn] = useState<string>('09:00');
   const [dragCreateClockOut, setDragCreateClockOut] = useState<string>('17:00');
+  const [entryDraft, setEntryDraft] = useState<CalendarEntryDraft | null>(null);
 
   const bannerSeqRef = useRef(0);
   const [activeBanner, setActiveBanner] = useState<ActionBannerState | null>(null);
 
   const handleDragCreate = useCallback((memberId: string, startTime: string, endTime: string) => {
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
     setDragCreateMemberId(memberId);
     setDragCreateClockIn(startTime);
     setDragCreateClockOut(endTime);
+    setEntryDraft(
+      startMinutes !== null && endMinutes !== null && endMinutes > startMinutes
+        ? {
+            date,
+            startTime,
+            durationMinutes: endMinutes - startMinutes,
+            userIds: [memberId]
+          }
+        : null
+    );
     setDragCreateOpen(true);
+  }, [date]);
+
+  const handleEntryDialogOpenChange = useCallback((open: boolean) => {
+    setDragCreateOpen(open);
+    if (!open) {
+      setEntryDraft(null);
+    }
   }, []);
 
   const silentRefresh = onSilentRefresh ?? onRefresh;
@@ -153,15 +202,57 @@ export function DayView({
     resetZoom
   } = useTimelineZoom();
   const dayViewRootRef = useRef<HTMLDivElement>(null)
+  const timelineHeaderTrackRef = useRef<HTMLDivElement>(null)
   const customScrollbarRef = useRef<HTMLDivElement>(null)
   const syncingScrollbarRef = useRef(false)
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false)
   const [useViewportScrollbarOverlay, setUseViewportScrollbarOverlay] = useState(false)
-  const [timelineScrollLeft, setTimelineScrollLeft] = useState(0)
+
+  const syncTimelineHeader = useCallback((scrollLeft: number) => {
+    const headerTrack = timelineHeaderTrackRef.current
+    if (!headerTrack) return
+    headerTrack.style.transform = `translate3d(${-scrollLeft}px, 0, 0)`
+  }, [])
+
+  useLayoutEffect(() => {
+    syncTimelineHeader(scrollContainerRef.current?.scrollLeft ?? 0)
+  }, [effectiveHourWidth, timelineWidth, scrollContainerRef, syncTimelineHeader])
 
   const dateKey = date.toISOString();
   const isToday = date.toDateString() === new Date().toDateString();
   const currentTimePosition = useCurrentTimePosition(effectiveHourWidth, isToday);
+  const entryDraftPreview = useMemo(() => {
+    if (
+      !dragCreateOpen ||
+      !entryDraft?.date ||
+      !entryDraft.durationMinutes ||
+      entryDraft.durationMinutes <= 0 ||
+      toLocalDateString(entryDraft.date) !== toLocalDateString(date)
+    ) {
+      return null;
+    }
+
+    const startMinutes = parseTimeToMinutes(entryDraft.startTime);
+    if (startMinutes === null || startMinutes >= 24 * 60) {
+      return null;
+    }
+
+    const left = (startMinutes / 60) * effectiveHourWidth;
+    const requestedWidth =
+      (entryDraft.durationMinutes / 60) * effectiveHourWidth;
+
+    return {
+      left,
+      width: Math.min(requestedWidth, timelineWidth - left),
+      userIds: new Set(entryDraft.userIds)
+    };
+  }, [
+    date,
+    dragCreateOpen,
+    effectiveHourWidth,
+    entryDraft,
+    timelineWidth
+  ]);
 
   useEffect(() => {
     resetZoom();
@@ -1147,7 +1238,7 @@ export function DayView({
         }
         return rootRect.bottom > window.innerHeight + overlayHysteresisPx
       })
-      setTimelineScrollLeft(timeline.scrollLeft)
+      syncTimelineHeader(timeline.scrollLeft)
 
       if (customScrollbarRef.current) {
         customScrollbarRef.current.scrollLeft = timeline.scrollLeft
@@ -1168,7 +1259,13 @@ export function DayView({
       scrollParent?.removeEventListener('scroll', updateScrollbarMetrics)
       window.removeEventListener('resize', updateScrollbarMetrics)
     }
-  }, [scrollContainerRef, timelineWidth, members.length, untimedDayJobs.length])
+  }, [
+    scrollContainerRef,
+    timelineWidth,
+    members.length,
+    untimedDayJobs.length,
+    syncTimelineHeader
+  ])
 
   useEffect(() => {
     const timeline = scrollContainerRef.current
@@ -1176,11 +1273,11 @@ export function DayView({
     if (!timeline) return
 
     const syncScroll = (source: HTMLDivElement, target: HTMLDivElement | null) => {
+      syncTimelineHeader(source.scrollLeft)
       if (!target) return
       if (syncingScrollbarRef.current) return
       syncingScrollbarRef.current = true
       target.scrollLeft = source.scrollLeft
-      setTimelineScrollLeft(source.scrollLeft)
       requestAnimationFrame(() => {
         syncingScrollbarRef.current = false
       })
@@ -1201,7 +1298,7 @@ export function DayView({
       timeline.removeEventListener('scroll', handleTimelineScroll)
       customScrollbar?.removeEventListener('scroll', handleCustomScrollbarScroll)
     }
-  }, [scrollContainerRef, hasHorizontalOverflow])
+  }, [scrollContainerRef, hasHorizontalOverflow, syncTimelineHeader])
 
   // Track cursor position during untimed chip drag for floating preview
   useEffect(() => {
@@ -1395,9 +1492,10 @@ export function DayView({
 
           <div className="min-w-0 flex-1 overflow-hidden bg-background">
             <div
+              ref={timelineHeaderTrackRef}
               style={{
                 width: timelineWidth,
-                transform: `translateX(-${timelineScrollLeft}px)`,
+                transform: 'translate3d(0, 0, 0)',
               }}
             >
               <TimelineHeader
@@ -1521,6 +1619,14 @@ export function DayView({
                     timelineWidth={timelineWidth}
                     currentTimePosition={currentTimePosition}
                     onDragCreate={handleDragCreate}
+                    draftPreview={
+                      entryDraftPreview?.userIds.has(member.user_id)
+                        ? {
+                            left: entryDraftPreview.left,
+                            width: entryDraftPreview.width
+                          }
+                        : null
+                    }
                     onMoveResize={handleMoveResize}
                     onBlockMoveStart={handleBlockMoveStart}
                     activeDragSessionId={
@@ -1738,12 +1844,13 @@ export function DayView({
       {/* Drag-to-create CalendarEntryDialog (controlled, two-tab) */}
       <CalendarEntryDialog
         open={dragCreateOpen}
-        onOpenChange={setDragCreateOpen}
+        onOpenChange={handleEntryDialogOpenChange}
         preselectedUserId={dragCreateMemberId}
         preselectedDate={date}
         preselectedClockInTime={dragCreateClockIn}
         preselectedClockOutTime={dragCreateClockOut}
         lockEntryMode
+        onDraftChange={setEntryDraft}
         onManualEntrySuccess={onManualEntrySuccess}
         onJobSuccess={onJobSuccess}
       />

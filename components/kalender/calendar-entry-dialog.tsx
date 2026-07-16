@@ -23,6 +23,7 @@ import type {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import type { CalendarEntryDraft } from './calendar-entry-draft';
 
 type CalendarEntryDialogData = {
   clients: Client[];
@@ -87,6 +88,7 @@ interface CalendarEntryDialogProps {
   lockEntryMode?: boolean;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   onJobSuccess?: () => void | Promise<void>;
+  onDraftChange?: (draft: CalendarEntryDraft | null) => void;
 }
 
 export function CalendarEntryDialog({
@@ -99,10 +101,14 @@ export function CalendarEntryDialog({
   lockEntryMode,
   onManualEntrySuccess,
   onJobSuccess,
+  onDraftChange,
 }: CalendarEntryDialogProps) {
   const { activeOrg, activeOrgId } = useOrganization();
   const activeOrgIdRef = useRef(activeOrgId);
   const [activeTab, setActiveTab] = useState<string>('job');
+  const activeTabRef = useRef(activeTab);
+  const jobDraftRef = useRef<CalendarEntryDraft | null>(null);
+  const manualDraftRef = useRef<CalendarEntryDraft | null>(null);
   const [loadedDialogData, setLoadedDialogData] = useState<{
     organizationId: string;
     data: CalendarEntryDialogData | null;
@@ -119,6 +125,43 @@ export function CalendarEntryDialog({
   useEffect(() => {
     activeOrgIdRef.current = activeOrgId;
   }, [activeOrgId]);
+
+  useEffect(() => {
+    if (open) return;
+    jobDraftRef.current = null;
+    manualDraftRef.current = null;
+  }, [open]);
+
+  const handleJobDraftChange = useCallback(
+    (draft: CalendarEntryDraft | null) => {
+      jobDraftRef.current = draft;
+      if (activeTabRef.current === 'job') {
+        onDraftChange?.(draft);
+      }
+    },
+    [onDraftChange]
+  );
+
+  const handleActiveTabChange = useCallback(
+    (nextTab: string) => {
+      activeTabRef.current = nextTab;
+      setActiveTab(nextTab);
+      onDraftChange?.(
+        nextTab === 'job' ? jobDraftRef.current : manualDraftRef.current
+      );
+    },
+    [onDraftChange]
+  );
+
+  const handleManualDraftChange = useCallback(
+    (draft: CalendarEntryDraft | null) => {
+      manualDraftRef.current = draft;
+      if (activeTabRef.current === 'entry') {
+        onDraftChange?.(draft);
+      }
+    },
+    [onDraftChange]
+  );
 
   const dialogData = useMemo(() => {
     if (!activeOrgId) {
@@ -214,6 +257,7 @@ export function CalendarEntryDialog({
 
   useEffect(() => {
     if (!open || !activeOrgId || !isAdminOrManager) return;
+    activeTabRef.current = 'job';
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the creation tab
     setActiveTab('job');
 
@@ -241,7 +285,7 @@ export function CalendarEntryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleActiveTabChange}>
           <TabsList className="w-full">
             <TabsTrigger value="job" className="flex-1 gap-1.5">
               <Briefcase className="h-3.5 w-3.5" />
@@ -270,6 +314,7 @@ export function CalendarEntryDialog({
               defaultDurationHours={defaultDurationHours}
               defaultEmployeeIds={preselectedUserId ? [preselectedUserId] : undefined}
               isActive={activeTab === 'job'}
+              onDraftChange={handleJobDraftChange}
               onSuccess={() => {
                 onOpenChange(false);
                 onJobSuccess?.();
@@ -287,6 +332,7 @@ export function CalendarEntryDialog({
               prefetchedJobs={dialogData?.manualEntryJobs}
               lockEntryMode={lockEntryMode}
               isActive={activeTab === 'entry'}
+              onDraftChange={handleManualDraftChange}
               onSuccess={async (entries) => {
                 await onManualEntrySuccess?.(entries);
                 setTimeout(() => onOpenChange(false), 1500);

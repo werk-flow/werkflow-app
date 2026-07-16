@@ -38,6 +38,7 @@ import type {
 } from '@/lib/time-tracking/types';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { toLocalDateString } from '@/lib/utils';
+import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
 
 type EntryMode = 'clock_in' | 'clock_out' | 'both';
 
@@ -53,6 +54,7 @@ export interface ManualEntryFormContentProps {
   prefetchedMembers?: OrgMember[];
   prefetchedJobs?: JobOption[];
   lockEntryMode?: boolean;
+  onDraftChange?: (draft: CalendarEntryDraft | null) => void;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean;
 }
@@ -66,6 +68,7 @@ export function ManualEntryFormContent({
   prefetchedMembers,
   prefetchedJobs,
   lockEntryMode,
+  onDraftChange,
   isActive = true,
 }: ManualEntryFormContentProps) {
   const { activeOrgId, activeOrg } = useOrganization();
@@ -163,6 +166,45 @@ export function ManualEntryFormContent({
     if (canAssignJob) return;
     setSelectedJobId('');
   }, [canAssignJob]);
+
+  useEffect(() => {
+    if (!isActive || !onDraftChange) return;
+
+    const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
+    const [clockInHours, clockInMinutes] = clockInTime.split(':').map(Number);
+    const [clockOutHours, clockOutMinutes] = clockOutTime.split(':').map(Number);
+    const startMinutes = clockInHours * 60 + clockInMinutes;
+    const endMinutes = clockOutHours * 60 + clockOutMinutes;
+    const durationMinutes = endMinutes - startMinutes;
+
+    if (
+      entryMode !== 'both' ||
+      !selectedDate ||
+      !targetUserId ||
+      !Number.isFinite(durationMinutes) ||
+      durationMinutes <= 0
+    ) {
+      onDraftChange(null);
+      return;
+    }
+
+    onDraftChange({
+      date: selectedDate,
+      startTime: clockInTime,
+      durationMinutes,
+      userIds: [targetUserId]
+    });
+  }, [
+    clockInTime,
+    clockOutTime,
+    currentUserId,
+    entryMode,
+    isActive,
+    isAdminOrManager,
+    onDraftChange,
+    selectedDate,
+    selectedUserId
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

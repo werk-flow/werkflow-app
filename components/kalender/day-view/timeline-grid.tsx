@@ -16,6 +16,19 @@ export function getTimelineWidth(zoom: number) {
   return 24 * getEffectiveHourWidth(zoom);
 }
 
+export function getVisibleGridIntervalMinutes(hourWidth: number): 15 | 30 | 60 {
+  if (hourWidth >= 200) return 15;
+  if (hourWidth >= 120) return 30;
+  return 60;
+}
+
+export function getVisibleGridSubdivisions(hourWidth: number): number[] {
+  const intervalMinutes = getVisibleGridIntervalMinutes(hourWidth);
+  if (intervalMinutes === 15) return [15, 30, 45];
+  if (intervalMinutes === 30) return [30];
+  return [];
+}
+
 /**
  * Calculate the position and width for a time block.
  * When `hourWidth` is provided, returns pixel positions using that scale.

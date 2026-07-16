@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { getVisibleGridIntervalMinutes } from './timeline-grid';
 
 interface DragToCreateProps {
   effectiveHourWidth: number;
@@ -44,6 +45,9 @@ export function DragToCreateOverlay({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(0);
   const [dragEnd, setDragEnd] = useState(0);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef(0);
+  const dragEndRef = useRef(0);
   const isCoarsePointer = useRef(false);
 
   useEffect(() => {
@@ -53,11 +57,15 @@ export function DragToCreateOverlay({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (disabled || !canCreate || isCoarsePointer.current) return;
     if (e.button !== 0) return;
+    if (e.detail > 1) return;
 
     const rect = overlayRef.current!.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const snapped = snapToGrid(x, effectiveHourWidth);
 
+    dragStartRef.current = snapped;
+    dragEndRef.current = snapped;
+    isDraggingRef.current = true;
     setDragStart(snapped);
     setDragEnd(snapped);
     setIsDragging(true);
@@ -68,18 +76,32 @@ export function DragToCreateOverlay({
     if (!isDragging) return;
     const rect = overlayRef.current!.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, timelineWidth));
-    setDragEnd(snapToGrid(x, effectiveHourWidth));
+    const snapped = snapToGrid(x, effectiveHourWidth);
+    dragEndRef.current = snapped;
+    setDragEnd(snapped);
   }, [isDragging, timelineWidth, effectiveHourWidth]);
 
-  const handleMouseUp = useCallback(() => {
-    if (!isDragging) return;
+  const finishDrag = useCallback((clientX?: number) => {
+    if (!isDraggingRef.current) return;
+
+    let finalDragEnd = dragEndRef.current;
+    const overlay = overlayRef.current;
+    if (clientX !== undefined && overlay) {
+      const rect = overlay.getBoundingClientRect();
+      const x = Math.max(0, Math.min(clientX - rect.left, timelineWidth));
+      finalDragEnd = snapToGrid(x, effectiveHourWidth);
+      dragEndRef.current = finalDragEnd;
+      setDragEnd(finalDragEnd);
+    }
+
+    isDraggingRef.current = false;
     setIsDragging(false);
 
-    const left = Math.min(dragStart, dragEnd);
-    const right = Math.max(dragStart, dragEnd);
+    const left = Math.min(dragStartRef.current, finalDragEnd);
+    const right = Math.max(dragStartRef.current, finalDragEnd);
     const minDragPx = (15 / 60) * effectiveHourWidth;
 
-    if (right - left < minDragPx) return;
+    if (right - left + 0.5 < minDragPx) return;
 
     const start = pixelToTime(left, effectiveHourWidth);
     const end = pixelToTime(right, effectiveHourWidth);
@@ -89,7 +111,16 @@ export function DragToCreateOverlay({
       formatTimeHHMM(start.hours, start.minutes),
       formatTimeHHMM(end.hours, end.minutes)
     );
-  }, [isDragging, dragStart, dragEnd, effectiveHourWidth, memberId, onCreateEntry]);
+  }, [
+    effectiveHourWidth,
+    memberId,
+    onCreateEntry,
+    timelineWidth
+  ]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    finishDrag(e.clientX);
+  }, [finishDrag]);
 
   // Handle tap-to-create on mobile
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -111,15 +142,54 @@ export function DragToCreateOverlay({
     );
   }, [disabled, canCreate, effectiveHourWidth, memberId, onCreateEntry]);
 
-  // Cancel drag if mouse leaves the window
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (disabled || !canCreate || isCoarsePointer.current) return;
+    if (e.button !== 0) return;
+
+    const rect = overlayRef.current!.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, timelineWidth));
+    const intervalMinutes = getVisibleGridIntervalMinutes(effectiveHourWidth);
+    const cellWidth = (intervalMinutes / 60) * effectiveHourWidth;
+    const left = Math.min(
+      timelineWidth - cellWidth,
+      Math.floor(x / cellWidth) * cellWidth
+    );
+    const right = left + cellWidth;
+
+    const start = pixelToTime(left, effectiveHourWidth);
+    const end = pixelToTime(right, effectiveHourWidth);
+
+    e.preventDefault();
+    onCreateEntry(
+      memberId,
+      formatTimeHHMM(start.hours, start.minutes),
+      formatTimeHHMM(end.hours, end.minutes)
+    );
+  }, [
+    disabled,
+    canCreate,
+    effectiveHourWidth,
+    timelineWidth,
+    memberId,
+    onCreateEntry
+  ]);
+
+  // Finish from the release position even when the pointer leaves the row.
   useEffect(() => {
     if (!isDragging) return;
-    const handleGlobalUp = () => {
-      setIsDragging(false);
+    const handleGlobalUp = (event: MouseEvent) => {
+      finishDrag(event.clientX);
+    };
+    const handleWindowBlur = () => {
+      finishDrag();
     };
     window.addEventListener('mouseup', handleGlobalUp);
-    return () => window.removeEventListener('mouseup', handleGlobalUp);
-  }, [isDragging]);
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalUp);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, [finishDrag, isDragging]);
 
   const selectionLeft = Math.min(dragStart, dragEnd);
   const selectionWidth = Math.abs(dragEnd - dragStart);
@@ -137,6 +207,7 @@ export function DragToCreateOverlay({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
     >
       {isDragging && selectionWidth > 0 && (
         <div

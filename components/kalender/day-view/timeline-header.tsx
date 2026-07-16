@@ -2,7 +2,10 @@
 
 import { memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { BASE_HOUR_WIDTH } from './timeline-grid';
+import {
+  BASE_HOUR_WIDTH,
+  getVisibleGridSubdivisions
+} from './timeline-grid';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -26,12 +29,10 @@ export const TimelineHeader = memo(function TimelineHeader({
   const isToday = date
     ? date.toDateString() === new Date().toDateString()
     : true;
-  // Determine which sub-labels to show based on zoom
-  const subLabels = useMemo(() => {
-    if (effectiveHourWidth >= 200) return [15, 30, 45];
-    if (effectiveHourWidth >= 120) return [30];
-    return [];
-  }, [effectiveHourWidth]);
+  const subLabels = useMemo(
+    () => getVisibleGridSubdivisions(effectiveHourWidth),
+    [effectiveHourWidth]
+  );
 
   // Opacity for sub-labels: fade in at threshold boundaries
   const subLabelOpacity = useMemo(() => {
