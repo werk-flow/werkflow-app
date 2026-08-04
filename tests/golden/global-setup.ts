@@ -1,0 +1,86 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { chromium, type FullConfig } from '@playwright/test';
+
+import { loadEnvLocal } from './support/env';
+import { createTestWorld, destroyLeftoverTestWorlds } from './support/seed';
+import {
+  ARTIFACTS_DIR,
+  saveWorld,
+  storageStatePath,
+  type TestWorld,
+} from './support/world';
+
+async function loginAndSaveState(
+  baseURL: string,
+  email: string,
+  password: string,
+  statePath: string
+): Promise<void> {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ locale: 'de-DE' });
+    const page = await context.newPage();
+
+    await page.goto(`${baseURL}/login`);
+    await page.locator('input[autocomplete="email"]').fill(email);
+    await page.locator('input[autocomplete="current-password"]').fill(password);
+    await page.getByRole('button', { name: 'Anmelden' }).click();
+    await page.waitForURL('**/dashboard', { timeout: 30_000 });
+
+    await context.storageState({ path: statePath });
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+}
+
+export default async function globalSetup(config: FullConfig): Promise<void> {
+  loadEnvLocal();
+  const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
+
+  // Clean up any worlds a crashed previous run left behind.
+  const removed = await destroyLeftoverTestWorlds();
+  if (removed > 0) {
+    console.log(`[golden] removed ${removed} leftover test records from earlier runs`);
+  }
+
+  const world: TestWorld = await createTestWorld();
+  saveWorld(world);
+  console.log(`[golden] seeded world ${world.runId} (org ${world.orgId})`);
+
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  // A 6 MB upload fixture proves the old 4.5 MB Vercel body limit is gone.
+  const largePdfPath = resolve(ARTIFACTS_DIR, 'upload-fixture.pdf');
+  const sixMegabytes = 6 * 1024 * 1024;
+  const buffer = Buffer.alloc(sixMegabytes, 'WerkFlow golden gate upload fixture. ');
+  buffer.write('%PDF-1.4\n', 0);
+  writeFileSync(largePdfPath, buffer);
+
+  await loginAndSaveState(
+    baseURL,
+    world.users.admin.email,
+    world.users.admin.password,
+    storageStatePath('admin')
+  );
+  await loginAndSaveState(
+    baseURL,
+    world.users.buero.email,
+    world.users.buero.password,
+    storageStatePath('buero')
+  );
+  await loginAndSaveState(
+    baseURL,
+    world.users.employee.email,
+    world.users.employee.password,
+    storageStatePath('employee')
+  );
+  await loginAndSaveState(
+    baseURL,
+    world.outsider.admin.email,
+    world.outsider.admin.password,
+    storageStatePath('outsider')
+  );
+
+  console.log('[golden] all four role sessions saved');
+}

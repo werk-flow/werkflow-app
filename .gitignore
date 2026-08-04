@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Golden-gate test artifacts
+tests/golden/.artifacts/
+tests/golden/.results/
+tests/golden/.report/

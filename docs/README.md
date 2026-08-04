@@ -22,6 +22,7 @@ docs/
     coderabbit.md
     data-model.md
     realtime-and-caching.md
+    testing.md
   features/
     ai-automations.md
     calendar-and-resource-planning.md
@@ -41,6 +42,8 @@ docs/
     product-capability-map.md
   plans/
     phase-1-build-roadmap.md
+    p1-00-baseline-verification.md
+    golden-gate-log.md
     inventory-v1-implementation-plan.md
   decisions/
     0001-infrastructure-stack.md
