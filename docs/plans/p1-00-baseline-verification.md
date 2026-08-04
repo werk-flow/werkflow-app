@@ -6,7 +6,7 @@ Date: 2026-08-04. This report records the discrepancy findings and resolutions r
 
 | Check | Result |
 | --- | --- |
-| Generated Supabase types vs live schema | **In sync.** Freshly generated types are byte-identical to `lib/supabase/database.types.ts` (verified 2026-08-04). The earlier "stale types" claim is resolved. |
+| Generated Supabase types vs live schema | **Now in sync.** The previously committed types were genuinely stale (missing `email_change_challenges` and ~800 lines of newer schema). The regenerated file was committed 2026-08-04 (`b956ab6`) and verified byte-identical to a fresh generation from the live schema; the app typechecks against it. |
 | Documentation vs implementation | Feature docs were overhauled 2026-08-04 with explicit **Current Product Baseline** sections; infrastructure state matches `docs/decisions/0001-infrastructure-stack.md` after the `P1-00a` storage migration. |
 
 ## Discrepancies Found And Resolved
