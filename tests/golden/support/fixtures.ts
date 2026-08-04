@@ -10,27 +10,29 @@ type GoldenFixtures = {
   outsiderPage: Page;
 };
 
+// Playwright fixture callbacks receive a `use` continuation; it is renamed to
+// `provide` here so the react-hooks lint rule does not mistake it for a Hook.
 async function rolePage(
   browser: import('@playwright/test').Browser,
   role: 'admin' | 'buero' | 'employee' | 'outsider',
-  use: (page: Page) => Promise<void>
+  provide: (page: Page) => Promise<void>
 ): Promise<void> {
   const context: BrowserContext = await browser.newContext({
     storageState: storageStatePath(role),
   });
   const page = await context.newPage();
-  await use(page);
+  await provide(page);
   await context.close();
 }
 
 export const test = base.extend<GoldenFixtures>({
-  world: async ({}, use) => {
-    await use(loadWorld());
+  world: async ({}, provide) => {
+    await provide(loadWorld());
   },
-  adminPage: async ({ browser }, use) => rolePage(browser, 'admin', use),
-  bueroPage: async ({ browser }, use) => rolePage(browser, 'buero', use),
-  employeePage: async ({ browser }, use) => rolePage(browser, 'employee', use),
-  outsiderPage: async ({ browser }, use) => rolePage(browser, 'outsider', use),
+  adminPage: async ({ browser }, provide) => rolePage(browser, 'admin', provide),
+  bueroPage: async ({ browser }, provide) => rolePage(browser, 'buero', provide),
+  employeePage: async ({ browser }, provide) => rolePage(browser, 'employee', provide),
+  outsiderPage: async ({ browser }, provide) => rolePage(browser, 'outsider', provide),
 });
 
 export { expect } from '@playwright/test';
