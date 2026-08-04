@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from './job-multi-select';
 import { ClientSelectWithCreate } from './client-select-with-create';
+import { SiteContactFields } from './site-contact-fields';
 import {
   createProject,
   getNextProjectNumber,
@@ -55,6 +56,8 @@ export function CreateProjectFormContent({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
+  const [siteId, setSiteId] = useState<string>('');
+  const [contactId, setContactId] = useState<string>('');
   const [projectNumber, setProjectNumber] = useState('');
   const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
   const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
@@ -83,6 +86,9 @@ export function CreateProjectFormContent({
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
+    // Sites and contacts belong to one customer; a change invalidates them.
+    setSiteId('');
+    setContactId('');
     if (selectedJobIds.length > 0) {
       const validJobIds = new Set(
         jobs
@@ -109,6 +115,8 @@ export function CreateProjectFormContent({
     setName('');
     setDescription('');
     setClientId(defaultClientId ?? '');
+    setSiteId('');
+    setContactId('');
     setProjectNumber('');
     setPlannedStartDate(undefined);
     setPlannedEndDate(undefined);
@@ -146,6 +154,8 @@ export function CreateProjectFormContent({
         name: name.trim(),
         description: description.trim() || undefined,
         clientId: clientId || undefined,
+        siteId: siteId || undefined,
+        contactId: contactId || undefined,
         projectNumber: projectNumber.trim() || undefined,
         plannedStartDate: plannedStartDate
           ? toLocalDateString(plannedStartDate)
@@ -272,6 +282,16 @@ export function CreateProjectFormContent({
             readOnlyLabel={readOnlyClientLabel}
           />
         </div>
+
+        <SiteContactFields
+          clientId={clientId}
+          siteId={siteId}
+          contactId={contactId}
+          onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
+          onContactChange={setContactId}
+          disabled={formDisabled}
+          idPrefix="create-project"
+        />
 
         <div className="grid gap-2">
           <Label>Geplanter Beginn</Label>

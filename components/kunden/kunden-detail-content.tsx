@@ -36,8 +36,11 @@ import {
 } from '@/components/shared/metadata-section';
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
+import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import { updateClient, deleteClient } from '@/lib/clients/actions';
+import type { ClientContact, ClientSite } from '@/lib/clients/types';
 import {
   CLIENT_TYPE_LABELS,
   type Client,
@@ -59,6 +62,8 @@ function formatDate(dateStr: string): string {
 
 interface KundenDetailContentProps {
   client: Client;
+  contacts: ClientContact[];
+  sites: ClientSite[];
   documents: OrganizationDocument[];
   jobs: Job[];
   projects: ProjectWithDetails[];
@@ -72,6 +77,8 @@ interface KundenDetailContentProps {
 
 export function KundenDetailContent({
   client,
+  contacts,
+  sites,
   documents,
   jobs,
   projects,
@@ -86,6 +93,11 @@ export function KundenDetailContent({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Colleagues' contact/site/master-data changes appear without a reload.
+  useRealtimeRouterRefresh({
+    tables: ['clients', 'client_contacts', 'client_sites'],
+  });
 
   const handleDelete = async () => {
     if (isDeleting) return;
@@ -131,6 +143,21 @@ export function KundenDetailContent({
           await updateClient(client.id, { clientType: v as ClientType });
         },
         options: clientTypeOptions,
+      },
+    },
+    {
+      label: 'Kundennummer',
+      value: client.customerNumber || '—',
+      editableConfig: {
+        type: 'text',
+        currentValue: client.customerNumber ?? '',
+        onSave: async (v) => {
+          const result = await updateClient(client.id, { customerNumber: v });
+          if (!result.success && result.error === 'customer_number_taken') {
+            throw new Error('Diese Kundennummer ist bereits vergeben.');
+          }
+        },
+        placeholder: 'z. B. K-1001',
       },
     },
     {
@@ -233,6 +260,14 @@ export function KundenDetailContent({
               title="Kundendetails"
               fields={metadataFields}
               isEditable={isAdminOrManager}
+            />
+
+            <ClientRelationsSection
+              clientId={client.id}
+              clientAddress={client.address}
+              contacts={contacts}
+              sites={sites}
+              isAdminOrManager={isAdminOrManager}
             />
 
             {/* Financial Summary Placeholder */}

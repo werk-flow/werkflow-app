@@ -33,6 +33,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Planning, Status, And Overview
 
 - Jobs support title, description, number, customer/project context, priority, planned date and time, estimated duration, planned total working time, location, status, and actual completion date.
+- **Site and contact references (P1-01):** a job can reference one of its customer's durable work sites (`Einsatzort`) and one contact person (`Ansprechpartner`); a project can carry a default site/contact that prefills new jobs and remains overridable per job (no forced sync). Selecting a site copies its current address into the job's free-text location as a snapshot — later site edits never rewrite the recorded location of existing work. Changing the customer of a job or project clears the previous customer's site/contact references, including on child jobs when a project's customer changes. The assigned field worker sees site address, access notes, and a click-to-call contact on the job detail.
 - Current job statuses are `nicht_bearbeitet`, `in_bearbeitung`, `fertig`, and `geparkt`; priorities are `niedrig`, `mittel`, and `hoch`.
 - A new job without a planned date is parked. Removing its planned date parks it; scheduling a parked job returns it to open work.
 - Completing a job records an actual completion date. Parking clears its schedule and completion date.

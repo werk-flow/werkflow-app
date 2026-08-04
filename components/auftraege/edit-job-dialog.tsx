@@ -30,6 +30,8 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
 
 import { ClientSelectWithCreate } from './client-select-with-create';
+import { SiteContactFields } from './site-contact-fields';
+import { formatSiteAddress } from '@/lib/clients/types';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import {
   updateJob,
@@ -99,6 +101,8 @@ export function EditJobDialog({
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
+  const [siteId, setSiteId] = useState<string>('');
+  const [contactId, setContactId] = useState<string>('');
   const [priority, setPriority] = useState<JobPriority>('mittel');
   const [plannedDate, setPlannedDate] = useState<Date | undefined>();
   const [plannedTime, setPlannedTime] = useState('');
@@ -133,6 +137,8 @@ export function EditJobDialog({
     setPlannedWorkingTouched(false);
     setAutoSyncPlannedWorking(false);
     setLocation(job.location ?? '');
+    setSiteId(job.siteId ?? '');
+    setContactId(job.contactId ?? '');
     setError(null);
     setContentError(null);
     setSuccess(false);
@@ -219,7 +225,9 @@ export function EditJobDialog({
         plannedTime: plannedTime || (job.plannedTime !== null ? null : undefined),
         estimatedDurationMinutes,
         plannedWorkingMinutes,
-        location: location.trim() || (job.location !== null ? '' : undefined)
+        location: location.trim() || (job.location !== null ? '' : undefined),
+        siteId,
+        contactId
       };
 
       const result = await updateJob(job.id, input);
@@ -318,6 +326,11 @@ export function EditJobDialog({
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
+    // Sites and contacts belong to one customer; a change invalidates them.
+    if (newClientId !== clientId) {
+      setSiteId('');
+      setContactId('');
+    }
     if (projectId) {
       const selectedProject = activeProjects.find((p) => p.id === projectId);
       if (selectedProject && newClientId && selectedProject.clientId !== newClientId && selectedProject.clientId !== null) {
@@ -331,6 +344,10 @@ export function EditJobDialog({
     if (newProjectId) {
       const selected = activeProjects.find((p) => p.id === newProjectId);
       if (selected) {
+        if (selected.clientId !== clientId) {
+          setSiteId('');
+          setContactId('');
+        }
         if (selected.clientId) {
           setClientId(selected.clientId);
         } else {
@@ -508,6 +525,24 @@ export function EditJobDialog({
                 disabled={formDisabled}
               />
             </div>
+
+            <SiteContactFields
+              clientId={clientId}
+              siteId={siteId}
+              contactId={contactId}
+              onSiteChange={(nextSiteId, site) => {
+                setSiteId(nextSiteId);
+                // The site's current address becomes the recorded Ort; it
+                // stays a text snapshot afterwards.
+                if (site) {
+                  const address = formatSiteAddress(site);
+                  if (address) setLocation(address);
+                }
+              }}
+              onContactChange={setContactId}
+              disabled={formDisabled}
+              idPrefix="edit-job"
+            />
 
             <div className="grid gap-2">
               <Label htmlFor="edit-job-location">Ort</Label>

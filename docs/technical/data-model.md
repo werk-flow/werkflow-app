@@ -56,11 +56,15 @@ The core work domain is job/project management.
 
 Concepts:
 
-- Customer (`Kunde`): private or commercial client.
-- Project (`Projekt`): a larger body of work that may contain multiple jobs.
-- Job/order (`Auftrag`): a concrete unit of work, either standalone or under a project.
+- Customer (`Kunde`): private or commercial client, with an optional manual org-unique customer number.
+- Contact (`Ansprechpartner`): a person belonging to exactly one customer, with a free-text role, channels, a primary marker, and an archive state. Contacts are never shared across customers or silently merged.
+- Work site (`Einsatzort`): a durable operational location belonging to exactly one customer, with a structured address, access notes, an optional on-site contact, a primary marker, and an archive state. A site is master data, not copied address text.
+- Project (`Projekt`): a larger body of work that may contain multiple jobs. A project may carry a default site/contact that prefills new jobs; each job can override it (no forced sync).
+- Job/order (`Auftrag`): a concrete unit of work, either standalone or under a project. A job may reference one of its customer's sites and contacts. The job's free-text location is a snapshot taken when a site is selected; site edits never rewrite it, preserving the historical execution location.
 - Assignment: connection between a job and one or more employees.
 - Instruction item: checklist/instruction content attached to a job.
+
+Ownership rule: sites and contacts belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity).
 
 Projects can have derived state based on child jobs unless manually overridden. Jobs can be scheduled, assigned, parked, completed, and connected to customers and time entries.
 

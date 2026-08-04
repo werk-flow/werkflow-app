@@ -28,6 +28,10 @@ export async function createJob(
     jobNumber: string;
     title: string;
     assignEmployeeName?: string;
+    // P1-01: pick the customer and its site/contact through the dialog.
+    clientName?: string;
+    siteName?: string;
+    contactName?: string;
   }
 ): Promise<void> {
   await page.goto('/auftraege');
@@ -39,6 +43,39 @@ export async function createJob(
 
   await page.locator('#job-number').fill(options.jobNumber);
   await page.locator('#job-title').fill(options.title);
+
+  if (options.clientName) {
+    // The customer picker is a searchable combobox showing "Kein Kunde".
+    await page.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
+    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: options.clientName })
+      .first()
+      .click();
+  }
+
+  if (options.siteName) {
+    // The site select appears once the customer's sites finished loading.
+    await expect(page.locator('#job-site')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#job-site').click();
+    await page
+      .getByRole('option')
+      .filter({ hasText: options.siteName })
+      .first()
+      .click();
+  }
+
+  if (options.contactName) {
+    await expect(page.locator('#job-contact')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#job-contact').click();
+    await page
+      .getByRole('option')
+      .filter({ hasText: options.contactName })
+      .first()
+      .click();
+  }
 
   if (options.assignEmployeeName) {
     // The employee picker renders as a combobox showing its placeholder text.
@@ -221,11 +258,99 @@ export async function returnMaterialOnJobPage(
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
 
+// P1-01: customer contact and work-site management on the customer detail.
+
+export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
+  await page.goto('/kunden');
+  await visibleText(page, customerName).click();
+  await expect(visibleText(page, 'Kundendetails')).toBeVisible({ timeout: 15_000 });
+}
+
+export async function addContactOnCustomerDetail(
+  page: Page,
+  contact: { name: string; role?: string; phone?: string }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Ansprechpartner hinzufügen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Ansprechpartner hinzufügen' })
+  ).toBeVisible();
+  await page.locator('#contact-name').fill(contact.name);
+  if (contact.role) await page.locator('#contact-role').fill(contact.role);
+  if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
+  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, contact.name)).toBeVisible();
+}
+
+export async function addSiteOnCustomerDetail(
+  page: Page,
+  site: { name: string; street?: string; postalCode?: string; city?: string }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Einsatzort hinzufügen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Einsatzort hinzufügen' })
+  ).toBeVisible();
+  await page.locator('#site-name').fill(site.name);
+  if (site.street) await page.locator('#site-street').fill(site.street);
+  if (site.postalCode) await page.locator('#site-postal-code').fill(site.postalCode);
+  if (site.city) await page.locator('#site-city').fill(site.city);
+  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, site.name)).toBeVisible();
+}
+
+export async function editSiteStreetOnCustomerDetail(
+  page: Page,
+  siteName: string,
+  newStreet: string
+): Promise<void> {
+  const siteRow = page
+    .locator('li')
+    .filter({ hasText: siteName })
+    .filter({ visible: true })
+    .first();
+  await siteRow.getByRole('button', { name: 'Einsatzort bearbeiten' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Einsatzort bearbeiten' })
+  ).toBeVisible();
+  await page.locator('#site-street').fill(newStreet);
+  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, newStreet)).toBeVisible({ timeout: 15_000 });
+}
+
+export async function searchCustomers(page: Page, query: string): Promise<void> {
+  await page.goto('/kunden');
+  await page.getByLabel('Kunden durchsuchen').fill(query);
+}
+
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {
   await page.goto(path);
   await expect(page).not.toHaveURL(new RegExp(`${path.replace('/', '\\/')}$`), {
     timeout: 15_000,
   });
+}
+
+export async function loginViaUi(
+  page: Page,
+  credentials: { email: string; password: string }
+): Promise<void> {
+  let loggedIn = false;
+  // Same pre-hydration retry the global setup uses.
+  for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+    await page.locator('input[autocomplete="email"]').fill(credentials.email);
+    await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
+    await page.getByRole('button', { name: 'Anmelden' }).click();
+    loggedIn = await page
+      .waitForURL('**/dashboard**', { timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  if (!loggedIn) {
+    throw new Error(`Login did not reach the dashboard for ${credentials.email}`);
+  }
 }
 
 export async function signOutViaUi(page: Page): Promise<void> {

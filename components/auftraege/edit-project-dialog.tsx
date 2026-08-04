@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from './job-multi-select';
 import { ClientSelectWithCreate } from './client-select-with-create';
+import { SiteContactFields } from './site-contact-fields';
 import { updateProject, getProjectDetails, type UpdateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import {
@@ -65,6 +66,8 @@ export function EditProjectDialog({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>('');
+  const [siteId, setSiteId] = useState<string>('');
+  const [contactId, setContactId] = useState<string>('');
   const [projectNumber, setProjectNumber] = useState('');
   const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
   const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
@@ -88,6 +91,11 @@ export function EditProjectDialog({
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
+    // Sites and contacts belong to one customer; a change invalidates them.
+    if (newClientId !== clientId) {
+      setSiteId('');
+      setContactId('');
+    }
     if (selectedJobIds.length > 0) {
       const validJobIds = new Set(
         jobs
@@ -104,6 +112,8 @@ export function EditProjectDialog({
     setName(project.name);
     setDescription(project.description ?? '');
     setClientId(project.clientId ?? '');
+    setSiteId(project.siteId ?? '');
+    setContactId(project.contactId ?? '');
     setProjectNumber(project.projectNumber ?? '');
     setPlannedStartDate(
       project.plannedStartDate
@@ -152,6 +162,8 @@ export function EditProjectDialog({
         name: name.trim(),
         description: description.trim() || undefined,
         clientId: clientId && clientId !== 'none' ? clientId : undefined,
+        siteId,
+        contactId,
         projectNumber: projectNumber.trim() || undefined,
         plannedStartDate: plannedStartDate
           ? toLocalDateString(plannedStartDate)
@@ -279,6 +291,16 @@ export function EditProjectDialog({
                 id="edit-project-client"
               />
             </div>
+
+            <SiteContactFields
+              clientId={clientId}
+              siteId={siteId}
+              contactId={contactId}
+              onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
+              onContactChange={setContactId}
+              disabled={formDisabled}
+              idPrefix="edit-project"
+            />
 
             <div className="grid gap-2">
               <Label>Geplanter Beginn</Label>

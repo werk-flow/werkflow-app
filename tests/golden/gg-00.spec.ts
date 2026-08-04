@@ -10,6 +10,7 @@ import {
   expectRedirectedAway,
   inviteMember,
   joinOrganizationViaInviteLink,
+  loginViaUi,
   returnMaterialOnJobPage,
   signOutViaUi,
   takeMaterialOnJobPage,
@@ -186,7 +187,13 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await expect(outsiderPage.getByText(`GG-${world.runId}-1`)).toHaveCount(0);
   });
 
-  test('Mitarbeiter kann sich abmelden', async ({ employeePage }) => {
-    await signOutViaUi(employeePage);
+  // Sign-out revokes the user's sessions server-side, so this check uses the
+  // invitee — the one member whose session no later spec depends on.
+  test('Benutzer kann sich abmelden', async ({ browser, world }) => {
+    const context = await browser.newContext({ locale: 'de-DE' });
+    const page = await context.newPage();
+    await loginViaUi(page, world.invitee);
+    await signOutViaUi(page);
+    await context.close();
   });
 });

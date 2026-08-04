@@ -14,11 +14,165 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_contacts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          name: string
+          notes: string | null
+          organization_id: string
+          phone: string | null
+          role: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name: string
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+          role?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contacts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_sites: {
+        Row: {
+          access_notes: string | null
+          city: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          name: string
+          notes: string | null
+          organization_id: string
+          postal_code: string | null
+          primary_contact_id: string | null
+          street: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_notes?: string | null
+          city?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name: string
+          notes?: string | null
+          organization_id: string
+          postal_code?: string | null
+          primary_contact_id?: string | null
+          street?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_notes?: string | null
+          city?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          name?: string
+          notes?: string | null
+          organization_id?: string
+          postal_code?: string | null
+          primary_contact_id?: string | null
+          street?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_sites_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_sites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_sites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_sites_primary_contact_id_fkey"
+            columns: ["primary_contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
           client_type: Database["public"]["Enums"]["client_type"]
           created_at: string
+          customer_number: string | null
           email: string | null
           id: string
           name: string
@@ -31,6 +185,7 @@ export type Database = {
           address?: string | null
           client_type?: Database["public"]["Enums"]["client_type"]
           created_at?: string
+          customer_number?: string | null
           email?: string | null
           id?: string
           name: string
@@ -43,6 +198,7 @@ export type Database = {
           address?: string | null
           client_type?: Database["public"]["Enums"]["client_type"]
           created_at?: string
+          customer_number?: string | null
           email?: string | null
           id?: string
           name?: string
@@ -1457,6 +1613,7 @@ export type Database = {
         Row: {
           actual_completion_date: string | null
           client_id: string | null
+          contact_id: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -1470,6 +1627,7 @@ export type Database = {
           planned_working_minutes: number | null
           priority: Database["public"]["Enums"]["job_priority"]
           project_id: string | null
+          site_id: string | null
           status: Database["public"]["Enums"]["job_status"]
           title: string
           updated_at: string
@@ -1477,6 +1635,7 @@ export type Database = {
         Insert: {
           actual_completion_date?: string | null
           client_id?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -1490,6 +1649,7 @@ export type Database = {
           planned_working_minutes?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           project_id?: string | null
+          site_id?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title: string
           updated_at?: string
@@ -1497,6 +1657,7 @@ export type Database = {
         Update: {
           actual_completion_date?: string | null
           client_id?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
@@ -1510,6 +1671,7 @@ export type Database = {
           planned_working_minutes?: number | null
           priority?: Database["public"]["Enums"]["job_priority"]
           project_id?: string | null
+          site_id?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title?: string
           updated_at?: string
@@ -1520,6 +1682,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
             referencedColumns: ["id"]
           },
           {
@@ -1541,6 +1710,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "client_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -1751,6 +1927,7 @@ export type Database = {
       projects: {
         Row: {
           client_id: string | null
+          contact_id: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -1760,11 +1937,13 @@ export type Database = {
           planned_end_date: string | null
           planned_start_date: string | null
           project_number: string | null
+          site_id: string | null
           status_override: Database["public"]["Enums"]["project_status"] | null
           updated_at: string
         }
         Insert: {
           client_id?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -1774,11 +1953,13 @@ export type Database = {
           planned_end_date?: string | null
           planned_start_date?: string | null
           project_number?: string | null
+          site_id?: string | null
           status_override?: Database["public"]["Enums"]["project_status"] | null
           updated_at?: string
         }
         Update: {
           client_id?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
@@ -1788,6 +1969,7 @@ export type Database = {
           planned_end_date?: string | null
           planned_start_date?: string | null
           project_number?: string | null
+          site_id?: string | null
           status_override?: Database["public"]["Enums"]["project_status"] | null
           updated_at?: string
         }
@@ -1797,6 +1979,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
             referencedColumns: ["id"]
           },
           {
@@ -1811,6 +2000,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "client_sites"
             referencedColumns: ["id"]
           },
         ]
@@ -1938,6 +2134,7 @@ export type Database = {
           address: string | null
           client_type: Database["public"]["Enums"]["client_type"]
           created_at: string
+          customer_number: string | null
           email: string | null
           id: string
           name: string

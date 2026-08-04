@@ -49,6 +49,8 @@ The provider subscribes to tables that affect active operational views, includin
 - `organization_settings`
 - `profiles`
 - `clients`
+- `client_contacts`
+- `client_sites`
 - `jobs`
 - `projects`
 - `job_assignments`

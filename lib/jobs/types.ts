@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
+import type { ClientContact, ClientSite } from '@/lib/clients/types';
 
 // ============================================
 // Database Row / Insert / Update Aliases
@@ -49,6 +50,7 @@ export type Client = {
   organizationId: string;
   name: string;
   clientType: ClientType;
+  customerNumber: string | null;
   email: string | null;
   phone: string | null;
   address: string | null;
@@ -67,6 +69,8 @@ export type Project = {
   statusOverride: ProjectStatus | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
+  siteId: string | null;
+  contactId: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -88,6 +92,8 @@ export type Job = {
   plannedWorkingMinutes: number | null;
   actualCompletionDate: string | null;
   location: string | null;
+  siteId: string | null;
+  contactId: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -131,6 +137,9 @@ export type JobWithDetails = Job & {
   assignments: JobAssignmentWithProfile[];
   client: Client | null;
   project: Pick<Project, 'id' | 'name' | 'projectNumber'> | null;
+  // Loaded by the job detail queries; list builders may omit them.
+  site?: ClientSite | null;
+  contact?: ClientContact | null;
 };
 
 export type JobAssignmentWithProfile = JobAssignment & {
@@ -283,6 +292,7 @@ export function toClient(row: ClientRow): Client {
     organizationId: row.organization_id,
     name: row.name,
     clientType: row.client_type,
+    customerNumber: row.customer_number,
     email: row.email,
     phone: row.phone,
     address: row.address,
@@ -303,6 +313,8 @@ export function toProject(row: ProjectRow): Project {
     statusOverride: row.status_override,
     plannedStartDate: row.planned_start_date,
     plannedEndDate: row.planned_end_date,
+    siteId: row.site_id,
+    contactId: row.contact_id,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -342,6 +354,8 @@ export function toJob(row: JobRow): Job {
     plannedWorkingMinutes: row.planned_working_minutes,
     actualCompletionDate: row.actual_completion_date,
     location: row.location,
+    siteId: row.site_id,
+    contactId: row.contact_id,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

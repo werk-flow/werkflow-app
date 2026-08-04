@@ -8,7 +8,7 @@ import {
   getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
-import { getClientDetail } from '@/lib/clients/actions';
+import { getClientDetail, getClientRelations } from '@/lib/clients/actions';
 import { getClientDocuments } from '@/lib/documents/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
@@ -47,12 +47,14 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
 
   const [
     clientResult,
+    relationsResult,
     jobsResult,
     clientDocumentsResult,
     clientsResult,
     membersResult,
   ] = await Promise.all([
     getClientDetail(clientId),
+    getClientRelations(clientId, { includeInactive: true }),
     getJobsForClient(clientId),
     getClientDocuments(clientId),
     admin
@@ -99,6 +101,8 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
   return (
     <KundenDetailContent
       client={client}
+      contacts={relationsResult.success ? relationsResult.contacts : []}
+      sites={relationsResult.success ? relationsResult.sites : []}
       documents={clientDocumentsResult.success ? clientDocumentsResult.documents : []}
       jobs={jobsData.jobs}
       projects={jobsData.projects}

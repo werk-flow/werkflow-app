@@ -15,25 +15,49 @@ import type { OrgRole } from '@/lib/members/actions';
 async function KundenData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
 
-  const { data, error } = await admin
-    .from('clients')
-    .select('*')
-    .eq('organization_id', activeOrgId)
-    .order('name', { ascending: true });
+  const [clientsResult, contactsResult, sitesResult] = await Promise.all([
+    admin
+      .from('clients')
+      .select('*')
+      .eq('organization_id', activeOrgId)
+      .order('name', { ascending: true }),
+    admin
+      .from('client_contacts')
+      .select('client_id, name')
+      .eq('organization_id', activeOrgId)
+      .eq('is_active', true),
+    admin
+      .from('client_sites')
+      .select('client_id, name, street, postal_code, city')
+      .eq('organization_id', activeOrgId)
+      .eq('is_active', true),
+  ]);
 
-  if (error) {
-    console.error('Error fetching clients:', error);
+  if (clientsResult.error) {
+    console.error('Error fetching clients:', clientsResult.error);
     return (
       <p className="text-destructive">
         Fehler beim Laden der Kunden:{' '}
-        {error.message || 'Unbekannter Fehler'}
+        {clientsResult.error.message || 'Unbekannter Fehler'}
       </p>
     );
   }
 
-  const clientList = (data ?? []).map(toClient);
+  const clientList = (clientsResult.data ?? []).map(toClient);
 
-  return <KundenContent clients={clientList} />;
+  // Per-customer search haystack so the list search also finds customers via
+  // contact names and site addresses (CRM spec §3).
+  const searchIndex: Record<string, string> = {};
+  for (const contact of contactsResult.data ?? []) {
+    searchIndex[contact.client_id] =
+      `${searchIndex[contact.client_id] ?? ''} ${contact.name}`;
+  }
+  for (const site of sitesResult.data ?? []) {
+    searchIndex[site.client_id] =
+      `${searchIndex[site.client_id] ?? ''} ${site.name} ${site.street ?? ''} ${site.postal_code ?? ''} ${site.city ?? ''}`;
+  }
+
+  return <KundenContent clients={clientList} searchIndex={searchIndex} />;
 }
 
 export default async function KundenPage() {

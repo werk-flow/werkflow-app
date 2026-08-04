@@ -50,6 +50,8 @@ function stripProjectDetails(project: ProjectWithDetails): Project {
     statusOverride: project.statusOverride,
     plannedStartDate: project.plannedStartDate,
     plannedEndDate: project.plannedEndDate,
+    siteId: project.siteId,
+    contactId: project.contactId,
     createdBy: project.createdBy,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,

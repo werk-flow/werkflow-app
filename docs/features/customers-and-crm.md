@@ -24,7 +24,13 @@ The current customer area is a useful master-data and work-context foundation, b
 
 ### Implemented Today
 
-- Customers are organization-scoped records with a name, type (`privat` or `gewerblich`), one email address, one phone number, one free-form address, notes, and created/updated timestamps.
+- Customers are organization-scoped records with a name, type (`privat` or `gewerblich`), an optional org-unique customer number (`Kundennummer`, manual entry, no automatic number ranges yet), one email address, one phone number, one free-form main/billing address, notes, and created/updated timestamps.
+- **Contacts (`Ansprechpartner`), P1-01:** a customer can have multiple contact people (`client_contacts`) with name, free-text German role label (suggestions offered), email, phone, notes, a single primary marker, and archive state. Archived contacts stay visible in an "Archiviert" list and can be restored; they no longer appear in work pickers.
+- **Work sites (`Einsatzorte`), P1-01:** a customer can have multiple durable sites (`client_sites`) with a name, structured address (street, postal code, city), access notes (keys, parking), general notes, an optional on-site contact, a single primary marker, and archive state. A one-click helper adopts the customer's free-form address as the first site.
+- **Work references, P1-01:** jobs carry optional `site_id`/`contact_id`; projects carry an optional default site/contact that prefills new jobs inside the project, and every job may override it (no forced sync). Selecting a site auto-fills the job's free-text `Ort` with the site's current address; that text stays a snapshot, so later site-address edits never rewrite the recorded execution location of existing work, while the site link continues to show current master data. Changing a job's or project's customer clears the previous customer's site/contact references (server-enforced, with DB-level org/client consistency validation).
+- The assigned field worker sees the job's site (name, address, access notes) and contact (name, role, click-to-call phone) on the job detail page.
+- Customer search on `/kunden` matches name, customer number, email, phone, address, active contact names, and active site addresses.
+- `client_contacts` and `client_sites` are Realtime-published; the customer list and customer detail refresh live.
 - `admin` and `buero` users can access `/kunden`, create customers, edit customer details, and delete customers. The route is not exposed to the `employee` role.
 - The customer list has responsive desktop and mobile presentations, shows customer count, type, email, and phone, and supports a manual refresh.
 - A customer detail page provides inline-editable customer metadata.
@@ -39,8 +45,9 @@ The current customer area is a useful master-data and work-context foundation, b
 
 ### Important Current Limitations
 
-- A customer has only one free-form name, email, phone, and address; there are no dedicated contact persons, departments, households, billing recipients, or multiple sites.
-- A person acting for a commercial customer, property owner, tenant, facility manager, architect, or site contact cannot be represented cleanly.
+- Contacts and sites exist (P1-01), but dedicated billing recipients, address purposes beyond main-address-plus-sites, households, and shared contacts across customers are not modeled; those wait for the commercial slices and an explicit shared-contact decision.
+- Customer numbers are manual and org-unique; controlled number ranges remain a Wave 4 commercial decision.
+- There is no customer-master audit trail yet beyond `created_by`/timestamps on contacts and sites; a consolidated audit approach is expected with the shared audit foundations.
 - There is no structured lead/request intake, ownership, urgency, next action, qualification, source, or conversion history.
 - There is no customer communication timeline for calls, emails, messages, letters, meetings, delivery state, or promised follow-ups.
 - There is no duplicate detection, merge flow, alias/history preservation, or import-quality workflow.
@@ -259,7 +266,7 @@ Phase 2 should reduce intake, data-quality, and follow-up work after the operati
 - Which customer classifications are required beyond `privat` and `gewerblich`, and which relationship roles should be separate from customer type?
 - Is the primary private-customer record a person, household, or contractual party, and how are spouses or multiple owners represented?
 - Can one contact belong to multiple customers/sites, and how is authority to approve or receive documents scoped?
-- Which address/site vocabulary is clearest for SHK users: `Adresse`, `Einsatzort`, `Objekt`, `Standort`, or context-dependent labels?
+- ~~Which address/site vocabulary is clearest for SHK users?~~ Decided with P1-01: the UI uses `Einsatzort` (with `Ansprechpartner` for contacts); revisit only with real user feedback.
 - How should landlord, tenant, property manager, owner, bill payer, and on-site contact relationships work without duplicate customer records?
 - Can one site have multiple current responsible customers over time, and how is the historical relationship preserved?
 - What is the minimum request lifecycle and which reasons close a request without work?

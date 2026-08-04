@@ -19,6 +19,7 @@ import {
   calculateTrafficLight,
   getEffectiveProjectStatus,
 } from '@/lib/jobs/types';
+import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
 
 // ============================================
 // Input Types
@@ -31,6 +32,9 @@ export type CreateProjectInput = {
   projectNumber?: string;
   plannedStartDate?: string;
   plannedEndDate?: string;
+  // Default site/contact for the project's jobs; each job may override.
+  siteId?: string;
+  contactId?: string;
 };
 
 export type UpdateProjectInput = Partial<CreateProjectInput> & {
@@ -101,11 +105,24 @@ export async function createProject(
       }
     }
 
+    const siteContactCheck = await validateSiteAndContactForClient(
+      admin,
+      orgId,
+      input.clientId || null,
+      input.siteId || null,
+      input.contactId || null
+    );
+    if (!siteContactCheck.success) {
+      return siteContactCheck;
+    }
+
     const { data, error } = await admin
       .from('projects')
       .insert({
         organization_id: orgId,
         client_id: input.clientId || null,
+        site_id: input.siteId || null,
+        contact_id: input.contactId || null,
         name,
         description: description || null,
         project_number: input.projectNumber?.trim() || null,
@@ -147,7 +164,7 @@ export async function updateProject(
 
     const { data: existing, error: fetchError } = await admin
       .from('projects')
-      .select('id, client_id, name, description')
+      .select('id, client_id, site_id, contact_id, name, description')
       .eq('id', projectId)
       .eq('organization_id', orgId)
       .single();
@@ -194,12 +211,51 @@ export async function updateProject(
       }
     }
 
+    const resultingClientId =
+      input.clientId !== undefined ? input.clientId || null : existing.client_id;
+    const clientChanged = resultingClientId !== existing.client_id;
+
+    // A customer change invalidates the previous customer's site/contact.
+    const resultingSiteId =
+      input.siteId !== undefined
+        ? input.siteId || null
+        : clientChanged
+          ? null
+          : existing.site_id;
+    const resultingContactId =
+      input.contactId !== undefined
+        ? input.contactId || null
+        : clientChanged
+          ? null
+          : existing.contact_id;
+
+    if (
+      input.siteId !== undefined ||
+      input.contactId !== undefined ||
+      clientChanged
+    ) {
+      const siteContactCheck = await validateSiteAndContactForClient(
+        admin,
+        orgId,
+        resultingClientId,
+        resultingSiteId,
+        resultingContactId
+      );
+      if (!siteContactCheck.success) {
+        return siteContactCheck;
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name.trim();
     if (input.description !== undefined)
       updateData.description = input.description?.trim() || null;
     if (input.clientId !== undefined)
       updateData.client_id = input.clientId || null;
+    if (input.siteId !== undefined || clientChanged)
+      updateData.site_id = resultingSiteId;
+    if (input.contactId !== undefined || clientChanged)
+      updateData.contact_id = resultingContactId;
     if (input.projectNumber !== undefined)
       updateData.project_number = input.projectNumber?.trim() || null;
     if (input.plannedStartDate !== undefined)
@@ -230,9 +286,11 @@ export async function updateProject(
       input.clientId !== undefined &&
       input.clientId !== existing.client_id
     ) {
+      // The customer change also invalidates each job's site/contact, which
+      // belonged to the previous customer.
       const { error: syncJobsError } = await admin
         .from('jobs')
-        .update({ client_id: data.client_id })
+        .update({ client_id: data.client_id, site_id: null, contact_id: null })
         .eq('organization_id', orgId)
         .eq('project_id', projectId);
 

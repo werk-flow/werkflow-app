@@ -20,6 +20,8 @@ import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { EmployeeMultiSelect, type OrgMemberOption } from './employee-multi-select';
 import { ClientSelectWithCreate } from './client-select-with-create';
+import { SiteContactFields } from './site-contact-fields';
+import { formatSiteAddress } from '@/lib/clients/types';
 import { createJob, getNextJobNumber, type CreateJobInput } from '@/lib/jobs/actions';
 import { assignEmployee } from '@/lib/jobs/actions';
 import {
@@ -103,6 +105,12 @@ export function CreateJobFormContent({
   const [description, setDescription] = useState('');
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
+  // Prefill from the project's default site/contact when creating inside one.
+  const defaultProject = projects.find((p) => p.id === defaultProjectId);
+  const [siteId, setSiteId] = useState<string>(defaultProject?.siteId ?? '');
+  const [contactId, setContactId] = useState<string>(
+    defaultProject?.contactId ?? ''
+  );
   const [priority, setPriority] = useState<JobPriority>('mittel');
   const [plannedDate, setPlannedDate] = useState<Date | undefined>(defaultDate);
   const [plannedTime, setPlannedTime] = useState(defaultTime ?? '');
@@ -239,7 +247,9 @@ export function CreateJobFormContent({
         plannedTime: plannedTime || undefined,
         estimatedDurationMinutes: durationMinutes ?? undefined,
         plannedWorkingMinutes,
-        location: location.trim() || undefined
+        location: location.trim() || undefined,
+        siteId: siteId || undefined,
+        contactId: contactId || undefined
       };
 
       const result = await createJob(input);
@@ -339,6 +349,9 @@ export function CreateJobFormContent({
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
+    // Sites and contacts belong to one customer; a change invalidates them.
+    setSiteId('');
+    setContactId('');
     if (projectId) {
       const selectedProject = activeProjects.find((p) => p.id === projectId);
       if (selectedProject && newClientId && selectedProject.clientId !== newClientId && selectedProject.clientId !== null) {
@@ -349,15 +362,20 @@ export function CreateJobFormContent({
 
   const handleProjectChange = (newProjectId: string) => {
     setProjectId(newProjectId);
-    if (newProjectId && !readOnlyClient) {
+    if (newProjectId) {
       const selected = activeProjects.find((p) => p.id === newProjectId);
       if (selected) {
-        if (selected.clientId) {
-          setClientId(selected.clientId);
-        } else {
-          setClientId('');
+        if (!readOnlyClient) {
+          setClientId(selected.clientId ?? '');
         }
+        // The project's default site/contact prefill the job; both stay
+        // overridable per job.
+        setSiteId(selected.siteId ?? '');
+        setContactId(selected.contactId ?? '');
       }
+    } else {
+      setSiteId('');
+      setContactId('');
     }
   };
 
@@ -500,6 +518,24 @@ export function CreateJobFormContent({
             disabled={formDisabled}
           />
         </div>
+
+        <SiteContactFields
+          clientId={clientId}
+          siteId={siteId}
+          contactId={contactId}
+          onSiteChange={(nextSiteId, site) => {
+            setSiteId(nextSiteId);
+            // The site's current address becomes the job's recorded Ort;
+            // it stays a text snapshot afterwards.
+            if (site) {
+              const address = formatSiteAddress(site);
+              if (address) setLocation(address);
+            }
+          }}
+          onContactChange={setContactId}
+          disabled={formDisabled}
+          idPrefix="job"
+        />
 
         <div className="grid gap-2">
           <Label htmlFor="job-location">Ort</Label>

@@ -26,6 +26,13 @@ import {
   toProject,
   toJobAssignment,
 } from './types';
+import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
+import {
+  toClientContact,
+  toClientSite,
+  type ClientContact,
+  type ClientSite,
+} from '@/lib/clients/types';
 
 // ============================================
 // Input Types
@@ -43,6 +50,8 @@ export type CreateJobInput = {
   estimatedDurationMinutes?: number;
   plannedWorkingMinutes?: number | null;
   location?: string;
+  siteId?: string;
+  contactId?: string;
 };
 
 export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'> & {
@@ -330,6 +339,28 @@ async function getProjectClientContext(
   return { success: true, project };
 }
 
+// Site/contact context for the job detail surfaces (office and assigned
+// field workers alike).
+async function loadJobSiteAndContact(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  siteId: string | null,
+  contactId: string | null
+): Promise<{ site: ClientSite | null; contact: ClientContact | null }> {
+  const [siteResult, contactResult] = await Promise.all([
+    siteId
+      ? admin.from('client_sites').select('*').eq('id', siteId).single()
+      : Promise.resolve({ data: null }),
+    contactId
+      ? admin.from('client_contacts').select('*').eq('id', contactId).single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    site: siteResult.data ? toClientSite(siteResult.data) : null,
+    contact: contactResult.data ? toClientContact(contactResult.data) : null,
+  };
+}
+
 // ============================================
 // Actions
 // ============================================
@@ -398,15 +429,30 @@ export async function createJob(
       }
     }
 
+    const effectiveClientId =
+      inheritedProjectClientId !== undefined
+        ? inheritedProjectClientId
+        : input.clientId || null;
+
+    const siteContactCheck = await validateSiteAndContactForClient(
+      admin,
+      orgId,
+      effectiveClientId,
+      input.siteId || null,
+      input.contactId || null
+    );
+    if (!siteContactCheck.success) {
+      return siteContactCheck;
+    }
+
     const { data, error } = await admin
       .from('jobs')
       .insert({
         organization_id: orgId,
         project_id: input.projectId || null,
-        client_id:
-          inheritedProjectClientId !== undefined
-            ? inheritedProjectClientId
-            : input.clientId || null,
+        client_id: effectiveClientId,
+        site_id: input.siteId || null,
+        contact_id: input.contactId || null,
         job_number: jobNumber,
         title,
         description: description || null,
@@ -456,7 +502,7 @@ export async function updateJob(
 
     const { data: existing, error: fetchError } = await admin
       .from('jobs')
-      .select('id, project_id, client_id, status, title, description')
+      .select('id, project_id, client_id, site_id, contact_id, status, title, description')
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
@@ -521,6 +567,45 @@ export async function updateJob(
       }
     }
 
+    const resultingClientId = resultingProjectId
+      ? (inheritedProjectClientId ?? null)
+      : input.clientId !== undefined
+        ? input.clientId || null
+        : existing.client_id;
+    const clientChanged = resultingClientId !== existing.client_id;
+
+    // A customer change invalidates the previous customer's site/contact;
+    // they are cleared unless the caller provides new valid ones.
+    const resultingSiteId =
+      input.siteId !== undefined
+        ? input.siteId || null
+        : clientChanged
+          ? null
+          : existing.site_id;
+    const resultingContactId =
+      input.contactId !== undefined
+        ? input.contactId || null
+        : clientChanged
+          ? null
+          : existing.contact_id;
+
+    if (
+      input.siteId !== undefined ||
+      input.contactId !== undefined ||
+      clientChanged
+    ) {
+      const siteContactCheck = await validateSiteAndContactForClient(
+        admin,
+        orgId,
+        resultingClientId,
+        resultingSiteId,
+        resultingContactId
+      );
+      if (!siteContactCheck.success) {
+        return siteContactCheck;
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
     if (input.title !== undefined) updateData.title = input.title.trim();
     if (input.description !== undefined)
@@ -532,6 +617,10 @@ export async function updateJob(
     } else if (input.clientId !== undefined) {
       updateData.client_id = input.clientId || null;
     }
+    if (input.siteId !== undefined || clientChanged)
+      updateData.site_id = resultingSiteId;
+    if (input.contactId !== undefined || clientChanged)
+      updateData.contact_id = resultingContactId;
     if (input.jobNumber !== undefined)
       updateData.job_number = input.jobNumber?.trim() || null;
     if (input.priority !== undefined) updateData.priority = input.priority;
@@ -975,11 +1064,19 @@ export async function getJobDetails(
         }
       : null;
 
+    const { site, contact } = await loadJobSiteAndContact(
+      admin,
+      jobData.site_id,
+      jobData.contact_id
+    );
+
     const job: JobWithDetails = {
       ...toJob({ ...jobData, client_id: effectiveClientId }),
       assignments,
       client,
       project,
+      site,
+      contact,
     };
 
     return { success: true, job };
@@ -1075,11 +1172,19 @@ export async function getJobByNumber(
         }
       : null;
 
+    const { site, contact } = await loadJobSiteAndContact(
+      admin,
+      jobData.site_id,
+      jobData.contact_id
+    );
+
     const job: JobWithDetails = {
       ...toJob({ ...jobData, client_id: effectiveClientId }),
       assignments,
       client,
       project,
+      site,
+      contact,
     };
 
     return { success: true, job };

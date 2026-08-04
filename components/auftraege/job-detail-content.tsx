@@ -74,6 +74,7 @@ import {
   getAuftraegeDialogOptions,
 } from '@/lib/jobs/actions';
 import { updateProject } from '@/lib/projects/actions';
+import { formatSiteAddress } from '@/lib/clients/types';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
@@ -1004,6 +1005,51 @@ export function JobDetailContent({
           }
         : undefined,
     },
+    ...(job.site
+      ? [
+          {
+            label: 'Einsatzort',
+            value: (
+              <span className="flex flex-col gap-0.5">
+                <span>{job.site.name}</span>
+                {formatSiteAddress(job.site) && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatSiteAddress(job.site)}
+                  </span>
+                )}
+                {job.site.accessNotes && (
+                  <span className="text-xs text-muted-foreground">
+                    Zugang: {job.site.accessNotes}
+                  </span>
+                )}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(job.contact
+      ? [
+          {
+            label: 'Ansprechpartner',
+            value: (
+              <span className="flex flex-col gap-0.5">
+                <span>
+                  {job.contact.name}
+                  {job.contact.role ? ` (${job.contact.role})` : ''}
+                </span>
+                {job.contact.phone && (
+                  <a
+                    href={`tel:${job.contact.phone}`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    {job.contact.phone}
+                  </a>
+                )}
+              </span>
+            ),
+          },
+        ]
+      : []),
     ...(liveJob.actualCompletionDate
       ? [
           {
