@@ -16,10 +16,13 @@ reviews:
   path_filters:
     - "!bun.lock"
     - "!**/*.lock"
+    - "!package-lock.json"
     - "!lib/supabase/database.types.ts"
     - "!.agents/**"
     - "!.cursor/rules/**"
     - "!docs/**"
+    - "!Transcript_*.txt"
+    - "!agent-response.md"
   path_instructions:
     - path: "app/**"
       instructions: |
@@ -32,7 +35,9 @@ reviews:
         Review shared logic, server actions, and Supabase access for input validation, tenant isolation, role checks, RLS-safe assumptions, PII-safe error handling, cache invalidation, realtime freshness, and timezone-sensitive behavior.
     - path: "lib/documents/**"
       instructions: |
-        This is WerkFlow document management. Check organization scoping, admin/buero versus employee access, contextual links to jobs/projects/customers/employees, versioning/audit behavior, trash behavior, and guarded Supabase Storage cleanup. Flag any path that could expose or delete another organization's documents.
+        This is WerkFlow document management. Check organization scoping, admin/buero versus employee access, contextual links to jobs/projects/customers/employees, versioning/audit behavior, trash behavior, and guarded R2 storage cleanup. Flag any path that could expose or delete another organization's documents.
+
+        File bytes live in Cloudflare R2 and transfer directly between browser and bucket via short-lived signed URLs; bytes must never travel through Server Actions (Vercel ~4.5 MB body limit). Uploads are two-phase: a ticket action authorizes and signs a PUT URL, a finalize action re-authorizes, recomputes the storage key server-side from the authenticated organization, verifies the object via HEAD (existence, size limit), and only then writes metadata. Flag any change that trusts a client-provided storage path or bucket, skips re-authorization at finalize, leaves uploaded objects behind on failed finalize without cleanup, or reintroduces byte buffering in a Server Action.
     - path: "lib/inventory/**"
       instructions: |
         This is WerkFlow inventory V1. Server actions use a Supabase admin client, so every read and write must authenticate first, derive the active organization and user on the server, and explicitly enforce either admin/buero manager access or assigned-job employee access before bypassing RLS. Re-resolve item, location, material-line, job, project, supplier, category, barcode, and import identifiers inside the active organization; never trust client-provided tenant, role, actor, price, or stock data.
@@ -67,6 +72,12 @@ reviews:
     - path: "components/auftraege/**"
       instructions: |
         Review job/project UI for practical German SHK workflows, clear state and assignment controls, safe form validation, accessible dialogs/menus, and mobile-friendly field-worker usage.
+    - path: "lib/storage/**"
+      instructions: |
+        Server-only Cloudflare R2 (S3-compatible) client. R2 credentials must never reach client bundles or logs; signed URLs must stay short-lived; upload URLs must pin the content type into the signature; object keys must remain organization-prefixed. Flag public-bucket assumptions, unbounded expiry times, credential leakage, or helpers that would let callers operate outside an organization prefix without an explicit, reviewed reason.
+    - path: "scripts/**"
+      instructions: |
+        Operational one-off scripts (R2 connectivity, CORS setup, storage migration) run manually with bun and env credentials. Check for destructive defaults (they must never delete source data), idempotency on re-run, clear failure output, and that no credentials or PII are printed. These scripts are not part of the app runtime.
     - path: "proxy.ts"
       instructions: |
         Review authentication/session middleware carefully. Flag redirect loops, public-route leaks, stale sessions, cookie misuse, and any behavior that could expose protected organization data.

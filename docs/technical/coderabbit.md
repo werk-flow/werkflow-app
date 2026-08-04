@@ -1,6 +1,6 @@
 # CodeRabbit Reviews
 
-Last reviewed: 2026-07-13
+Last reviewed: 2026-08-04
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -93,7 +93,20 @@ Install using the official script when the CLI is missing:
 curl -fsSL https://cli.coderabbit.ai/install.sh | sh
 ```
 
-On this Windows workstation, run the Linux CLI through Ubuntu in WSL. The native PowerShell PATH may not contain a CodeRabbit binary even when the WSL workflow is available.
+On this Windows workstation the CLI is **already installed** in WSL Ubuntu at `~/.local/bin/coderabbit` and already authenticated with the `werk-flow` GitHub account. **Do not reinstall it.** Two traps that make it look missing:
+
+1. The native PowerShell PATH contains no CodeRabbit binary — the install lives inside WSL only.
+2. Inside WSL, `command -v coderabbit` can fail in non-interactive shells because `~/.local/bin` is not on that PATH. This does **not** mean the CLI is absent. Always probe and invoke via the absolute path.
+
+The original installation also required workarounds for corporate network/admin restrictions, so a fresh `curl | sh` install may hang or fail here. If the CLI is genuinely broken, ask the user before attempting any reinstall.
+
+Invoke it from Windows shells as:
+
+```bash
+wsl.exe bash -lc "cd '/mnt/c/Users/z0052ceu/Tamay Can - Siemens AG/WerkFlow/Code/werkflow-app' && ~/.local/bin/coderabbit review --agent --type uncommitted"
+```
+
+Claude Code note: there is no CodeRabbit plugin for Claude Code. The Codex review skill is mirrored at `.claude/skills/coderabbit-review/SKILL.md`; agents without that skill loaded should follow this document directly — the CLI workflow is identical.
 
 Authenticate interactively:
 
@@ -130,6 +143,10 @@ coderabbit --light
 # Only committed or uncommitted changes
 coderabbit --agent --type committed
 coderabbit --agent --type uncommitted
+
+# Include files that are not yet tracked by git (new modules, new scripts).
+# Without this, brand-new files are invisible to an uncommitted-changes review.
+coderabbit --agent --type uncommitted --include-untracked
 
 # Uncommitted inventory review with durable repo and feature context
 coderabbit --agent --type uncommitted \
@@ -192,7 +209,7 @@ When asking CodeRabbit for a review, remind it indirectly through config and con
 - Organization/tenant isolation.
 - Intentional role behavior for `admin`, `buero`, and `employee`.
 - German user-facing copy and German accessibility text.
-- Document storage, trash, restore, versioning, audit, and cleanup safety.
+- Document storage safety: direct-to-R2 signed upload/download flow (ticket + finalize authorization, server-recomputed storage keys, no bytes through Server Actions), trash, restore, versioning, audit, and cleanup safety.
 - Calendar drag/drop correctness, parked job workflows, and Europe/Berlin date/time behavior.
 - Time-tracking correctness for breaks, manual entries, approvals, stale sessions, and auditability.
 - Inventory organization/role boundaries, atomic stock ledger updates, job/project material consistency, and import retry safety.

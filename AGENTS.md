@@ -12,7 +12,9 @@ WerkFlow is intended to become the digital operations backbone for German HVAC /
 
 It is a TypeScript web app today and is expected to have an associated React Native mobile app in the future.
 
-The app should help SHK business owners and their teams save time, reduce paperwork, organize work digitally, and replace slow, outdated software with a fast, modern system tailored to their daily operations. Core product areas include employee and working-time management, project/job management, document management, AI-assisted automations, and inventory management as a major near-term planned module.
+The app should help SHK business owners and their teams save time, reduce paperwork, organize work digitally, and replace slow, outdated software with a fast, modern system tailored to their daily operations. Core product areas include customers/CRM, employee and working-time management, calendar/resource planning, project/job and service management, document management, inventory/procurement, commercial/finance workflows, and later AI-assisted automations.
+
+WerkFlow has two broad product phases. First, build a complete operational core with the depth expected from serious Handwerkersoftware; this is not a bare-minimum MVP. Then use that trustworthy operational data and workflow foundation for differentiated AI assistance, configurable automation, and bounded agents inside and outside the app. The product-wide capability and dependency map lives in `docs/product/product-capability-map.md`. The living implementation order, slice dependencies, current checkpoint, and Phase 1 acceptance gates live in `docs/plans/phase-1-build-roadmap.md`; agents doing Phase 1 feature work must read and update it.
 
 ## Target User / Avatar
 
@@ -63,14 +65,18 @@ If the answer to all three questions is no, think carefully before adding the fe
 
 Some of these areas already exist in the app, some are only partially implemented, and some are planned product scope rather than current implementation.
 
-- Working-time and employee management: employees can clock in and out, track working hours and breaks, plan vacation, track sick days, and see day/week/month work time. Owners and office staff can manage employee working times, vacation, sick leave, assignments, and job/project allocation.
+- Working-time and employee management: current functionality covers organization membership/roles, employee assignment, clock in/out, breaks, job-linked time, manual entries, weekly overview, and change requests. The complete product should add personnel master data, schedules, skills/certifications, contracts/personnel documents, onboarding/offboarding, vacation, sick leave, time accounts, approvals, period close, and payroll-ready handoffs.
+- Customers and CRM: a basic organization-scoped customer area exists. The complete product should add contacts, multiple work sites, operational requests, relationship/communication history, duplicate control, installed-equipment links, and practical follow-up without becoming a bloated generic sales CRM.
+- Calendar and resource planning: day/week/month scheduling, job assignment, time context, and parked work exist. The complete product should connect recurring work, employee availability and skills, teams, tools, vehicles, material readiness, routes, and customer commitments while keeping planned and actual time distinct.
 - Project and job management: authorized users can create projects and jobs, assign employees, track state and progress, attach photos and documents, and keep all project-related information connected. Offer/contract/invoice entities are not separate modules yet; documents can be categorized and linked operationally.
-- Inventory management: this is a major near-term planned module and is not currently implemented. The app should digitize the business inventory down to specific parts and materials, track what is available, what is used for which job, what should be invoiced, and what needs reordering.
-- Mobile inventory workflows: once inventory exists, the future mobile app should support barcode scanning so employees can quickly add or remove inventory items by scanning a part and entering the quantity.
+- Service and maintenance: a dedicated module does not exist yet. It should eventually connect customer sites and installed equipment with reactive service, recurring maintenance, contracts' operational delivery, dispatch, field reports, warranty/return context, and equipment history.
+- Commercial and finance workflows: structured offers, contracts, invoices, incoming bills, payments, dunning, and accounting-ready handoffs are not implemented yet. The complete operational core should connect these records to approved work, material, measurements, customer context, and post-calculation. Native double-entry accounting, payroll, or tax filing remain separate strategic decision gates rather than automatic scope.
+- Inventory management: a substantial V1 is implemented. The app should continue toward a connected material lifecycle covering catalog, locations, stock movements, job planning and consumption, tools/assets, suppliers, procurement, billability, and reordering without conflating these states. See `docs/features/inventory.md`.
+- Mobile inventory workflows: the future mobile app should build on inventory V1 with barcode scanning so employees can quickly identify an item and complete permitted take, return, transfer, count, or receipt actions.
 - Inventory onboarding service: part of the surrounding product/service offer may include an initial inventory audit so a customer starts with a usable baseline inventory in WerkFlow from day one.
-- Supplier and ordering workflows: once inventory exists, the app may support ordering or automated reordering of parts when stock drops below configured thresholds, ideally through German wholesaler APIs where possible.
-- Document management: a substantial first implementation exists. Managers (`admin`, `buero`) use a central `/dokumente` library with manual folders, a Drive-like file table, search/filtering by category and linked targets, trash, versioning for business documents, audit history, and private Supabase Storage maintenance helpers. Field workers (`employee`) do not see the library sidebar page; they upload, view, and download documents from assigned job detail pages. Documents are metadata-linked to jobs, projects, customers, or employees rather than auto-creating physical folders when operational records are created. See `docs/features/document-management.md` for the full current model and open decisions.
-- AI automations: future workflows may allow businesses to create automations such as automatic part ordering, invoice sending, or customer review-link follow-ups after work is completed. These need more product thinking before implementation.
+- Supplier and ordering workflows: the app should extend inventory V1 with demand, approvals, supplier orders, receipts, returns, invoice matching, and reviewed reorder proposals, ideally through relevant German wholesaler standards and APIs where possible.
+- Document management: a substantial first implementation exists. Managers (`admin`, `buero`) use a central `/dokumente` library with manual folders, a Drive-like file table, search/filtering by category and linked targets, trash, versioning for business documents, audit history, and server-side storage maintenance helpers. File bytes live in private Cloudflare R2 buckets (EU jurisdiction) with direct signed uploads/downloads; Postgres keeps all metadata (see `docs/decisions/0001-infrastructure-stack.md`). Field workers (`employee`) do not see the library sidebar page; they upload, view, and download documents from assigned job detail pages. Documents are metadata-linked to jobs, projects, customers, or employees rather than auto-creating physical folders when operational records are created. See `docs/features/document-management.md` for the full current model and open decisions.
+- AI automations: this is the second broad product phase after the complete operational core is trustworthy. Future capabilities may include assistance, recommendations, product-owned templates, configurable workflows, and bounded agents acting inside WerkFlow or through authorized external email, SMS, calendar, accounting, or supplier connections. Human control, source visibility, permissions, audit, cost limits, and safe failure behavior are required. See `docs/features/ai-automations.md`.
 
 Treat generated Supabase types and live Supabase inspection as more reliable than older architecture documentation when schema details matter.
 
@@ -184,6 +190,7 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 - Distinguish current implementation from planned scope, especially for inventory and AI automation work.
 - Do not invent offer, pricing, acquisition, or deeper avatar details; ask or leave TODOs until product docs exist.
 - When schema details matter, treat live Supabase inspection and generated types as more reliable than older architecture documentation.
+- The infrastructure stack is a settled decision (`docs/decisions/0001-infrastructure-stack.md`): Supabase Postgres/Auth/Realtime, Vercel (Frankfurt), Cloudflare R2 EU for file bytes via direct signed uploads, Railway workers only when a real long-running workload exists, Phase 2 AI via provider APIs. Do not propose provider migrations or route file bytes through Server Actions without a superseding decision record.
 
 ### Styling And Brand Color Rules
 
@@ -200,6 +207,6 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 
 ## Maintenance Guidance
 
-Update this file when the product direction changes, not for every implementation detail. Keep it concise enough that an agent can read it quickly at the start of a task.
+Update this file when the product direction changes, not for every implementation detail. During Phase 1 implementation, update the affected feature specifications and `docs/plans/phase-1-build-roadmap.md` as part of the same change. Keep this file concise enough that an agent can read it quickly at the start of a task.
 
 If a future task needs exact database state, inspect Supabase directly through the available MCP/plugin workflow before making schema-specific claims.

@@ -88,8 +88,8 @@ import {
   renameDocumentFolder,
   restoreDocument,
   updateDocumentCategory,
-  uploadDocumentVersion,
 } from '@/lib/documents/actions';
+import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
 import {
   DOCUMENT_CATEGORY_LABELS,
   type DocumentCategory,
@@ -1584,13 +1584,12 @@ export function DocumentLibraryContent({
   function handleVersionUpload(files: FileList | null) {
     if (!detailsDialog || !files?.[0]) return;
 
-    const formData = new FormData();
-    formData.set('file', files[0]);
+    const file = files[0];
 
     startTransition(async () => {
-      const result = await uploadDocumentVersion({
+      const result = await uploadDocumentVersionDirect({
         documentId: detailsDialog.id,
-        formData,
+        file,
       });
 
       if (!result.success) {

@@ -27,6 +27,19 @@ const nextConfig = {
 
 Use `package.json` as the source of truth for dependency versions.
 
+## Infrastructure Stack
+
+The accepted stack and its rationale live in [decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md). Summary of the target state:
+
+- **Vercel** hosts the Next.js app. Functions should run in Frankfurt (`fra1`), next to the Supabase EU database (verification is part of roadmap slice `P1-00`).
+- **Supabase (EU)** provides Postgres (operational source of truth), Auth, and Realtime. Authorization is enforced primarily in server code; RLS is defense in depth, not the sole barrier.
+- **Cloudflare R2 (EU jurisdiction)** stores all document file bytes via direct signed uploads/downloads (`lib/storage/r2.ts`, implemented in slice `P1-00a`; profile avatars still use Supabase Storage via the browser client). File bytes must not pass through Vercel Functions or Server Actions: Vercel enforces a ~4.5 MB request-body limit in production, and routing bytes through app servers adds avoidable egress cost. Postgres keeps all file metadata.
+- **A separate S3 bucket with Object Lock (compliance mode)** will hold retention-relevant document copies (designed in slice `P1-45`); R2 alone is not a compliance archive.
+- **Railway** is the designated home for future long-running workers (OCR, imports/exports, queues, connector sync). It is added when the first such workload exists, not before.
+- **Phase 2 AI** uses external model provider APIs (Anthropic/OpenAI/OpenRouter) with server-side keys. No self-hosted models or GPU infrastructure.
+
+Agents must not migrate the database, auth, or hosting providers, and must not route file bytes through server compute, without a superseding decision record.
+
 ## Application Shape
 
 The app uses the Next.js App Router. The main route groups are:
@@ -36,7 +49,7 @@ The app uses the Next.js App Router. The main route groups are:
 - `app/(app)/`: authenticated product shell and operational pages.
 - `app/api/`: server endpoints where route handlers are needed.
 
-Authenticated product areas currently include dashboard, calendar, time tracking, jobs/projects, employees, customers, and settings. Inventory is a major near-term planned module and is not currently implemented.
+Authenticated product areas currently include dashboard, calendar, time tracking, jobs/projects, employees, customers, document management, inventory, and settings. Inventory V1 is implemented; use `docs/features/inventory.md` for the current product boundary.
 
 ## Supabase Access Model
 
@@ -117,6 +130,8 @@ The app should feel fast, modern, clear, and hard to misuse, especially for fiel
 
 ## Related Docs
 
+- `docs/decisions/0001-infrastructure-stack.md`
 - `docs/technical/data-model.md`
 - `docs/technical/realtime-and-caching.md`
 - `docs/features/`
+- `docs/product/product-capability-map.md`

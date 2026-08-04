@@ -88,20 +88,19 @@ Settings are split across scopes:
 
 When adding settings, decide whether the setting belongs to the user globally, the organization, or a user within a specific organization.
 
-## Future Inventory Domain
+## Inventory Domain
 
-Inventory is a major near-term planned module and is not currently implemented.
+Inventory V1 is implemented. At a conceptual level it separates:
 
-Conceptual areas to design:
+- inventory catalog items and categories;
+- storage locations and stock state;
+- append-only stock movement history;
+- suppliers and item identifiers/barcodes;
+- planned job/project material from physical take/return actions;
+- basic tool/asset instances;
+- import batches and inventory audit events.
 
-- Inventory catalog items.
-- Stock state/counts.
-- Stock movement history.
-- Job/project material links.
-- Barcode and supplier identifiers.
-- Low-stock and reorder thresholds.
-
-See `docs/features/inventory.md` before implementing.
+Future procurement, reservation, transfer, lifecycle, valuation, commercial, and automation capabilities are defined in `docs/features/inventory.md`. Inspect live Supabase and generated types before schema-aware work.
 
 ## Document Domain
 
@@ -110,7 +109,7 @@ Document management is implemented (Stages 1–4). See `docs/features/document-m
 At a high level:
 
 - **Metadata in Postgres:** folders, documents, links to jobs/projects/customers/employees, categories, trash state, versions, audit events.
-- **Bytes in Supabase Storage:** private `organization-documents` bucket with org-scoped paths.
+- **Bytes in Cloudflare R2 (EU jurisdiction):** private `werkflow-documents-dev`/`-prod` buckets with org-scoped paths and direct signed uploads/downloads (`lib/storage/r2.ts`; see `docs/decisions/0001-infrastructure-stack.md`). `documents.storage_bucket` keeps the logical value `organization-documents`.
 - **No automatic folder creation** when jobs, projects, customers, or employee records are created; manual folders, metadata links, and library filters provide operational organization instead.
 - **Role split:** managers use `/dokumente`; employees use assigned job contextual sections only.
 
@@ -123,3 +122,5 @@ Exact columns and RLS policies belong in Supabase and generated types, not in th
 - Keep field-worker flows simple even if the underlying model is rich.
 - Preserve auditability where operational records can affect time, stock, billing, or customer documentation.
 - Prefer conceptual docs here; exact schema belongs to Supabase and generated types.
+
+The future product-domain boundaries and cross-feature handoffs are mapped in `docs/product/product-capability-map.md`. Update this document when those planned concepts become part of the implemented conceptual model.

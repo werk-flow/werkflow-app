@@ -12,7 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { createDocumentFolder, uploadDocument } from '@/lib/documents/actions';
+import { createDocumentFolder } from '@/lib/documents/actions';
+import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import {
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
@@ -30,6 +31,7 @@ type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
 
 type UploadRow = DocumentUploadItem & {
   status: UploadStatus;
+  progress?: number;
   error?: string;
 };
 
@@ -100,8 +102,18 @@ export function DocumentUploadDialog({
   const completedCount = activeRows.filter(
     (row) => row.status === 'done' || row.status === 'error'
   ).length;
+  const totalProgress = activeRows.reduce(
+    (sum, row) =>
+      sum +
+      (row.status === 'done' || row.status === 'error'
+        ? 1
+        : row.status === 'uploading'
+          ? (row.progress ?? 0)
+          : 0),
+    0
+  );
   const progressPercentage = activeRows.length
-    ? Math.round((completedCount / activeRows.length) * 100)
+    ? Math.round((totalProgress / activeRows.length) * 100)
     : 0;
   const isComplete = hasStarted && completedCount === activeRows.length;
 
@@ -177,20 +189,22 @@ export function DocumentUploadDialog({
       for (const row of initialRows) {
         if (row.status === 'error') continue;
 
-        updateRow(row.id, { status: 'uploading' });
+        updateRow(row.id, { status: 'uploading', progress: 0 });
 
         try {
           const folderId = await ensureRelativeFolder(folderCache, row.relativePath);
-          const formData = new FormData();
-          formData.append('file', row.file);
-          if (folderId) formData.append('folderId', folderId);
-          if (target.jobId) formData.append('jobId', target.jobId);
-          if (target.projectId) formData.append('projectId', target.projectId);
-          if (target.clientId) formData.append('clientId', target.clientId);
-          if (target.employeeId) formData.append('employeeId', target.employeeId);
-          if (row.category) formData.append('category', row.category);
-
-          const result = await uploadDocument(formData);
+          const result = await uploadDocumentDirect({
+            file: row.file,
+            target: {
+              folderId,
+              jobId: target.jobId ?? null,
+              projectId: target.projectId ?? null,
+              clientId: target.clientId ?? null,
+              employeeId: target.employeeId ?? null,
+            },
+            category: row.category,
+            onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
+          });
           if (!result.success) {
             failures++;
             updateRow(row.id, {
@@ -261,12 +275,19 @@ export function DocumentUploadDialog({
         <div className="space-y-3">
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>
+              <span aria-live="polite">
                 {completedCount} von {activeRows.length} abgeschlossen
               </span>
               <span>{progressPercentage}%</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label="Gesamtfortschritt des Uploads"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPercentage}
+            >
               <div
                 className="h-full rounded-full bg-primary transition-all"
                 style={{ width: `${progressPercentage}%` }}
@@ -312,6 +333,9 @@ export function DocumentUploadDialog({
                           {formatFileSize(row.file.size)}
                           {row.category
                             ? ` · ${DOCUMENT_CATEGORY_LABELS[row.category]}`
+                            : ''}
+                          {row.status === 'uploading' && row.progress !== undefined
+                            ? ` · ${Math.round(row.progress * 100)} %`
                             : ''}
                         </p>
                         {row.error && (

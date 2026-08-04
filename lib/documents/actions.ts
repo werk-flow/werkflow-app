@@ -7,6 +7,14 @@ import { CACHE_TAGS } from '@/lib/data/cached';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import {
+  copyStorageObject as copyR2Object,
+  createSignedDownloadUrl,
+  createSignedUploadUrl,
+  deleteStorageObjects,
+  headStorageObject,
+  listStorageObjectPaths as listR2ObjectPaths,
+} from '@/lib/storage/r2';
+import {
   DOCUMENT_CATEGORIES,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   DOCUMENT_STORAGE_BUCKET,
@@ -31,6 +39,8 @@ import {
   type DocumentLink,
   type DocumentLinkRow,
   type DocumentListResult,
+  type DocumentUploadTicketResult,
+  type DocumentVersionUploadTicketResult,
   type DocumentMutationResult,
   type DocumentResult,
   type DocumentRow,
@@ -133,11 +143,6 @@ type LinkDocumentToEmployeeInput = {
 
 type UnlinkDocumentInput = {
   linkId: string;
-};
-
-type UploadDocumentVersionInput = {
-  documentId: string;
-  formData: FormData;
 };
 
 type RecordDocumentAuditEventInput = {
@@ -300,46 +305,56 @@ function buildStoragePath({
 }
 
 async function copyStorageObject({
-  admin,
   sourcePath,
   targetPath,
   contentType,
 }: {
-  admin: SupabaseAdmin;
   sourcePath: string;
   targetPath: string;
   contentType: string | null;
 }): Promise<{ success: true } | { success: false; error: unknown }> {
-  const { error: copyError } = await admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .copy(sourcePath, targetPath);
-
-  if (!copyError) return { success: true };
-
-  console.error('Supabase storage copy failed, falling back to download/upload:', copyError);
-
-  const { data: sourceBlob, error: downloadError } = await admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .download(sourcePath);
-
-  if (downloadError || !sourceBlob) {
-    return { success: false, error: downloadError ?? 'download_failed' };
+  try {
+    await copyR2Object({ sourcePath, targetPath, contentType });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error };
   }
+}
 
-  const fileBuffer = Buffer.from(await sourceBlob.arrayBuffer());
-  const { error: uploadError } = await admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .upload(targetPath, fileBuffer, {
-      cacheControl: '3600',
-      contentType: contentType || 'application/octet-stream',
-      upsert: false,
-    });
+function buildVersionStoragePath({
+  orgId,
+  documentId,
+  versionNumber,
+  fileName,
+}: {
+  orgId: string;
+  documentId: string;
+  versionNumber: number;
+  fileName: string;
+}): string {
+  return `${orgId}/${documentId}/versions/${versionNumber}-${sanitizeStorageFileName(fileName)}`;
+}
 
-  if (uploadError) {
-    return { success: false, error: uploadError };
-  }
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  return { success: true };
+// Types the in-app viewer actually previews. Everything else is delivered as a
+// download so uploader-controlled active content (HTML, SVG) can never render
+// inline from the storage origin.
+const SAFE_INLINE_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/avif',
+  'text/plain',
+]);
+
+function inlineSafeDisposition(mimeType: string | null): 'inline' | 'attachment' {
+  return mimeType && SAFE_INLINE_MIME_TYPES.has(mimeType.toLowerCase())
+    ? 'inline'
+    : 'attachment';
 }
 
 function revalidateDocuments(orgId: string): void {
@@ -1747,9 +1762,9 @@ export async function copyDocumentFolder(
 
   async function cleanupPartialCopy() {
     if (createdStoragePaths.length > 0) {
-      await context.admin.storage
-        .from(DOCUMENT_STORAGE_BUCKET)
-        .remove(createdStoragePaths);
+      await deleteStorageObjects(createdStoragePaths).catch((error) => {
+        console.error('Failed to clean up copied storage objects:', error);
+      });
     }
     if (createdDocumentIds.length > 0) {
       await context.admin
@@ -1863,7 +1878,6 @@ export async function copyDocumentFolder(
       fileName: sourceDocument.original_file_name,
     });
     const storageCopyResult = await copyStorageObject({
-      admin: auth.context.admin,
       sourcePath: sourceDocument.storage_path,
       targetPath: storagePath,
       contentType: sourceDocument.mime_type,
@@ -2027,100 +2041,197 @@ export async function deleteDocumentFolder(
   return { success: true };
 }
 
-export async function uploadDocument(formData: FormData): Promise<DocumentResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
+type DocumentUploadTargetInput = {
+  folderId?: string | null;
+  jobId?: string | null;
+  projectId?: string | null;
+  clientId?: string | null;
+  employeeId?: string | null;
+};
 
-  const fileEntry = formData.get('file');
-  if (!(fileEntry instanceof File)) {
-    return { success: false, error: 'file_required' };
-  }
+type NormalizedUploadTarget = {
+  folderId: string | null;
+  jobId: string | null;
+  projectId: string | null;
+  clientId: string | null;
+  employeeId: string | null;
+};
 
-  if (fileEntry.size <= 0) {
-    return { success: false, error: 'file_empty' };
-  }
+type CreateDocumentUploadTicketInput = DocumentUploadTargetInput & {
+  fileName: string;
+  fileSizeBytes: number;
+  mimeType?: string | null;
+};
 
-  if (fileEntry.size > DOCUMENT_MAX_FILE_SIZE_BYTES) {
-    return { success: false, error: 'file_too_large' };
-  }
+type FinalizeDocumentUploadInput = DocumentUploadTargetInput & {
+  documentId: string;
+  fileName: string;
+  category?: string | null;
+};
 
-  const folderId = (formData.get('folderId')?.toString() || '').trim() || null;
-  const jobId = (formData.get('jobId')?.toString() || '').trim() || null;
-  const projectId = (formData.get('projectId')?.toString() || '').trim() || null;
-  const clientId = (formData.get('clientId')?.toString() || '').trim() || null;
-  const employeeId = (formData.get('employeeId')?.toString() || '').trim() || null;
+function normalizeUploadTarget(input: DocumentUploadTargetInput): NormalizedUploadTarget {
+  return {
+    folderId: (input.folderId ?? '').trim() || null,
+    jobId: (input.jobId ?? '').trim() || null,
+    projectId: (input.projectId ?? '').trim() || null,
+    clientId: (input.clientId ?? '').trim() || null,
+    employeeId: (input.employeeId ?? '').trim() || null,
+  };
+}
+
+// Deny-by-default authorization for both the ticket and finalize steps. The
+// same checks run twice on purpose: the signed upload URL and the metadata
+// insert are separate requests, and each must independently prove access.
+async function authorizeDocumentUploadTarget(
+  context: AuthorizedDocumentContext,
+  target: NormalizedUploadTarget
+): Promise<{ success: true } | { success: false; error: string }> {
+  const { folderId, jobId, projectId, clientId, employeeId } = target;
 
   if ([jobId, projectId, clientId, employeeId].filter(Boolean).length > 1) {
     return { success: false, error: 'invalid_target' };
   }
 
   if (jobId) {
-    const access = await ensureJobAccess(auth.context, jobId);
+    const access = await ensureJobAccess(context, jobId);
     if (!access.success) return access;
   } else if (projectId) {
-    const access = await ensureProjectManagerAccess(auth.context, projectId);
+    const access = await ensureProjectManagerAccess(context, projectId);
     if (!access.success) return access;
   } else if (clientId) {
-    const access = await ensureClientManagerAccess(auth.context, clientId);
+    const access = await ensureClientManagerAccess(context, clientId);
     if (!access.success) return access;
   } else if (employeeId) {
-    const access = await ensureEmployeeManagerAccess(auth.context, employeeId);
+    const access = await ensureEmployeeManagerAccess(context, employeeId);
     if (!access.success) return access;
   } else {
-    const manager = requireManager(auth.context);
+    const manager = requireManager(context);
     if (!manager.success) return manager;
   }
 
-  if (folderId && !auth.context.isManagerOrAbove) {
+  if (folderId && !context.isManagerOrAbove) {
     return { success: false, error: 'not_authorized' };
   }
 
-  const folderCheck = await ensureFolder(
-    auth.context.admin,
-    auth.context.orgId,
-    folderId
-  );
+  const folderCheck = await ensureFolder(context.admin, context.orgId, folderId);
   if (!folderCheck.success) return folderCheck;
 
-  const originalFileName = trimName(fileEntry.name) || 'Dokument';
-  const displayName = await getAvailableDisplayName({
-    admin: auth.context.admin,
-    orgId: auth.context.orgId,
-    folderId,
-    preferredName: originalFileName,
-  });
+  return { success: true };
+}
+
+export async function createDocumentUploadTicket(
+  input: CreateDocumentUploadTicketInput
+): Promise<DocumentUploadTicketResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  if (input.fileSizeBytes <= 0) {
+    return { success: false, error: 'file_empty' };
+  }
+
+  if (input.fileSizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
+    return { success: false, error: 'file_too_large' };
+  }
+
+  const target = normalizeUploadTarget(input);
+  const access = await authorizeDocumentUploadTarget(auth.context, target);
+  if (!access.success) return access;
+
+  const originalFileName = trimName(input.fileName) || 'Dokument';
   const documentId = randomUUID();
   const storagePath = buildStoragePath({
     orgId: auth.context.orgId,
     documentId,
     fileName: originalFileName,
   });
-  const fileBuffer = Buffer.from(await fileEntry.arrayBuffer());
-  const contentType = fileEntry.type || 'application/octet-stream';
+
+  try {
+    const uploadUrl = await createSignedUploadUrl({
+      path: storagePath,
+      contentType: input.mimeType || 'application/octet-stream',
+    });
+
+    return { success: true, ticket: { documentId, storagePath, uploadUrl } };
+  } catch (error) {
+    console.error('Failed to create document upload ticket:', error);
+    return { success: false, error: 'ticket_failed' };
+  }
+}
+
+export async function finalizeDocumentUpload(
+  input: FinalizeDocumentUploadInput
+): Promise<DocumentResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  if (!UUID_PATTERN.test(input.documentId)) {
+    return { success: false, error: 'invalid_document_id' };
+  }
+
+  const target = normalizeUploadTarget(input);
+  const access = await authorizeDocumentUploadTarget(auth.context, target);
+  if (!access.success) return access;
+
+  const { folderId, jobId, projectId, clientId, employeeId } = target;
+  const originalFileName = trimName(input.fileName) || 'Dokument';
+  // The storage path is recomputed server-side from the authenticated org and
+  // the document id, so a client can never register a foreign object key.
+  const storagePath = buildStoragePath({
+    orgId: auth.context.orgId,
+    documentId: input.documentId,
+    fileName: originalFileName,
+  });
+
+  const { data: existingRow } = await auth.context.admin
+    .from('documents')
+    .select('id')
+    .eq('id', input.documentId)
+    .maybeSingle();
+
+  if (existingRow) {
+    return { success: false, error: 'already_finalized' };
+  }
+
+  let head;
+  try {
+    head = await headStorageObject(storagePath);
+  } catch (error) {
+    console.error('Failed to verify uploaded document object:', error);
+    return { success: false, error: 'upload_failed' };
+  }
+
+  if (!head.exists) {
+    return { success: false, error: 'file_missing' };
+  }
+
+  if (!head.sizeBytes || head.sizeBytes <= 0) {
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
+    return { success: false, error: 'file_empty' };
+  }
+
+  if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
+    return { success: false, error: 'file_too_large' };
+  }
+
+  const contentType = head.contentType || 'application/octet-stream';
   const category =
-    parseDocumentCategory(formData.get('category')) ??
+    parseDocumentCategory(input.category ?? null) ??
     inferDocumentCategory({
       fileName: originalFileName,
       mimeType: contentType,
     });
-
-  const { error: uploadError } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .upload(storagePath, fileBuffer, {
-      cacheControl: '3600',
-      contentType,
-      upsert: false,
-    });
-
-  if (uploadError) {
-    console.error('Failed to upload document:', uploadError);
-    return { success: false, error: 'upload_failed' };
-  }
+  const displayName = await getAvailableDisplayName({
+    admin: auth.context.admin,
+    orgId: auth.context.orgId,
+    folderId,
+    preferredName: originalFileName,
+  });
 
   const { data: documentRow, error: insertError } = await auth.context.admin
     .from('documents')
     .insert({
-      id: documentId,
+      id: input.documentId,
       organization_id: auth.context.orgId,
       folder_id: folderId,
       storage_bucket: DOCUMENT_STORAGE_BUCKET,
@@ -2129,14 +2240,14 @@ export async function uploadDocument(formData: FormData): Promise<DocumentResult
       display_name: displayName,
       category,
       mime_type: contentType,
-      size_bytes: fileEntry.size,
+      size_bytes: head.sizeBytes,
       uploaded_by: auth.context.userId,
     })
     .select('*')
     .single();
 
   if (insertError || !documentRow) {
-    await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
     console.error('Failed to create document metadata:', insertError);
     return { success: false, error: 'create_failed' };
   }
@@ -2146,7 +2257,7 @@ export async function uploadDocument(formData: FormData): Promise<DocumentResult
       .from('document_links')
       .insert({
         organization_id: auth.context.orgId,
-        document_id: documentId,
+        document_id: input.documentId,
         job_id: jobId,
         project_id: projectId,
         client_id: clientId,
@@ -2157,25 +2268,24 @@ export async function uploadDocument(formData: FormData): Promise<DocumentResult
     if (linkError) {
       await auth.context.admin
         .from('documents')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', documentId);
-      await auth.context.admin.storage
-        .from(DOCUMENT_STORAGE_BUCKET)
-        .remove([storagePath]);
+        .delete()
+        .eq('id', input.documentId)
+        .eq('organization_id', auth.context.orgId);
+      await deleteStorageObjects([storagePath]).catch(() => undefined);
       console.error('Failed to create document link:', linkError);
       return { success: false, error: 'link_failed' };
     }
   }
 
   await recordDocumentAuditEvent(auth.context, {
-    documentId,
+    documentId: input.documentId,
     folderId,
     eventType: 'uploaded',
     eventPayload: {
       displayName,
       originalFileName,
       category,
-      sizeBytes: fileEntry.size,
+      sizeBytes: head.sizeBytes,
       mimeType: contentType,
       jobId,
       projectId,
@@ -2186,7 +2296,7 @@ export async function uploadDocument(formData: FormData): Promise<DocumentResult
 
   if (jobId || projectId || clientId || employeeId) {
     await recordDocumentAuditEvent(auth.context, {
-      documentId,
+      documentId: input.documentId,
       eventType: 'linked',
       eventPayload: { jobId, projectId, clientId, employeeId },
     });
@@ -2383,7 +2493,6 @@ export async function copyDocument(input: CopyDocumentInput): Promise<DocumentRe
   });
 
   const storageCopyResult = await copyStorageObject({
-    admin: auth.context.admin,
     sourcePath: existing.document.storage_path,
     targetPath: storagePath,
     contentType: existing.document.mime_type,
@@ -2415,7 +2524,7 @@ export async function copyDocument(input: CopyDocumentInput): Promise<DocumentRe
     .single();
 
   if (error || !data) {
-    await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
     console.error('Failed to create copied document metadata:', error);
     return { success: false, error: 'copy_failed' };
   }
@@ -2850,18 +2959,17 @@ export async function getDocumentSignedUrl(
   const existing = await getAuthorizedDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const { data, error } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .createSignedUrl(existing.document.storage_path, 60 * 10, {
-      download: existing.document.display_name,
+  try {
+    const signedUrl = await createSignedDownloadUrl({
+      path: existing.document.storage_path,
+      disposition: 'attachment',
+      downloadFileName: existing.document.display_name,
     });
-
-  if (error || !data?.signedUrl) {
+    return { success: true, signedUrl };
+  } catch (error) {
     console.error('Failed to create document signed URL:', error);
     return { success: false, error: 'signed_url_failed' };
   }
-
-  return { success: true, signedUrl: data.signedUrl };
 }
 
 export async function getDocumentViewSignedUrl(
@@ -2873,16 +2981,20 @@ export async function getDocumentViewSignedUrl(
   const existing = await getAuthorizedDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const { data, error } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .createSignedUrl(existing.document.storage_path, 60 * 10);
-
-  if (error || !data?.signedUrl) {
+  try {
+    const signedUrl = await createSignedDownloadUrl({
+      path: existing.document.storage_path,
+      disposition: inlineSafeDisposition(existing.document.mime_type),
+      downloadFileName:
+        inlineSafeDisposition(existing.document.mime_type) === 'attachment'
+          ? existing.document.display_name
+          : undefined,
+    });
+    return { success: true, signedUrl };
+  } catch (error) {
     console.error('Failed to create document view signed URL:', error);
     return { success: false, error: 'signed_url_failed' };
   }
-
-  return { success: true, signedUrl: data.signedUrl };
 }
 
 export async function getDocumentVersionSignedUrl(
@@ -2908,18 +3020,21 @@ export async function getDocumentVersionSignedUrl(
   const existing = await getAuthorizedDocument(auth.context, versionRow.document_id);
   if (!existing.success) return existing;
 
-  const { data, error: signedUrlError } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .createSignedUrl(versionRow.storage_path, 60 * 10, {
-      download: options.download ? versionRow.original_file_name : undefined,
+  try {
+    const disposition = options.download
+      ? 'attachment'
+      : inlineSafeDisposition(versionRow.mime_type);
+    const signedUrl = await createSignedDownloadUrl({
+      path: versionRow.storage_path,
+      disposition,
+      downloadFileName:
+        disposition === 'attachment' ? versionRow.original_file_name : undefined,
     });
-
-  if (signedUrlError || !data?.signedUrl) {
+    return { success: true, signedUrl };
+  } catch (signedUrlError) {
     console.error('Failed to create version signed URL:', signedUrlError);
     return { success: false, error: 'signed_url_failed' };
   }
-
-  return { success: true, signedUrl: data.signedUrl };
 }
 
 export async function getDocumentDetails(
@@ -3079,11 +3194,9 @@ export async function permanentlyDeleteDocument(
     ),
   ];
 
-  const { error: storageError } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .remove(storagePaths);
-
-  if (storageError) {
+  try {
+    await deleteStorageObjects(storagePaths);
+  } catch (storageError) {
     console.error('Failed to permanently remove document storage:', storageError);
     return { success: false, error: 'storage_delete_failed' };
   }
@@ -3114,16 +3227,30 @@ export async function permanentlyDeleteDocument(
   return { success: true };
 }
 
-export async function uploadDocumentVersion(
-  input: UploadDocumentVersionInput
-): Promise<VersionResult> {
-  const auth = await getAuthorizedDocumentContext();
-  if (!auth.success) return auth;
+type CreateDocumentVersionUploadTicketInput = {
+  documentId: string;
+  fileName: string;
+  fileSizeBytes: number;
+  mimeType?: string | null;
+};
 
-  const manager = requireManager(auth.context);
+type FinalizeDocumentVersionUploadInput = {
+  documentId: string;
+  versionNumber: number;
+  fileName: string;
+};
+
+async function getVersionableDocument(
+  context: AuthorizedDocumentContext,
+  documentId: string
+): Promise<
+  | { success: true; document: DocumentRow }
+  | { success: false; error: string }
+> {
+  const manager = requireManager(context);
   if (!manager.success) return manager;
 
-  const existing = await getAuthorizedDocument(auth.context, input.documentId);
+  const existing = await getAuthorizedDocument(context, documentId);
   if (!existing.success) return existing;
 
   const category = toDocumentCategory(existing.document.category);
@@ -3131,37 +3258,113 @@ export async function uploadDocumentVersion(
     return { success: false, error: 'versioning_not_supported' };
   }
 
-  const fileEntry = input.formData.get('file');
-  if (!(fileEntry instanceof File)) {
-    return { success: false, error: 'file_required' };
-  }
+  return existing;
+}
 
-  if (fileEntry.size <= 0) {
+export async function createDocumentVersionUploadTicket(
+  input: CreateDocumentVersionUploadTicketInput
+): Promise<DocumentVersionUploadTicketResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getVersionableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+
+  if (input.fileSizeBytes <= 0) {
     return { success: false, error: 'file_empty' };
   }
 
-  if (fileEntry.size > DOCUMENT_MAX_FILE_SIZE_BYTES) {
+  if (input.fileSizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
     return { success: false, error: 'file_too_large' };
   }
 
   const nextVersionNumber = existing.document.current_version_number + 1;
-  const originalFileName = trimName(fileEntry.name) || 'Dokument';
-  const storagePath = `${auth.context.orgId}/${existing.document.id}/versions/${nextVersionNumber}-${sanitizeStorageFileName(originalFileName)}`;
-  const fileBuffer = Buffer.from(await fileEntry.arrayBuffer());
-  const contentType = fileEntry.type || 'application/octet-stream';
+  const storagePath = buildVersionStoragePath({
+    orgId: auth.context.orgId,
+    documentId: existing.document.id,
+    versionNumber: nextVersionNumber,
+    fileName: trimName(input.fileName) || 'Dokument',
+  });
 
-  const { error: uploadError } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .upload(storagePath, fileBuffer, {
-      cacheControl: '3600',
-      contentType,
-      upsert: false,
+  try {
+    const uploadUrl = await createSignedUploadUrl({
+      path: storagePath,
+      contentType: input.mimeType || 'application/octet-stream',
     });
 
-  if (uploadError) {
-    console.error('Failed to upload document version storage object:', uploadError);
+    return {
+      success: true,
+      ticket: {
+        documentId: existing.document.id,
+        versionNumber: nextVersionNumber,
+        storagePath,
+        uploadUrl,
+      },
+    };
+  } catch (error) {
+    console.error('Failed to create version upload ticket:', error);
+    return { success: false, error: 'ticket_failed' };
+  }
+}
+
+export async function finalizeDocumentVersionUpload(
+  input: FinalizeDocumentVersionUploadInput
+): Promise<VersionResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const existing = await getVersionableDocument(auth.context, input.documentId);
+  if (!existing.success) return existing;
+
+  const nextVersionNumber = existing.document.current_version_number + 1;
+  if (input.versionNumber !== nextVersionNumber) {
+    // Another version landed between ticket and finalize; the uploaded object
+    // sits at a now-stale version path and must not become the current file.
+    // Only clean up paths above the current version number — lower numbers
+    // could collide with legitimately archived version objects.
+    if (input.versionNumber > existing.document.current_version_number) {
+      const staleStoragePath = buildVersionStoragePath({
+        orgId: auth.context.orgId,
+        documentId: existing.document.id,
+        versionNumber: input.versionNumber,
+        fileName: trimName(input.fileName) || 'Dokument',
+      });
+      await deleteStorageObjects([staleStoragePath]).catch(() => undefined);
+    }
+    return { success: false, error: 'version_conflict' };
+  }
+
+  const originalFileName = trimName(input.fileName) || 'Dokument';
+  const storagePath = buildVersionStoragePath({
+    orgId: auth.context.orgId,
+    documentId: existing.document.id,
+    versionNumber: nextVersionNumber,
+    fileName: originalFileName,
+  });
+
+  let head;
+  try {
+    head = await headStorageObject(storagePath);
+  } catch (error) {
+    console.error('Failed to verify uploaded version object:', error);
     return { success: false, error: 'upload_failed' };
   }
+
+  if (!head.exists) {
+    return { success: false, error: 'file_missing' };
+  }
+
+  if (!head.sizeBytes || head.sizeBytes <= 0) {
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
+    return { success: false, error: 'file_empty' };
+  }
+
+  if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
+    return { success: false, error: 'file_too_large' };
+  }
+
+  const contentType = head.contentType || 'application/octet-stream';
 
   const { data: archivedVersion, error: versionInsertError } = await auth.context.admin
     .from('document_versions')
@@ -3180,7 +3383,7 @@ export async function uploadDocumentVersion(
     .single();
 
   if (versionInsertError) {
-    await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
     console.error('Failed to store previous document version:', versionInsertError);
     return { success: false, error: 'version_failed' };
   }
@@ -3192,7 +3395,7 @@ export async function uploadDocumentVersion(
       storage_path: storagePath,
       original_file_name: originalFileName,
       mime_type: contentType,
-      size_bytes: fileEntry.size,
+      size_bytes: head.sizeBytes,
       uploaded_by: auth.context.userId,
     })
     .eq('id', existing.document.id)
@@ -3202,7 +3405,7 @@ export async function uploadDocumentVersion(
     .single();
 
   if (updateError || !updatedDocument) {
-    await auth.context.admin.storage.from(DOCUMENT_STORAGE_BUCKET).remove([storagePath]);
+    await deleteStorageObjects([storagePath]).catch(() => undefined);
     if (archivedVersion?.id) {
       await auth.context.admin
         .from('document_versions')
@@ -3224,7 +3427,7 @@ export async function uploadDocumentVersion(
       storagePath,
       originalFileName,
       mimeType: contentType,
-      sizeBytes: fileEntry.size,
+      sizeBytes: head.sizeBytes,
     },
   });
 
@@ -3237,7 +3440,7 @@ export async function uploadDocumentVersion(
     storagePath,
     originalFileName,
     mimeType: contentType,
-    sizeBytes: fileEntry.size,
+    sizeBytes: head.sizeBytes,
     uploadedBy: auth.context.userId,
     createdAt: (updatedDocument as DocumentRow).updated_at,
     uploader: null,
@@ -3245,50 +3448,6 @@ export async function uploadDocumentVersion(
 
   revalidateDocuments(auth.context.orgId);
   return { success: true, version };
-}
-
-type StorageObject = {
-  id: string | null;
-  name: string;
-  metadata: unknown | null;
-};
-
-async function listStorageObjectPaths(
-  admin: SupabaseAdmin,
-  prefix: string
-): Promise<string[]> {
-  const paths: string[] = [];
-
-  async function walk(path: string): Promise<void> {
-    let offset = 0;
-    const limit = 100;
-
-    while (true) {
-      const { data, error } = await admin.storage
-        .from(DOCUMENT_STORAGE_BUCKET)
-        .list(path, { limit, offset, sortBy: { column: 'name', order: 'asc' } });
-
-      if (error) {
-        throw error;
-      }
-
-      const objects = (data ?? []) as StorageObject[];
-      for (const object of objects) {
-        const objectPath = path ? `${path}/${object.name}` : object.name;
-        if (object.id || object.metadata) {
-          paths.push(objectPath);
-        } else {
-          await walk(objectPath);
-        }
-      }
-
-      if (objects.length < limit) break;
-      offset += limit;
-    }
-  }
-
-  await walk(prefix);
-  return paths;
 }
 
 export async function getDocumentStorageCleanupReport(): Promise<StorageCleanupReportResult> {
@@ -3300,7 +3459,7 @@ export async function getDocumentStorageCleanupReport(): Promise<StorageCleanupR
 
   try {
     const [storagePaths, documentsResult, versionsResult] = await Promise.all([
-      listStorageObjectPaths(auth.context.admin, auth.context.orgId),
+      listR2ObjectPaths(`${auth.context.orgId}/`),
       auth.context.admin
         .from('documents')
         .select('storage_path, deleted_at')
@@ -3372,11 +3531,9 @@ export async function deleteOrphanedStorageObjects(
     return { success: false, error: 'no_orphans_selected' };
   }
 
-  const { error } = await auth.context.admin.storage
-    .from(DOCUMENT_STORAGE_BUCKET)
-    .remove(safePaths);
-
-  if (error) {
+  try {
+    await deleteStorageObjects(safePaths);
+  } catch (error) {
     console.error('Failed to delete orphaned storage objects:', error);
     return { success: false, error: 'storage_delete_failed' };
   }

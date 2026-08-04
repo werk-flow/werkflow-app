@@ -24,19 +24,26 @@ docs/
     realtime-and-caching.md
   features/
     ai-automations.md
+    calendar-and-resource-planning.md
+    commercial-and-finance.md
+    customers-and-crm.md
     document-management.md
     employee-management.md
     inventory.md
     jobs-and-projects.md
+    service-and-maintenance.md
     time-tracking.md
   product/
     offer.md
     acquisition.md
     avatar.md
+    competitive-landscape.md
+    product-capability-map.md
   plans/
+    phase-1-build-roadmap.md
     inventory-v1-implementation-plan.md
   decisions/
-    0001-example-decision.md
+    0001-infrastructure-stack.md
 ```
 
 Not every file needs to exist immediately. Add a document when it prevents repeated confusion, guides future implementation, or records a meaningful product/architecture decision.
@@ -54,18 +61,28 @@ Technical docs should avoid column-by-column schema dumps. When exact schema mat
 Use `docs/features/` for intended behavior of major feature areas. These docs should distinguish between:
 
 - Current implementation.
-- Planned scope.
-- Explicit non-goals.
+- Phase 1 future build-out for the complete operational core.
+- Phase 2 intelligence and automation opportunities.
+- Cross-feature inputs, outputs, and ownership boundaries.
+- Explicit non-goals and decision gates.
 - Open decisions.
 - Permission and role expectations.
+
+The standard feature-spec sections are defined in `docs/product/product-capability-map.md`. Feature specs describe **what** the complete product should do and how it connects to the rest of WerkFlow; concrete implementation sequencing belongs in `docs/plans/`.
 
 ### Product Docs
 
 Use `docs/product/` for business context that should not always be loaded into every coding task: offer, acquisition process, deeper avatar/persona notes, onboarding services, pricing assumptions, and positioning.
 
+`docs/product/competitive-landscape.md` is the dated, source-linked research reference for major German Handwerkersoftware competitors. Treat vendor features, public pricing, review signals, and WerkFlow analysis as separate evidence types, and refresh volatile figures before using them in a current decision.
+
+`docs/product/product-capability-map.md` is the product-wide map for the complete operational core and later intelligent-automation phase. Use it to keep feature specs coherent, resolve cross-feature ownership, and distinguish a product capability from a release or implementation plan.
+
 ### Implementation Plans
 
 Use `docs/plans/` for detailed implementation plans that are too concrete for broad feature specs, especially when a large feature needs a handoff anchor across multiple sessions. Plans should link back to the relevant feature spec and be updated or archived after implementation decisions are finalized.
+
+`docs/plans/phase-1-build-roadmap.md` is the living execution index for the complete operational core. Phase 1 agents should use it to identify the next eligible vertical slice, verify direct prerequisites, record current status and evidence, run the required golden scenarios, and update dependent documentation. It owns implementation order and progress; feature specs remain the source for intended product behavior.
 
 ### Decision Records
 

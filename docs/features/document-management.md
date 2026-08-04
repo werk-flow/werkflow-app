@@ -2,11 +2,11 @@
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
-This document describes the **current implementation** (Stages 1–4), the **major product/technical decisions** behind it, and **planned future work** (Stage 5+). For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
+This document describes the **current implementation** (Stages 1–4), the **major product/technical decisions** behind it, and the Phase 1/Phase 2 **future product build-out**. For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
 
 ---
 
-## Current Status (Stages 1–4 Implemented)
+## Current Product Baseline (Stages 1–4 Implemented)
 
 Document management is **substantially implemented**, not a placeholder anymore.
 
@@ -28,8 +28,8 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Storage orphan cleanup report + guarded delete | Implemented as server-side maintenance helpers; not exposed in the `/dokumente` UI |
 | Advanced move/copy destination modal | Implemented |
 | Auto folder creation on job/project/customer/employee create | **Not implemented** (deliberate) |
-| OCR / invoice parsing / AI classification | **Not implemented** (Stage 5) |
-| Thumbnail generation | **Not implemented** (Stage 5) |
+| OCR / invoice parsing / AI classification | **Not implemented** (future build-out; extraction and generative assistance have different phase boundaries below) |
+| Thumbnail generation | **Not implemented** (Phase 1 build-out) |
 | Dedicated offer/contract/invoice entities | **Not implemented** |
 
 Implementation was delivered in four stages:
@@ -115,21 +115,26 @@ flowchart TB
 
   subgraph data [Supabase]
     Meta["Postgres metadata tables"]
-    Storage["Storage bucket: organization-documents"]
     RLS["RLS + app_private helpers"]
+  end
+
+  subgraph storage [Cloudflare R2 EU]
+    R2["Bucket: werkflow-documents-dev/-prod"]
   end
 
   Library --> Actions
   Context --> Actions
   Viewer --> Actions
   Actions --> Meta
-  Actions --> Storage
+  Actions -->|"signed URLs only"| R2
+  Library -->|"direct PUT/GET of bytes"| R2
+  Context -->|"direct PUT/GET of bytes"| R2
   Meta --> RLS
   Actions --> Audit["document_audit_events"]
   Actions --> Versions["document_versions"]
 ```
 
-Key principle: **Postgres holds organization, folder structure, links, categories, trash state, versions, and audit events. Supabase Storage holds bytes.** The two are joined by immutable storage paths on document/version rows.
+Key principle: **Postgres holds organization, folder structure, links, categories, trash state, versions, and audit events. Cloudflare R2 (EU jurisdiction) holds bytes.** The two are joined by immutable storage paths on document/version rows. File bytes never pass through server compute — server actions authorize and sign URLs; the browser transfers bytes directly (`lib/storage/r2.ts`, [decision 0001](../../docs/decisions/0001-infrastructure-stack.md)).
 
 ---
 
@@ -171,9 +176,13 @@ Links are metadata only. They do **not** move Storage objects or change `folder_
 
 ## Storage Model
 
-- **Bucket:** `organization-documents` (private, org-scoped paths).
+- **Provider:** Cloudflare R2, EU jurisdiction, private bucket selected via `R2_BUCKET_NAME`. Because local development and the deployed app currently share **one** Supabase database, both environments must point at the **same** bucket (`werkflow-documents-prod`) — split buckets over a shared metadata table would make rows point at bytes the other environment cannot see. `werkflow-documents-dev` stays reserved for a future separate dev/staging database. `documents.storage_bucket` keeps the logical value `organization-documents`; the physical bucket comes from the environment.
 - **Path pattern:** `{organizationId}/{documentId}/{sanitizedFileName}`
 - **Version path pattern:** `{organizationId}/{documentId}/versions/{versionNumber}-{sanitizedFileName}`
+- **Upload flow (direct, two-phase):** `createDocumentUploadTicket` authorizes (user, organization, target, folder) and returns a document id plus a short-lived signed PUT URL with the content type pinned into the signature → the browser PUTs the bytes directly to R2 → `finalizeDocumentUpload` re-authorizes, recomputes the storage path server-side (a client can never register a foreign key), verifies the object via HEAD (existence, size limit, content type), then inserts metadata, links, and audit events. Failed finalizes delete the uploaded object. Versions use the same pattern with a version-number conflict check.
+- **Environment variables:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (plus optional `R2_JURISDICTION`, default `eu`).
+- **Bucket CORS** must allow `GET`, `PUT`, `HEAD` with the `content-type` header from the app origins (see `scripts/setup-r2-cors.ts`; applying it needs a bucket-admin token or the dashboard, the runtime object token deliberately cannot change bucket settings).
+- Orphaned uploads (PUT succeeded, finalize never ran) are invisible to users and are reconciled through the existing storage-cleanup report, which lists R2 objects against metadata.
 
 ### Decision: immutable storage paths
 
@@ -189,6 +198,10 @@ Access uses **short-lived signed URLs**:
 
 - View URLs — inline preview, no forced download.
 - Download URLs — include download filename.
+
+### Migration note (`P1-00a`, 2026-08-04)
+
+File bytes moved from Supabase Storage to R2 with direct uploads, fixing the production defect where Server-Action-buffered uploads hit Vercel's ~4.5 MB body limit, and eliminating download egress cost ([decision 0001](../../docs/decisions/0001-infrastructure-stack.md)). All pre-existing objects were copied to R2 under unchanged paths and verified; the old Supabase `organization-documents` bucket is retained untouched as a temporary fallback and can be emptied once the R2 path has proven itself in production. Retention-relevant categories will additionally get copies in an independent immutable archive (see Governance below).
 
 ---
 
@@ -308,8 +321,8 @@ Categories are **organizational labels**, not separate database entities. There 
 
 ### Upload
 
-- Max file size: 50 MB (`DOCUMENT_MAX_FILE_SIZE_BYTES`).
-- Uploads use Server Actions; `next.config.ts` sets `experimental.serverActions.bodySizeLimit` to `50mb` so Office/PDF uploads above Next's default 1 MB limit are accepted up to the app limit.
+- Max file size: 50 MB (`DOCUMENT_MAX_FILE_SIZE_BYTES`), enforced at ticket creation and re-verified against the actual object size at finalize.
+- Uploads go directly from the browser to R2 via `lib/documents/upload-client.ts` (ticket → XHR PUT with real progress → finalize); file bytes never pass through Server Actions, so no body-size workaround exists or is needed.
 - Upload dialog shows per-file progress and errors.
 - Folder upload creates nested folders when allowed (`allowFolderCreation`).
 - OS drag/drop supports single files, multiple files, folders, and mixed file/folder drops. Dropping on `Dokumente` uploads into the current folder; dropping on `Alle Dateien` uploads to the root library. The manager table also supports dragging existing files/folders onto folders, breadcrumb path pills, or `Papierkorb`. Existing-file DnD uses a custom drag pill and suppresses the browser's native dashed drag ghost.
@@ -324,8 +337,8 @@ Move is a metadata operation for files and folders. Moving files updates `docume
 
 Copy creates new rows and does **not** copy links automatically:
 
-- File copy creates a new `documents` row and copies the Storage object. If Supabase Storage `.copy()` fails, the action falls back to download + upload for the same private bucket.
-- Folder copy creates a copied folder tree and copied document rows for contained files, with the same Storage copy fallback for each copied file.
+- File copy creates a new `documents` row and copies the R2 object server-side (S3 `CopyObject`; no bytes travel through the app).
+- Folder copy creates a copied folder tree and copied document rows for contained files, with the same server-side object copy for each copied file.
 - Copied file and folder display names are prefixed with `Kopie von ` and still pass through collision-safe name generation in the target folder.
 
 ### Link / unlink
@@ -415,40 +428,174 @@ Audit is exposed in the manager details dialog (not in field-worker contextual U
 
 ---
 
-## What Is Not Implemented Yet
+## Phase 1 — Complete Operational Core
 
-- OCR for PDFs/scans.
-- Structured invoice/offer/contract extraction.
-- AI-based classification beyond filename/MIME heuristics.
-- Background processing queue for heavy document jobs.
-- Automatic logical or physical folders per Auftrag/Projekt/Kunde/Mitarbeiter.
-- Generated thumbnails/pre-rendered preview assets for fast browsing.
-- Mobile-native capture app (web upload works today).
-- Document annotations, comments, or approval workflows.
-- Integration with future dedicated invoice/offer modules.
-- Employee access to project-only, customer-only, or employee-only documents.
+Stages 1–4 established the reliability foundation: private storage, contextual links, manager organization, audit, trash, restore, versioning, viewer, and cleanup safeguards.
 
----
+The complete operational core should extend that foundation in the following product areas.
 
-## Future Additions (Stage 5 Guidance)
+### Capture And Inbound Documents
 
-Stage 5 should focus on **intelligence and automation**, not reliability basics (audit, trash, versioning, viewer, and cleanup are in place).
+Users should be able to bring documents into WerkFlow from the way the business actually receives or creates them:
 
-Planned direction:
+- web file/folder upload;
+- mobile camera scan and photo capture;
+- files shared from the future mobile operating system;
+- approved email-to-WerkFlow or message attachment intake;
+- generated reports, offers, invoices, contracts, and forms from other WerkFlow features;
+- supplier and accounting documents received through supported integrations.
 
-1. **OCR pipeline** for PDFs and images — searchable text, accessibility, future extraction input.
-2. **Invoice parsing** — structured metadata (amount, date, vendor, line items) with human review before trusting values.
-3. **Contract/offer extraction** — key fields with review UI; liability-sensitive, never fully silent automation early on.
-4. **AI classification** beyond filename/MIME — suggest category, link targets, or folder placement; always allow manual override.
-5. **Background processing jobs** — retries, failure states, progress for long OCR/extraction runs.
-6. **Optional automatic logical folders/views** for every Auftrag, Projekt, Kunde, or Mitarbeiter — prefer metadata-driven smart collections over physical Storage folders unless a hard operational need appears.
-7. **Thumbnail generation** for image/PDF library rows if the in-app viewer proves useful but large libraries feel slow.
+Every inbound path should show:
 
-When implementing Stage 5, preserve:
+- organization and uploader/source;
+- upload and processing state;
+- duplicate or version warning where relevant;
+- required review before a file becomes a trusted financial or legal record;
+- a recoverable error when upload, processing, or linking fails.
 
-- Organization boundaries and RLS.
-- Simple field-worker flows (suggestions should not complicate upload).
-- Human review for financially or legally relevant extractions.
+### Findability And Large-Library Use
+
+The manager library should remain usable at real business volume:
+
+- generated image/PDF thumbnails where they materially improve scanning;
+- full-text search across supported digital documents;
+- OCR text for scans and photos;
+- search by document metadata, linked context, date, category, participant, and business reference;
+- saved filters or smart collections for recurring office work;
+- visible processing and index state;
+- bulk actions and export that remain understandable;
+- performance that does not require the office user to know the storage layout.
+
+OCR makes a document searchable. It does not by itself make extracted values financially correct.
+
+### Structured Forms, Reports, And Signatures
+
+WerkFlow should support structured operational artifacts without turning every form into a custom software project:
+
+- reusable report and form templates;
+- job, service, measurement, inspection, handover, defect, and site-diary outputs;
+- required and conditional fields;
+- original capture time and responsible person;
+- photos and annotations;
+- internal approval and customer signature where relevant;
+- correction and version history;
+- stable PDF/export output for external use.
+
+The structured record and rendered file should remain linked so future changes do not create two unrelated sources of truth.
+
+### Document Review And Approval
+
+Selected documents should support:
+
+- review owner and due state;
+- comments or correction requests;
+- approval, rejection, replacement, and superseded state;
+- multi-step approval only where the business process requires it;
+- clear distinction between internal review and customer signature;
+- audit of who accepted financially or legally relevant extracted data.
+
+The product should avoid imposing document approval on ordinary job photos or low-risk uploads.
+
+### Commercial And Accounting Integration
+
+Documents should connect to dedicated structured records:
+
+- an uploaded supplier invoice can become the source for a reviewed incoming-bill draft;
+- an offer, order confirmation, contract, invoice, credit, or service report generated by WerkFlow remains linked to its structured entity;
+- delivery notes can be connected to purchase orders and receipts;
+- customer and supplier files can be found from both their business context and the central library;
+- commercial corrections create appropriate versions or successor records instead of mutating signed/final artifacts without trace.
+
+Document categories remain useful for organization, but a file categorized as `invoice` is not automatically a structured invoice or an accounting transaction.
+
+### Governance, Retention, And Portability
+
+Complete document management needs policy-level clarity:
+
+- organization retention rules by document type;
+- legal-hold or deletion-block behavior where required;
+- role and context access that stays understandable;
+- external sharing with recipient, expiry, revocation, and download history where justified;
+- complete organization export with files, metadata, versions, links, and audit context;
+- import/migration that preserves meaningful folder and reference information;
+- recoverability and deletion behavior aligned across structured records and stored files.
+
+Infrastructure direction for retention ([decision 0001](../../docs/decisions/0001-infrastructure-stack.md), designed in slice `P1-45`): retention-relevant document categories get copies in a separate, independently administered S3 bucket with Object Lock in compliance mode, so not even an administrator can delete them during the retention period. German retention is per category (books/financial statements commonly 10 years, vouchers commonly 8, commercial correspondence commonly 6 — AO §147 / HGB §257 / UStG §14b), so retention policy must be category-aware rather than a blanket lock on every photo.
+
+Claims such as `GoBD-konform`, `revisionssicher`, or legally sufficient electronic signature require qualified validation before they appear in product marketing.
+
+### Smart Views Without Folder Duplication
+
+The product may add metadata-driven views for:
+
+- every customer, site, project, job, service asset, employee, supplier, purchase, or commercial record;
+- missing-document and awaiting-approval work;
+- recently generated or externally shared artifacts;
+- retention or review exceptions.
+
+These views should use the existing link model. Physical folder creation should remain optional and deliberate unless a validated operational need outweighs its rename, synchronization, and duplicate-file costs.
+
+## Connected Workflow Contracts
+
+| Feature area | Document management receives | Document management provides |
+| --- | --- | --- |
+| Customers and CRM | Customer, contact, site, request, and communication context | Findable customer files, correspondence artifacts, consent, and relationship evidence |
+| Jobs and projects | Work scope, project/job identity, field artifacts, completion and handover state | Plans, photos, reports, forms, signatures, and document packs |
+| Service and maintenance | Installed-equipment context, checklist/report type, measurement and signature requirements | Manuals, certificates, service reports, history artifacts, and customer handover |
+| Employees and time | Employee identity, role, personnel-document context, and approved time exports | Restricted personnel files, certificates, contracts, and generated time evidence |
+| Inventory and purchasing | Item, supplier, order, receipt, return, and stock-count context | Catalog files, delivery notes, supplier invoices, warranties, and equipment documents |
+| Commercial and finance | Structured offer, contract, invoice, credit, expense, payment, and accounting state | Source files, rendered outputs, versions, signatures, and reviewed extraction evidence |
+| AI automations | Authorized source scope, processing request, and review policy | Searchable content, source references, drafts, and document-trigger events |
+
+No feature should store a private duplicate merely to display the same file in its context.
+
+## Role And UX Principles
+
+- `admin` and `buero` need the central library, governance, review, bulk organization, and export.
+- `employee` users need only the documents, capture actions, and forms required for assigned work.
+- Personnel, financial, contract, customer, and supplier documents need purpose-specific access rather than one broad `manager` assumption forever.
+- Upload should remain fast; classification, linking, and extraction suggestions must not block simple field evidence.
+- Document status, structured-record status, processing status, and approval status should be visually distinct.
+- A failed upload, scan, OCR, extraction, share, or signature must remain visible with a recovery action.
+- Mobile capture should make offline and synchronization state explicit.
+- Destructive actions, link removal, permanent deletion, and version replacement must explain their cross-context impact.
+
+## Phase 2 — Intelligence And Automation
+
+Once the capture, search, structured-record, and review foundations are stable, intelligence can support:
+
+- category, link-target, and smart-view suggestions;
+- extraction of invoice, delivery-note, offer, contract, report, and form fields;
+- comparison of versions or contract/offer changes;
+- summaries of large document sets with source references;
+- identification of missing signatures, required attachments, or inconsistent values;
+- conversion of speech, notes, and photos into a report draft;
+- routing a reviewed document into the correct job, service, procurement, or commercial workflow;
+- document-triggered automations with explicit permissions and approvals.
+
+Financially, legally, technically, or employment-relevant extraction remains a proposal until an authorized person reviews it. The original file and extracted source region should remain available.
+
+## Boundaries And Decision Gates
+
+- Document management is not a replacement for structured jobs, stock, employee, service, or finance records.
+- A document category does not create commercial/accounting meaning on its own.
+- Automatic physical folder creation remains deferred unless user research establishes a stronger need than metadata-driven views.
+- Broad employee library access should not be introduced merely for convenience.
+- External sharing and electronic signatures need security, identity, revocation, retention, and legal-validity decisions.
+- Long-term archive and compliance claims require qualified German legal/accounting validation.
+- AI may propose classification, extraction, links, summaries, and workflows; it must not silently alter signed or financially final records.
+
+## Open Product Decisions
+
+- Which Phase 1 workflows require OCR and full-text search first?
+- Which document types need structured templates rather than uploaded files?
+- Which review/approval patterns deserve a shared product workflow?
+- What retention and deletion rules should be configurable by document category?
+- Which external sharing and signature use cases provide enough value for the first complete product?
+- What organization-wide export format preserves files, links, versions, and structured record relationships?
+- Which personnel, financial, supplier, and customer documents require more granular permission groups?
+- When should a newly uploaded file be treated as a duplicate, a new version, or a different business record?
+- Which extracted fields may be accepted in bulk, and which always require individual review?
 
 ---
 
@@ -482,10 +629,18 @@ When implementing Stage 5, preserve:
 - `app/(app)/kunden/[clientId]/page.tsx` → `getClientDocuments`
 - `app/(app)/mitarbeiter/[userId]/page.tsx` → `getEmployeeDocuments`
 
-### Related docs
+## Related Docs
 
-- `docs/features/jobs-and-projects.md` — operational context for links.
-- `docs/technical/data-model.md` — high-level domain model pointer.
+- [Product capability map](../product/product-capability-map.md) — product phases and cross-feature rules.
+- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md) — active slice order, prerequisites, evidence, and golden-scenario gates.
+- [Competitive landscape](../product/competitive-landscape.md) — external evidence and comparison method.
+- [Jobs and projects](./jobs-and-projects.md) — operational context for links.
+- [Customers and CRM](./customers-and-crm.md) — customer/site context.
+- [Service and maintenance](./service-and-maintenance.md) — reports, equipment files, and service history.
+- [Inventory](./inventory.md) — supplier, receipt, warranty, and asset documents.
+- [Commercial and finance](./commercial-and-finance.md) — structured commercial records and document handoffs.
+- [AI automations](./ai-automations.md) — extraction, drafting, review, and document-triggered workflows.
+- [Conceptual data model](../technical/data-model.md) — high-level domain model pointer.
 - `AGENTS.md` — agent-facing product summary.
 
 ---

@@ -222,6 +222,27 @@ export type SignedDocumentUrlResult =
   | { success: true; signedUrl: string }
   | { success: false; error: string };
 
+export type DocumentUploadTicket = {
+  documentId: string;
+  storagePath: string;
+  uploadUrl: string;
+};
+
+export type DocumentUploadTicketResult =
+  | { success: true; ticket: DocumentUploadTicket }
+  | { success: false; error: string };
+
+export type DocumentVersionUploadTicket = {
+  documentId: string;
+  versionNumber: number;
+  storagePath: string;
+  uploadUrl: string;
+};
+
+export type DocumentVersionUploadTicketResult =
+  | { success: true; ticket: DocumentVersionUploadTicket }
+  | { success: false; error: string };
+
 export type DocumentAuditEvent = {
   id: string;
   organizationId: string;
