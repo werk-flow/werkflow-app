@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ClientsTable } from './clients-table';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { Client } from '@/lib/jobs/types';
 
 interface KundenContentProps {
@@ -15,6 +16,9 @@ interface KundenContentProps {
 export function KundenContent({ clients: initialClients }: KundenContentProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+
+  // Keep the customer list fresh when colleagues create or edit customers.
+  useRealtimeRouterRefresh({ tables: ['clients'] });
   const [clients, setClients] = useState<Client[]>(initialClients);
   const [prevCount, setPrevCount] = useState(initialClients.length);
 

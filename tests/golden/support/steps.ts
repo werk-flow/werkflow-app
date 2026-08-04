@@ -80,14 +80,40 @@ export async function uploadDocumentOnJobPage(
     .filter({ has: page.getByText('Dokumente & Bilder') });
   await section.locator('input[type="file"]').first().setInputFiles(filePath);
 
-  // Direct-to-R2 upload dialog: wait for completion, then close if needed.
+  // Direct-to-R2 upload dialog: wait for completion and require actual success —
+  // "abgeschlossen" alone also counts failed files.
   await expect(page.getByText('1 von 1 abgeschlossen')).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('Upload fehlgeschlagen.')).toHaveCount(0);
+
   const closeButton = page.getByRole('button', { name: 'Schließen' });
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click();
   }
+  // Dialog must be gone before asserting, so the file name match can only come
+  // from the documents section itself, not from the dialog's row list.
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
 
-  await expect(page.getByText(expectedFileName)).toBeVisible({ timeout: 15_000 });
+  await expect(visibleText(page, expectedFileName)).toBeVisible({ timeout: 15_000 });
+}
+
+export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void> {
+  await page.goto('/dashboard');
+  // The clock control is a floating action button named via its title attribute.
+  await page.locator('button[title="Einstempeln"]').click();
+  await expect(page.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
+
+  if (jobTitle) {
+    await page.getByRole('button').filter({ hasText: jobTitle }).first().click();
+  }
+
+  // The modal's confirm button also says "Einstempeln" but has no title attr.
+  await page.locator('button:not([title])', { hasText: 'Einstempeln' }).click();
+  await expect(page.locator('button[title="Ausstempeln"]')).toBeVisible({ timeout: 15_000 });
+}
+
+export async function clockOut(page: Page): Promise<void> {
+  await page.locator('button[title="Ausstempeln"]').click();
+  await expect(page.locator('button[title="Einstempeln"]')).toBeVisible({ timeout: 15_000 });
 }
 
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {

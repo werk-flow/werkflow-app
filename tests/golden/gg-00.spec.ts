@@ -2,6 +2,8 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
 import {
+  clockInOnJob,
+  clockOut,
   createCustomer,
   createJob,
   expectRedirectedAway,
@@ -9,7 +11,7 @@ import {
   uploadDocumentOnJobPage,
   visibleText,
 } from './support/steps';
-import { ARTIFACTS_DIR } from './support/world';
+import { ARTIFACTS_DIR, storageStatePath } from './support/world';
 
 // GG-00 — Existing Foundation Regression (@GG-00)
 // Verifies the roadmap's baseline scenario: role-scoped core flows, document
@@ -68,6 +70,42 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await expect(visibleText(bueroPage, 'upload-fixture')).toBeVisible({
       timeout: 15_000,
     });
+  });
+
+  test('Mitarbeiter erfasst auftragsbezogene Arbeitszeit', async ({ employeePage }) => {
+    await clockInOnJob(employeePage, 'Heizung warten (Golden Gate)');
+    await clockOut(employeePage);
+  });
+
+  test('Realtime: Büro sieht neue Kunden ohne Neuladen', async ({
+    adminPage,
+    bueroPage,
+    world,
+  }) => {
+    // Two users are signed in simultaneously in separate browser contexts.
+    await bueroPage.goto('/kunden');
+    await expect(visibleText(bueroPage, `Testkunde ${world.runId}`)).toBeVisible();
+
+    await createCustomer(adminPage, `Realtime Kunde ${world.runId}`);
+
+    // The Büro page must pick the new customer up via Realtime, without reload.
+    await expect(visibleText(bueroPage, `Realtime Kunde ${world.runId}`)).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+
+  test('Mobil: Mitarbeiter sieht zugewiesene Aufträge auf kleinem Viewport', async ({
+    browser,
+    world,
+  }) => {
+    const context = await browser.newContext({
+      storageState: storageStatePath('employee'),
+      viewport: { width: 375, height: 812 },
+    });
+    const page = await context.newPage();
+    await page.goto('/auftraege');
+    await expect(visibleText(page, `GG-${world.runId}-1`)).toBeVisible();
+    await context.close();
   });
 
   test('Mitarbeiter hat keinen Zugriff auf Bibliothek und Inventar', async ({

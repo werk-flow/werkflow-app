@@ -22,11 +22,23 @@ async function loginAndSaveState(
     const context = await browser.newContext({ locale: 'de-DE' });
     const page = await context.newPage();
 
-    await page.goto(`${baseURL}/login`);
-    await page.locator('input[autocomplete="email"]').fill(email);
-    await page.locator('input[autocomplete="current-password"]').fill(password);
-    await page.getByRole('button', { name: 'Anmelden' }).click();
-    await page.waitForURL('**/dashboard', { timeout: 30_000 });
+    // Clicking before React hydration attaches the submit handler falls back
+    // to a native form submission that reloads /login; retry when that happens.
+    let loggedIn = false;
+    for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
+      await page.goto(`${baseURL}/login`);
+      await page.waitForLoadState('networkidle');
+      await page.locator('input[autocomplete="email"]').fill(email);
+      await page.locator('input[autocomplete="current-password"]').fill(password);
+      await page.getByRole('button', { name: 'Anmelden' }).click();
+      loggedIn = await page
+        .waitForURL('**/dashboard', { timeout: 20_000 })
+        .then(() => true)
+        .catch(() => false);
+    }
+    if (!loggedIn) {
+      throw new Error(`Login did not reach the dashboard for ${email}`);
+    }
 
     await context.storageState({ path: statePath });
     await context.close();

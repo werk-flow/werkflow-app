@@ -170,7 +170,9 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
 
   return (
     <Form {...form}>
-      <form className="grid gap-4" onSubmit={handleSubmit}>
+      {/* method="post" guards the pre-hydration fallback: a native GET submit
+          would put the credentials into the URL and server logs. */}
+      <form className="grid gap-4" method="post" onSubmit={handleSubmit}>
         {successMessage ? (
           <div className="rounded-lg bg-accent p-3 text-sm text-accent-foreground">
             {successMessage}

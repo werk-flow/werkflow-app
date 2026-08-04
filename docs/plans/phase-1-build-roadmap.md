@@ -145,7 +145,7 @@ These are deliberate warnings for future agents and the product owner, recorded 
 - Make consequential actions explicit, previewable, attributable, and correctable.
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
-- Add focused tests at the domain boundary and end-to-end tests for the slice outcome.
+- Add focused tests at the domain boundary and end-to-end tests for the slice outcome. Concretely: extend the golden-gate harness (`docs/technical/testing.md`) — add the slice's business actions to `tests/golden/support/steps.ts` and cover the slice outcome in the gate spec named by its roadmap row (or a dedicated spec if no gate is due yet). A slice without an automated end-to-end check of its own outcome is not done.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
 - Record a decision in `docs/decisions/` when future agents must understand why a durable choice was made.
 
@@ -165,7 +165,7 @@ The slice is not complete until all applicable items are satisfied:
 - connected feature contracts and open decisions are updated;
 - conceptual data-model and technical docs are updated if ownership or architecture changed;
 - this roadmap records status, completion date, evidence, follow-up work, and any split/superseding slices;
-- appropriate lint, type, test, and build validation passes;
+- appropriate lint, type, test, and build validation passes — including the slice's golden-gate spec run against a production build (`bun run build` + `bun start`, then `bunx playwright test --grep @GG-XX`), with the run recorded in `docs/plans/golden-gate-log.md`;
 - a separate review finds no unresolved correctness, security, data-loss, or documentation issue.
 
 ## Cross-Cutting Invariants
@@ -616,6 +616,7 @@ Keep newest entries first. Link commits, pull requests, implementation plans, de
 
 | Date | Slice / gate | Change | Owner / evidence |
 | --- | --- | --- | --- |
+| 2026-08-04 | `P1-00` / `GG-00` | Gate extended to automated v2 (11/11 on a production build): adds job-linked time tracking, Realtime freshness across two simultaneous sessions, mobile viewport, hardened upload assertions. The cycle surfaced and fixed two real defects: `/kunden` lacked the Realtime refresh hook, and pre-hydration login submits leaked credentials into the URL (now `method="post"` + harness retry). Per-slice testing made an explicit rule in this roadmap. Remaining `GG-00` gaps: invites/onboarding, inventory take/return | This session; `docs/plans/golden-gate-log.md` |
 | 2026-08-04 | `P1-00` / `GG-00` | Golden-gate test harness established (Playwright, disposable multi-role fixture organizations, business-step helper library, per-gate specs; see `docs/technical/testing.md`). `GG-00` automated v1 passes 8/8 including a 6 MB direct-to-R2 upload and organization-isolation checks; run recorded in `docs/plans/golden-gate-log.md`. Remaining `P1-00` items narrowed to `GG-00` coverage gaps and the deploy-time region check | This session; `bun run test:golden:gg00` |
 | 2026-08-04 | `P1-00` | Baseline verification executed: generated types confirmed in sync with live schema; Realtime publication reconciled with frontend subscriptions (10 tables added via migration `add_document_and_inventory_tables_to_realtime_publication`); Vercel Functions region pinned to Frankfurt via `vercel.json`. Status `verification`; open items (regression coverage, owner-run `GG-00`, deploy-time region check) recorded in [`p1-00-baseline-verification.md`](./p1-00-baseline-verification.md) | This session; Supabase migration; baseline report |
 | 2026-08-04 | `P1-00a` | Verification progress: owner tested upload/download on a production build; folder-tree deletion exposed a pre-existing order-dependent org-validation trigger bug on `document_folders` (and latently `documents`), fixed via migrations `fix_folder_parent_validation_on_soft_delete` / `fix_document_folder_validation_on_update` with rollback-tested SQL proofs. Shared-database analysis unified both environments on `werkflow-documents-prod`; objects migrated into it (40/40 verified). CodeRabbit reviewed all changes (15 issues → 12 fixed, 3 skipped with reasons). Practical execution cautions added to this roadmap and the commercial/finance spec | This session; Supabase migrations; CodeRabbit CLI run |

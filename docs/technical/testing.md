@@ -12,7 +12,14 @@ bun run test:golden:gg00     # only GG-00
 bunx playwright test --grep @GG-03   # any single gate by tag
 ```
 
-Requirements: `.env.local` with Supabase and R2 credentials, and an app server on `http://localhost:3000` (an existing `bun run dev`/`bun start` is reused; otherwise the config starts `bun run dev`). Results/report/trace live in `tests/golden/.results` and `.report` (gitignored). Record every gate run in [`docs/plans/golden-gate-log.md`](../plans/golden-gate-log.md).
+Requirements: `.env.local` with Supabase and R2 credentials, and an app server on `http://localhost:3000` (an existing server is reused; otherwise the config starts `bun run dev`). Results/report/trace live in `tests/golden/.results` and `.report` (gitignored). Record every gate run in [`docs/plans/golden-gate-log.md`](../plans/golden-gate-log.md).
+
+Hard-earned operational rules (2026-08-04):
+
+1. **Run gates against a production build**: `bun run build`, then `bun start`, then the gate. `next dev` compiles routes on demand mid-test and produces flaky timeouts; the dev server is for iterating on a slice, the production build is for the gate that counts.
+2. **Port 3000 only.** Direct-to-R2 uploads are CORS-authorized for `http://localhost:3000`; a server on any other port makes browser uploads fail with misleading symptoms.
+3. **Never run `bun run build` while a server is serving `.next`.** The rebuild deletes the running server's chunk files; pages then load without JavaScript (broken hydration, forms fall back to native submits). Stop the server, build, start again.
+4. `KEEP_WORLD=1` skips teardown for manual debugging of a seeded world; the next run's leftover sweeper cleans it up.
 
 ## Architecture
 
