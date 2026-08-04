@@ -20,6 +20,20 @@ Hard-earned operational rules (2026-08-04):
 2. **Port 3000 only.** Direct-to-R2 uploads are CORS-authorized for `http://localhost:3000`; a server on any other port makes browser uploads fail with misleading symptoms.
 3. **Never run `bun run build` while a server is serving `.next`.** The rebuild deletes the running server's chunk files; pages then load without JavaScript (broken hydration, forms fall back to native submits). Stop the server, build, start again.
 4. `KEEP_WORLD=1` skips teardown for manual debugging of a seeded world; the next run's leftover sweeper cleans it up.
+5. Chromium is already installed (`bunx playwright install chromium` has been run on this machine); do not reinstall unless `playwright test` itself reports a missing browser.
+6. `GOLDEN_BASE_URL` can point the run at another server, but direct-to-R2 uploads will fail on any origin the bucket CORS does not allow — stick to port 3000 unless the CORS policy was deliberately extended.
+
+## Debugging Failed Runs
+
+Playwright writes three artifacts per failure into `tests/golden/.results/<test>/`:
+
+1. **`error-context.md` — read this first.** It contains the failing assertion plus a YAML accessibility snapshot of the page at failure time. Most fixes come straight from seeing what roles/names the page actually exposes (e.g. the employee picker is a `combobox`, its options are `button`s inside a `listbox`, dialogs sometimes close without a success flash).
+2. `test-failed-1.png` — screenshot.
+3. `trace.zip` — full replay (`bunx playwright show-trace <path>`), rarely needed.
+
+Known interaction gotchas are documented as comments in `tests/golden/support/steps.ts` — read them before writing new steps. The recurring classes so far: duplicate desktop/mobile text nodes (use `visibleText`), Escape closing the whole dialog instead of an inner popover (dismiss by clicking elsewhere), success flashes that do or don't exist per dialog (assert resulting state, not flashes), upload dialogs whose "abgeschlossen" counter includes failed files (also assert the absence of error text), and a pre-hydration login race (the setup retries; the form itself is hardened with `method="post"`).
+
+A test that passes must mean the business outcome happened: pair every positive assertion with the state it produced (row exists, URL changed, count is zero for the other role) rather than trusting transient UI feedback.
 
 ## Architecture
 

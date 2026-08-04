@@ -202,6 +202,17 @@ If CodeRabbit reports a quota limit:
 - Continue with manual Codex review only if the user explicitly asks for it.
 - Retry CodeRabbit later or narrow the review scope when that still makes sense.
 
+## Per-Slice Review Protocol
+
+After each Phase 1 vertical slice, run a CodeRabbit review before the slice is marked complete. The standing prompt for this lives here so it stays current; the product owner may paste it verbatim into a session.
+
+Key rules the prompt encodes:
+
+1. **Do not rewrite `.coderabbit.yaml` per review.** The yaml holds durable, repo-wide review behavior only. Touch it only when the slice changed a durable boundary it describes (a new `lib/` domain, a changed role model, a new storage/tenant invariant) — then add or adjust the matching `path_instructions` entry and keep the wording timeless.
+2. **Per-review context goes on the command line** with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature spec(s) the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
+3. **Scope to the slice's diff**: `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
+4. Findings are verified against the code before fixing; invalid findings are skipped with a stated reason; after fixes, lint/typecheck and the slice's golden-gate spec are rerun.
+
 ## WerkFlow-Specific Review Priorities
 
 When asking CodeRabbit for a review, remind it indirectly through config and context to prioritize:
