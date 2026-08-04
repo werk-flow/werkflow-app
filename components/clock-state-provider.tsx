@@ -194,7 +194,12 @@ export function ClockStateProvider({
   );
 
   useEffect(() => {
-    if (initialState?.organizationId === activeOrgId) {
+    // A server-rendered snapshot can stream in after a local mutation: a
+    // revalidation triggered around page load delivers a tree rendered before
+    // the user clocked in/out, and applying it would silently revert the
+    // mutation in the UI. Once any mutation happened, ignore the snapshot and
+    // fetch the current server state instead.
+    if (initialState?.organizationId === activeOrgId && mutationVersionRef.current === 0) {
       setState(initialState);
       setStatusError(null);
       setIsLoading(false);

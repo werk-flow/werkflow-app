@@ -19,6 +19,19 @@ export type TestWorld = {
   orgId: string;
   orgName: string;
   users: Record<TestRole, TestUser>;
+  // A confirmed user without any membership; joins the primary organization
+  // through the real invite flow during the gate. Uses a Resend test address
+  // (delivered+...@resend.dev) so the invite email sends without bouncing.
+  invitee: TestUser;
+  // Seeded inventory master data for the take/return scenario. Stock is
+  // seeded through record_inventory_movement so the ledger starts consistent.
+  inventory: {
+    itemId: string;
+    itemName: string;
+    locationId: string;
+    locationName: string;
+    initialQuantity: number;
+  };
   outsider: {
     orgId: string;
     orgName: string;

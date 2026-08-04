@@ -54,7 +54,8 @@ A test that passes must mean the business outcome happened: pair every positive 
 - Use `visibleText()` for text assertions — pages render text twice (desktop table + hidden mobile card) and strict-mode locators fail otherwise.
 - Absence assertions (`toHaveCount(0)`) prove role/organization boundaries; every gate should include at least one negative check.
 - Success signals differ per dialog: some show a flash (`Kunde erfolgreich erstellt!`), some close immediately — assert the resulting row/state, not only flashes.
-- Seeded identities use `@werkflow-golden.test` emails and org names prefixed `Golden Test SHK` / `Fremde Firma`; the leftover cleaner keys on exactly these markers. Never use these markers for real data.
+- Seeded identities use `@werkflow-golden.test` emails and org names prefixed `Golden Test SHK` / `Fremde Firma`; the invite scenario additionally uses Resend's bounce-safe test address pattern `delivered+gg-<runId>@resend.dev` so the real invite email sends without harming sender reputation. The leftover cleaner keys on exactly these markers. Never use these markers for real data.
+- `tests/golden/support/db.ts` holds read-only service-role lookups for assertions the UI cannot prove (the invite code inside the email link, stock-ledger consistency). Specs still drive every user-visible action through the UI.
 
 ## Shared-Database Caution
 
@@ -62,4 +63,4 @@ Local dev, the deployed app, and this harness currently share **one** Supabase p
 
 ## What Is Not Covered Yet
 
-Unit tests for pure logic (time math, pricing later) can use `bun test` when the first real candidates appear. Realtime freshness, invites/onboarding, time tracking, and inventory take/return are not yet automated in `GG-00` — see the gate log for per-run coverage notes.
+Unit tests for pure logic (time math, pricing later) can use `bun test` when the first real candidates appear. As of automated v3 (13/13), `GG-00` covers the full roadmap baseline scenario — role flows, documents, time tracking, Realtime freshness, mobile viewport, invites/onboarding, and inventory take/return; see the gate log for per-run notes.

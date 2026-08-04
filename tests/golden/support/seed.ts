@@ -30,9 +30,10 @@ async function createTestUser(
   runId: string,
   role: string,
   firstName: string,
-  lastName: string
+  lastName: string,
+  emailOverride?: string
 ): Promise<TestUser> {
-  const email = `gg-${role}-${runId}@werkflow-golden.test`;
+  const email = emailOverride ?? `gg-${role}-${runId}@werkflow-golden.test`;
   const password = `GgTest!${runId}#2026`;
 
   const { data, error } = await admin.auth.admin.createUser({
@@ -98,6 +99,74 @@ async function createOrganizationWithSettings(
   return org.id as string;
 }
 
+// Seeds inventory master data plus opening stock. Stock enters through the
+// same record_inventory_movement RPC the product uses, so the movement ledger
+// and inventory_stock_levels are consistent from the first row on.
+async function seedInventory(
+  admin: SupabaseClient,
+  orgId: string,
+  actorId: string,
+  runId: string
+): Promise<TestWorld['inventory']> {
+  const locationName = 'Hauptlager (Golden)';
+  const itemName = `Kupferrohr 15 mm ${runId}`;
+  const initialQuantity = 20;
+
+  const { data: location, error: locationError } = await admin
+    .from('inventory_locations')
+    .insert({
+      organization_id: orgId,
+      name: locationName,
+      location_type: 'storage',
+      created_by: actorId,
+    })
+    .select('id')
+    .single();
+  if (locationError || !location) {
+    throw new Error(`Failed to seed inventory location: ${locationError?.message}`);
+  }
+
+  const { data: item, error: itemError } = await admin
+    .from('inventory_items')
+    .insert({
+      organization_id: orgId,
+      name: itemName,
+      item_type: 'material',
+      unit: 'piece',
+      created_by: actorId,
+    })
+    .select('id')
+    .single();
+  if (itemError || !item) {
+    throw new Error(`Failed to seed inventory item: ${itemError?.message}`);
+  }
+
+  const { error: movementError } = await admin.rpc('record_inventory_movement', {
+    p_organization_id: orgId,
+    p_actor_id: actorId,
+    p_item_id: item.id,
+    p_location_id: location.id,
+    p_movement_type: 'initial_count',
+    p_quantity_delta: initialQuantity,
+    p_job_id: null,
+    p_project_id: null,
+    p_job_material_line_id: null,
+    p_import_batch_id: null,
+    p_reason: 'Golden-Gate Startbestand',
+  });
+  if (movementError) {
+    throw new Error(`Failed to seed inventory stock: ${movementError.message}`);
+  }
+
+  return {
+    itemId: item.id as string,
+    itemName,
+    locationId: location.id as string,
+    locationName,
+    initialQuantity,
+  };
+}
+
 export async function createTestWorld(): Promise<TestWorld> {
   const admin = createAdminClient();
   const runId = Date.now().toString(36);
@@ -108,6 +177,17 @@ export async function createTestWorld(): Promise<TestWorld> {
     employee: await createTestUser(admin, runId, 'employee', 'Emil', `Golden-${runId}`),
   };
   const outsiderAdmin = await createTestUser(admin, runId, 'outsider', 'Otto', `Fremd-${runId}`);
+  // The invitee joins during the gate via the real invite flow. Resend's
+  // delivered+label@resend.dev test address accepts mail without bouncing, so
+  // the gate does not damage sender reputation on every run.
+  const invitee = await createTestUser(
+    admin,
+    runId,
+    'invitee',
+    'Ida',
+    `Golden-${runId}`,
+    `delivered+gg-${runId}@resend.dev`
+  );
 
   // Organization creation is subscription-gated in the product UI; seeded
   // admins get an active subscription row so admin-gated surfaces behave.
@@ -142,11 +222,15 @@ export async function createTestWorld(): Promise<TestWorld> {
     outsiderAdmin.id
   );
 
+  const inventory = await seedInventory(admin, orgId, users.admin.id, runId);
+
   return {
     runId,
     orgId,
     orgName,
     users,
+    invitee,
+    inventory,
     outsider: { orgId: outsiderOrgId, orgName: outsiderOrgName, admin: outsiderAdmin },
   };
 }
@@ -179,6 +263,7 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
     world.users.admin,
     world.users.buero,
     world.users.employee,
+    world.invitee,
     world.outsider.admin,
   ];
 
@@ -231,7 +316,10 @@ export async function destroyLeftoverTestWorlds(): Promise<number> {
   const { data: userList } = await admin.auth.admin.listUsers({ perPage: 1000 });
   let removedUsers = 0;
   for (const user of userList?.users ?? []) {
-    if (user.email?.endsWith('@werkflow-golden.test')) {
+    const isGoldenTestUser =
+      user.email?.endsWith('@werkflow-golden.test') ||
+      (user.email?.startsWith('delivered+gg-') && user.email?.endsWith('@resend.dev'));
+    if (isGoldenTestUser) {
       await admin.from('subscriptions').delete().eq('user_id', user.id);
       await admin.auth.admin.deleteUser(user.id);
       removedUsers++;

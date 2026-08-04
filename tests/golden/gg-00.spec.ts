@@ -1,13 +1,18 @@
 import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
+import { getInventoryLedgerState, getPendingInviteCode } from './support/db';
 import {
   clockInOnJob,
   clockOut,
   createCustomer,
   createJob,
   expectRedirectedAway,
+  inviteMember,
+  joinOrganizationViaInviteLink,
+  returnMaterialOnJobPage,
   signOutViaUi,
+  takeMaterialOnJobPage,
   uploadDocumentOnJobPage,
   visibleText,
 } from './support/steps';
@@ -106,6 +111,65 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await page.goto('/auftraege');
     await expect(visibleText(page, `GG-${world.runId}-1`)).toBeVisible();
     await context.close();
+  });
+
+  test('Einladung: Eingeladene Person tritt bei und sieht Büro-Oberflächen', async ({
+    adminPage,
+    browser,
+    world,
+  }) => {
+    await inviteMember(adminPage, world.invitee.email, 'Büro');
+    // Reading the code from the database stands in for opening the invite
+    // email; the join itself runs through the real link and login UI.
+    const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
+
+    const context = await browser.newContext({ locale: 'de-DE' });
+    const page = await context.newPage();
+    await joinOrganizationViaInviteLink(page, inviteCode, world.invitee, world.orgId);
+
+    // Role-appropriate surface: the new Büro member reaches the manager-only
+    // document library (employees are redirected away from it) and sees the
+    // organization's previously uploaded document.
+    await page.goto('/dokumente');
+    await expect(page).toHaveURL(/\/dokumente$/);
+    await expect(visibleText(page, 'upload-fixture')).toBeVisible({ timeout: 15_000 });
+    await context.close();
+
+    // The admin's member list now contains the new member.
+    await adminPage.goto('/mitarbeiter');
+    await expect(visibleText(adminPage, world.invitee.firstName)).toBeVisible();
+  });
+
+  test('Inventar: Mitarbeiter entnimmt Material auf dem Auftrag und legt es zurück', async ({
+    employeePage,
+    adminPage,
+    world,
+  }) => {
+    const { itemId, itemName, locationId, initialQuantity } = world.inventory;
+    const jobNumber = `GG-${world.runId}-1`;
+
+    await takeMaterialOnJobPage(employeePage, jobNumber, itemName, 3);
+    await expect(visibleText(employeePage, itemName)).toBeVisible();
+
+    const afterTake = await getInventoryLedgerState(world.orgId, itemId, locationId);
+    expect(afterTake.quantityOnHand).toBe(initialQuantity - 3);
+    expect(afterTake.movementTotal).toBe(afterTake.quantityOnHand);
+    expect(afterTake.lastQuantityAfter).toBe(afterTake.quantityOnHand);
+
+    await returnMaterialOnJobPage(employeePage, jobNumber, 3);
+    await expect(visibleText(employeePage, 'Noch draußen: 0 Stück')).toBeVisible();
+
+    // Ledger consistency: stock level, sum of movement deltas, and the last
+    // movement's running total must all agree after take + return.
+    const afterReturn = await getInventoryLedgerState(world.orgId, itemId, locationId);
+    expect(afterReturn.quantityOnHand).toBe(initialQuantity);
+    expect(afterReturn.movementTotal).toBe(initialQuantity);
+    expect(afterReturn.lastQuantityAfter).toBe(initialQuantity);
+    expect(afterReturn.movementCount).toBe(3);
+
+    // The manager inventory surface shows the item after the round trip.
+    await adminPage.goto('/inventar');
+    await expect(visibleText(adminPage, itemName)).toBeVisible();
   });
 
   test('Mitarbeiter hat keinen Zugriff auf Bibliothek und Inventar', async ({

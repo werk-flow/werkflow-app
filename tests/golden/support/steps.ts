@@ -116,6 +116,111 @@ export async function clockOut(page: Page): Promise<void> {
   await expect(page.locator('button[title="Einstempeln"]')).toBeVisible({ timeout: 15_000 });
 }
 
+export async function inviteMember(
+  page: Page,
+  email: string,
+  roleLabel: 'Büro' | 'Handwerker/in'
+): Promise<void> {
+  await page.goto('/mitarbeiter');
+  await page.getByRole('button', { name: 'Mitarbeiter hinzufügen' }).click();
+  await expect(page.getByRole('heading', { name: 'Mitarbeiter einladen' })).toBeVisible();
+  await page.locator('#email').fill(email);
+  // Role picker is a Radix select; its options render with role "option".
+  await page.locator('#role').click();
+  await page.getByRole('option', { name: roleLabel, exact: true }).click();
+  await page.getByRole('button', { name: 'Einladung senden' }).click();
+  // The invite action inserts the invite and sends the email before reporting
+  // success; the dialog closes itself two seconds after the flash.
+  await expect(page.getByText('Einladung erfolgreich gesendet!')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole('heading', { name: 'Mitarbeiter einladen' })).toBeHidden({
+    timeout: 10_000,
+  });
+}
+
+// Simulates the invited existing user clicking the email's invite link:
+// /auth/callback?invite_code=... bounces to /login, and a successful login
+// redeems the invite and lands on /dashboard?joined=<orgId>.
+export async function joinOrganizationViaInviteLink(
+  page: Page,
+  inviteCode: string,
+  credentials: { email: string; password: string },
+  expectedOrgId: string
+): Promise<void> {
+  // already_member also counts: it means an earlier (slow) attempt already
+  // redeemed the invite before the retry re-opened the link.
+  const confirmationUrl = new RegExp(
+    `/dashboard\\?(joined|already_member)=${expectedOrgId}`
+  );
+
+  let joined = false;
+  for (let attempt = 1; attempt <= 3 && !joined; attempt++) {
+    // The invite link itself is idempotent: logged-out users bounce to
+    // /login?invite_code=..., logged-in users are redeemed server-side and
+    // land directly on the dashboard confirmation URL.
+    await page.goto(`/auth/callback?invite_code=${inviteCode}`);
+    if (confirmationUrl.test(page.url())) {
+      joined = true;
+      break;
+    }
+    if (!page.url().includes('/login')) {
+      continue;
+    }
+
+    // Same pre-hydration caution as the global setup's login helper.
+    await page.waitForLoadState('networkidle');
+    await page.locator('input[autocomplete="email"]').fill(credentials.email);
+    await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
+    await page.getByRole('button', { name: 'Anmelden' }).click();
+    joined = await page
+      .waitForURL(confirmationUrl, { timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  if (!joined) {
+    throw new Error(
+      `Invited user ${credentials.email} did not reach /dashboard?joined=${expectedOrgId}`
+    );
+  }
+}
+
+export async function takeMaterialOnJobPage(
+  page: Page,
+  jobNumber: string,
+  itemName: string,
+  quantity: number
+): Promise<void> {
+  await page.goto(`/auftraege/${jobNumber}`);
+  await expect(page.getByText('Material & Inventar')).toBeVisible();
+  await page.getByRole('button', { name: 'Aus Lager entnehmen' }).click();
+  await expect(page.getByRole('heading', { name: 'Entnahme buchen' })).toBeVisible();
+
+  // Pick the item from the search list; a row with quantity 1 appears.
+  await page.getByRole('dialog').getByRole('button').filter({ hasText: itemName }).first().click();
+  await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
+
+  // The line rows outside the dialog also carry an "Entnahme buchen" button,
+  // so the confirm click must stay scoped to the dialog.
+  await page.getByRole('dialog').getByRole('button', { name: 'Entnahme buchen' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function returnMaterialOnJobPage(
+  page: Page,
+  jobNumber: string,
+  quantity: number
+): Promise<void> {
+  await page.goto(`/auftraege/${jobNumber}`);
+  await expect(page.getByText('Material & Inventar')).toBeVisible();
+  await page.getByRole('button', { name: 'Zurücklegen' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Material zurücklegen' })).toBeVisible();
+
+  await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
+  await page.getByRole('dialog').getByRole('button', { name: 'Zurücklegen' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {
   await page.goto(path);
   await expect(page).not.toHaveURL(new RegExp(`${path.replace('/', '\\/')}$`), {
