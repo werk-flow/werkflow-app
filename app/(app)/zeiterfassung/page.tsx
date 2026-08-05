@@ -12,6 +12,7 @@ import {
   getCurrentClockState,
   getTimeEntries,
 } from '@/lib/time-tracking/actions';
+import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { LiveClockState, ZeiterfassungOverview } from '@/lib/time-tracking/types';
 import {
@@ -54,16 +55,20 @@ async function getInitialOverview(
   const weekLabel = computeWeekLabel(monday);
   const todayIndex = getTodayIndex();
 
-  const [clockStateResult, weekEntriesResult, organizationSettings] = await Promise.all([
-    getCurrentClockState(activeOrgId),
-    getTimeEntries({
-      organizationId: activeOrgId,
-      from: monday.toISOString(),
-      to: sunday.toISOString(),
-      userId,
-    }),
-    getCachedOrganizationSettings(activeOrgId),
-  ]);
+  const [clockStateResult, weekEntriesResult, organizationSettings, targetsResult] =
+    await Promise.all([
+      getCurrentClockState(activeOrgId),
+      getTimeEntries({
+        organizationId: activeOrgId,
+        from: monday.toISOString(),
+        to: sunday.toISOString(),
+        userId,
+      }),
+      getCachedOrganizationSettings(activeOrgId),
+      getWeeklyTargets({ userId }),
+    ]);
+
+  const weekTargets = targetsResult.success ? targetsResult.targets : undefined;
 
   return {
     clockState: clockStateResult.success
@@ -71,10 +76,16 @@ async function getInitialOverview(
       : createDefaultClockState(activeOrgId, organizationSettings),
     weekData:
       weekEntriesResult.success && weekEntriesResult.entries
-        ? buildWeeklyTimeData(weekEntriesResult.entries, monday, organizationSettings)
+        ? buildWeeklyTimeData(
+            weekEntriesResult.entries,
+            monday,
+            organizationSettings,
+            weekTargets
+          )
         : [],
     todayIndex,
     weekLabel,
+    weekTargets,
   };
 }
 

@@ -16,9 +16,9 @@ import { JobPickerModal } from '@/components/job-picker-modal';
 import {
   formatDuration,
   getNonNegativeElapsedMs,
-  WORK_GOAL_MINUTES,
 } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
+import { getTargetSourceHint } from '@/lib/personnel/targets';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
@@ -89,6 +89,7 @@ export function ZeiterfassungDashboard({
 
   const {
     weekData,
+    weekTargets,
     todayIndex,
     weekLabel,
   } = useWeeklyTimeData({
@@ -100,6 +101,7 @@ export function ZeiterfassungDashboard({
     initialWeekData: initialOverview.weekData,
     initialTodayIndex: initialOverview.todayIndex,
     initialWeekLabel: initialOverview.weekLabel,
+    initialWeekTargets: initialOverview.weekTargets,
   });
 
   const [liveTime, setLiveTime] = useState('00:00:00');
@@ -180,17 +182,23 @@ export function ZeiterfassungDashboard({
           ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
           : 0)
       : effectiveState.breakMinutes;
+  // Today's resolved target (P1-04): schedule → derived → labeled default.
+  const todayTarget = weekTargets?.[todayIndex];
+  const todayTargetMinutes = todayTarget?.targetMinutes;
+  const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
+
   const breakdown = computeBreakdownForSettings(
     liveTotalMinutes,
     trackedLiveBreakMinutes,
-    effectiveState
+    effectiveState,
+    todayTargetMinutes
   );
   const liveWorkMinutes = breakdown.workMinutes;
   const liveBreakMinutes = breakdown.breakMinutes;
-  const workPercentage = Math.min(
-    Math.round((liveWorkMinutes / WORK_GOAL_MINUTES) * 100),
-    100
-  );
+  const workPercentage =
+    todayTargetMinutes !== undefined && todayTargetMinutes > 0
+      ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
+      : null;
   const ringTimelineSegments =
     effectiveState.breakMode === 'manual' ? liveTimelineSegments : undefined;
 
@@ -219,6 +227,7 @@ export function ZeiterfassungDashboard({
           totalMinutes={liveTotalMinutes}
           breakMinutes={liveBreakMinutes}
           timelineSegments={ringTimelineSegments}
+          targetMinutes={todayTargetMinutes}
           size={260}
           strokeWidth={14}
           isActive={effectiveState.isClockedIn}
@@ -253,9 +262,31 @@ export function ZeiterfassungDashboard({
           </p>
         ) : null}
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Tagesziel: 8 Stunden Arbeitszeit ({workPercentage}% erreicht)
-        </p>
+        {todayTarget?.isHoliday ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Feiertag: {todayTarget.holidayName} – heute keine Sollarbeitszeit.
+          </p>
+        ) : todayTarget?.isClosureDay ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Betriebsruhe
+            {todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} –
+            heute keine Sollarbeitszeit.
+          </p>
+        ) : todayTarget && todayTarget.targetMinutes === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Laut Arbeitszeitmodell heute kein Arbeitstag.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tagesziel: {formatDuration(todayTargetMinutes ?? 480)} Arbeitszeit
+            {workPercentage !== null ? ` (${workPercentage}% erreicht)` : ''}
+          </p>
+        )}
+        {todayTargetHint && (
+          <p className="mt-1 max-w-sm text-center text-xs text-muted-foreground/80">
+            {todayTargetHint}
+          </p>
+        )}
 
         {/* Time breakdown indicators */}
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs">
@@ -468,6 +499,7 @@ export function ZeiterfassungDashboard({
                   liveAutoBreakDurationMinutes={effectiveState.autoBreakDurationMinutes}
                   narrowBars
                   weekLabel={weekLabel}
+                  weekTargets={weekTargets}
                 />
               </>
             )}

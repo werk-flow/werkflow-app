@@ -41,6 +41,7 @@ import {
   MANUAL_ENTRY_CREATED_EVENT
 } from '@/lib/time-tracking/manual-entry-bridge';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
+import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -75,6 +76,8 @@ interface CalendarContainerProps {
   isAdminOrManager: boolean;
   members: CalendarMember[];
   organizationSettings: OrganizationTimeTrackingSettings;
+  /** Holiday/closure context (P1-04), shown in the month view. */
+  holidayCalendar?: OrganizationHolidayCalendar;
   initialEntries?: TimeEntry[];
   initialChangeRequestMap?: EntryChangeRequestMap;
   initialJobs?: CalendarJob[];
@@ -97,6 +100,7 @@ export function CalendarContainer({
   isAdminOrManager,
   members,
   organizationSettings,
+  holidayCalendar,
   initialEntries,
   initialChangeRequestMap,
   initialJobs
@@ -1478,6 +1482,7 @@ export function CalendarContainer({
             entries={filteredEntries}
             members={members}
             organizationSettings={organizationSettings}
+            holidayCalendar={holidayCalendar}
             currentUserId={currentUserId}
             isAdminOrManager={isAdminOrManager}
             onEventClick={handleEventClick}

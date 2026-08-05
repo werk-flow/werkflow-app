@@ -112,6 +112,40 @@ export async function getEmployeeRecordStateByUser(
   };
 }
 
+// P1-04: which work-schedule rows a real signed-in user can see under RLS.
+// The UI never shows foreign schedules, so the self-or-manager SELECT policy
+// (managers all org rows, a person exactly their own) is proved here.
+// Deliberately no signOut: the default scope would revoke the user's other
+// sessions and break the browser fixtures of later tests.
+export async function getVisibleWorkScheduleRecordIdsAs(
+  user: { email: string; password: string },
+  orgId: string
+): Promise<string[]> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (signInError) {
+    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
+  }
+
+  const { data, error } = await client
+    .from('work_schedules')
+    .select('employee_record_id')
+    .eq('organization_id', orgId);
+  if (error) {
+    throw new Error(`work_schedules query failed for ${user.email}: ${error.message}`);
+  }
+
+  return [...new Set((data ?? []).map((row) => row.employee_record_id as string))];
+}
+
 export type InventoryLedgerState = {
   quantityOnHand: number;
   movementTotal: number;

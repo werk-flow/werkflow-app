@@ -20,12 +20,14 @@ import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
+import type { DailyTarget } from '@/lib/personnel/targets';
 
 interface MitarbeiterTabsProps {
   members: OrgMember[];
   invites: Invite[];
   personnelEntries: PersonnelListEntry[];
   personnelProfileNames: Record<string, string>;
+  targetsByUserId?: Record<string, DailyTarget>;
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
@@ -36,6 +38,7 @@ export function MitarbeiterTabs({
   invites: initialInvites,
   personnelEntries,
   personnelProfileNames,
+  targetsByUserId,
   currentUserId,
   currentUserRole,
   organizationId
@@ -110,6 +113,8 @@ export function MitarbeiterTabs({
   useRealtimeEvent('organization_invites', handleRefresh);
   useRealtimeEvent('employee_records', handleRefresh);
   useRealtimeEvent('employment_conditions', handleRefresh);
+  useRealtimeEvent('work_schedules', handleRefresh);
+  useRealtimeEvent('organization_closure_days', handleRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(
@@ -197,6 +202,7 @@ export function MitarbeiterTabs({
             isLoading={isPending || isStatusLoading}
             skeletonCount={prevMemberCount}
             statusMap={statusMap}
+            targetsByUserId={targetsByUserId}
           />
           <PersonnelRecordsSection
             entries={personnelWithoutMembership}

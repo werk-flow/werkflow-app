@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import type { DailyTarget } from '@/lib/personnel/targets';
 
 interface HoursDisplayProps {
   status?: 'clocked_out' | 'working' | 'on_break';
@@ -11,9 +12,12 @@ interface HoursDisplayProps {
   workMinutes: number;
   /** Whether the viewer has permission to see this member's progress */
   canViewStatus?: boolean;
+  /** Resolved daily target (P1-04); without it the legacy 8h goal applies. */
+  target?: DailyTarget;
 }
 
-// Daily goal in minutes (8 hours)
+// Legacy daily goal in minutes (8 hours); only used when no resolved target
+// is available — equals the labeled `default` target source.
 const DAILY_GOAL_MINUTES = 8 * 60; // 480 minutes
 
 /**
@@ -34,10 +38,11 @@ function calculateTotalMinutes(
 }
 
 /**
- * Calculate percentage towards daily goal (capped at 100%)
+ * Calculate percentage towards the daily goal (capped at 100%)
  */
-function calculatePercentage(totalMinutes: number): number {
-  const percentage = (totalMinutes / DAILY_GOAL_MINUTES) * 100;
+function calculatePercentage(totalMinutes: number, goalMinutes: number): number {
+  if (goalMinutes <= 0) return 0;
+  const percentage = (totalMinutes / goalMinutes) * 100;
   return Math.min(percentage, 100);
 }
 
@@ -53,7 +58,8 @@ export function HoursDisplay({
   status,
   statusStartedAt,
   workMinutes,
-  canViewStatus = true
+  canViewStatus = true,
+  target
 }: HoursDisplayProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
   const [nowMs, setNowMs] = useState(() =>
@@ -87,9 +93,26 @@ export function HoursDisplay({
     [effectiveStatus, nowMs, statusStartedAt, workMinutes]
   );
 
+  const goalMinutes = target?.targetMinutes ?? DAILY_GOAL_MINUTES;
+  // Visible exception, not a silent assumption: mark unconfigured members.
+  const goalHint =
+    target?.source === 'default'
+      ? 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden'
+      : target?.source === 'derived'
+        ? 'Ziel aus den Wochenstunden der Beschäftigung abgeleitet'
+        : undefined;
+  const zeroTargetReason =
+    target && target.targetMinutes === 0
+      ? target.isHoliday
+        ? `Feiertag: ${target.holidayName}`
+        : target.isClosureDay
+          ? 'Betriebsruhe'
+          : 'Kein Arbeitstag laut Wochenplan'
+      : undefined;
+
   const percentage = useMemo(
-    () => calculatePercentage(totalMinutes),
-    [totalMinutes]
+    () => calculatePercentage(totalMinutes, goalMinutes),
+    [goalMinutes, totalMinutes]
   );
 
   // Determine indicator color based on progress
@@ -114,8 +137,26 @@ export function HoursDisplay({
     );
   }
 
+  if (zeroTargetReason) {
+    return (
+      <div
+        className="flex items-center gap-2 min-w-[100px]"
+        title={zeroTargetReason}
+      >
+        <Progress
+          value={0}
+          className="h-2 flex-1 bg-muted/30"
+          indicatorClassName="bg-muted-foreground/30"
+        />
+        <span className="truncate text-xs font-medium text-muted-foreground">
+          {zeroTargetReason}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 min-w-[100px]">
+    <div className="flex items-center gap-2 min-w-[100px]" title={goalHint}>
       <Progress
         value={percentage}
         className={cn('h-2 flex-1 bg-muted/50')}
@@ -134,6 +175,12 @@ export function HoursDisplay({
       >
         {formatPercentage(percentage)}
       </span>
+      {target?.source === 'default' && (
+        <span
+          aria-label="Kein Arbeitszeitmodell hinterlegt"
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-yellow-500"
+        />
+      )}
     </div>
   );
 }

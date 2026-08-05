@@ -2142,6 +2142,41 @@ export type Database = {
           },
         ]
       }
+      organization_closure_days: {
+        Row: {
+          closure_date: string
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string | null
+          organization_id: string
+        }
+        Insert: {
+          closure_date: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          organization_id: string
+        }
+        Update: {
+          closure_date?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_closure_days_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_invites: {
         Row: {
           accepted_at: string | null
@@ -2225,6 +2260,8 @@ export type Database = {
           break_mode: Database["public"]["Enums"]["time_tracking_break_mode"]
           break_policy_history: Json
           created_at: string
+          holiday_region: string | null
+          holiday_region_history: Json
           organization_id: string
           updated_at: string
         }
@@ -2234,6 +2271,8 @@ export type Database = {
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"]
           break_policy_history?: Json
           created_at?: string
+          holiday_region?: string | null
+          holiday_region_history?: Json
           organization_id: string
           updated_at?: string
         }
@@ -2243,6 +2282,8 @@ export type Database = {
           break_mode?: Database["public"]["Enums"]["time_tracking_break_mode"]
           break_policy_history?: Json
           created_at?: string
+          holiday_region?: string | null
+          holiday_region_history?: Json
           organization_id?: string
           updated_at?: string
         }
@@ -2512,6 +2553,75 @@ export type Database = {
           },
           {
             foreignKeyName: "time_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_schedules: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          friday_minutes: number
+          id: string
+          monday_minutes: number
+          note: string | null
+          organization_id: string
+          saturday_minutes: number
+          sunday_minutes: number
+          thursday_minutes: number
+          tuesday_minutes: number
+          updated_at: string
+          valid_from: string
+          wednesday_minutes: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          friday_minutes?: number
+          id?: string
+          monday_minutes?: number
+          note?: string | null
+          organization_id: string
+          saturday_minutes?: number
+          sunday_minutes?: number
+          thursday_minutes?: number
+          tuesday_minutes?: number
+          updated_at?: string
+          valid_from: string
+          wednesday_minutes?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          friday_minutes?: number
+          id?: string
+          monday_minutes?: number
+          note?: string | null
+          organization_id?: string
+          saturday_minutes?: number
+          sunday_minutes?: number
+          thursday_minutes?: number
+          tuesday_minutes?: number
+          updated_at?: string
+          valid_from?: string
+          wednesday_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_schedules_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_schedules_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

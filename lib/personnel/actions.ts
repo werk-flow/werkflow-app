@@ -17,6 +17,7 @@ import {
   type EmploymentCondition,
   type EmploymentType,
 } from '@/lib/personnel/types';
+import { toWorkSchedule, type WorkSchedule } from '@/lib/personnel/schedule';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -176,6 +177,7 @@ export async function getPersonnelRecords(): Promise<
 export type PersonnelDetail = {
   record: EmployeeRecord;
   conditions: EmploymentCondition[];
+  schedules: WorkSchedule[];
   events: EmployeeRecordEvent[];
   hasPendingInvite: boolean;
   // Present when the record is linked to a login.
@@ -224,9 +226,14 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
       return { success: false, error: 'record_not_found' };
     }
 
-    const [conditionsResult, eventsResult, profileResult] = await Promise.all([
+    const [conditionsResult, schedulesResult, eventsResult, profileResult] = await Promise.all([
       admin
         .from('employment_conditions')
+        .select('*')
+        .eq('employee_record_id', row.id)
+        .order('valid_from', { ascending: false }),
+      admin
+        .from('work_schedules')
         .select('*')
         .eq('employee_record_id', row.id)
         .order('valid_from', { ascending: false }),
@@ -257,6 +264,7 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
       detail: {
         record: toEmployeeRecord(row),
         conditions: (conditionsResult.data ?? []).map(toEmploymentCondition),
+        schedules: (schedulesResult.data ?? []).map(toWorkSchedule),
         events: (eventsResult.data ?? []).map(toEmployeeRecordEvent),
         hasPendingInvite: invite?.status === 'pending',
         profileName: profile ? formatProfileName(profile) : null,
@@ -746,6 +754,264 @@ export async function deleteEmploymentCondition(
     return { success: true };
   } catch (error) {
     console.error('Unexpected error in deleteEmploymentCondition:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+// ============================================
+// Work Schedules (date-effective weekly patterns, P1-04)
+// ============================================
+
+export type WorkScheduleInput = {
+  validFrom: string;
+  /** Minutes per weekday, index 0 = Montag … 6 = Sonntag. */
+  dayMinutes: number[];
+  note?: string | null;
+};
+
+function validateScheduleInput(input: WorkScheduleInput): string | null {
+  if (!input.validFrom || !isValidIsoDate(input.validFrom)) {
+    return 'invalid_valid_from';
+  }
+  if (!Array.isArray(input.dayMinutes) || input.dayMinutes.length !== 7) {
+    return 'invalid_day_minutes';
+  }
+  for (const minutes of input.dayMinutes) {
+    if (
+      !Number.isInteger(minutes) ||
+      minutes < 0 ||
+      minutes > 1440
+    ) {
+      return 'invalid_day_minutes';
+    }
+  }
+  return null;
+}
+
+function scheduleAuditPayload(input: {
+  validFrom: string;
+  dayMinutes: number[];
+  note: string | null;
+}): Record<string, unknown> {
+  return {
+    valid_from: input.validFrom,
+    day_minutes: input.dayMinutes,
+    weekly_minutes: input.dayMinutes.reduce((total, m) => total + m, 0),
+    note: input.note,
+  };
+}
+
+export async function addWorkSchedule(
+  recordId: string,
+  input: WorkScheduleInput
+): Promise<UpdatePersonnelResult> {
+  try {
+    const guard = await requireManagerAndRecord(recordId);
+    if (!guard.success) return guard;
+    const { orgId, userId, admin } = guard.context;
+
+    const validationError = validateScheduleInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
+    const [mon, tue, wed, thu, fri, sat, sun] = input.dayMinutes;
+    const { data, error } = await admin
+      .from('work_schedules')
+      .insert({
+        organization_id: orgId,
+        employee_record_id: recordId,
+        valid_from: input.validFrom,
+        monday_minutes: mon,
+        tuesday_minutes: tue,
+        wednesday_minutes: wed,
+        thursday_minutes: thu,
+        friday_minutes: fri,
+        saturday_minutes: sat,
+        sunday_minutes: sun,
+        note: normalizeOptionalText(input.note),
+        created_by: userId,
+      })
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      if (error?.code === '23505') {
+        return { success: false, error: 'duplicate_valid_from' };
+      }
+      console.error('Failed to add work schedule:', error);
+      return { success: false, error: 'create_failed' };
+    }
+
+    await recordPersonnelEvent(admin, {
+      orgId,
+      employeeRecordId: recordId,
+      eventType: 'schedule_added',
+      eventPayload: {
+        schedule_id: data.id,
+        ...scheduleAuditPayload({
+          validFrom: input.validFrom,
+          dayMinutes: input.dayMinutes,
+          note: normalizeOptionalText(input.note),
+        }),
+      },
+      actorId: userId,
+    });
+
+    updateTag(CACHE_TAGS.personnel(orgId));
+
+    return { success: true };
+  } catch (error) {
+    console.error('Unexpected error in addWorkSchedule:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+async function requireManagerAndSchedule(scheduleId: string): Promise<
+  | {
+      success: true;
+      context: { orgId: string; userId: string; admin: AdminClient };
+      schedule: WorkSchedule;
+    }
+  | { success: false; error: string }
+> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  const { orgId, userId, isManagerOrAbove } = auth.context;
+
+  if (!isManagerOrAbove) {
+    return { success: false, error: 'not_authorized' };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from('work_schedules')
+    .select('*')
+    .eq('id', scheduleId)
+    .eq('organization_id', orgId)
+    .single();
+
+  if (error || !data) {
+    return { success: false, error: 'schedule_not_found' };
+  }
+
+  return {
+    success: true,
+    context: { orgId, userId, admin },
+    schedule: toWorkSchedule(data),
+  };
+}
+
+export async function updateWorkSchedule(
+  scheduleId: string,
+  input: WorkScheduleInput
+): Promise<UpdatePersonnelResult> {
+  try {
+    const guard = await requireManagerAndSchedule(scheduleId);
+    if (!guard.success) return guard;
+    const { orgId, userId, admin } = guard.context;
+    const { schedule } = guard;
+
+    const validationError = validateScheduleInput(input);
+    if (validationError) {
+      return { success: false, error: validationError };
+    }
+
+    const [mon, tue, wed, thu, fri, sat, sun] = input.dayMinutes;
+    const { error } = await admin
+      .from('work_schedules')
+      .update({
+        valid_from: input.validFrom,
+        monday_minutes: mon,
+        tuesday_minutes: tue,
+        wednesday_minutes: wed,
+        thursday_minutes: thu,
+        friday_minutes: fri,
+        saturday_minutes: sat,
+        sunday_minutes: sun,
+        note: normalizeOptionalText(input.note),
+      })
+      .eq('id', scheduleId)
+      .eq('organization_id', orgId);
+
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: 'duplicate_valid_from' };
+      }
+      console.error('Failed to update work schedule:', error);
+      return { success: false, error: 'update_failed' };
+    }
+
+    // Corrections stay traceable: the audit event keeps the full before/after.
+    await recordPersonnelEvent(admin, {
+      orgId,
+      employeeRecordId: schedule.employeeRecordId,
+      eventType: 'schedule_updated',
+      eventPayload: {
+        schedule_id: scheduleId,
+        before: scheduleAuditPayload({
+          validFrom: schedule.validFrom,
+          dayMinutes: schedule.dayMinutes,
+          note: schedule.note,
+        }),
+        after: scheduleAuditPayload({
+          validFrom: input.validFrom,
+          dayMinutes: input.dayMinutes,
+          note: normalizeOptionalText(input.note),
+        }),
+      },
+      actorId: userId,
+    });
+
+    updateTag(CACHE_TAGS.personnel(orgId));
+
+    return { success: true };
+  } catch (error) {
+    console.error('Unexpected error in updateWorkSchedule:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+export async function deleteWorkSchedule(
+  scheduleId: string
+): Promise<UpdatePersonnelResult> {
+  try {
+    const guard = await requireManagerAndSchedule(scheduleId);
+    if (!guard.success) return guard;
+    const { orgId, userId, admin } = guard.context;
+    const { schedule } = guard;
+
+    const { error } = await admin
+      .from('work_schedules')
+      .delete()
+      .eq('id', scheduleId)
+      .eq('organization_id', orgId);
+
+    if (error) {
+      console.error('Failed to delete work schedule:', error);
+      return { success: false, error: 'delete_failed' };
+    }
+
+    await recordPersonnelEvent(admin, {
+      orgId,
+      employeeRecordId: schedule.employeeRecordId,
+      eventType: 'schedule_deleted',
+      eventPayload: {
+        schedule_id: scheduleId,
+        deleted: scheduleAuditPayload({
+          validFrom: schedule.validFrom,
+          dayMinutes: schedule.dayMinutes,
+          note: schedule.note,
+        }),
+      },
+      actorId: userId,
+    });
+
+    updateTag(CACHE_TAGS.personnel(orgId));
+
+    return { success: true };
+  } catch (error) {
+    console.error('Unexpected error in deleteWorkSchedule:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

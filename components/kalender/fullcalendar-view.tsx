@@ -24,6 +24,10 @@ import type { CalendarView } from './calendar-container';
 import { JobEventPopover } from './job-event-popover';
 import { clearCalendarDragState, startCalendarDragState } from './drag-state';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
+import {
+  getHolidayContextDays,
+  type OrganizationHolidayCalendar,
+} from '@/lib/personnel/targets';
 
 interface CalendarMember {
   user_id: string;
@@ -39,6 +43,8 @@ interface FullCalendarViewProps {
   entries: TimeEntry[];
   members: CalendarMember[];
   organizationSettings: OrganizationTimeTrackingSettings;
+  /** Holiday/closure context (P1-04): labeled all-day context in the month view. */
+  holidayCalendar?: OrganizationHolidayCalendar;
   currentUserId: string;
   isAdminOrManager: boolean;
   onEventClick: (session: InteractiveCalendarSession) => void;
@@ -67,6 +73,7 @@ export function FullCalendarView({
   entries,
   members,
   organizationSettings,
+  holidayCalendar,
   currentUserId,
   isAdminOrManager,
   onEventClick,
@@ -429,9 +436,40 @@ export function FullCalendarView({
     }).filter((e): e is NonNullable<typeof e> => e !== null);
   }, [jobs]);
 
+  // Holiday and closure context (P1-04): non-interactive all-day entries so
+  // planners see days without Sollarbeitszeit. Deliberately display-only —
+  // capacity/conflict behavior is later scope (P1-11).
+  const holidayContextEvents = useMemo(() => {
+    if (!holidayCalendar) return [];
+    const year = date.getFullYear();
+    const holidayDays = getHolidayContextDays(holidayCalendar, year - 1, year + 1);
+
+    const holidayEvents = holidayDays.map((holiday) => ({
+      id: `holiday-${holiday.date}`,
+      title: holiday.name,
+      start: holiday.date,
+      allDay: true,
+      editable: false,
+      classNames: ['fc-holiday-context'],
+      extendedProps: { isHolidayContext: true },
+    }));
+
+    const closureEvents = holidayCalendar.closureDays.map((day) => ({
+      id: `closure-${day.closureDate}`,
+      title: day.label ?? 'Betriebsruhe',
+      start: day.closureDate,
+      allDay: true,
+      editable: false,
+      classNames: ['fc-holiday-context'],
+      extendedProps: { isHolidayContext: true },
+    }));
+
+    return [...holidayEvents, ...closureEvents];
+  }, [date, holidayCalendar]);
+
   const allEvents = useMemo(
-    () => [...events, ...jobEvents],
-    [events, jobEvents]
+    () => [...events, ...jobEvents, ...holidayContextEvents],
+    [events, jobEvents, holidayContextEvents]
   );
 
   // Sync date with FullCalendar
@@ -586,6 +624,11 @@ export function FullCalendarView({
   }, []);
 
   const handleEventClick = (info: EventClickArg) => {
+    // Holiday/closure context is informational only.
+    if (info.event.extendedProps.isHolidayContext) {
+      return;
+    }
+
     if (info.event.extendedProps.isJobEvent) {
       const job = info.event.extendedProps.job as CalendarJob;
       const rect = info.el.getBoundingClientRect();
@@ -735,6 +778,17 @@ export function FullCalendarView({
   };
 
   const renderEventContent = (eventInfo: EventContentArg) => {
+    if (eventInfo.event.extendedProps.isHolidayContext) {
+      return (
+        <div
+          className="w-full overflow-hidden truncate px-1 text-[11px] font-medium"
+          title={eventInfo.event.title}
+        >
+          {eventInfo.event.title}
+        </div>
+      );
+    }
+
     if (eventInfo.event.extendedProps.isJobEvent) {
       const job = eventInfo.event.extendedProps.job as CalendarJob;
       return (

@@ -1,4 +1,5 @@
 import type { TimeEntry, WeeklyTimeDataPoint, WeeklyTimeLabel } from './types';
+import type { DailyTarget } from '@/lib/personnel/targets';
 import {
   calculateBreakMinutes,
   calculateTotalMinutes,
@@ -66,7 +67,10 @@ export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
 export function buildWeeklyTimeData(
   entries: TimeEntry[],
   monday: Date,
-  settings: OrganizationTimeTrackingSettings
+  settings: OrganizationTimeTrackingSettings,
+  // Monday-first resolved targets (P1-04); joined by index so a server/client
+  // date-key drift can never mis-assign a day's target.
+  weekTargets?: DailyTarget[]
 ): WeeklyTimeDataPoint[] {
   const grouped = groupEntriesByDate(entries);
   const days: WeeklyTimeDataPoint[] = [];
@@ -83,10 +87,12 @@ export function buildWeeklyTimeData(
     const totalMinutes = workMinutes + trackedBreakMinutes;
     const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
     const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
+    const target = weekTargets?.[i];
     const breakdown = computeBreakdownForSettings(
       totalMinutes,
       trackedBreakMinutes,
-      effectiveSettings
+      effectiveSettings,
+      target?.targetMinutes
     );
 
     days.push({
@@ -96,6 +102,7 @@ export function buildWeeklyTimeData(
       workMinutes: breakdown.workMinutes,
       breakMinutes: breakdown.breakMinutes,
       overtimeMinutes: breakdown.overtimeMinutes,
+      target,
     });
   }
 

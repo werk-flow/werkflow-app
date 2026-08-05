@@ -30,14 +30,21 @@ export interface TimeBreakdown {
   overtimeMinutes: number;
 }
 
+/**
+ * Split total presence into work/break/overtime. Since P1-04 the overtime
+ * boundary is the resolved daily target for that date (schedule → derived →
+ * labeled default); callers that do not resolve targets keep the legacy
+ * 8h boundary, which equals the `default` target source.
+ */
 export function computeTimeBreakdown(
   totalMinutes: number,
-  actualBreakMinutes?: number
+  actualBreakMinutes?: number,
+  targetMinutes: number = WORK_GOAL_MINUTES
 ): TimeBreakdown {
   if (actualBreakMinutes !== undefined) {
     const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, totalMinutes));
     const netWorkMinutes = Math.max(0, totalMinutes - clampedBreakMinutes);
-    const overtimeMinutes = Math.max(0, netWorkMinutes - WORK_GOAL_MINUTES);
+    const overtimeMinutes = Math.max(0, netWorkMinutes - Math.max(0, targetMinutes));
     const workMinutes = Math.max(0, netWorkMinutes - overtimeMinutes);
     return { workMinutes, breakMinutes: clampedBreakMinutes, overtimeMinutes };
   }
@@ -172,7 +179,8 @@ export function buildClockTimelineSegments(
  */
 export function computeRingSegments(
   totalMinutes: number,
-  actualBreakMinutes?: number
+  actualBreakMinutes?: number,
+  targetMinutes: number = WORK_GOAL_MINUTES
 ): RingData {
   if (actualBreakMinutes !== undefined) {
     const clamped = Math.max(0, totalMinutes);
@@ -181,7 +189,7 @@ export function computeRingSegments(
     const clampedWorkMinutes = Math.max(0, mainMinutes - clampedBreakMinutes);
     const overtimeMinutes = Math.max(
       0,
-      Math.max(0, totalMinutes - actualBreakMinutes) - WORK_GOAL_MINUTES
+      Math.max(0, totalMinutes - actualBreakMinutes) - Math.max(0, targetMinutes)
     );
     const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
 
@@ -235,14 +243,15 @@ export function computeRingSegments(
 }
 
 export function computeRingSegmentsFromTimeline(
-  timelineSegments: ClockTimelineSegment[]
+  timelineSegments: ClockTimelineSegment[],
+  targetMinutes: number = WORK_GOAL_MINUTES
 ): RingData {
   const normalizedSegments = timelineSegments.filter((segment) => segment.minutes > 0);
   const totalWorkMinutes = normalizedSegments.reduce(
     (total, segment) => total + (segment.type === 'work' ? segment.minutes : 0),
     0
   );
-  const overtimeMinutes = Math.max(0, totalWorkMinutes - WORK_GOAL_MINUTES);
+  const overtimeMinutes = Math.max(0, totalWorkMinutes - Math.max(0, targetMinutes));
   const overtimeFraction = Math.min(overtimeMinutes / OVERTIME_RING_MAX_MINUTES, 1);
 
   const segments: RingSegment[] = [];

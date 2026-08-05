@@ -16,6 +16,10 @@ import {
   parseBreakPolicyHistory,
   type OrganizationTimeTrackingSettings,
 } from '@/lib/time-tracking/settings'
+import {
+  parseHolidayRegionHistory,
+  type OrganizationHolidayCalendar,
+} from '@/lib/personnel/targets'
 
 type OrganizationData = {
   id: string
@@ -35,6 +39,7 @@ export const CACHE_TAGS = {
   clients: (orgId: string) => `clients-${orgId}`,
   requests: (orgId: string) => `requests-${orgId}`,
   personnel: (orgId: string) => `personnel-${orgId}`,
+  organizationCalendar: (orgId: string) => `organization-calendar-${orgId}`,
   jobs: (orgId: string) => `jobs-${orgId}`,
   projects: (orgId: string) => `projects-${orgId}`,
   documents: (orgId: string) => `documents-${orgId}`,
@@ -224,6 +229,70 @@ export const getCachedOrganizationSettings = cache(
     )
 
     return fetchOrganizationSettings(orgId)
+  }
+)
+
+/**
+ * Cross-request cached holiday/closure context (P1-04): the selected holiday
+ * region with its effective-from history plus the organization's closure days.
+ * Tagged with both the settings tag (region lives on organization_settings)
+ * and its own calendar tag (closure-day mutations).
+ */
+export const getCachedOrganizationCalendar = cache(
+  async (orgId: string): Promise<OrganizationHolidayCalendar> => {
+    const fetchCalendar = unstable_cache(
+      async (oid: string): Promise<OrganizationHolidayCalendar> => {
+        const admin = createSupabaseAdminClient()
+
+        const [settingsResult, closureResult] = await Promise.all([
+          admin
+            .from('organization_settings')
+            .select('holiday_region, holiday_region_history')
+            .eq('organization_id', oid)
+            .maybeSingle(),
+          admin
+            .from('organization_closure_days')
+            .select('id, closure_date, label')
+            .eq('organization_id', oid)
+            .order('closure_date', { ascending: true }),
+        ])
+
+        if (settingsResult.error) {
+          console.error(
+            'Error fetching organization holiday settings:',
+            settingsResult.error
+          )
+        }
+        if (closureResult.error) {
+          console.error(
+            'Error fetching organization closure days:',
+            closureResult.error
+          )
+        }
+
+        return {
+          holidayRegion: settingsResult.data?.holiday_region ?? null,
+          holidayRegionHistory: parseHolidayRegionHistory(
+            settingsResult.data?.holiday_region_history
+          ),
+          closureDays: (closureResult.data ?? []).map((row) => ({
+            id: row.id,
+            closureDate: row.closure_date,
+            label: row.label,
+          })),
+        }
+      },
+      [`organization-calendar-${orgId}`],
+      {
+        tags: [
+          CACHE_TAGS.organizationSettings(orgId),
+          CACHE_TAGS.organizationCalendar(orgId),
+        ],
+        revalidate: REVALIDATE_SECONDS,
+      }
+    )
+
+    return fetchCalendar(orgId)
   }
 )
 

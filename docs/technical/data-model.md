@@ -59,6 +59,8 @@ Employment identity is organization-scoped and deliberately separate from the gl
 - Employee record event: append-only, actor-attributed audit of material personnel changes with before/after payloads (same pattern as request and document audit events).
 - States are derived, never stored: employment `aktiv`/`geplant`/`ausgeschieden` from entry/exit dates, access `mit Zugang`/`eingeladen`/`ohne Zugang` from the linked user/invite.
 - Access: manager-only SELECT RLS; all writes through service-role server actions with org-validation triggers. Operational pickers (assignment, time) read memberships, so non-login personnel can never appear in them.
+- Work schedule (`P1-04`): date-effective weekly-pattern versions per employee record (minutes per weekday, `valid_from` semantics like conditions). The schedule wins over the condition's contractual weekly hours for time targets. SELECT RLS is self-or-manager — the first employee-self read path on personnel-adjacent data; writes stay service-role with the same audit trail.
+- Organization holiday context (`P1-04`): the org's selected German-state holiday calendar (in-code dataset; selection with effective-from history on organization settings, `break_policy_history` pattern) and dated closure-day rows (today/future edits only). Daily targets are computed, never stored: schedule → condition-derived → visibly labeled 8h default, with holidays/closure days forcing 0. Later config changes never silently rewrite what was true for past days.
 
 ## Work Domain
 

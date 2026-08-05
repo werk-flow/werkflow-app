@@ -18,6 +18,7 @@ import {
   type OrgRole,
 } from '@/lib/members/actions';
 import { getPersonnelRecords } from '@/lib/personnel/actions';
+import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
 
 async function MitarbeiterData({
   activeOrgId,
@@ -28,17 +29,19 @@ async function MitarbeiterData({
   userId: string;
   currentUserRole: OrgRole;
 }) {
-  const [membersResult, invitesResult, personnelResult] = await Promise.all([
-    getOrgMembersForUser(activeOrgId, userId),
-    createSupabaseAdminClient()
-      .from('organization_invites')
-      .select(
-        'id, email, status, created_at, expires_at, accepted_at, invited_role'
-      )
-      .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false }),
-    getPersonnelRecords(),
-  ]);
+  const [membersResult, invitesResult, personnelResult, targetsResult] =
+    await Promise.all([
+      getOrgMembersForUser(activeOrgId, userId),
+      createSupabaseAdminClient()
+        .from('organization_invites')
+        .select(
+          'id, email, status, created_at, expires_at, accepted_at, invited_role'
+        )
+        .eq('organization_id', activeOrgId)
+        .order('created_at', { ascending: false }),
+      getPersonnelRecords(),
+      getTodayTargetsForMembers(),
+    ]);
 
   const memberList = membersResult as OrgMember[];
   const inviteList = (invitesResult.data as Invite[]) || [];
@@ -76,6 +79,9 @@ async function MitarbeiterData({
       invites={inviteList}
       personnelEntries={personnelEntries}
       personnelProfileNames={personnelProfileNames}
+      targetsByUserId={
+        targetsResult.success ? targetsResult.targetsByUserId : undefined
+      }
       currentUserId={userId}
       currentUserRole={currentUserRole}
       organizationId={activeOrgId}

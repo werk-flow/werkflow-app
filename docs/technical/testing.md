@@ -61,6 +61,10 @@ A test that passes must mean the business outcome happened: pair every positive 
 
 Local dev, the deployed app, and this harness currently share **one** Supabase project and **one** R2 bucket. The harness isolates itself through disposable organizations and cleans up in teardown, but test users transiently exist in the real auth pool. Before test volume grows (around Wave 2), stand up a separate dev/staging Supabase project and pair it with the reserved `werkflow-documents-dev` bucket; the harness then targets that environment via `.env` switching. Track this as an infrastructure follow-up to [decision 0001](../decisions/0001-infrastructure-stack.md).
 
+## Unit Tests
+
+Pure-logic unit tests run with `bun run test:unit` (Bun's test runner over `lib/`). The first real candidates landed with `P1-04`: `lib/personnel/holidays.test.ts` asserts the official German holiday lists for the current and next year (a legal change fails CI so the in-code dataset is updated deliberately), and `lib/personnel/targets.test.ts` covers the target-resolution contract across part-time, date-effective schedule changes, holiday/closure zeroing, region history, and the labeled fallback cascade — including the historical cases the UI specs cannot pin to fixed dates.
+
 ## What Is Not Covered Yet
 
-Unit tests for pure logic (time math, pricing later) can use `bun test` when the first real candidates appear. As of automated v3 (13/13), `GG-00` covers the full roadmap baseline scenario — role flows, documents, time tracking, Realtime freshness, mobile viewport, invites/onboarding, and inventory take/return; see the gate log for per-run notes.
+As of automated v3 (13/13), `GG-00` covers the full roadmap baseline scenario — role flows, documents, time tracking, Realtime freshness, mobile viewport, invites/onboarding, and inventory take/return; see the gate log for per-run notes.

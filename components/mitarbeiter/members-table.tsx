@@ -18,6 +18,7 @@ import { HoursDisplay } from './hours-display';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status-polling';
+import type { DailyTarget } from '@/lib/personnel/targets';
 
 // Roles that managers can view status for (same as MANAGED_ROLES in time-tracking/types.ts)
 const BUERO_VIEWABLE_ROLES: OrgRole[] = [
@@ -73,6 +74,8 @@ interface MembersTableProps {
   skeletonCount?: number;
   /** Status data from polling hook */
   statusMap?: Record<string, MemberStatus>;
+  /** Resolved daily targets per member (P1-04) */
+  targetsByUserId?: Record<string, DailyTarget>;
 }
 
 // Mobile card skeleton - matches exact card structure
@@ -137,7 +140,8 @@ function MemberCard({
   currentUserId,
   currentUserRole,
   onRoleChange,
-  status
+  status,
+  target
 }: {
   member: OrgMember;
   memberName: string;
@@ -152,6 +156,7 @@ function MemberCard({
     lastName: string
   ) => void;
   status?: MemberStatus;
+  target?: DailyTarget;
 }) {
   const router = useRouter();
 
@@ -185,6 +190,7 @@ function MemberCard({
             statusStartedAt={status?.statusStartedAt ?? null}
             workMinutes={status?.workMinutes ?? 0}
             canViewStatus={canViewStatus}
+            target={target}
           />
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -225,7 +231,8 @@ export function MembersTable({
   onRoleChange,
   isLoading = false,
   skeletonCount = 0,
-  statusMap = {}
+  statusMap = {},
+  targetsByUserId
 }: MembersTableProps) {
   const router = useRouter();
   const canManageMembers =
@@ -313,6 +320,7 @@ export function MembersTable({
               currentUserRole={currentUserRole}
               onRoleChange={onRoleChange}
               status={statusMap[member.user_id]}
+              target={targetsByUserId?.[member.user_id]}
             />
           );
         })}
@@ -378,6 +386,7 @@ export function MembersTable({
                       statusStartedAt={status?.statusStartedAt ?? null}
                       workMinutes={status?.workMinutes ?? 0}
                       canViewStatus={canViewStatus}
+                      target={targetsByUserId?.[member.user_id]}
                     />
                   </TableCell>
                   <TableCell className="text-muted-foreground">

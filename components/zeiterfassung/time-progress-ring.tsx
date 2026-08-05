@@ -12,6 +12,8 @@ interface TimeProgressRingProps {
   totalMinutes: number;
   breakMinutes?: number;
   timelineSegments?: ClockTimelineSegment[];
+  /** Resolved daily target (P1-04); the overtime ring starts beyond it. */
+  targetMinutes?: number;
   isActive?: boolean;
   glowVariant?: 'work' | 'break';
   size?: number;
@@ -30,6 +32,7 @@ export function TimeProgressRing({
   totalMinutes,
   breakMinutes,
   timelineSegments,
+  targetMinutes,
   size = 260,
   strokeWidth = 14,
   isActive = false,
@@ -50,9 +53,9 @@ export function TimeProgressRing({
   const { segments, overtimeFraction } = useMemo(
     () =>
       timelineSegments && timelineSegments.length > 0
-        ? computeRingSegmentsFromTimeline(timelineSegments)
-        : computeRingSegments(totalMinutes, breakMinutes),
-    [breakMinutes, timelineSegments, totalMinutes]
+        ? computeRingSegmentsFromTimeline(timelineSegments, targetMinutes)
+        : computeRingSegments(totalMinutes, breakMinutes, targetMinutes),
+    [breakMinutes, targetMinutes, timelineSegments, totalMinutes]
   );
 
   const viewBox = `${center - outerSize / 2} ${center - outerSize / 2} ${outerSize} ${outerSize}`;

@@ -170,10 +170,11 @@ export function computeBreakdownForSettings(
         'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
       >
     | null
-    | undefined
+    | undefined,
+  targetMinutes?: number
 ): TimeBreakdown {
   if (!settings || settings.breakMode === 'manual') {
-    return computeTimeBreakdown(totalMinutes, trackedBreakMinutes)
+    return computeTimeBreakdown(totalMinutes, trackedBreakMinutes, targetMinutes)
   }
 
   const breakMinutes =
@@ -181,7 +182,7 @@ export function computeBreakdownForSettings(
       ? settings.autoBreakDurationMinutes
       : 0
 
-  return computeTimeBreakdown(totalMinutes, breakMinutes)
+  return computeTimeBreakdown(totalMinutes, breakMinutes, targetMinutes)
 }
 
 export function getAutomaticBreakRange(

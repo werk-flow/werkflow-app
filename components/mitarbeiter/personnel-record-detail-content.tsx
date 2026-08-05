@@ -3,6 +3,7 @@
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { PersonalienSection } from '@/components/mitarbeiter/personalien-section';
 import { EmploymentConditionsSection } from '@/components/mitarbeiter/employment-conditions-section';
+import { WorkScheduleSection } from '@/components/mitarbeiter/work-schedule-section';
 import { PersonnelHistorySection } from '@/components/mitarbeiter/personnel-history-section';
 import { PersonnelInviteDialog } from '@/components/mitarbeiter/personnel-invite-dialog';
 import {
@@ -33,10 +34,15 @@ export function PersonnelRecordDetailContent({
   actorNames,
   canEdit,
 }: PersonnelRecordDetailContentProps) {
-  const { record, conditions, events, hasPendingInvite } = detail;
+  const { record, conditions, schedules, events, hasPendingInvite } = detail;
 
   useRealtimeRouterRefresh({
-    tables: ['employee_records', 'employment_conditions', 'organization_invites'],
+    tables: [
+      'employee_records',
+      'employment_conditions',
+      'work_schedules',
+      'organization_invites',
+    ],
   });
 
   const name = formatEmployeeRecordName(record, detail.profileName);
@@ -76,6 +82,12 @@ export function PersonnelRecordDetailContent({
           <PersonalienSection record={record} canEdit={canEdit} />
           <EmploymentConditionsSection
             recordId={record.id}
+            conditions={conditions}
+            canEdit={canEdit}
+          />
+          <WorkScheduleSection
+            recordId={record.id}
+            schedules={schedules}
             conditions={conditions}
             canEdit={canEdit}
           />

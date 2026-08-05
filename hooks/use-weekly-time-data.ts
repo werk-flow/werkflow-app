@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
+import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type {
   WeeklyTimeDataPoint,
   WeeklyTimeLabel,
 } from '@/lib/time-tracking/types';
+import type { DailyTarget } from '@/lib/personnel/targets';
 import {
   buildWeeklyTimeData,
   computeWeekLabel,
@@ -30,6 +32,7 @@ interface UseWeeklyTimeDataOptions {
   initialWeekData?: WeeklyTimeDataPoint[];
   initialTodayIndex?: number;
   initialWeekLabel?: WeeklyTimeLabel;
+  initialWeekTargets?: DailyTarget[];
 }
 
 export function useWeeklyTimeData({
@@ -42,10 +45,14 @@ export function useWeeklyTimeData({
   initialWeekData,
   initialTodayIndex,
   initialWeekLabel,
+  initialWeekTargets,
 }: UseWeeklyTimeDataOptions) {
   const hasInitialData = !!initialWeekData;
   const [weekData, setWeekData] = useState<WeeklyTimeDataPoint[]>(
     initialWeekData ?? []
+  );
+  const [weekTargets, setWeekTargets] = useState<DailyTarget[] | undefined>(
+    initialWeekTargets
   );
   const [isLoading, setIsLoading] = useState(!hasInitialData);
   const [error, setError] = useState<string | null>(null);
@@ -69,18 +76,25 @@ export function useWeeklyTimeData({
     setWeekLabel(computeWeekLabel(monday));
 
     try {
-      const result = await getTimeEntries({
-        organizationId,
-        from: monday.toISOString(),
-        to: sunday.toISOString(),
-        userId,
-      });
+      const [result, targetsResult] = await Promise.all([
+        getTimeEntries({
+          organizationId,
+          from: monday.toISOString(),
+          to: sunday.toISOString(),
+          userId,
+        }),
+        getWeeklyTargets({ userId }),
+      ]);
 
       if (!result.success) {
         setError(result.error);
         return;
       }
 
+      const nextTargets = targetsResult.success
+        ? targetsResult.targets
+        : undefined;
+      setWeekTargets(nextTargets);
       setWeekData(
         buildWeeklyTimeData(
           result.entries || [],
@@ -90,7 +104,8 @@ export function useWeeklyTimeData({
             breakMode,
             autoBreakThresholdMinutes,
             autoBreakDurationMinutes,
-          })
+          }),
+          nextTargets
         )
       );
       setError(null);
@@ -120,6 +135,20 @@ export function useWeeklyTimeData({
   }, [enabled, fetchWeekData]);
 
   useRealtimeEvent('time_entries', fetchWeekData);
+  // Targets change with schedules, conditions, the holiday region, and
+  // closure days — refresh the week when any of them move.
+  useRealtimeEvent('work_schedules', fetchWeekData);
+  useRealtimeEvent('employment_conditions', fetchWeekData);
+  useRealtimeEvent('organization_closure_days', fetchWeekData);
+  useRealtimeEvent('organization_settings', fetchWeekData);
 
-  return { weekData, todayIndex, weekLabel, isLoading, error, refetch: fetchWeekData };
+  return {
+    weekData,
+    weekTargets,
+    todayIndex,
+    weekLabel,
+    isLoading,
+    error,
+    refetch: fetchWeekData,
+  };
 }

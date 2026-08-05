@@ -685,6 +685,91 @@ export async function sendInviteFromPersonnelRecord(
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
 }
 
+// P1-04: date-effective work schedules and holiday/closure context.
+
+export async function addWorkScheduleViaDialog(
+  page: Page,
+  options: {
+    // ddmmyyyy digits for the valid-from date; omitted = keep today's default.
+    validFromDigits?: string;
+    // Hours per weekday as typed strings, index 0 = Montag … 6 = Sonntag;
+    // omitted = keep the dialog's full-time default (Mo–Fr 8, weekend 0).
+    dayHours?: string[];
+    note?: string;
+  }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Wochenplan hinzufügen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Wochenplan hinzufügen' })
+  ).toBeVisible();
+
+  const dialog = page.getByRole('dialog');
+  if (options.validFromDigits) {
+    await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
+  }
+  if (options.dayHours) {
+    for (let index = 0; index < options.dayHours.length; index++) {
+      await page.locator(`#schedule-day-${index}`).fill(options.dayHours[index]);
+    }
+  }
+  if (options.note !== undefined) {
+    await page.locator('#schedule-note').fill(options.note);
+  }
+
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function setHolidayRegionViaSettings(
+  page: Page,
+  regionLabel: string
+): Promise<void> {
+  await page.goto('/einstellungen/zeiterfassung');
+  await page.locator('#holiday-region').click();
+  await page.getByRole('option', { name: regionLabel, exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Feiertagskalender speichern' })
+    .click();
+  await expect(
+    page.getByText('Der Feiertagskalender wurde gespeichert.')
+  ).toBeVisible({ timeout: 15_000 });
+}
+
+export async function addClosureDayViaSettings(
+  page: Page,
+  options: { dateDigits: string; label?: string }
+): Promise<void> {
+  await page.goto('/einstellungen/zeiterfassung');
+  await typeIntoDatePicker(
+    page.locator('body'),
+    'Datum der Betriebsruhe',
+    options.dateDigits
+  );
+  if (options.label !== undefined) {
+    await page.locator('#closure-label').fill(options.label);
+  }
+  await page.getByRole('button', { name: 'Eintragen' }).click();
+  await expect(
+    page.getByText('Der Betriebsruhe-Tag wurde eingetragen.')
+  ).toBeVisible({ timeout: 15_000 });
+}
+
+// dateLabel: dd.mm.yyyy — the aria-label also contains the weekday, so match
+// via regular expression around the date.
+export async function removeClosureDayViaSettings(
+  page: Page,
+  dateLabel: string
+): Promise<void> {
+  await page.goto('/einstellungen/zeiterfassung');
+  const escaped = dateLabel.replace(/\./g, '\\.');
+  await page
+    .getByRole('button', { name: new RegExp(`Betriebsruhe am .*${escaped} entfernen`) })
+    .click();
+  await expect(
+    page.getByText('Der Betriebsruhe-Tag wurde entfernt.')
+  ).toBeVisible({ timeout: 15_000 });
+}
+
 export async function removeMemberFromDetail(page: Page, name: string): Promise<void> {
   await openMemberDetailFromList(page, name);
   await page.getByRole('button', { name: 'Aktionen' }).click();

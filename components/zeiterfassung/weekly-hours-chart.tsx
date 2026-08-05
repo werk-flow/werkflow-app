@@ -3,6 +3,8 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
+import { formatDuration } from '@/lib/time-tracking/helpers';
+import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
 import type { DayData } from '@/hooks/use-weekly-time-data';
 import type { OrgBreakMode } from '@/lib/time-tracking/types';
 
@@ -16,6 +18,8 @@ interface WeeklyHoursChartProps {
   liveAutoBreakDurationMinutes?: number;
   narrowBars?: boolean;
   weekLabel?: { dateRange: string; kw: string };
+  /** Monday-first resolved daily targets (P1-04) for the shown week. */
+  weekTargets?: DailyTarget[];
   className?: string;
 }
 
@@ -33,17 +37,23 @@ export function WeeklyHoursChart({
   liveAutoBreakDurationMinutes,
   narrowBars = false,
   weekLabel,
+  weekTargets,
   className
 }: WeeklyHoursChartProps) {
   const data = useMemo(() => {
     if (!weekData.length) return [];
     return weekData.map((day, i) => {
       if (i === todayIndex && liveTodayMinutes !== undefined) {
-        const bd = computeBreakdownForSettings(liveTodayMinutes, liveTodayBreakMinutes ?? 0, {
-          breakMode: liveTodayBreakMode ?? 'manual',
-          autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
-          autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
-        });
+        const bd = computeBreakdownForSettings(
+          liveTodayMinutes,
+          liveTodayBreakMinutes ?? 0,
+          {
+            breakMode: liveTodayBreakMode ?? 'manual',
+            autoBreakThresholdMinutes: liveAutoBreakThresholdMinutes ?? 360,
+            autoBreakDurationMinutes: liveAutoBreakDurationMinutes ?? 30,
+          },
+          weekTargets?.[i]?.targetMinutes
+        );
         return { ...day, ...bd, totalMinutes: liveTodayMinutes };
       }
       return day;
@@ -56,7 +66,13 @@ export function WeeklyHoursChart({
     liveTodayBreakMinutes,
     liveTodayBreakMode,
     liveTodayMinutes,
+    weekTargets,
   ]);
+
+  const weeklyTargetMinutes = useMemo(
+    () => (weekTargets ? sumTargetMinutes(weekTargets) : null),
+    [weekTargets]
+  );
 
   const maxMinutes = useMemo(() => {
     const tallest = Math.max(...data.map((d) => d.totalMinutes), 0);
@@ -77,9 +93,14 @@ export function WeeklyHoursChart({
   return (
     <div className={cn('isolate w-full overflow-hidden', className)}>
       {weekLabel && (
-        <div className="mb-6 flex items-baseline justify-between text-[11px] font-medium tabular-nums text-muted-foreground">
+        <div className="mb-6 flex items-baseline justify-between gap-2 text-[11px] font-medium tabular-nums text-muted-foreground">
           <span>{weekLabel.dateRange}</span>
-          <span>{weekLabel.kw}</span>
+          <span className="flex items-baseline gap-3">
+            {weeklyTargetMinutes !== null && (
+              <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>
+            )}
+            <span>{weekLabel.kw}</span>
+          </span>
         </div>
       )}
 

@@ -46,6 +46,7 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { StatusBadge } from './status-badge';
 import { PersonalienSection } from './personalien-section';
 import { EmploymentConditionsSection } from './employment-conditions-section';
+import { WorkScheduleSection } from './work-schedule-section';
 import { PersonnelHistorySection } from './personnel-history-section';
 import { EmploymentStateBadge } from './personnel-state-badges';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
@@ -74,6 +75,7 @@ import {
   computeBreakdownForSettings,
   type OrgBreakMode,
 } from '@/lib/time-tracking/settings';
+import { getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
 import type {
   Job,
   ProjectWithDetails,
@@ -129,7 +131,8 @@ function computeLiveBreakMinutesForMember(
   liveTotalMinutes: number,
   defaultBreakMode: OrgBreakMode,
   defaultAutoBreakThresholdMinutes: number,
-  defaultAutoBreakDurationMinutes: number
+  defaultAutoBreakDurationMinutes: number,
+  targetMinutes?: number
 ) {
   const effectiveBreakMode = status?.breakMode ?? defaultBreakMode;
   const trackedLiveBreakMinutes =
@@ -140,13 +143,18 @@ function computeLiveBreakMinutesForMember(
           : 0)
       : status?.breakMinutes ?? 0;
 
-  return computeBreakdownForSettings(liveTotalMinutes, trackedLiveBreakMinutes, {
-    breakMode: effectiveBreakMode,
-    autoBreakThresholdMinutes:
-      status?.autoBreakThresholdMinutes ?? defaultAutoBreakThresholdMinutes,
-    autoBreakDurationMinutes:
-      status?.autoBreakDurationMinutes ?? defaultAutoBreakDurationMinutes,
-  });
+  return computeBreakdownForSettings(
+    liveTotalMinutes,
+    trackedLiveBreakMinutes,
+    {
+      breakMode: effectiveBreakMode,
+      autoBreakThresholdMinutes:
+        status?.autoBreakThresholdMinutes ?? defaultAutoBreakThresholdMinutes,
+      autoBreakDurationMinutes:
+        status?.autoBreakDurationMinutes ?? defaultAutoBreakDurationMinutes,
+    },
+    targetMinutes
+  );
 }
 
 interface MitarbeiterDetailContentProps {
@@ -200,7 +208,7 @@ export function MitarbeiterDetailContent({
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
 
   useRealtimeRouterRefresh({
-    tables: ['employee_records', 'employment_conditions'],
+    tables: ['employee_records', 'employment_conditions', 'work_schedules'],
   });
 
   const memberIds = useMemo(() => [member.userId], [member.userId]);
@@ -214,7 +222,7 @@ export function MitarbeiterDetailContent({
   });
   const status = statusMap[member.userId];
 
-  const { weekData, todayIndex, weekLabel } = useWeeklyTimeData({
+  const { weekData, weekTargets, todayIndex, weekLabel } = useWeeklyTimeData({
     organizationId,
     userId: member.userId,
     breakMode,
@@ -286,18 +294,28 @@ export function MitarbeiterDetailContent({
     return () => clearInterval(interval);
   }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);
 
+  // This member's resolved target for today (P1-04); the legacy 8h value only
+  // appears as the visibly labeled `default` source.
+  const todayTarget: DailyTarget | undefined = weekTargets?.[todayIndex];
+  const todayTargetMinutes = todayTarget?.targetMinutes ?? DAILY_GOAL_MINUTES;
+  const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
+
   const memberBreakdown = computeLiveBreakMinutesForMember(
     status,
     liveTotalMinutes,
     breakMode,
     autoBreakThresholdMinutes,
-    autoBreakDurationMinutes
+    autoBreakDurationMinutes,
+    todayTarget?.targetMinutes
   );
   const liveBreakMinutes = memberBreakdown.breakMinutes;
-  const dailyPercentage = Math.min(
-    100,
-    Math.round((memberBreakdown.workMinutes / DAILY_GOAL_MINUTES) * 100)
-  );
+  const dailyPercentage =
+    todayTargetMinutes > 0
+      ? Math.min(
+          100,
+          Math.round((memberBreakdown.workMinutes / todayTargetMinutes) * 100)
+        )
+      : 0;
 
   const metadataFields: MetadataField[] = [
     { label: 'Vorname', value: member.firstName || '—' },
@@ -428,6 +446,15 @@ export function MitarbeiterDetailContent({
             )}
 
             {personnel && (
+              <WorkScheduleSection
+                recordId={personnel.record.id}
+                schedules={personnel.schedules}
+                conditions={personnel.conditions}
+                canEdit={isAdminOrManager}
+              />
+            )}
+
+            {personnel && (
               <PersonnelHistorySection
                 events={personnel.events}
                 actorNames={actorNames}
@@ -477,12 +504,14 @@ export function MitarbeiterDetailContent({
                     <span
                       className={cn(
                         'font-medium tabular-nums',
-                        dailyPercentage >= 100
+                        todayTargetMinutes > 0 && dailyPercentage >= 100
                           ? 'text-green-600 dark:text-green-400'
                           : 'text-foreground'
                       )}
                     >
-                      {formatMinutesAsHours(memberBreakdown.workMinutes)} / 8 Std. ({dailyPercentage}%)
+                      {todayTargetMinutes > 0
+                        ? `${formatMinutesAsHours(memberBreakdown.workMinutes)} / ${formatMinutesAsHours(todayTargetMinutes)} (${dailyPercentage}%)`
+                        : formatMinutesAsHours(memberBreakdown.workMinutes)}
                     </span>
                   </div>
                   <Progress
@@ -493,6 +522,20 @@ export function MitarbeiterDetailContent({
                       status?.status === 'working' && 'opacity-80'
                     )}
                   />
+                  {todayTarget && todayTarget.targetMinutes === 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {todayTarget.isHoliday
+                        ? `Feiertag: ${todayTarget.holidayName} – keine Sollarbeitszeit.`
+                        : todayTarget.isClosureDay
+                          ? `Betriebsruhe${todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} – keine Sollarbeitszeit.`
+                          : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'}
+                    </p>
+                  )}
+                  {todayTargetHint && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {todayTargetHint}
+                    </p>
+                  )}
                 </div>
 
                 {/* Time breakdown indicators */}
@@ -546,6 +589,7 @@ export function MitarbeiterDetailContent({
                     status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes
                   }
                   weekLabel={weekLabel}
+                  weekTargets={weekTargets}
                 />
               ) : (
                 <p className="py-4 text-center text-xs text-muted-foreground">

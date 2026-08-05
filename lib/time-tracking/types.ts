@@ -136,6 +136,11 @@ export type WeeklyTimeDataPoint = {
   workMinutes: number;
   breakMinutes: number;
   overtimeMinutes: number;
+  /**
+   * Resolved daily target (P1-04) for this day; absent when the caller did not
+   * resolve targets, in which case the legacy 8h boundary applied.
+   */
+  target?: import('@/lib/personnel/targets').DailyTarget;
 };
 
 export type WeeklyTimeLabel = {
@@ -173,6 +178,8 @@ export type ZeiterfassungOverview = {
   weekData: WeeklyTimeDataPoint[];
   todayIndex: number;
   weekLabel: WeeklyTimeLabel;
+  /** Monday-first resolved daily targets for the current week (P1-04). */
+  weekTargets?: import('@/lib/personnel/targets').DailyTarget[];
 };
 
 export type ClockResult =

@@ -32,7 +32,8 @@ Current cache tag areas include:
 - User preferences within an organization.
 - Clients.
 - Requests (Anfragen).
-- Personnel records and employment conditions (`personnel-<orgId>`, P1-03).
+- Personnel records, employment conditions, and work schedules (`personnel-<orgId>`, P1-03/P1-04).
+- Organization holiday/closure context (`organization-calendar-<orgId>` plus the settings tag, P1-04).
 - Jobs.
 - Projects.
 
@@ -52,6 +53,8 @@ The provider subscribes to tables that affect active operational views, includin
 - `profiles`
 - `employee_records`
 - `employment_conditions`
+- `work_schedules`
+- `organization_closure_days`
 - `clients`
 - `client_contacts`
 - `client_sites`

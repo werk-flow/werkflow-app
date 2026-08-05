@@ -29,7 +29,7 @@ The implemented baseline on 23 July 2026 includes:
 - An organization-level choice between manually stamped breaks and one automatic break threshold/duration. Admins can change the rule, Büro can view it, and policy history prevents later settings from silently rewriting closed history.
 - Job-linked clock-in, job switching during an active session, assigned-job selection for employees, and job/project time views.
 - Protection against an employee being actively clocked in in more than one organization.
-- A current-week view with daily presence, work, break, and simple overtime display.
+- A current-week view with daily presence, work, break, and overtime display; since `P1-04` the overtime boundary and the weekly `Soll` come from each date's resolved schedule/holiday target instead of a fixed 480 minutes.
 - Manual same-day work or break entries with sequence/overlap validation. Employees can add their own entries for approval; admins and Büro can add records within their management scope.
 - Approval of pending employee sessions by admins/Büro, including paired session display and job context.
 - Manager history filters by date range, employee, and status.
@@ -42,7 +42,7 @@ Important current limitations:
 
 - Travel time is shown as a disabled action and is not a distinct implemented time type.
 - The vacation widget is static placeholder presentation (`9 von 30`) rather than a real entitlement, absence, or balance workflow.
-- The dashboard uses a fixed eight-hour daily goal. Date-effective employment conditions (employment type, weekly hours) exist per employee since `P1-03` in `employment_conditions`, but nothing in time tracking consumes them yet — `P1-04` (work schedules and targets) is the first consumer, and it must apply the condition version effective on each date rather than the current one.
+- Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Approved absence does not reduce targets yet — vacation arrives with `P1-06`, sickness with `P1-08`.
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
 - On-call/standby time, deployments during on-call periods, night/Sunday/holiday supplements, paid/unpaid classifications, and explicit overtime approval are not implemented as complete product concepts.
 - Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.

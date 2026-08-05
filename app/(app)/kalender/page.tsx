@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import {
   getCachedMemberships,
+  getCachedOrganizationCalendar,
   getCachedOrganizationSettings,
   getCachedUser,
 } from '@/lib/data/cached';
@@ -52,16 +53,18 @@ async function KalenderData({
   const fromIso = toLocalDateString(dayStart);
   const toIso = toLocalDateString(dayEnd);
 
-  const [entriesResult, members, jobsResult, organizationSettings] = await Promise.all([
-    getTimeEntries({
-      organizationId: activeOrgId,
-      from: dayStart.toISOString(),
-      to: dayEnd.toISOString()
-    }),
-    fetchMembers(),
-    getJobsForCalendar(fromIso, toIso),
-    getCachedOrganizationSettings(activeOrgId),
-  ]);
+  const [entriesResult, members, jobsResult, organizationSettings, holidayCalendar] =
+    await Promise.all([
+      getTimeEntries({
+        organizationId: activeOrgId,
+        from: dayStart.toISOString(),
+        to: dayEnd.toISOString()
+      }),
+      fetchMembers(),
+      getJobsForCalendar(fromIso, toIso),
+      getCachedOrganizationSettings(activeOrgId),
+      getCachedOrganizationCalendar(activeOrgId),
+    ]);
 
   return (
     <CalendarContainer
@@ -71,6 +74,7 @@ async function KalenderData({
       isAdminOrManager={isAdminOrManager}
       members={members}
       organizationSettings={organizationSettings}
+      holidayCalendar={holidayCalendar}
       initialEntries={entriesResult.success ? entriesResult.entries : undefined}
       initialJobs={jobsResult.success ? jobsResult.jobs : undefined}
     />
