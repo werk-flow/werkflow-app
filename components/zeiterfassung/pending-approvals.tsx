@@ -92,6 +92,19 @@ function formatDuration(clockIn: string, clockOut: string): string {
   return `${minutes}m`;
 }
 
+function getApprovalErrorMessage(error: string): string {
+  if (error === 'self_approval_not_allowed') {
+    return 'Eigene Arbeitszeiten können nicht selbst freigegeben werden.';
+  }
+  if (error === 'not_responsible') {
+    return 'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.';
+  }
+  if (error === 'responsibility_load_failed') {
+    return 'Die aktuelle Freigabeverantwortung konnte nicht geprüft werden. Bitte versuche es erneut.';
+  }
+  return 'Die Freigabe konnte nicht gespeichert werden.';
+}
+
 // Badge component for request type
 function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
   if (type === 'session') {
@@ -211,7 +224,8 @@ export function PendingApprovals({
         setSessions((prev) => prev.filter((s) => s.id !== session.id));
       } else {
         console.error('Failed to approve session:', result.error);
-        setError(`Fehler: ${result.error}`);
+        await fetchPendingItems(true);
+        setError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error approving session:', err);
@@ -233,7 +247,8 @@ export function PendingApprovals({
         setSessions((prev) => prev.filter((s) => s.id !== session.id));
       } else {
         console.error('Failed to reject session:', result.error);
-        setError(`Fehler: ${result.error}`);
+        await fetchPendingItems(true);
+        setError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error rejecting session:', err);
@@ -546,7 +561,7 @@ function SessionRequestCard({
 
   return (
     <>
-      <Card>
+      <Card data-testid={`pending-session-${session.userId}`}>
         <CardContent className="flex items-center justify-between p-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">

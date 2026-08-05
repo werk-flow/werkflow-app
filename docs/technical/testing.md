@@ -1,6 +1,6 @@
 # Testing And Golden-Gate Harness
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-06
 
 WerkFlow's regression safety net is a Playwright end-to-end harness that runs the roadmap's golden-gate scenarios (`GG-XX` in [`docs/plans/phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md)) as real multi-role browser journeys against a locally running app and the live Supabase project.
 
@@ -46,6 +46,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 | `tests/golden/support/fixtures.ts` | `adminPage` / `bueroPage` / `employeePage` / `outsiderPage` fixtures bound to the saved sessions |
 | `tests/golden/support/steps.ts` | **The reuse mechanism**: named business steps (`createCustomer`, `createJob`, `uploadDocumentOnJobPage`, …). Specs compose steps; when a slice changes UI, update the step once and every gate follows |
 | `tests/golden/gg-00.spec.ts` | The baseline gate |
+| `tests/golden/p1-05.spec.ts` | P1-05 scoped-responsibility, substitute, four-eyes, owner-safety, RLS, and organization-isolation slice proof (`@P1-05`) |
 
 ## Conventions
 
@@ -63,8 +64,8 @@ Local dev, the deployed app, and this harness currently share **one** Supabase p
 
 ## Unit Tests
 
-Pure-logic unit tests run with `bun run test:unit` (Bun's test runner over `lib/`). The first real candidates landed with `P1-04`: `lib/personnel/holidays.test.ts` asserts the official German holiday lists for the current and next year (a legal change fails CI so the in-code dataset is updated deliberately), and `lib/personnel/targets.test.ts` covers the target-resolution contract across part-time, date-effective schedule changes, holiday/closure zeroing, region history, and the labeled fallback cascade — including the historical cases the UI specs cannot pin to fixed dates.
+Pure-logic unit tests run with `bun run test:unit` (Bun's test runner over `lib/`). The first real candidates landed with `P1-04`: `lib/personnel/holidays.test.ts` asserts the official German holiday lists for the current and next year (a legal change fails CI so the in-code dataset is updated deliberately), and `lib/personnel/targets.test.ts` covers the target-resolution contract across part-time, date-effective schedule changes, holiday/closure zeroing, region history, and the labeled fallback cascade — including the historical cases the UI specs cannot pin to fixed dates. `P1-05` adds `lib/responsibilities/resolution.test.ts`: fixed-role fallback, direct configuration precedence, delegation start/end boundaries, expiry, early end, inherited role scope, and self-approval are pure date/authorization contracts and stay out of browser timing assertions.
 
 ## What Is Not Covered Yet
 
-As of automated v3 (13/13), `GG-00` covers the full roadmap baseline scenario — role flows, documents, time tracking, Realtime freshness, mobile viewport, invites/onboarding, and inventory take/return; see the gate log for per-run notes.
+As of `P1-05` (2026-08-06), the full production suite is 50 tests: 13 `GG-00`, 8 `GG-01`, 6 `@P1-01`, 8 `@P1-03`, 9 `@P1-04`, and 6 `@P1-05`. `GG-00` covers the full roadmap baseline scenario — role flows, documents, time tracking, Realtime freshness, mobile viewport, invites/onboarding, and inventory take/return — while the slice specs preserve the accepted vertical outcomes; see the gate log for per-run notes.

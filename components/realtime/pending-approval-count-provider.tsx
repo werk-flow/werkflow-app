@@ -35,27 +35,29 @@ export function PendingApprovalCountProvider({
   const { activeOrgId, activeOrg } = useOrganization();
   const activeRole = activeOrg?.role;
   const isAdmin = activeRole === 'admin';
-  const canViewPendingApprovals =
-    activeRole === 'admin' || activeRole === 'buero';
   const [pendingApprovalCount, setPendingApprovalCount] = useState(
     initialPendingApprovalCount ?? 0
   );
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshGenerationRef = useRef(0);
   const skippedInitialRefreshRef = useRef(false);
 
   const refreshPendingApprovalCount = useCallback(async () => {
-    if (!activeOrgId || !canViewPendingApprovals) {
+    const generation = ++refreshGenerationRef.current;
+    if (!activeOrgId) {
       setPendingApprovalCount(0);
       return;
     }
 
     try {
       const nextCount = await getPendingApprovalCount(activeOrgId, isAdmin);
-      setPendingApprovalCount(nextCount);
+      if (generation === refreshGenerationRef.current) {
+        setPendingApprovalCount(nextCount);
+      }
     } catch (error) {
       console.error('Error fetching pending approval count:', error);
     }
-  }, [activeOrgId, canViewPendingApprovals, isAdmin]);
+  }, [activeOrgId, isAdmin]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
@@ -113,6 +115,15 @@ export function PendingApprovalCountProvider({
     scheduleRefresh();
   });
   useRealtimeEvent('entry_change_requests', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('organization_responsibility_configurations', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('organization_responsibility_assignments', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('organization_responsibility_delegations', () => {
     scheduleRefresh();
   });
 

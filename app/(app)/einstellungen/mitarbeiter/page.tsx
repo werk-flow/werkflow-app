@@ -1,5 +1,14 @@
-import { SettingsPlaceholderPage } from '@/components/settings/settings-placeholder-page';
+import { redirect } from 'next/navigation';
 
-export default function EmployeesSettingsPage() {
-  return <SettingsPlaceholderPage slug="mitarbeiter" />;
+import { ResponsibilitySettings } from '@/components/settings/responsibility-settings';
+import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
+
+export default async function EmployeesSettingsPage() {
+  const result = await getResponsibilitySettingsData();
+  if (!result.success) {
+    if (result.error === 'not_authenticated') redirect('/login');
+    redirect('/dashboard');
+  }
+
+  return <ResponsibilitySettings data={result.data} />;
 }

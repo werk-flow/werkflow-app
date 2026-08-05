@@ -115,13 +115,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     slug: 'mitarbeiter',
     label: 'Mitarbeiter',
-    shortDescription: 'Mitarbeiterbezogene Regeln',
-    description: 'Steuert Berechtigungen, Prozesse und Standards rund um Teammitglieder.',
+    shortDescription: 'Freigaben und Vertretungen',
+    description: 'Zeigt, wer Freigaben verantwortet und wer diese Verantwortung zeitlich begrenzt vertritt.',
     icon: Users,
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
-    implemented: false,
+    implemented: true,
   },
   {
     slug: 'kunden',

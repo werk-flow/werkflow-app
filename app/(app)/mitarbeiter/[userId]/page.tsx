@@ -26,6 +26,7 @@ import type { OrgMemberOption } from '@/components/auftraege/employee-multi-sele
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
 import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
+import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import MitarbeiterDetailLoading from './loading';
 
 async function resolveActorNames(
@@ -90,6 +91,7 @@ async function MitarbeiterDetailData({
     documentsResult,
     organizationSettings,
     organizationUserPreferences,
+    responsibilitySettingsResult,
   ] = await Promise.all([
     getMemberDetail(targetUserId),
     getPersonnelDetail(targetUserId),
@@ -112,6 +114,7 @@ async function MitarbeiterDetailData({
     getEmployeeDocuments(targetUserId),
     getCachedOrganizationSettings(activeOrgId),
     getCachedOrganizationUserPreferences(activeOrgId, user.id),
+    getResponsibilitySettingsData(),
   ]);
 
   if (!memberResult.success) {
@@ -223,6 +226,11 @@ async function MitarbeiterDetailData({
       breakMode={organizationSettings.breakMode}
       autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
       autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
+      responsibilitySettings={
+        responsibilitySettingsResult.success
+          ? responsibilitySettingsResult.data
+          : null
+      }
     />
   );
 }

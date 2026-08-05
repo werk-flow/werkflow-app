@@ -45,14 +45,11 @@ async function getInitialAppRuntimeState({
     };
   }
 
-  const canViewPendingApprovals = role === 'admin' || role === 'buero';
   const [clockStateResult, activeJobsResult, pendingApprovalCount] =
     await Promise.all([
       getCurrentClockState(activeOrgId),
       getActiveJobIdsForOrg(activeOrgId),
-      canViewPendingApprovals
-        ? getPendingApprovalCount(activeOrgId, role === 'admin')
-        : Promise.resolve(0),
+      getPendingApprovalCount(activeOrgId, role === 'admin'),
     ]);
 
   return {

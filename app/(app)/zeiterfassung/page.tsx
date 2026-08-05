@@ -21,6 +21,7 @@ import {
   getTodayIndex,
   getWeekBounds,
 } from '@/lib/time-tracking/weekly';
+import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 
 function createDefaultClockState(
   activeOrgId: string,
@@ -116,9 +117,14 @@ async function ZeiterfassungData({
     return getOrgMembersForUser(activeOrgId, userId);
   }
 
-  const [initialOverview, members] = await Promise.all([
+  const [initialOverview, members, timeApprovalHolder] = await Promise.all([
     getInitialOverview(activeOrgId, userId),
     fetchMembers(),
+    getEffectiveResponsibilityHolderForActor({
+      organizationId: activeOrgId,
+      responsibility: 'time_approval',
+      actorUserId: userId,
+    }),
   ]);
 
   return (
@@ -126,6 +132,7 @@ async function ZeiterfassungData({
       organizationId={activeOrgId}
       userId={userId}
       isAdminOrManager={isAdminOrManager}
+      canApproveTime={Boolean(timeApprovalHolder)}
       isAdmin={isAdmin}
       currentUserRole={currentUserRole}
       initialTab={tab === 'approvals' ? 'approvals' : 'overview'}

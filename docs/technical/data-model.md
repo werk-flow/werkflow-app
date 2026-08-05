@@ -50,6 +50,18 @@ Role behavior should be designed around the product context:
 - Büro/office users need operational coordination tools.
 - Field workers need simple, mobile-friendly flows with minimal room for mistakes.
 
+## Scoped Responsibilities And Delegation (P1-05)
+
+Responsibilities restrict a small number of operational actions without turning the fixed role enum into a generic permission system:
+
+- Responsibility vocabulary: `time_approval` and `leave_approval`. They are stored as stable English enum values and presented as **Zeitfreigaben** and **Urlaubsfreigaben**.
+- Responsibility configuration: append-only, organization-scoped effective versions. `role_default` snapshots active Admin/Büro memberships; `selected` snapshots a non-empty named holder set. The effective version is the newest `effective_from <= action time`, with deterministic tie-breaking. Organizations received default snapshots, so migration changed no existing authority.
+- Responsibility assignment: an immutable member of one configuration snapshot, keyed to `employee_record_id`. The personnel record supplies the organization-stable person identity; authorization is only effective while that record is linked to an active organization membership/login. An assignment source is `role_default` with its role snapshot or `direct`.
+- Responsibility delegation/substitute: references a base holder record and substitute record in the same organization and responsibility. `valid_from` and `valid_until` are inclusive Europe/Berlin business dates; `revoked_from` is the first date on which an early-ended window no longer applies. Rows are retained, not deleted, so historical authority remains reconstructible.
+- Responsibility event: append-only, actor-attributed audit for configuration snapshots and substitute creation/end with before/after details. It is a responsibility-domain log rather than an `employee_record_event`, because each fact concerns an organization action contract involving multiple people.
+- The pure `resolveEffectiveResponsibility` result identifies holders via `role_default`, `direct_assignment`, or `delegation` (including the inherited base source). Approval scope and self-approval checks consume that result; the responsibility data is not a second independent permission matrix.
+- Reads are self-or-manager through `app_private` SECURITY DEFINER helpers; ordinary employees can see only rows involving their own employee record. Writes use owner-authorized service-role RPCs plus organization-validation triggers. A unique partial constraint and ownership triggers keep exactly one owner/admin membership; selected sets cannot be empty and their sole base holder cannot be removed.
+
 ## Personnel Domain (P1-03)
 
 Employment identity is organization-scoped and deliberately separate from the global profile:

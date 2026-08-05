@@ -2253,6 +2253,241 @@ export type Database = {
           },
         ]
       }
+      organization_responsibility_assignments: {
+        Row: {
+          configuration_id: string
+          created_at: string
+          employee_record_id: string
+          id: string
+          organization_id: string
+          role_snapshot: Database["public"]["Enums"]["org_role"] | null
+          source: Database["public"]["Enums"]["responsibility_assignment_source"]
+        }
+        Insert: {
+          configuration_id: string
+          created_at?: string
+          employee_record_id: string
+          id?: string
+          organization_id: string
+          role_snapshot?: Database["public"]["Enums"]["org_role"] | null
+          source: Database["public"]["Enums"]["responsibility_assignment_source"]
+        }
+        Update: {
+          configuration_id?: string
+          created_at?: string
+          employee_record_id?: string
+          id?: string
+          organization_id?: string
+          role_snapshot?: Database["public"]["Enums"]["org_role"] | null
+          source?: Database["public"]["Enums"]["responsibility_assignment_source"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_responsibility_assignments_configuration_id_fkey"
+            columns: ["configuration_id"]
+            isOneToOne: false
+            referencedRelation: "organization_responsibility_configurations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_assignments_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_assignments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_responsibility_configurations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          mode: Database["public"]["Enums"]["responsibility_configuration_mode"]
+          organization_id: string
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          mode: Database["public"]["Enums"]["responsibility_configuration_mode"]
+          organization_id: string
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          mode?: Database["public"]["Enums"]["responsibility_configuration_mode"]
+          organization_id?: string
+          responsibility?: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_responsibility_configurations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_responsibility_delegations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          delegator_employee_record_id: string
+          id: string
+          note: string | null
+          organization_id: string
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+          revoked_from: string | null
+          substitute_employee_record_id: string
+          updated_at: string
+          valid_from: string
+          valid_until: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          delegator_employee_record_id: string
+          id?: string
+          note?: string | null
+          organization_id: string
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+          revoked_from?: string | null
+          substitute_employee_record_id: string
+          updated_at?: string
+          valid_from: string
+          valid_until: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          delegator_employee_record_id?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          responsibility?: Database["public"]["Enums"]["organization_responsibility"]
+          revoked_from?: string | null
+          substitute_employee_record_id?: string
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_responsibility_d_delegator_employee_record_id_fkey"
+            columns: ["delegator_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_d_substitute_employee_record_i_fkey"
+            columns: ["substitute_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_delegations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_responsibility_events: {
+        Row: {
+          configuration_id: string | null
+          created_at: string
+          created_by: string | null
+          delegation_id: string | null
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          primary_employee_record_id: string | null
+          related_employee_record_id: string | null
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Insert: {
+          configuration_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          delegation_id?: string | null
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          primary_employee_record_id?: string | null
+          related_employee_record_id?: string | null
+          responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Update: {
+          configuration_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          delegation_id?: string | null
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          primary_employee_record_id?: string | null
+          related_employee_record_id?: string | null
+          responsibility?: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_responsibility_eve_primary_employee_record_id_fkey"
+            columns: ["primary_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_eve_related_employee_record_id_fkey"
+            columns: ["related_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_events_configuration_id_fkey"
+            columns: ["configuration_id"]
+            isOneToOne: false
+            referencedRelation: "organization_responsibility_configurations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_events_delegation_id_fkey"
+            columns: ["delegation_id"]
+            isOneToOne: false
+            referencedRelation: "organization_responsibility_delegations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_responsibility_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_settings: {
         Row: {
           auto_break_duration_minutes: number
@@ -2634,12 +2869,44 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_responsibility_configuration: {
+        Args: {
+          p_actor_id: string
+          p_employee_record_ids: string[]
+          p_expected_configuration_id: string
+          p_mode: Database["public"]["Enums"]["responsibility_configuration_mode"]
+          p_organization_id: string
+          p_responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Returns: string
+      }
       check_user_exists_by_email: {
         Args: { p_email: string }
         Returns: {
           user_exists: boolean
           user_id: string
         }[]
+      }
+      create_responsibility_delegation: {
+        Args: {
+          p_actor_id: string
+          p_delegator_employee_record_id: string
+          p_note: string
+          p_organization_id: string
+          p_responsibility: Database["public"]["Enums"]["organization_responsibility"]
+          p_substitute_employee_record_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: string
+      }
+      end_responsibility_delegation: {
+        Args: {
+          p_actor_id: string
+          p_delegation_id: string
+          p_revoked_from: string
+        }
+        Returns: undefined
       }
       ensure_inventory_defaults: {
         Args: { p_actor_id: string; p_org_id: string }
@@ -2760,6 +3027,7 @@ export type Database = {
       job_priority: "niedrig" | "mittel" | "hoch"
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt"
       org_role: "admin" | "buero" | "employee"
+      organization_responsibility: "time_approval" | "leave_approval"
       project_status:
         | "nicht_begonnen"
         | "in_bearbeitung"
@@ -2783,6 +3051,8 @@ export type Database = {
       request_source: "telefon" | "email" | "vor_ort" | "sonstiges"
       request_status: "offen" | "in_klaerung" | "umgewandelt" | "geschlossen"
       request_urgency: "niedrig" | "normal" | "hoch" | "notfall"
+      responsibility_assignment_source: "role_default" | "direct"
+      responsibility_configuration_mode: "role_default" | "selected"
       subscription_status: "active" | "inactive" | "canceled" | "trialing"
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete"
       time_tracking_break_mode: "manual" | "automatic"
@@ -2920,6 +3190,7 @@ export const Constants = {
       job_priority: ["niedrig", "mittel", "hoch"],
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
       org_role: ["admin", "buero", "employee"],
+      organization_responsibility: ["time_approval", "leave_approval"],
       project_status: [
         "nicht_begonnen",
         "in_bearbeitung",
@@ -2946,6 +3217,8 @@ export const Constants = {
       request_source: ["telefon", "email", "vor_ort", "sonstiges"],
       request_status: ["offen", "in_klaerung", "umgewandelt", "geschlossen"],
       request_urgency: ["niedrig", "normal", "hoch", "notfall"],
+      responsibility_assignment_source: ["role_default", "direct"],
+      responsibility_configuration_mode: ["role_default", "selected"],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_tracking_break_mode: ["manual", "automatic"],

@@ -45,6 +45,7 @@ interface ZeiterfassungContentProps {
   organizationId: string;
   userId: string;
   isAdminOrManager: boolean;
+  canApproveTime: boolean;
   isAdmin: boolean;
   currentUserRole: OrgRole;
   initialTab?: 'overview' | 'approvals' | 'history';
@@ -57,6 +58,7 @@ export function ZeiterfassungContent({
   organizationId,
   userId,
   isAdminOrManager,
+  canApproveTime,
   isAdmin,
   currentUserRole,
   initialTab = 'overview',
@@ -66,7 +68,7 @@ export function ZeiterfassungContent({
   const { pendingApprovalCount } = usePendingApprovalCount();
 
   // For regular employees, just show the dashboard
-  if (!isAdminOrManager) {
+  if (!isAdminOrManager && !canApproveTime) {
     return (
       <ZeiterfassungDashboard
         organizationId={organizationId}
@@ -76,7 +78,7 @@ export function ZeiterfassungContent({
     );
   }
 
-  // For admin/manager, show tabs with dashboard + approvals + history
+  // Scoped approvers get the approval surface without manager history access.
   return (
     <Tabs defaultValue={initialTab} className="w-full">
       <TabsList className="gap-1">
@@ -89,7 +91,9 @@ export function ZeiterfassungContent({
             </span>
           )}
         </TabsTrigger>
-        <TabsTrigger value="history">Verlauf</TabsTrigger>
+        {isAdminOrManager ? (
+          <TabsTrigger value="history">Verlauf</TabsTrigger>
+        ) : null}
       </TabsList>
 
       <TabsContent value="overview" className="mt-4">
@@ -109,9 +113,11 @@ export function ZeiterfassungContent({
         />
       </TabsContent>
 
-      <TabsContent value="history" className="mt-4">
-        <EntryHistory organizationId={organizationId} members={members} />
-      </TabsContent>
+      {isAdminOrManager ? (
+        <TabsContent value="history" className="mt-4">
+          <EntryHistory organizationId={organizationId} members={members} />
+        </TabsContent>
+      ) : null}
     </Tabs>
   );
 }

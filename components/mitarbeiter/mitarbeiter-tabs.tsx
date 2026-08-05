@@ -28,6 +28,7 @@ interface MitarbeiterTabsProps {
   personnelEntries: PersonnelListEntry[];
   personnelProfileNames: Record<string, string>;
   targetsByUserId?: Record<string, DailyTarget>;
+  removalBlockedByUserId: Record<string, string>;
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
@@ -39,6 +40,7 @@ export function MitarbeiterTabs({
   personnelEntries,
   personnelProfileNames,
   targetsByUserId,
+  removalBlockedByUserId,
   currentUserId,
   currentUserRole,
   organizationId
@@ -115,6 +117,9 @@ export function MitarbeiterTabs({
   useRealtimeEvent('employment_conditions', handleRefresh);
   useRealtimeEvent('work_schedules', handleRefresh);
   useRealtimeEvent('organization_closure_days', handleRefresh);
+  useRealtimeEvent('organization_responsibility_configurations', handleRefresh);
+  useRealtimeEvent('organization_responsibility_assignments', handleRefresh);
+  useRealtimeEvent('organization_responsibility_delegations', handleRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(
@@ -203,6 +208,7 @@ export function MitarbeiterTabs({
             skeletonCount={prevMemberCount}
             statusMap={statusMap}
             targetsByUserId={targetsByUserId}
+            removalBlockedByUserId={removalBlockedByUserId}
           />
           <PersonnelRecordsSection
             entries={personnelWithoutMembership}

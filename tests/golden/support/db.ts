@@ -146,6 +146,123 @@ export async function getVisibleWorkScheduleRecordIdsAs(
   return [...new Set((data ?? []).map((row) => row.employee_record_id as string))];
 }
 
+export type ResponsibilityConfigurationState = {
+  id: string;
+  mode: string;
+  holderEmployeeRecordIds: string[];
+};
+
+export async function getLatestResponsibilityConfigurationState(
+  orgId: string,
+  responsibility: 'time_approval' | 'leave_approval'
+): Promise<ResponsibilityConfigurationState> {
+  const admin = createAdminClient();
+  const { data: configuration, error } = await admin
+    .from('organization_responsibility_configurations')
+    .select('id, mode')
+    .eq('organization_id', orgId)
+    .eq('responsibility', responsibility)
+    .order('effective_from', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error || !configuration) {
+    throw new Error(`Responsibility configuration missing: ${error?.message}`);
+  }
+
+  const { data: assignments, error: assignmentError } = await admin
+    .from('organization_responsibility_assignments')
+    .select('employee_record_id')
+    .eq('configuration_id', configuration.id);
+  if (assignmentError) {
+    throw new Error(`Responsibility assignments query failed: ${assignmentError.message}`);
+  }
+
+  return {
+    id: configuration.id as string,
+    mode: configuration.mode as string,
+    holderEmployeeRecordIds: (assignments ?? []).map(
+      (assignment) => assignment.employee_record_id as string
+    ),
+  };
+}
+
+export async function getVisibleResponsibilityEmployeeRecordIdsAs(
+  user: { email: string; password: string },
+  orgId: string
+): Promise<string[]> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (signInError) {
+    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
+  }
+
+  const { data, error } = await client
+    .from('organization_responsibility_assignments')
+    .select('employee_record_id')
+    .eq('organization_id', orgId);
+  if (error) {
+    throw new Error(`Responsibility RLS query failed for ${user.email}: ${error.message}`);
+  }
+
+  return [
+    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+  ].sort();
+}
+
+export async function getLatestPendingTimeEntryState(
+  orgId: string,
+  userId: string
+): Promise<{ id: string; status: string }> {
+  const { data, error } = await createAdminClient()
+    .from('time_entries')
+    .select('id, status')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId)
+    .eq('is_manual', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error || !data) {
+    throw new Error(`Pending time entry missing for ${userId}: ${error?.message}`);
+  }
+  return { id: data.id as string, status: data.status as string };
+}
+
+export async function expectOwnerRoleMutationRejected(
+  orgId: string,
+  ownerUserId: string
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from('organization_members')
+    .update({ role: 'employee' })
+    .eq('organization_id', orgId)
+    .eq('user_id', ownerUserId);
+  if (!error?.message.includes('organization_owner_is_protected')) {
+    throw new Error(
+      `Owner role mutation was not rejected by the database: ${error?.message ?? 'no error'}`
+    );
+  }
+
+  const { data: membership, error: readError } = await admin
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', orgId)
+    .eq('user_id', ownerUserId)
+    .single();
+  if (readError || membership?.role !== 'admin') {
+    throw new Error('Owner membership changed despite last-admin protection.');
+  }
+}
+
 export type InventoryLedgerState = {
   quantityOnHand: number;
   movementTotal: number;

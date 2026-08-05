@@ -73,6 +73,21 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('organization_closure_days', () => {
     if (tableSet.has('organization_closure_days')) scheduleRefresh();
   });
+  useRealtimeEvent('organization_responsibility_configurations', () => {
+    if (tableSet.has('organization_responsibility_configurations')) {
+      scheduleRefresh();
+    }
+  });
+  useRealtimeEvent('organization_responsibility_assignments', () => {
+    if (tableSet.has('organization_responsibility_assignments')) {
+      scheduleRefresh();
+    }
+  });
+  useRealtimeEvent('organization_responsibility_delegations', () => {
+    if (tableSet.has('organization_responsibility_delegations')) {
+      scheduleRefresh();
+    }
+  });
   useRealtimeEvent('clients', () => {
     if (tableSet.has('clients')) scheduleRefresh();
   });

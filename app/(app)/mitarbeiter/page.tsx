@@ -19,6 +19,9 @@ import {
 } from '@/lib/members/actions';
 import { getPersonnelRecords } from '@/lib/personnel/actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
+import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
+import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
+import { getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';
 
 async function MitarbeiterData({
   activeOrgId,
@@ -29,7 +32,13 @@ async function MitarbeiterData({
   userId: string;
   currentUserRole: OrgRole;
 }) {
-  const [membersResult, invitesResult, personnelResult, targetsResult] =
+  const [
+    membersResult,
+    invitesResult,
+    personnelResult,
+    targetsResult,
+    responsibilitySettingsResult,
+  ] =
     await Promise.all([
       getOrgMembersForUser(activeOrgId, userId),
       createSupabaseAdminClient()
@@ -41,6 +50,7 @@ async function MitarbeiterData({
         .order('created_at', { ascending: false }),
       getPersonnelRecords(),
       getTodayTargetsForMembers(),
+      getResponsibilitySettingsData(),
     ]);
 
   const memberList = membersResult as OrgMember[];
@@ -56,6 +66,19 @@ async function MitarbeiterData({
   const personnelEntries = personnelResult.success
     ? personnelResult.entries
     : [];
+  const removalBlockedByUserId: Record<string, string> = {};
+  if (responsibilitySettingsResult.success) {
+    for (const entry of personnelEntries) {
+      if (!entry.record.userId) continue;
+      const message = getResponsibilityRemovalBlockMessage(
+        getResponsibilitiesStrandedByEmployeeRemoval(
+          responsibilitySettingsResult.data.effective,
+          entry.record.id
+        )
+      );
+      if (message) removalBlockedByUserId[entry.record.userId] = message;
+    }
+  }
 
   // Exited people keep their linked login; resolve those names from profiles.
   const linkedUserIds = personnelEntries
@@ -82,6 +105,7 @@ async function MitarbeiterData({
       targetsByUserId={
         targetsResult.success ? targetsResult.targetsByUserId : undefined
       }
+      removalBlockedByUserId={removalBlockedByUserId}
       currentUserId={userId}
       currentUserRole={currentUserRole}
       organizationId={activeOrgId}

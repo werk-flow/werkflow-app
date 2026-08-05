@@ -27,6 +27,9 @@ export type RealtimeTable =
   | 'employment_conditions'
   | 'work_schedules'
   | 'organization_closure_days'
+  | 'organization_responsibility_configurations'
+  | 'organization_responsibility_assignments'
+  | 'organization_responsibility_delegations'
   | 'clients'
   | 'client_contacts'
   | 'client_sites'
@@ -76,6 +79,9 @@ const TABLES: RealtimeTable[] = [
   'employment_conditions',
   'work_schedules',
   'organization_closure_days',
+  'organization_responsibility_configurations',
+  'organization_responsibility_assignments',
+  'organization_responsibility_delegations',
   'clients',
   'client_contacts',
   'client_sites',
@@ -290,6 +296,39 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('organization_closure_days', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_responsibility_configurations',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_responsibility_configurations', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_responsibility_assignments',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_responsibility_assignments', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_responsibility_delegations',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_responsibility_delegations', p)
         )
         .on(
           'postgres_changes',

@@ -542,7 +542,7 @@ export async function editPersonnelTextField(
 // The segmented DatePicker (dd.mm.yyyy) is driven by typing digits after
 // focusing the group; segments auto-advance after two/two/four digits. The
 // group's accessible name is the field label (e.g. "Gültig ab").
-async function typeIntoDatePicker(
+export async function typeIntoDatePicker(
   scope: Locator,
   groupName: string,
   digits: string
@@ -554,6 +554,212 @@ async function typeIntoDatePicker(
   await group.press('ArrowLeft');
   await group.press('ArrowLeft');
   await group.pressSequentially(digits, { delay: 50 });
+}
+
+// P1-05: scoped responsibilities, effective previews, and substitutions.
+
+export async function previewResponsibilityChange(
+  page: Page,
+  options: {
+    responsibility: 'time_approval' | 'leave_approval';
+    selectedNames?: string[];
+    gainedNames?: string[];
+    lostNames?: string[];
+  }
+): Promise<void> {
+  await page.goto('/einstellungen/mitarbeiter');
+  const card = page.getByTestId(`responsibility-${options.responsibility}`);
+  await card.getByRole('button', { name: 'Verantwortung ändern' }).click();
+  const dialog = page.getByRole('dialog');
+
+  if (options.selectedNames) {
+    await dialog.locator(`#${options.responsibility}-mode`).click();
+    await page.getByRole('option', { name: 'Bestimmte Personen' }).click();
+    for (const checkbox of await dialog.getByRole('checkbox').all()) {
+      if (await checkbox.isChecked()) await checkbox.uncheck();
+    }
+    for (const name of options.selectedNames) {
+      await dialog.getByRole('checkbox', { name: new RegExp(name) }).check();
+    }
+  } else {
+    await dialog.locator(`#${options.responsibility}-mode`).click();
+    await page
+      .getByRole('option', { name: 'Standardrollen: Admin und Büro' })
+      .click();
+  }
+
+  await dialog.getByRole('button', { name: 'Wirkung prüfen' }).click();
+  const preview = page.getByTestId('effective-access-preview');
+  await expect(preview).toBeVisible({ timeout: 15_000 });
+  const gainedSection = preview
+    .getByText('Erhält Zugriff', { exact: true })
+    .locator('..');
+  const lostSection = preview
+    .getByText('Verliert Zugriff', { exact: true })
+    .locator('..');
+  for (const name of options.gainedNames ?? []) {
+    await expect(gainedSection.getByText(name, { exact: false })).toBeVisible();
+  }
+  for (const name of options.lostNames ?? []) {
+    await expect(lostSection.getByText(name, { exact: false })).toBeVisible();
+  }
+}
+
+export async function confirmResponsibilityPreview(page: Page): Promise<void> {
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Änderung bestätigen' })
+    .click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function createResponsibilityDelegationViaSettings(
+  page: Page,
+  options: {
+    responsibility: 'time_approval' | 'leave_approval';
+    delegatorName: string;
+    substituteName: string;
+    validFromDigits: string;
+    validUntilDigits: string;
+  }
+): Promise<void> {
+  await page.goto('/einstellungen/mitarbeiter');
+  const card = page.getByTestId(`responsibility-${options.responsibility}`);
+  await card.getByRole('button', { name: 'Vertretung eintragen' }).click();
+  const dialog = page.getByRole('dialog');
+
+  await dialog.locator(`#${options.responsibility}-delegator`).click();
+  await page.getByRole('option', { name: options.delegatorName }).click();
+  await dialog.locator(`#${options.responsibility}-substitute`).click();
+  await page.getByRole('option', { name: options.substituteName }).click();
+  await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
+  await typeIntoDatePicker(dialog, 'Gültig bis', options.validUntilDigits);
+  await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expectVisibleAfterSave(page, options.substituteName);
+}
+
+export async function endResponsibilityDelegationViaSettings(
+  page: Page,
+  responsibility: 'time_approval' | 'leave_approval',
+  substituteName: string
+): Promise<void> {
+  await page.goto('/einstellungen/mitarbeiter');
+  const card = page.getByTestId(`responsibility-${responsibility}`);
+  const row = card
+    .locator('li')
+    .filter({ hasText: substituteName })
+    .filter({ has: page.getByRole('button', { name: 'Heute beenden' }) })
+    .first();
+  await row.getByRole('button', { name: 'Heute beenden' }).click();
+  const endedRow = card.locator('li').filter({ hasText: substituteName }).first();
+  await expect(endedRow.getByText('Beendet', { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+async function typeIntoTimeInput(
+  dialog: Locator,
+  id: string,
+  digits: string
+): Promise<void> {
+  const group = dialog.locator(`#${id}`);
+  await group.click();
+  await group.press('ArrowLeft');
+  await group.pressSequentially(digits, { delay: 50 });
+}
+
+export async function createOwnManualTimeEntry(
+  page: Page,
+  options: {
+    memberName?: string;
+    dateDigits: string;
+    clockInDigits: string;
+    clockOutDigits: string;
+  }
+): Promise<void> {
+  await page.goto('/zeiterfassung');
+  await page.getByRole('button', { name: 'Manuelle Eintragung' }).click();
+  const dialog = page.getByRole('dialog');
+  if (options.memberName) {
+    await dialog.locator('#manual-entry-member').click();
+    await dialog
+      .getByRole('button', { name: new RegExp(options.memberName) })
+      .click();
+  }
+  await typeIntoDatePicker(dialog, 'Datum', options.dateDigits);
+  await typeIntoTimeInput(dialog, 'clockInTime', options.clockInDigits);
+  await typeIntoTimeInput(dialog, 'clockOutTime', options.clockOutDigits);
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog.getByText('Antrag wurde zur Genehmigung eingereicht.')).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function openTimeApprovals(page: Page): Promise<void> {
+  await page.goto('/zeiterfassung?tab=approvals');
+  await expect(page.getByRole('tab', { name: /Anträge/ })).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function expectPendingTimeApprovalVisible(
+  page: Page,
+  userId: string
+): Promise<void> {
+  await expect(page.getByTestId(`pending-session-${userId}`)).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function expectPendingTimeApprovalHidden(
+  page: Page,
+  userId: string
+): Promise<void> {
+  await expect(page.getByTestId(`pending-session-${userId}`)).toHaveCount(0, {
+    timeout: 15_000,
+  });
+}
+
+export async function approvePendingTimeEntry(
+  page: Page,
+  userId: string
+): Promise<void> {
+  const card = page.getByTestId(`pending-session-${userId}`);
+  await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
+  await expect(card).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function expectExpiredResponsibilityDeniedAtAction(
+  page: Page,
+  userId: string
+): Promise<void> {
+  const card = page.getByTestId(`pending-session-${userId}`);
+  await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
+  await expect(
+    page.getByText(
+      'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.'
+    )
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(card).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function expectMemberRemovalBlockedByResponsibility(
+  page: Page,
+  memberName: string
+): Promise<void> {
+  await openMemberDetailFromList(page, memberName);
+  await page.getByRole('button', { name: 'Aktionen', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Entfernen' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(
+    dialog.getByText(
+      'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.'
+    )
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    dialog.getByRole('button', { name: 'Zuerst neu zuweisen' })
+  ).toBeDisabled();
 }
 
 export async function addConditionViaDialog(

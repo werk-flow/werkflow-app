@@ -18,7 +18,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline (updated 5 August 2026 with slice `P1-03`) includes:
+The implemented baseline (updated 5 August 2026 through slice `P1-05`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -53,6 +53,17 @@ Work schedules and holiday/closure context (`P1-04`, 2026-08-05):
 - Authorization: schedule writes are manager-only service-role actions with org-validation triggers and `employee_record_events` audit (`schedule_added`/`schedule_updated`/`schedule_deleted` with before/after). `work_schedules` SELECT RLS is self-or-manager (`app_private.get_user_employee_record_ids` security-definer helper) — the first employee-self read path on personnel-adjacent data, so employees' own dashboards stay Realtime-fresh without exposing colleagues' schedules. Closure days are org-member-readable planning context.
 - Realtime: `work_schedules` and `organization_closure_days` are published and wired into the provider and refresh hooks.
 
+Scoped responsibilities and substitutes (`P1-05`, 2026-08-05):
+
+- The three fixed roles remain the safe product presets. Phase 1 deliberately adds no custom role names, generic role builder, or field-by-field permission switches. Two practical responsibilities exist under **Einstellungen → Mitarbeiter & Rollen**: `time_approval` (**Zeitfreigaben**) and `leave_approval` (**Urlaubsfreigaben**). Time approval is the first live consumer; leave approval is the stable contract consumed by `P1-06`, not an implemented vacation workflow.
+- An unconfigured organization keeps the previous behavior exactly: active Admin and Büro members are the default holders. The owner can instead select named active members; that selected set replaces the role default for the responsibility without granting the people broader personnel, settings, or manager access. The existing organization owner remains the only person who can change responsibility holders or substitutes; Büro sees the configuration read-only.
+- Before saving a holder change, the owner must confirm an **Auswirkung vor dem Speichern** preview showing who gains, keeps, or loses the effective responsibility. Every configuration change appends a new effective-from snapshot rather than rewriting the prior one. Role changes in default mode append a new default snapshot as well, so the answer to “who held this responsibility then?” remains reconstructible.
+- A current base holder can receive a named substitute for an inclusive Berlin business-date window (`valid_from` through `valid_until`). The base holder keeps the responsibility; the substitute temporarily inherits that holder's scope. Ending a substitute records `revoked_from` and takes effect from that date without deleting the original window. Expired and ended windows remain visible and auditable.
+- Employees see **Meine Verantwortlichkeiten und Vertretungen** in employee settings, scoped to responsibilities and substitute windows that affect them. Admin/Büro also see a responsibility summary on member details. This transparency does not broaden access to other employees' responsibility data.
+- The pure resolver `resolveEffectiveResponsibility` returns each effective holder with a discriminated source: `role_default`, `direct_assignment`, or `delegation`. Live approval actions resolve it again server-side using the current action timestamp and `getBusinessTodayIso()`; cached or midnight-stale display state can never authorize an expired substitute.
+- Append-only `organization_responsibility_events` records configuration, substitute, expiry/revocation, and default-snapshot facts with actor and before/after details. The operational tables use self-or-manager SELECT RLS through `app_private` SECURITY DEFINER helpers, service-role writes through validated RPCs, organization-consistency triggers, Realtime publication, and replica identity full.
+- Safety: a selected holder set may never be empty, removing its sole base holder is blocked with an understandable message, the organization owner membership remains the sole `admin`, and direct `admin_id` changes are rejected in favor of a future dedicated ownership-transfer flow. Ownership transfer and emergency recovery remain out of scope.
+
 Important current limitations:
 
 - There is no team structure and no skill/certification model (`P1-09`). Work schedules cover weekly patterns only: no shift rotations, seasonal patterns, or date-specific overrides (`P1-11`), and approved absence does not yet reduce targets (`P1-06` vacation, `P1-08` sickness).
@@ -60,7 +71,7 @@ Important current limitations:
 - Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents (`P1-24`).
 - There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, payroll profile, payroll export, or accounting handoff.
 - Current member removal remains destructive: it attempts to close an active session, deletes that member's organization time entries, and then deletes the membership. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
-- Custom roles, custom role names, and granular permission editing are not implemented.
+- Custom roles, custom role names, and granular permission editing are intentionally not part of Phase 1; fixed roles plus scoped responsibilities are the accepted safe model.
 - Employees cannot yet view or propose corrections to their own personnel record; the self-service surface is later scope.
 
 Current application code and live database state remain authoritative if this baseline drifts.
@@ -272,7 +283,7 @@ Every intelligent action must show its source, proposed result, confidence or un
 
 - WerkFlow is an operational people-management system first, not a full payroll engine, recruiting suite, performance-management platform, or source of employment-law advice.
 - The boundary between a practical personnel record and a full HRIS must be validated with SHK businesses before adding generic enterprise HR features.
-- Custom roles and field-level permissions require a tested permission vocabulary and safe presets before a role builder is exposed.
+- Phase 1 is fixed roles plus the tested scoped-responsibility vocabulary. A custom-role or field-permission builder remains a separate future decision gate and must not be inferred from this model.
 - Personnel-document categories, retention periods, deletion rights, and employee access require legal/privacy review; do not invent one universal policy.
 - Health and sick-leave data must remain minimal. Diagnosis capture, broad manager visibility, or medical-document sharing is outside the default product.
 - Compensation storage, native payroll calculation, and specific payroll-provider integrations are separate decision gates.
@@ -287,9 +298,10 @@ Resolved with `P1-03` (2026-08-05): the V1 master-data and condition field set (
 
 Resolved with `P1-04` (2026-08-05): the first configurable work-schedule pattern is a date-effective weekly pattern (minutes per weekday) keyed to the employee record; the schedule wins over the condition's contractual weekly hours for targets, shown as a non-blocking mismatch hint. Public-holiday calendars ship as an in-code per-Bundesland dataset (no external API; 16 states, Bavaria with/without Mariä Himmelfahrt) selected org-wide by the admin with effective-from history; closure days („Betriebsruhe") are today/future-only entries maintained by admin/Büro. Holidays and closure days set the day's target to 0. Missing configuration resolves through a labeled display-time fallback (condition-derived, else the visibly labeled legacy 8h) — nothing is persisted that a human did not enter.
 
+Resolved with `P1-05` (2026-08-05): Phase 1 keeps the fixed `admin`/`buero`/`employee` roles and adds exactly two named responsibilities, `time_approval` (**Zeitfreigaben**) and `leave_approval` (**Urlaubsfreigaben**), with named holders and date-effective substitutes. There is no generic role builder. Responsibility assignments key to the organization-specific employee record but authorize its linked active login; role-default snapshots preserve existing behavior when an organization configures nothing. Only the owner edits the model, every change has an effective-result preview and append-only audit, and affected people can inspect their own effective state. Ownership transfer remains a dedicated future flow.
+
 - Which additional personnel fields are genuinely required for the first SHK customer profiles beyond the `P1-03` set, and which remain optional?
-- Should custom roles ship in Phase 1, or should default roles plus scoped responsibilities cover the initial need?
-- Which project-lead and leave-approver responsibilities can be delegated without creating another global role?
+- Which future operational responsibility beyond Zeitfreigaben and Urlaubsfreigaben proves necessary in real SHK use without becoming a generic permission switch (for example, a deliberately scoped project-lead contract in `P1-09`)?
 - Which skills and certification templates should WerkFlow provide by default for SHK, and who verifies them?
 - Which personnel documents require acknowledgement, signature, expiry, versioning, or special retention?
 - How should employees propose corrections to private master data and employment conditions?

@@ -14,6 +14,10 @@ import {
   isSameLocalDay
 } from './day-utils';
 import { getEffectiveTimeEntries } from './effective-entries';
+import {
+  canHolderApproveTarget,
+  type EffectiveResponsibilityHolder,
+} from '@/lib/responsibilities/resolution';
 
 // ── Time model constants ──────────────────────────────────────────────
 export const TOTAL_RING_MINUTES = 510;        // 8.5h = one full rotation of main ring
@@ -400,27 +404,23 @@ export function getLastEntry(entries: TimeEntry[]): TimeEntry | null {
  *
  * Rules:
  * - Admin adding any entry → approved
- * - Manager adding for managed roles (accountant, secretary, employee) → approved
- * - Manager adding for self → approved (TODO: make configurable via org settings;
- *   when enabled, return 'pending' so admin approval is required)
+ * - Büro adding for employees → approved
+ * - Büro adding for self → pending so another effective time approver decides
  * - Other roles adding for self → pending (needs admin/manager approval)
  */
 export function determineApprovalStatus(
   callerRole: OrgRole,
-  _targetUserId: string,
-  _callerId: string
+  targetUserId: string,
+  callerId: string
 ): TimeEntryStatus {
-  void _targetUserId;
-  void _callerId;
-
   // Admin adding any entry → immediately approved
   if (callerRole === 'admin') {
     return 'approved';
   }
 
-  // Manager adding entry → immediately approved (both for self and managed roles)
+  // Four-eyes boundary: Büro users submit their own additions for approval.
   if (callerRole === 'buero') {
-    return 'approved';
+    return targetUserId === callerId ? 'pending' : 'approved';
   }
 
   // All other roles → needs approval
@@ -483,8 +483,20 @@ export function needsChangeRequest(
  */
 export function canApproveEntries(
   callerRole: OrgRole,
-  targetRole: OrgRole
+  targetRole: OrgRole,
+  options?: {
+    holder: EffectiveResponsibilityHolder;
+    targetUserId: string;
+  }
 ): boolean {
+  if (options) {
+    return canHolderApproveTarget(
+      options.holder,
+      options.targetUserId,
+      targetRole
+    );
+  }
+
   // Admin can approve all entries
   if (callerRole === 'admin') {
     return true;

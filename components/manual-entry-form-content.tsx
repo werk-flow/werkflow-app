@@ -352,6 +352,8 @@ export function ManualEntryFormContent({
       })),
     [jobOptions]
   );
+  const isOwnBueroEntry =
+    activeOrg?.role === 'buero' && selectedUserId === currentUserId;
 
   if (!activeOrgId || !activeOrg) return null;
 
@@ -410,8 +412,9 @@ export function ManualEntryFormContent({
 
         {isAdminOrManager && (
           <div className="space-y-2">
-            <Label>Mitarbeiter</Label>
+            <Label htmlFor="manual-entry-member">Mitarbeiter</Label>
             <SearchableSelect
+              id="manual-entry-member"
               options={memberOptions}
               value={selectedUserId}
               onChange={setSelectedUserId}
@@ -445,8 +448,10 @@ export function ManualEntryFormContent({
         )}
 
         <div className="space-y-2">
-          <Label>Datum</Label>
+          <Label htmlFor="manual-entry-date">Datum</Label>
           <DatePicker
+            id="manual-entry-date"
+            ariaLabel="Datum"
             value={selectedDate}
             onChange={setSelectedDate}
             placeholder="Datum wählen"
@@ -494,6 +499,13 @@ export function ManualEntryFormContent({
             {successMessage}
           </div>
         )}
+
+        {isOwnBueroEntry ? (
+          <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            Eigene Nachträge werden zur Freigabe eingereicht. Du kannst sie
+            nicht selbst freigeben.
+          </p>
+        ) : null}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="submit" disabled={isPending}>

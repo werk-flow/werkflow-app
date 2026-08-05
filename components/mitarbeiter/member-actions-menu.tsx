@@ -31,6 +31,7 @@ import {
   type OrgRole
 } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
+import { getMemberActionErrorMessage } from '@/lib/members/errors';
 
 // Role hierarchy - lower number = higher rank
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
@@ -56,6 +57,7 @@ interface MemberActionsMenuProps {
   memberRole: OrgRole;
   currentUserId: string;
   currentUserRole: OrgRole;
+  removalBlockedMessage?: string;
   onRoleChange?: (
     memberId: string,
     newRole: OrgRole,
@@ -72,6 +74,7 @@ export function MemberActionsMenu({
   memberRole,
   currentUserId,
   currentUserRole,
+  removalBlockedMessage,
   onRoleChange
 }: MemberActionsMenuProps) {
   const router = useRouter();
@@ -118,7 +121,7 @@ export function MemberActionsMenu({
       // Refresh to get sorted data from server
       router.refresh();
     } else {
-      setError(result.error || 'Fehler beim Ändern der Rolle');
+      setError(getMemberActionErrorMessage(result.error));
     }
 
     setIsUpdating(false);
@@ -138,7 +141,7 @@ export function MemberActionsMenu({
       router.push(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
       // Don't set isRemoving to false on success - component will unmount
     } else {
-      setError(result.error || 'Fehler beim Entfernen des Mitglieds');
+      setError(getMemberActionErrorMessage(result.error));
       setIsRemoving(false);
     }
   };
@@ -211,14 +214,24 @@ export function MemberActionsMenu({
       <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Mitglied entfernen?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {removalBlockedMessage
+                ? 'Mitglied kann noch nicht entfernt werden'
+                : 'Mitglied entfernen?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Bist du sicher, dass du{' '}
-              <span className="font-medium">
-                {memberName || 'dieses Mitglied'}
-              </span>{' '}
-              aus der Organisation entfernen möchtest? Diese Aktion kann nicht
-              rückgängig gemacht werden.
+              {removalBlockedMessage ? (
+                removalBlockedMessage
+              ) : (
+                <>
+                  Bist du sicher, dass du{' '}
+                  <span className="font-medium">
+                    {memberName || 'dieses Mitglied'}
+                  </span>{' '}
+                  aus der Organisation entfernen möchtest? Diese Aktion kann
+                  nicht rückgängig gemacht werden.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -228,7 +241,7 @@ export function MemberActionsMenu({
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemove}
-              disabled={isRemoving}
+              disabled={isRemoving || Boolean(removalBlockedMessage)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isRemoving ? (
@@ -237,7 +250,7 @@ export function MemberActionsMenu({
                   Wird entfernt...
                 </>
               ) : (
-                'Entfernen'
+                removalBlockedMessage ? 'Zuerst neu zuweisen' : 'Entfernen'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

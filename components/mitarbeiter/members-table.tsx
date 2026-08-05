@@ -76,6 +76,7 @@ interface MembersTableProps {
   statusMap?: Record<string, MemberStatus>;
   /** Resolved daily targets per member (P1-04) */
   targetsByUserId?: Record<string, DailyTarget>;
+  removalBlockedByUserId?: Record<string, string>;
 }
 
 // Mobile card skeleton - matches exact card structure
@@ -141,7 +142,8 @@ function MemberCard({
   currentUserRole,
   onRoleChange,
   status,
-  target
+  target,
+  removalBlockedMessage,
 }: {
   member: OrgMember;
   memberName: string;
@@ -157,6 +159,7 @@ function MemberCard({
   ) => void;
   status?: MemberStatus;
   target?: DailyTarget;
+  removalBlockedMessage?: string;
 }) {
   const router = useRouter();
 
@@ -216,6 +219,7 @@ function MemberCard({
             memberRole={member.role}
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
+            removalBlockedMessage={removalBlockedMessage}
             onRoleChange={onRoleChange}
           />
         </div>
@@ -232,7 +236,8 @@ export function MembersTable({
   isLoading = false,
   skeletonCount = 0,
   statusMap = {},
-  targetsByUserId
+  targetsByUserId,
+  removalBlockedByUserId = {},
 }: MembersTableProps) {
   const router = useRouter();
   const canManageMembers =
@@ -321,6 +326,7 @@ export function MembersTable({
               onRoleChange={onRoleChange}
               status={statusMap[member.user_id]}
               target={targetsByUserId?.[member.user_id]}
+              removalBlockedMessage={removalBlockedByUserId[member.user_id]}
             />
           );
         })}
@@ -406,6 +412,9 @@ export function MembersTable({
                         memberRole={member.role}
                         currentUserId={currentUserId}
                         currentUserRole={currentUserRole}
+                        removalBlockedMessage={
+                          removalBlockedByUserId[member.user_id]
+                        }
                         onRoleChange={onRoleChange}
                       />
                     </TableCell>

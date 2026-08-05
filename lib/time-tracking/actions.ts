@@ -36,8 +36,7 @@ import {
   type GetChangeRequestsResult,
   toTimeEntry,
   toTimeEntries,
-  toChangeRequest,
-  MANAGED_ROLES
+  toChangeRequest
 } from './types';
 import {
   buildClockTimelineSegments,
@@ -69,6 +68,10 @@ import {
 import { getEffectiveTimeEntries } from './effective-entries';
 import { computeBreakdownForSettings } from './settings';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
+import {
+  authorizeResponsibilityForTarget,
+  getEffectiveResponsibilityHolderForActor,
+} from '@/lib/responsibilities/server';
 
 const STALE_SESSION_LOOKBACK_DAYS = 92;
 const STALE_SESSION_LOOKUP_LIMIT = 500;
@@ -1145,9 +1148,17 @@ export async function reviewEntry(
 
     const targetRole = targetMember.role as OrgRole;
 
-    // Check if caller can approve this entry
-    if (!canApproveEntries(callerRole, targetRole)) {
-      return { success: false, error: 'not_authorized' };
+    // Resolve current stored responsibility at action time. A stale UI can
+    // never preserve authority after a delegation expires.
+    const approvalAuthorization = await authorizeResponsibilityForTarget({
+      organizationId: entry.organization_id,
+      responsibility: 'time_approval',
+      actorUserId: user.id,
+      targetUserId: entry.user_id,
+      targetRole,
+    });
+    if (!approvalAuthorization.success) {
+      return { success: false, error: approvalAuthorization.error };
     }
 
     if (decision === 'approved') {
@@ -1772,8 +1783,13 @@ export async function getPendingEntries(
       return { success: false, error: 'not_a_member' };
     }
 
-    // Only admin and manager can see pending entries
-    if (callerRole !== 'admin' && callerRole !== 'buero') {
+    const responsibilityHolder =
+      await getEffectiveResponsibilityHolderForActor({
+        organizationId: orgId,
+        responsibility: 'time_approval',
+        actorUserId: user.id,
+      });
+    if (!responsibilityHolder) {
       return { success: true, entries: [] };
     }
 
@@ -1792,12 +1808,8 @@ export async function getPendingEntries(
       return { success: false, error: 'fetch_failed' };
     }
 
-    // Filter based on what the caller can review
-    if (callerRole === 'admin') {
-      return { success: true, entries: toTimeEntries(pendingEntries || []) };
-    }
-
-    // Manager: batch-fetch roles for all unique users in pending entries
+    // Batch-fetch roles, then apply the same effective responsibility and
+    // inherited target scope used by the review action.
     const uniqueUserIds = [
       ...new Set((pendingEntries || []).map((e) => e.user_id))
     ];
@@ -1814,7 +1826,13 @@ export async function getPendingEntries(
 
     const filteredEntries = (pendingEntries || []).filter((entry) => {
       const targetRole = roleMap.get(entry.user_id);
-      return targetRole && MANAGED_ROLES.includes(targetRole);
+      return Boolean(
+        targetRole &&
+          canApproveEntries(callerRole, targetRole, {
+            holder: responsibilityHolder,
+            targetUserId: entry.user_id,
+          })
+      );
     });
 
     return { success: true, entries: toTimeEntries(filteredEntries) };
@@ -1840,7 +1858,7 @@ export async function getPendingApprovalCount(
     if (!user) return 0;
 
     const callerRole = await verifyMembershipFromCache(user.id, orgId);
-    if (!callerRole || (callerRole !== 'admin' && callerRole !== 'buero')) {
+    if (!callerRole) {
       return 0;
     }
 
@@ -1886,8 +1904,13 @@ export async function getPendingSessions(
       return { success: false, error: 'not_a_member' };
     }
 
-    // Only admin and manager can see pending entries
-    if (callerRole !== 'admin' && callerRole !== 'buero') {
+    const responsibilityHolder =
+      await getEffectiveResponsibilityHolderForActor({
+        organizationId: orgId,
+        responsibility: 'time_approval',
+        actorUserId: user.id,
+      });
+    if (!responsibilityHolder) {
       return { success: true, sessions: [] };
     }
 
@@ -1930,30 +1953,26 @@ export async function getPendingSessions(
       });
     }
 
-    // Filter based on what the caller can review (manager can only review managed roles)
-    let filteredEntries: TimeEntryRow[];
-
-    if (callerRole === 'admin') {
-      filteredEntries = pendingEntries;
-    } else {
-      // Manager: batch-fetch roles for all unique users
-      const uniqueUserIds = [...new Set(pendingEntries.map((e) => e.user_id))];
-      const { data: memberRows } = await admin
-        .from('organization_members')
-        .select('user_id, role')
-        .eq('organization_id', orgId)
-        .in('user_id', uniqueUserIds);
-
-      const roleMap = new Map<string, OrgRole>();
-      for (const m of memberRows || []) {
-        roleMap.set(m.user_id, m.role as OrgRole);
-      }
-
-      filteredEntries = pendingEntries.filter((entry) => {
-        const targetRole = roleMap.get(entry.user_id);
-        return targetRole && MANAGED_ROLES.includes(targetRole);
-      });
+    const uniqueUserIds = [...new Set(pendingEntries.map((e) => e.user_id))];
+    const { data: memberRows } = await admin
+      .from('organization_members')
+      .select('user_id, role')
+      .eq('organization_id', orgId)
+      .in('user_id', uniqueUserIds);
+    const roleMap = new Map<string, OrgRole>();
+    for (const member of memberRows || []) {
+      roleMap.set(member.user_id, member.role as OrgRole);
     }
+    const filteredEntries: TimeEntryRow[] = pendingEntries.filter((entry) => {
+      const targetRole = roleMap.get(entry.user_id);
+      return Boolean(
+        targetRole &&
+          canApproveEntries(callerRole, targetRole, {
+            holder: responsibilityHolder,
+            targetUserId: entry.user_id,
+          })
+      );
+    });
 
     // Group entries into sessions (pairs of clock_in/clock_out with same createdAt within 5 seconds)
     const sessions: PendingSession[] = [];

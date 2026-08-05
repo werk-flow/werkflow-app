@@ -7,6 +7,7 @@ import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
@@ -216,6 +217,21 @@ export async function removeMember(
       }
     }
 
+    // Check before clocking out or deleting time data: the database trigger is
+    // the final backstop, but discovering the conflict after those destructive
+    // steps would leave a partial removal.
+    const strandedResponsibilities =
+      await getResponsibilitiesStrandedByMemberRemoval({
+        organizationId: orgId,
+        userId: memberId,
+      });
+    if (strandedResponsibilities.length > 0) {
+      return {
+        success: false,
+        error: `last_responsibility_holder:${strandedResponsibilities[0]}`,
+      };
+    }
+
     // If the member is currently working today in this org, insert an automatic clock_out
     // before removal (best-effort). This mirrors "clock out via FAB, then remove from org".
     try {
@@ -296,6 +312,15 @@ export async function removeMember(
 
     if (deleteError) {
       console.error('Error removing member:', deleteError);
+      if (deleteError.message.includes('last_responsibility_holder:')) {
+        const responsibility = deleteError.message.includes('leave_approval')
+          ? 'leave_approval'
+          : 'time_approval';
+        return {
+          success: false,
+          error: `last_responsibility_holder:${responsibility}`,
+        };
+      }
       return { success: false, error: 'delete_failed' };
     }
 
@@ -356,6 +381,7 @@ export async function removeMember(
 
     updateTag(CACHE_TAGS.memberships(memberId));
     updateTag(CACHE_TAGS.personnel(orgId));
+    updateTag(CACHE_TAGS.responsibilities(orgId));
     if (orgId) {
       updateTag(CACHE_TAGS.memberCount(orgId));
     }

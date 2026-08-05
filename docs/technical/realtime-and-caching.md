@@ -33,6 +33,7 @@ Current cache tag areas include:
 - Clients.
 - Requests (Anfragen).
 - Personnel records, employment conditions, and work schedules (`personnel-<orgId>`, P1-03/P1-04).
+- Scoped responsibility configurations, assignments, and substitutes (`responsibilities-<orgId>`, P1-05).
 - Organization holiday/closure context (`organization-calendar-<orgId>` plus the settings tag, P1-04).
 - Jobs.
 - Projects.
@@ -55,6 +56,9 @@ The provider subscribes to tables that affect active operational views, includin
 - `employment_conditions`
 - `work_schedules`
 - `organization_closure_days`
+- `organization_responsibility_configurations`
+- `organization_responsibility_assignments`
+- `organization_responsibility_delegations`
 - `clients`
 - `client_contacts`
 - `client_sites`
@@ -67,6 +71,8 @@ The provider subscribes to tables that affect active operational views, includin
 Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
 
 Events are debounced inside the provider to avoid refresh storms when multiple related rows change quickly.
+
+The three P1-05 responsibility tables use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit table is not subscribed, matching other per-domain audit logs.
 
 ## Refresh Patterns
 
@@ -89,6 +95,8 @@ When adding or changing server actions:
 4. Invalidate relevant cache tags with `updateTag()`.
 5. Confirm whether Realtime already covers the affected table.
 6. Avoid redundant manual client refreshes if Realtime already updates the view.
+
+Responsibility writes invalidate `responsibilities-<orgId>` and revalidate settings, personnel, time, and calendar consumers. Authorization does not read a cross-request responsibility cache: every approval action reloads stored configuration and uses the current server action timestamp plus the Europe/Berlin business date. Therefore a stale render around midnight or an overlapping Realtime refresh may affect display freshness, but can never extend an expired substitute's authority. Focused client refetches such as the pending-approval count retain last-known data on transient failure and use a generation guard so an older response cannot overwrite a newer one.
 
 ## Adding New Realtime Data
 

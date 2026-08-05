@@ -21,7 +21,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline on 23 July 2026 includes:
+The implemented baseline (updated 5 August 2026 through `P1-05`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
@@ -30,8 +30,8 @@ The implemented baseline on 23 July 2026 includes:
 - Job-linked clock-in, job switching during an active session, assigned-job selection for employees, and job/project time views.
 - Protection against an employee being actively clocked in in more than one organization.
 - A current-week view with daily presence, work, break, and overtime display; since `P1-04` the overtime boundary and the weekly `Soll` come from each date's resolved schedule/holiday target instead of a fixed 480 minutes.
-- Manual same-day work or break entries with sequence/overlap validation. Employees can add their own entries for approval; admins and Büro can add records within their management scope.
-- Approval of pending employee sessions by admins/Büro, including paired session display and job context.
+- Manual same-day work or break entries with sequence/overlap validation. Employees can add their own entries for approval; admins and Büro can add records within their management scope. Since `P1-05`, a Büro user's own new manual entries are pending rather than silently self-approved; admin-owned additions remain auto-approved as the owner recovery path.
+- Approval of pending sessions by effective holders of the scoped `time_approval` responsibility (**Zeitfreigaben**), including paired session display and job context. With no explicit configuration, active Admin and Büro holders preserve the prior matrix (Admin can approve Büro/employee; Büro can approve employee). Selected holders replace that default, and direct holders can be ordinary employees without gaining any other manager capability.
 - Manager history filters by date range, employee, and status.
 - Correction, deletion, reassignment, pending-state, review, and calendar-visualization infrastructure for time records.
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
@@ -46,7 +46,8 @@ Important current limitations:
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
 - On-call/standby time, deployments during on-call periods, night/Sunday/holiday supplements, paid/unpaid classifications, and explicit overtime approval are not implemented as complete product concepts.
 - Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.
-- The code contains change-request infrastructure, but current permission helpers do not require a change request for Büro edits/deletes. Büro additions are also approved immediately. Four-eyes approval for a manager's own changes is therefore not an active general rule.
+- Four eyes is active for every pending time approval: a holder can never approve their own entry. Büro users' own new manual additions become pending and need another holder with sufficient scope. Existing Büro edit/delete behavior still does not create a change request, and the complete correction/request workflow remains `P1-22`.
+- Date-effective substitutes inherit only their base holder's approval scope for an inclusive Berlin-date window. Every approval action resolves current responsibility server-side; an ended or expired substitute is denied even if a stale browser still shows the old approval card.
 - There is no native mobile app or offline time queue. Web behavior must not be described as offline-capable.
 - There is no payroll-ready period workflow, standard payroll/accounting export, or native finance handoff.
 - There is no complete German working-time compliance configuration. Current break settings alone must not be presented as proof of compliance.
@@ -311,12 +312,13 @@ Every intelligent action must show its source, proposed change, uncertainty, hum
 
 ## Open Product Decisions
 
+Resolved with `P1-05` (2026-08-05): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer, the complete correction request model, batch decisions, and closed-period behavior remain later scope.
+
 - Which time categories and internal activities should ship as defaults for SHK businesses?
 - Is job selection required for all field work, required only for selected roles, or handled through an unallocated-time queue?
 - Which travel models must be supported first: company start, home-to-site, site-to-site, passengers, or driver distinction?
 - How should standby/on-call schedules and active call-outs affect credited time, supplements, and rest warnings?
 - Which employee edits are direct, which require approval, and how long is the self-correction window?
-- Who approves Büro/admin time, and how do delegation and the last-approver case work?
 - Which German state holiday calendars and exceptional-work configurations are needed first?
 - Which warnings should be informational, approval-required, or blocking by default?
 - How are overtime approval, time off in lieu, carryover, expiry, payout, and caps configured?

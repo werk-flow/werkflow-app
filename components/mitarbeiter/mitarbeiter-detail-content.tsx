@@ -48,6 +48,7 @@ import { PersonalienSection } from './personalien-section';
 import { EmploymentConditionsSection } from './employment-conditions-section';
 import { WorkScheduleSection } from './work-schedule-section';
 import { PersonnelHistorySection } from './personnel-history-section';
+import { ResponsibilitySummarySection } from './responsibility-summary-section';
 import { EmploymentStateBadge } from './personnel-state-badges';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
@@ -85,6 +86,12 @@ import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { cn } from '@/lib/utils';
+import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
+import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
+import {
+  getMemberActionErrorMessage,
+  getResponsibilityRemovalBlockMessage,
+} from '@/lib/members/errors';
 
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
@@ -178,6 +185,7 @@ interface MitarbeiterDetailContentProps {
   breakMode: OrgBreakMode;
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
+  responsibilitySettings: ResponsibilitySettingsData | null;
 }
 
 export function MitarbeiterDetailContent({
@@ -201,11 +209,13 @@ export function MitarbeiterDetailContent({
   breakMode,
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
+  responsibilitySettings,
 }: MitarbeiterDetailContentProps) {
   const router = useRouter();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useRealtimeRouterRefresh({
     tables: ['employee_records', 'employment_conditions', 'work_schedules'],
@@ -238,6 +248,16 @@ export function MitarbeiterDetailContent({
       (currentUserRole === 'buero' &&
         ROLE_HIERARCHY[member.role] > ROLE_HIERARCHY['buero']));
 
+  const removalBlockedMessage = useMemo(() => {
+    if (!personnel || !responsibilitySettings) return null;
+    return getResponsibilityRemovalBlockMessage(
+      getResponsibilitiesStrandedByEmployeeRemoval(
+        responsibilitySettings.effective,
+        personnel.record.id
+      )
+    );
+  }, [personnel, responsibilitySettings]);
+
   const availableRoles = useMemo(() => {
     const assignable =
       currentUserRole === 'admin'
@@ -258,9 +278,12 @@ export function MitarbeiterDetailContent({
   const handleRoleChange = async (newRole: OrgRole) => {
     if (isUpdatingRole) return;
     setIsUpdatingRole(true);
+    setActionError(null);
     const result = await updateMemberRole(member.userId, newRole);
     if (result.success) {
       router.refresh();
+    } else {
+      setActionError(getMemberActionErrorMessage(result.error));
     }
     setIsUpdatingRole(false);
   };
@@ -268,10 +291,12 @@ export function MitarbeiterDetailContent({
   const handleRemove = async () => {
     if (isRemoving) return;
     setIsRemoving(true);
+    setActionError(null);
     const result = await removeMember(member.userId);
     if (result.success) {
       router.push(`/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`);
     } else {
+      setActionError(getMemberActionErrorMessage(result.error));
       setIsRemoving(false);
     }
   };
@@ -333,7 +358,7 @@ export function MitarbeiterDetailContent({
             type: 'select' as const,
             currentValue: member.role,
             onSave: async (v: string) => {
-              await updateMemberRole(member.userId, v as OrgRole);
+              await handleRoleChange(v as OrgRole);
             },
             options: roleOptions,
           }
@@ -419,6 +444,14 @@ export function MitarbeiterDetailContent({
           ) : undefined
         }
       />
+      {actionError ? (
+        <div
+          role="alert"
+          className="mx-4 mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
+        >
+          {actionError}
+        </div>
+      ) : null}
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
@@ -453,6 +486,13 @@ export function MitarbeiterDetailContent({
                 canEdit={isAdminOrManager}
               />
             )}
+
+            {personnel && responsibilitySettings ? (
+              <ResponsibilitySummarySection
+                employeeRecordId={personnel.record.id}
+                data={responsibilitySettings}
+              />
+            ) : null}
 
             {personnel && (
               <PersonnelHistorySection
@@ -633,21 +673,36 @@ export function MitarbeiterDetailContent({
       <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Mitglied entfernen?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {removalBlockedMessage
+                ? 'Mitglied kann noch nicht entfernt werden'
+                : 'Mitglied entfernen?'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Bist du sicher, dass du{' '}
-              <span className="font-medium">{fullName}</span> aus der
-              Organisation entfernen möchtest? Diese Aktion kann nicht
-              rückgängig gemacht werden.
+              {removalBlockedMessage ? (
+                removalBlockedMessage
+              ) : (
+                <>
+                  Bist du sicher, dass du{' '}
+                  <span className="font-medium">{fullName}</span> aus der
+                  Organisation entfernen möchtest? Diese Aktion kann nicht
+                  rückgängig gemacht werden.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {actionError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {actionError}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemove}
-              disabled={isRemoving}
+              disabled={isRemoving || Boolean(removalBlockedMessage)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isRemoving ? (
@@ -656,7 +711,7 @@ export function MitarbeiterDetailContent({
                   Wird entfernt...
                 </>
               ) : (
-                'Entfernen'
+                removalBlockedMessage ? 'Zuerst neu zuweisen' : 'Entfernen'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
