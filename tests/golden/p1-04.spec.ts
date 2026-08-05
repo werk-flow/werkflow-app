@@ -1,4 +1,5 @@
 import { expect, test } from './support/fixtures';
+import { getHolidayName } from '../../lib/personnel/holidays';
 import {
   getEmployeeRecordStateByUser,
   getVisibleWorkScheduleRecordIdsAs,
@@ -64,6 +65,25 @@ function previousMondayIso(): string {
   return shiftIsoDate(todayIso, -(weekdayIndex(todayIso) + 7));
 }
 
+// Expected weekly Soll (hours) for Mo–Fr plans: the first test selects the
+// Bavarian calendar effective from today, so a Bavarian holiday on today or a
+// later weekday zeroes that day's target — the expectation must mirror the
+// same in-code dataset the app uses or the suite would fail in holiday weeks.
+function expectedWeeklyHours(
+  hoursBeforeToday: number,
+  hoursFromToday: number
+): number {
+  const todayIso = berlinTodayIso();
+  const weekStartIso = shiftIsoDate(todayIso, -weekdayIndex(todayIso));
+  let total = 0;
+  for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+    const dayIso = shiftIsoDate(weekStartIso, dayOffset);
+    if (dayIso >= todayIso && getHolidayName('BY', dayIso) !== null) continue;
+    total += dayIso < todayIso ? hoursBeforeToday : hoursFromToday;
+  }
+  return total;
+}
+
 test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
   test('Admin wählt den Feiertagskalender, Büro sieht ihn nur', async ({
     adminPage,
@@ -115,7 +135,10 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     employeePage,
   }) => {
     await employeePage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(employeePage, 'Soll: 40 Std.');
+    await expectVisibleAfterSave(
+      employeePage,
+      `Soll: ${expectedWeeklyHours(8, 8)} Std.`
+    );
     // With a real schedule there is no unconfigured warning.
     await expect(
       employeePage.getByText('Kein Arbeitszeitmodell hinterlegt')
@@ -138,7 +161,10 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
 
     // The part-time member sees their own different weekly target.
     await bueroPage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(bueroPage, 'Soll: 20 Std.');
+    await expectVisibleAfterSave(
+      bueroPage,
+      `Soll: ${expectedWeeklyHours(4, 4)} Std.`
+    );
   });
 
   test('Änderung ab heute: frühere Tage behalten das alte Ziel', async ({
@@ -164,14 +190,12 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     ).toBeVisible();
 
     // The week's target mixes both versions: weekdays before today keep the
-    // old 8h target, today and later use 6h. On a weekend run the whole
-    // Mo–Fr week already lies in the past and stays at 40.
-    const pastWeekdays = Math.min(weekdayIndex(berlinTodayIso()), 5);
-    const expectedWeeklyHours = 8 * pastWeekdays + 6 * (5 - pastWeekdays);
+    // old 8h target, today and later use 6h (holiday-aware). On a weekend run
+    // the whole Mo–Fr week already lies in the past and stays at 40.
     await employeePage.goto('/zeiterfassung');
     await expectVisibleAfterSave(
       employeePage,
-      `Soll: ${expectedWeeklyHours} Std.`
+      `Soll: ${expectedWeeklyHours(8, 6)} Std.`
     );
   });
 

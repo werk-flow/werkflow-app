@@ -110,12 +110,18 @@ export function resolveHolidayRegionOnDate(
   >,
   dateIso: string
 ): string | null {
-  const history = calendar.holidayRegionHistory;
-  if (history.length === 0) {
+  if (calendar.holidayRegionHistory.length === 0) {
     // No recorded history: the current selection (if any) applies from now on;
     // without history we cannot place it in time, so treat it as effective.
     return calendar.holidayRegion;
   }
+
+  // parseHolidayRegionHistory sorts ascending, but calendars can be assembled
+  // elsewhere (tests, future callers) — order defensively, non-mutating.
+  const history = [...calendar.holidayRegionHistory].sort(
+    (a, b) =>
+      new Date(a.effectiveFrom).getTime() - new Date(b.effectiveFrom).getTime()
+  );
 
   for (let i = history.length - 1; i >= 0; i--) {
     const entry = history[i];
@@ -150,9 +156,11 @@ export function resolveDailyTarget({
     source = 'schedule';
     baseTargetMinutes = schedule.dayMinutes[weekday] ?? 0;
   } else {
+    // Noon UTC always maps onto the same Berlin calendar date, in CET and
+    // CEST alike — no fixed-offset assumption around DST changes.
     const condition = getEffectiveCondition(
       conditions,
-      new Date(`${dateIso}T12:00:00+02:00`)
+      new Date(`${dateIso}T12:00:00Z`)
     );
     if (condition?.weeklyHours != null && condition.weeklyHours > 0) {
       source = 'derived';

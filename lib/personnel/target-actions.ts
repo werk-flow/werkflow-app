@@ -42,6 +42,10 @@ export async function getWeeklyTargets(input: {
 
     const admin = createSupabaseAdminClient();
     const calendarPromise = getCachedOrganizationCalendar(orgId);
+    // The record lookup below can return early; without a handler an infra
+    // rejection of the calendar fetch would surface as an unhandled rejection.
+    // The real await further down still propagates it into this try block.
+    calendarPromise.catch(() => {});
 
     const { data: record, error: recordError } = await admin
       .from('employee_records')

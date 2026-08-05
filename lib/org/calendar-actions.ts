@@ -2,12 +2,15 @@
 
 import { updateTag } from 'next/cache';
 
-import { CACHE_TAGS, getCachedOrganizationCalendar } from '@/lib/data/cached';
+import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isHolidayRegion } from '@/lib/personnel/holidays';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
-import type { HolidayRegionHistoryEntry } from '@/lib/personnel/targets';
+import {
+  parseHolidayRegionHistory,
+  type HolidayRegionHistoryEntry,
+} from '@/lib/personnel/targets';
 
 // Organization holiday/closure configuration (P1-04).
 // - Holiday region: admin-only (structural policy, break-settings precedent),
@@ -46,8 +49,21 @@ export async function setHolidayRegion(
       return { success: false, error: 'not_authorized' };
     }
 
-    const calendar = await getCachedOrganizationCalendar(orgId);
-    if ((calendar.holidayRegion ?? null) === region) {
+    // Append onto the stored history, never onto the cross-request cache: a
+    // stale cached copy could silently drop earlier history entries and with
+    // them the effective-dated meaning of past days.
+    const { data: settingsRow, error: settingsError } = await admin
+      .from('organization_settings')
+      .select('holiday_region, holiday_region_history')
+      .eq('organization_id', orgId)
+      .maybeSingle();
+
+    if (settingsError) {
+      console.error('Failed to read holiday settings:', settingsError);
+      return { success: false, error: 'update_failed' };
+    }
+
+    if ((settingsRow?.holiday_region ?? null) === region) {
       return { success: true };
     }
 
@@ -56,7 +72,10 @@ export async function setHolidayRegion(
       region: region ?? '',
       effectiveFrom: new Date().toISOString(),
     };
-    const nextHistory = [...calendar.holidayRegionHistory, nextEntry];
+    const nextHistory = [
+      ...parseHolidayRegionHistory(settingsRow?.holiday_region_history),
+      nextEntry,
+    ];
 
     const { error: updateError } = await admin
       .from('organization_settings')

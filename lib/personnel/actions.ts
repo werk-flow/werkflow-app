@@ -17,7 +17,11 @@ import {
   type EmploymentCondition,
   type EmploymentType,
 } from '@/lib/personnel/types';
-import { toWorkSchedule, type WorkSchedule } from '@/lib/personnel/schedule';
+import {
+  toWorkSchedule,
+  WORK_SCHEDULE_DAY_COLUMNS,
+  type WorkSchedule,
+} from '@/lib/personnel/schedule';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -251,6 +255,17 @@ export async function getPersonnelDetail(idOrUserId: string): Promise<
             .maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
+
+    // A failed conditions/schedules load must fail the detail explicitly —
+    // otherwise the surface would silently show the labeled default target
+    // although a real schedule exists.
+    if (conditionsResult.error || schedulesResult.error) {
+      console.error(
+        'Failed to load personnel detail context:',
+        conditionsResult.error ?? schedulesResult.error
+      );
+      return { success: false, error: 'load_failed' };
+    }
 
     const rawInvite = row.organization_invites as unknown;
     const invite = (
@@ -801,6 +816,14 @@ function scheduleAuditPayload(input: {
   };
 }
 
+function toDayMinuteColumns(dayMinutes: number[]): Record<string, number> {
+  const columns: Record<string, number> = {};
+  WORK_SCHEDULE_DAY_COLUMNS.forEach((column, index) => {
+    columns[column] = dayMinutes[index];
+  });
+  return columns;
+}
+
 export async function addWorkSchedule(
   recordId: string,
   input: WorkScheduleInput
@@ -815,20 +838,13 @@ export async function addWorkSchedule(
       return { success: false, error: validationError };
     }
 
-    const [mon, tue, wed, thu, fri, sat, sun] = input.dayMinutes;
     const { data, error } = await admin
       .from('work_schedules')
       .insert({
         organization_id: orgId,
         employee_record_id: recordId,
         valid_from: input.validFrom,
-        monday_minutes: mon,
-        tuesday_minutes: tue,
-        wednesday_minutes: wed,
-        thursday_minutes: thu,
-        friday_minutes: fri,
-        saturday_minutes: sat,
-        sunday_minutes: sun,
+        ...toDayMinuteColumns(input.dayMinutes),
         note: normalizeOptionalText(input.note),
         created_by: userId,
       })
@@ -917,18 +933,11 @@ export async function updateWorkSchedule(
       return { success: false, error: validationError };
     }
 
-    const [mon, tue, wed, thu, fri, sat, sun] = input.dayMinutes;
     const { error } = await admin
       .from('work_schedules')
       .update({
         valid_from: input.validFrom,
-        monday_minutes: mon,
-        tuesday_minutes: tue,
-        wednesday_minutes: wed,
-        thursday_minutes: thu,
-        friday_minutes: fri,
-        saturday_minutes: sat,
-        sunday_minutes: sun,
+        ...toDayMinuteColumns(input.dayMinutes),
         note: normalizeOptionalText(input.note),
       })
       .eq('id', scheduleId)

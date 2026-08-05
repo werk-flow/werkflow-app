@@ -63,12 +63,20 @@ export function useWeeklyTimeData({
     initialWeekLabel ?? computeWeekLabel(getWeekBounds().monday)
   );
   const hasUsedInitialData = useRef(hasInitialData);
+  // Several Realtime events can trigger overlapping fetches; only the latest
+  // request may commit state, or a slow older response would win.
+  const fetchGenerationRef = useRef(0);
+  // Last successfully resolved targets: a transiently failed refetch must not
+  // silently degrade the surface back to the fixed eight-hour fallback.
+  const lastKnownTargetsRef = useRef<DailyTarget[] | undefined>(initialWeekTargets);
 
   const fetchWeekData = useCallback(async () => {
     if (!organizationId || !userId) {
       setIsLoading(false);
       return;
     }
+
+    const generation = ++fetchGenerationRef.current;
 
     // Recompute week bounds fresh on every fetch so we never use stale dates
     const { monday, sunday } = getWeekBounds();
@@ -86,6 +94,10 @@ export function useWeeklyTimeData({
         getWeeklyTargets({ userId }),
       ]);
 
+      if (generation !== fetchGenerationRef.current) {
+        return;
+      }
+
       if (!result.success) {
         setError(result.error);
         return;
@@ -93,7 +105,8 @@ export function useWeeklyTimeData({
 
       const nextTargets = targetsResult.success
         ? targetsResult.targets
-        : undefined;
+        : lastKnownTargetsRef.current;
+      lastKnownTargetsRef.current = nextTargets;
       setWeekTargets(nextTargets);
       setWeekData(
         buildWeeklyTimeData(
@@ -110,10 +123,15 @@ export function useWeeklyTimeData({
       );
       setError(null);
     } catch (err) {
+      if (generation !== fetchGenerationRef.current) {
+        return;
+      }
       console.error('Error fetching weekly time data:', err);
       setError('Failed to fetch weekly data');
     } finally {
-      setIsLoading(false);
+      if (generation === fetchGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [
     autoBreakDurationMinutes,
