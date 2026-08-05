@@ -188,6 +188,24 @@ export async function createTestWorld(): Promise<TestWorld> {
     `Golden-${runId}`,
     `delivered+gg-${runId}@resend.dev`
   );
+  // P1-03 fixtures: a member the personnel spec removes, and a future login
+  // for a personnel record without access. The invite email address reuses the
+  // delivered+gg- prefix so the leftover cleaner keeps matching it.
+  const removableEmployee = await createTestUser(
+    admin,
+    runId,
+    'removable',
+    'Rudi',
+    `Golden-${runId}`
+  );
+  const personnelInvitee = await createTestUser(
+    admin,
+    runId,
+    'personnel-invitee',
+    'Nora',
+    `Neuling-${runId}`,
+    `delivered+gg-p103-${runId}@resend.dev`
+  );
 
   // Organization creation is subscription-gated in the product UI; seeded
   // admins get an active subscription row so admin-gated surfaces behave.
@@ -206,6 +224,7 @@ export async function createTestWorld(): Promise<TestWorld> {
   for (const [role, user] of [
     ['buero', users.buero],
     ['employee', users.employee],
+    ['employee', removableEmployee],
   ] as const) {
     const { error } = await admin
       .from('organization_members')
@@ -230,6 +249,8 @@ export async function createTestWorld(): Promise<TestWorld> {
     orgName,
     users,
     invitee,
+    removableEmployee,
+    personnelInvitee,
     inventory,
     outsider: { orgId: outsiderOrgId, orgName: outsiderOrgName, admin: outsiderAdmin },
   };
@@ -264,6 +285,8 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
     world.users.buero,
     world.users.employee,
     world.invitee,
+    world.removableEmployee,
+    world.personnelInvitee,
     world.outsider.admin,
   ];
 

@@ -13,13 +13,40 @@ import {
   getCachedOrganizationUserPreferences,
   getCachedUser,
 } from '@/lib/data/cached';
-import { getMemberDetail, getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
+import {
+  getMemberDetail,
+  getOrgMembersForUser,
+  getProfilesByIds,
+  type OrgRole,
+} from '@/lib/members/actions';
+import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import { toClient, toProject, type Client, type ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
+import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import MitarbeiterDetailLoading from './loading';
+
+async function resolveActorNames(
+  detail: PersonnelDetail | null
+): Promise<Record<string, string>> {
+  if (!detail) return {};
+  const actorIds = Array.from(
+    new Set(
+      detail.events
+        .map((event) => event.createdBy)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+  const profiles = await getProfilesByIds(actorIds);
+  const names: Record<string, string> = {};
+  for (const [id, profile] of Object.entries(profiles)) {
+    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
+    if (name) names[id] = name;
+  }
+  return names;
+}
 
 interface MitarbeiterDetailPageProps {
   params: Promise<{ userId: string }>;
@@ -54,6 +81,7 @@ async function MitarbeiterDetailData({
 
   const [
     memberResult,
+    personnelResult,
     jobsResult,
     clientsResult,
     membersResult,
@@ -64,6 +92,7 @@ async function MitarbeiterDetailData({
     organizationUserPreferences,
   ] = await Promise.all([
     getMemberDetail(targetUserId),
+    getPersonnelDetail(targetUserId),
     getJobsForMember(targetUserId),
     admin
       .from('clients')
@@ -86,6 +115,18 @@ async function MitarbeiterDetailData({
   ]);
 
   if (!memberResult.success) {
+    // No active membership: personnel records without a login and exited
+    // people get the personnel-only detail surface.
+    if (personnelResult.success) {
+      const actorNames = await resolveActorNames(personnelResult.detail);
+      return (
+        <PersonnelRecordDetailContent
+          detail={personnelResult.detail}
+          actorNames={actorNames}
+          canEdit={isAdminOrManager}
+        />
+      );
+    }
     return (
       <RouteRedirect href="/mitarbeiter">
         <MitarbeiterDetailLoading />
@@ -94,6 +135,13 @@ async function MitarbeiterDetailData({
   }
 
   const { member } = memberResult;
+  const personnelDetail = personnelResult.success
+    ? personnelResult.detail
+    : null;
+  const actorNames = await resolveActorNames(personnelDetail);
+  if (!personnelResult.success) {
+    console.error('Failed to load personnel detail:', personnelResult.error);
+  }
 
   const jobsData = jobsResult.success
     ? {
@@ -156,6 +204,8 @@ async function MitarbeiterDetailData({
   return (
     <MitarbeiterDetailContent
       member={member}
+      personnel={personnelDetail}
+      actorNames={actorNames}
       jobs={jobsData.jobs}
       projects={jobsData.projects}
       projectGraphProjects={employeeProjectGraph}

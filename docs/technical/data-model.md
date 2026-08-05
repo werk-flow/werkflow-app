@@ -50,6 +50,16 @@ Role behavior should be designed around the product context:
 - Büro/office users need operational coordination tools.
 - Field workers need simple, mobile-friendly flows with minimal room for mistakes.
 
+## Personnel Domain (P1-03)
+
+Employment identity is organization-scoped and deliberately separate from the global profile:
+
+- Employee record (`Personalakte`): one per person per organization, holding practical master data (employee number, contact/address, emergency contact, entry/exit dates, notes). `user_id` is nullable — future starters and non-login personnel exist as records without an account; a pending invite can be remembered on the record and redeeming it links the login to the existing record instead of creating a duplicate. Every membership-creation path auto-creates a record via trigger; the personnel record survives destructive member removal and is marked exited.
+- Employment condition: date-effective versions per employee record keyed by `valid_from`; the condition effective on a date is the newest version on or before that date. Later changes never silently rewrite what was true for past work and time (time tracking's `P1-04` is the first consumer). No compensation fields exist.
+- Employee record event: append-only, actor-attributed audit of material personnel changes with before/after payloads (same pattern as request and document audit events).
+- States are derived, never stored: employment `aktiv`/`geplant`/`ausgeschieden` from entry/exit dates, access `mit Zugang`/`eingeladen`/`ohne Zugang` from the linked user/invite.
+- Access: manager-only SELECT RLS; all writes through service-role server actions with org-validation triggers. Operational pickers (assignment, time) read memberships, so non-login personnel can never appear in them.
+
 ## Work Domain
 
 The core work domain is job/project management.

@@ -881,6 +881,192 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_record_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_record_events_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_record_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_records: {
+        Row: {
+          city: string | null
+          created_at: string
+          created_by: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          employee_number: string | null
+          entry_date: string | null
+          exit_date: string | null
+          first_name: string | null
+          id: string
+          invite_id: string | null
+          last_name: string | null
+          notes: string | null
+          organization_id: string
+          phone: string | null
+          postal_code: string | null
+          private_email: string | null
+          street: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          employee_number?: string | null
+          entry_date?: string | null
+          exit_date?: string | null
+          first_name?: string | null
+          id?: string
+          invite_id?: string | null
+          last_name?: string | null
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+          postal_code?: string | null
+          private_email?: string | null
+          street?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          created_by?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          employee_number?: string | null
+          entry_date?: string | null
+          exit_date?: string | null
+          first_name?: string | null
+          id?: string
+          invite_id?: string | null
+          last_name?: string | null
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+          postal_code?: string | null
+          private_email?: string | null
+          street?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_records_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "organization_invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_records_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employment_conditions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          employment_type: string
+          id: string
+          note: string | null
+          organization_id: string
+          updated_at: string
+          vacation_days_per_year: number | null
+          valid_from: string
+          weekly_hours: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          employment_type: string
+          id?: string
+          note?: string | null
+          organization_id: string
+          updated_at?: string
+          vacation_days_per_year?: number | null
+          valid_from: string
+          weekly_hours?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          employment_type?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          updated_at?: string
+          vacation_days_per_year?: number | null
+          valid_from?: string
+          weekly_hours?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employment_conditions_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employment_conditions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entry_change_requests: {
         Row: {
           change_type: Database["public"]["Enums"]["entry_change_type"]
@@ -2350,6 +2536,7 @@ export type Database = {
         Returns: undefined
       }
       generate_job_number: { Args: { p_org_id: string }; Returns: string }
+      generate_personnel_number: { Args: { p_org_id: string }; Returns: string }
       generate_project_number: { Args: { p_org_id: string }; Returns: string }
       generate_request_number: { Args: { p_org_id: string }; Returns: string }
       get_invite_by_code: {

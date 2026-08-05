@@ -288,7 +288,7 @@ export async function returnMaterialOnJobPage(
 // business assertion strict — the saved row must exist and render — without
 // making the gate a latency lottery. GG-00's dedicated Realtime test remains
 // the freshness guard.
-async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
+export async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
   try {
     await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
   } catch {
@@ -509,6 +509,189 @@ export async function closeRequestViaDialog(
   await expect(visibleText(page, 'Ohne Auftrag geschlossen:')).toBeVisible({
     timeout: 15_000,
   });
+}
+
+// P1-03: personnel identity and date-effective employment conditions.
+
+export async function openMemberDetailFromList(page: Page, name: string): Promise<void> {
+  await page.goto('/mitarbeiter');
+  await visibleText(page, name).click();
+  await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
+  await expect(visibleText(page, 'Personalien')).toBeVisible({ timeout: 15_000 });
+}
+
+// Inline edit of one Personalien field through the shared MetadataSection
+// pencil-edit flow (text fields only; dates use the segmented DatePicker).
+export async function editPersonnelTextField(
+  page: Page,
+  fieldLabel: string,
+  value: string
+): Promise<void> {
+  await page
+    .getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true })
+    .click();
+  // The field editor autofocuses its input; targeting :focus avoids matching
+  // unrelated inputs elsewhere on the detail page (e.g. table search boxes).
+  const input = page.locator('input:focus, textarea:focus');
+  await expect(input).toBeVisible();
+  await input.fill(value);
+  await page.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expectVisibleAfterSave(page, value);
+}
+
+// The segmented DatePicker (dd.mm.yyyy) is driven by typing digits after
+// focusing the group; segments auto-advance after two/two/four digits.
+async function typeIntoDatePicker(
+  scope: Locator,
+  digits: string
+): Promise<void> {
+  const group = scope.getByRole('group', { name: 'Datum' });
+  await group.click();
+  // The click may land on any segment; ArrowLeft twice normalizes to the day
+  // segment (it is a no-op when already there).
+  await group.press('ArrowLeft');
+  await group.press('ArrowLeft');
+  await group.pressSequentially(digits, { delay: 50 });
+}
+
+export async function addConditionViaDialog(
+  page: Page,
+  options: {
+    // ddmmyyyy digits for the valid-from date; omitted = keep today's default.
+    validFromDigits?: string;
+    employmentTypeLabel: string;
+    weeklyHours?: string;
+    vacationDays?: string;
+    note?: string;
+  }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Kondition hinzufügen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Kondition hinzufügen' })
+  ).toBeVisible();
+
+  const dialog = page.getByRole('dialog');
+  if (options.validFromDigits) {
+    await typeIntoDatePicker(dialog, options.validFromDigits);
+  }
+
+  await page.locator('#condition-type').click();
+  await page
+    .getByRole('option', { name: options.employmentTypeLabel, exact: true })
+    .click();
+
+  if (options.weeklyHours !== undefined) {
+    await page.locator('#condition-weekly-hours').fill(options.weeklyHours);
+  }
+  if (options.vacationDays !== undefined) {
+    await page.locator('#condition-vacation-days').fill(options.vacationDays);
+  }
+  if (options.note !== undefined) {
+    await page.locator('#condition-note').fill(options.note);
+  }
+
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function editConditionWeeklyHours(
+  page: Page,
+  validFromLabel: string,
+  weeklyHours: string
+): Promise<void> {
+  const row = page
+    .locator('li')
+    .filter({ hasText: `Gültig ab ${validFromLabel}` })
+    .filter({ visible: true })
+    .first();
+  await row
+    .getByRole('button', { name: `Kondition vom ${validFromLabel} bearbeiten` })
+    .click();
+  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Kondition bearbeiten' })
+  ).toBeVisible();
+  await page.locator('#condition-weekly-hours').fill(weeklyHours);
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Speichern', exact: true })
+    .click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function createPersonnelRecordViaDialog(
+  page: Page,
+  options: {
+    firstName?: string;
+    lastName: string;
+    entryDateDigits?: string;
+    employeeNumber?: string;
+  }
+): Promise<string> {
+  await page.goto('/mitarbeiter');
+  await page.getByRole('button', { name: 'Personalakte anlegen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Personalakte anlegen' })
+  ).toBeVisible();
+
+  const dialog = page.getByRole('dialog');
+  if (options.firstName) {
+    await page.locator('#personnel-first-name').fill(options.firstName);
+  }
+  await page.locator('#personnel-last-name').fill(options.lastName);
+  if (options.employeeNumber !== undefined) {
+    await page.locator('#personnel-number').fill(options.employeeNumber);
+  } else {
+    // The number suggestion arrives asynchronously; wait so the submit cannot
+    // race it (mirrors the request/job dialogs).
+    await expect(page.locator('#personnel-number')).toHaveValue(/.+/, {
+      timeout: 15_000,
+    });
+  }
+  if (options.entryDateDigits) {
+    await typeIntoDatePicker(dialog, options.entryDateDigits);
+  }
+
+  await dialog
+    .getByRole('button', { name: 'Personalakte anlegen', exact: true })
+    .click();
+  await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
+
+  const match = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
+  if (!match) {
+    throw new Error('createPersonnelRecordViaDialog: could not read the record id');
+  }
+  return match[1];
+}
+
+export async function sendInviteFromPersonnelRecord(
+  page: Page,
+  email: string,
+  roleLabel: 'Büro' | 'Handwerker/in'
+): Promise<void> {
+  await page.getByRole('button', { name: 'Zugang einladen' }).click();
+  await expect(
+    page.getByRole('heading', { name: /Zugang für .* einladen/ })
+  ).toBeVisible();
+  await page.locator('#personnel-invite-email').fill(email);
+  await page.locator('#personnel-invite-role').click();
+  await page.getByRole('option', { name: roleLabel, exact: true }).click();
+  await page.getByRole('button', { name: 'Einladung senden' }).click();
+  await expect(page.getByText('Einladung erfolgreich gesendet!')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
+}
+
+export async function removeMemberFromDetail(page: Page, name: string): Promise<void> {
+  await openMemberDetailFromList(page, name);
+  await page.getByRole('button', { name: 'Aktionen' }).click();
+  await page.getByRole('menuitem', { name: 'Entfernen' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Mitglied entfernen?' })
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Entfernen', exact: true }).click();
+  await page.waitForURL(/\/mitarbeiter\?removed_member=/, { timeout: 20_000 });
 }
 
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {

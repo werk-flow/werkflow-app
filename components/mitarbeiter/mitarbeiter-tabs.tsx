@@ -15,13 +15,17 @@ import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
 import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
 import { QuickStats } from './quick-stats';
+import { PersonnelRecordsSection } from './personnel-records-section';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
+import type { PersonnelListEntry } from '@/lib/personnel/actions';
 
 interface MitarbeiterTabsProps {
   members: OrgMember[];
   invites: Invite[];
+  personnelEntries: PersonnelListEntry[];
+  personnelProfileNames: Record<string, string>;
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
@@ -30,6 +34,8 @@ interface MitarbeiterTabsProps {
 export function MitarbeiterTabs({
   members: initialMembers,
   invites: initialInvites,
+  personnelEntries,
+  personnelProfileNames,
   currentUserId,
   currentUserRole,
   organizationId
@@ -47,6 +53,15 @@ export function MitarbeiterTabs({
 
   // Get member IDs for status polling
   const memberIds = useMemo(() => members.map((m) => m.user_id), [members]);
+
+  // Personnel records that are not active members (future starters, non-login
+  // personnel, exited people) get their own visibly distinct section.
+  const personnelWithoutMembership = useMemo(() => {
+    const memberIdSet = new Set(memberIds);
+    return personnelEntries.filter(
+      (entry) => !entry.record.userId || !memberIdSet.has(entry.record.userId)
+    );
+  }, [personnelEntries, memberIds]);
 
   // Poll for member status (working status and hours)
   const {
@@ -91,8 +106,10 @@ export function MitarbeiterTabs({
     });
   }, [router, members.length, invites.length, refetchStatus]);
 
-  // Realtime: refetch server data when invitations change (e.g. accepted)
+  // Realtime: refetch server data when invitations or personnel records change
   useRealtimeEvent('organization_invites', handleRefresh);
+  useRealtimeEvent('employee_records', handleRefresh);
+  useRealtimeEvent('employment_conditions', handleRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(
@@ -180,6 +197,10 @@ export function MitarbeiterTabs({
             isLoading={isPending || isStatusLoading}
             skeletonCount={prevMemberCount}
             statusMap={statusMap}
+          />
+          <PersonnelRecordsSection
+            entries={personnelWithoutMembership}
+            profileNames={personnelProfileNames}
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-4">

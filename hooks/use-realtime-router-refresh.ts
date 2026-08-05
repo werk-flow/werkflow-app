@@ -61,6 +61,12 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('profiles', () => {
     if (tableSet.has('profiles')) scheduleRefresh();
   });
+  useRealtimeEvent('employee_records', () => {
+    if (tableSet.has('employee_records')) scheduleRefresh();
+  });
+  useRealtimeEvent('employment_conditions', () => {
+    if (tableSet.has('employment_conditions')) scheduleRefresh();
+  });
   useRealtimeEvent('clients', () => {
     if (tableSet.has('clients')) scheduleRefresh();
   });

@@ -6,12 +6,18 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
+import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
 import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton';
 import { ActionBanner } from '@/components/shared/action-banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
-import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
+import {
+  getOrgMembersForUser,
+  getProfilesByIds,
+  type OrgRole,
+} from '@/lib/members/actions';
+import { getPersonnelRecords } from '@/lib/personnel/actions';
 
 async function MitarbeiterData({
   activeOrgId,
@@ -22,7 +28,7 @@ async function MitarbeiterData({
   userId: string;
   currentUserRole: OrgRole;
 }) {
-  const [membersResult, invitesResult] = await Promise.all([
+  const [membersResult, invitesResult, personnelResult] = await Promise.all([
     getOrgMembersForUser(activeOrgId, userId),
     createSupabaseAdminClient()
       .from('organization_invites')
@@ -30,7 +36,8 @@ async function MitarbeiterData({
         'id, email, status, created_at, expires_at, accepted_at, invited_role'
       )
       .eq('organization_id', activeOrgId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }),
+    getPersonnelRecords(),
   ]);
 
   const memberList = membersResult as OrgMember[];
@@ -40,10 +47,35 @@ async function MitarbeiterData({
     console.error('Error fetching invites:', invitesResult.error);
   }
 
+  if (!personnelResult.success) {
+    console.error('Error fetching personnel records:', personnelResult.error);
+  }
+  const personnelEntries = personnelResult.success
+    ? personnelResult.entries
+    : [];
+
+  // Exited people keep their linked login; resolve those names from profiles.
+  const linkedUserIds = personnelEntries
+    .map((entry) => entry.record.userId)
+    .filter((id): id is string => Boolean(id));
+  const profileNamesByUserId = await getProfilesByIds(linkedUserIds);
+  const personnelProfileNames: Record<string, string> = {};
+  for (const entry of personnelEntries) {
+    if (!entry.record.userId) continue;
+    const profile = profileNamesByUserId[entry.record.userId];
+    if (!profile) continue;
+    const name = [profile.firstName, profile.lastName]
+      .filter(Boolean)
+      .join(' ');
+    if (name) personnelProfileNames[entry.record.id] = name;
+  }
+
   return (
     <MitarbeiterTabs
       members={memberList}
       invites={inviteList}
+      personnelEntries={personnelEntries}
+      personnelProfileNames={personnelProfileNames}
       currentUserId={userId}
       currentUserRole={currentUserRole}
       organizationId={activeOrgId}
@@ -97,7 +129,10 @@ export default async function MitarbeiterPage() {
       </Suspense>
       <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
         <h1 className="text-xl font-bold sm:text-2xl">Mitarbeiter</h1>
-        <InviteDialog />
+        <div className="flex items-center gap-2">
+          <CreatePersonnelDialog />
+          <InviteDialog />
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">

@@ -298,7 +298,62 @@ export async function removeMember(
       return { success: false, error: 'delete_failed' };
     }
 
+    // P1-03 (owner-approved): the personnel record survives the destructive
+    // membership removal and is marked as exited so the person stays
+    // distinguishable in history. P1-33 replaces this whole flow with real
+    // offboarding.
+    try {
+      const today = new Date();
+      const todayIso = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}-${`${today.getDate()}`.padStart(2, '0')}`;
+
+      const { data: personnelRecord } = await admin
+        .from('employee_records')
+        .select('id, exit_date')
+        .eq('organization_id', orgId)
+        .eq('user_id', memberId)
+        .maybeSingle();
+
+      if (
+        personnelRecord &&
+        (!personnelRecord.exit_date || personnelRecord.exit_date >= todayIso)
+      ) {
+        const { error: exitError } = await admin
+          .from('employee_records')
+          .update({ exit_date: todayIso })
+          .eq('id', personnelRecord.id);
+
+        if (exitError) {
+          console.error(
+            'Error marking personnel record as exited on member removal:',
+            exitError
+          );
+        } else {
+          const { error: eventError } = await admin
+            .from('employee_record_events')
+            .insert({
+              organization_id: orgId,
+              employee_record_id: personnelRecord.id,
+              event_type: 'membership_removed',
+              event_payload: { exit_date: todayIso },
+              created_by: user.id,
+            });
+          if (eventError) {
+            console.error(
+              'Error recording membership_removed event:',
+              eventError
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.error(
+        'Unexpected error updating personnel record on member removal:',
+        e
+      );
+    }
+
     updateTag(CACHE_TAGS.memberships(memberId));
+    updateTag(CACHE_TAGS.personnel(orgId));
     if (orgId) {
       updateTag(CACHE_TAGS.memberCount(orgId));
     }

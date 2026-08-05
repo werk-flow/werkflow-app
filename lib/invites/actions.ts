@@ -18,6 +18,9 @@ const VALID_INVITE_ROLES: InviteRole[] = ['buero', 'employee'];
 export type SendInviteResult = {
   success: boolean;
   error?: string;
+  // Present on success so callers (e.g. personnel records, P1-03) can connect
+  // the invite to their own domain objects.
+  inviteId?: string;
 };
 
 export async function sendOrgInvite(
@@ -127,14 +130,18 @@ export async function sendOrgInvite(
 
     // Insert invite record using admin client (no INSERT policy for invites)
     // Include the invited_role so the user receives the correct role when accepting
-    const { error: insErr } = await admin.from('organization_invites').insert({
-      organization_id: orgId,
-      email: trimmedEmail,
-      invite_code: inviteCode,
-      invited_role: role
-    });
+    const { data: insertedInvite, error: insErr } = await admin
+      .from('organization_invites')
+      .insert({
+        organization_id: orgId,
+        email: trimmedEmail,
+        invite_code: inviteCode,
+        invited_role: role
+      })
+      .select('id')
+      .single();
 
-    if (insErr) {
+    if (insErr || !insertedInvite) {
       console.error('Error inserting invite:', insErr);
       return { success: false, error: 'insert_failed' };
     }
@@ -192,7 +199,7 @@ export async function sendOrgInvite(
       return { success: false, error: 'email_send_failed' };
     }
 
-    return { success: true };
+    return { success: true, inviteId: insertedInvite.id };
   } catch (error) {
     console.error('Unexpected error in sendOrgInvite:', error);
     return { success: false, error: 'unexpected_error' };

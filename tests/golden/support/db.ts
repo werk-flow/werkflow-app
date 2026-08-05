@@ -64,6 +64,43 @@ export async function getRequestConversionState(
   };
 }
 
+export type EmployeeRecordState = {
+  id: string;
+  userId: string | null;
+  employeeNumber: string | null;
+  entryDate: string | null;
+  exitDate: string | null;
+  recordCountForUser: number;
+};
+
+// P1-03: DB-side proof for personnel facts the UI cannot show directly —
+// exactly one record per person per organization, the backfilled entry date,
+// and the exit marking after a destructive membership removal.
+export async function getEmployeeRecordStateByUser(
+  orgId: string,
+  userId: string
+): Promise<EmployeeRecordState> {
+  const { data, error } = await createAdminClient()
+    .from('employee_records')
+    .select('id, user_id, employee_number, entry_date, exit_date')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId);
+
+  if (error || !data || data.length === 0) {
+    throw new Error(`No employee record found for user ${userId}: ${error?.message}`);
+  }
+
+  const row = data[0];
+  return {
+    id: row.id as string,
+    userId: (row.user_id as string | null) ?? null,
+    employeeNumber: (row.employee_number as string | null) ?? null,
+    entryDate: (row.entry_date as string | null) ?? null,
+    exitDate: (row.exit_date as string | null) ?? null,
+    recordCountForUser: data.length,
+  };
+}
+
 export type InventoryLedgerState = {
   quantityOnHand: number;
   movementTotal: number;

@@ -44,7 +44,14 @@ import {
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { StatusBadge } from './status-badge';
+import { PersonalienSection } from './personalien-section';
+import { EmploymentConditionsSection } from './employment-conditions-section';
+import { PersonnelHistorySection } from './personnel-history-section';
+import { EmploymentStateBadge } from './personnel-state-badges';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { getEmploymentState } from '@/lib/personnel/types';
+import type { PersonnelDetail } from '@/lib/personnel/actions';
 
 import {
   updateMemberRole,
@@ -144,6 +151,8 @@ function computeLiveBreakMinutesForMember(
 
 interface MitarbeiterDetailContentProps {
   member: MemberDetail;
+  personnel: PersonnelDetail | null;
+  actorNames: Record<string, string>;
   jobs: Job[];
   projects: ProjectWithDetails[];
   projectGraphProjects: ProjectWithDetails[];
@@ -165,6 +174,8 @@ interface MitarbeiterDetailContentProps {
 
 export function MitarbeiterDetailContent({
   member,
+  personnel,
+  actorNames,
   jobs,
   projects,
   projectGraphProjects,
@@ -187,6 +198,10 @@ export function MitarbeiterDetailContent({
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
+
+  useRealtimeRouterRefresh({
+    tables: ['employee_records', 'employment_conditions'],
+  });
 
   const memberIds = useMemo(() => [member.userId], [member.userId]);
 
@@ -324,9 +339,17 @@ export function MitarbeiterDetailContent({
         title={fullName}
         subtitle={member.email}
         badges={
-          <Badge variant="secondary" className="text-xs">
-            {ROLE_LABELS[member.role] || member.role}
-          </Badge>
+          <span className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="text-xs">
+              {ROLE_LABELS[member.role] || member.role}
+            </Badge>
+            {personnel &&
+              getEmploymentState(personnel.record) !== 'aktiv' && (
+                <EmploymentStateBadge
+                  state={getEmploymentState(personnel.record)}
+                />
+              )}
+          </span>
         }
         actions={
           canManage ? (
@@ -336,6 +359,7 @@ export function MitarbeiterDetailContent({
                   variant="outline"
                   size="icon"
                   className="size-8"
+                  aria-label="Aktionen"
                   disabled={isUpdatingRole}
                 >
                   {isUpdatingRole ? (
@@ -387,6 +411,28 @@ export function MitarbeiterDetailContent({
               fields={metadataFields}
               isEditable={canManage}
             />
+
+            {personnel && (
+              <PersonalienSection
+                record={personnel.record}
+                canEdit={isAdminOrManager}
+              />
+            )}
+
+            {personnel && (
+              <EmploymentConditionsSection
+                recordId={personnel.record.id}
+                conditions={personnel.conditions}
+                canEdit={isAdminOrManager}
+              />
+            )}
+
+            {personnel && (
+              <PersonnelHistorySection
+                events={personnel.events}
+                actorNames={actorNames}
+              />
+            )}
 
             <div className="min-w-0 md:col-span-2 2xl:col-span-1">
               <ContextualDocumentsSection

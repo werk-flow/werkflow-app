@@ -23,6 +23,12 @@ export type TestWorld = {
   // through the real invite flow during the gate. Uses a Resend test address
   // (delivered+...@resend.dev) so the invite email sends without bouncing.
   invitee: TestUser;
+  // P1-03: an employee member whose destructive removal the personnel spec
+  // exercises; no other spec may depend on this member.
+  removableEmployee: TestUser;
+  // P1-03: a confirmed user without membership who redeems an invite that was
+  // sent from a personnel record, proving record-to-login linking.
+  personnelInvitee: TestUser;
   // Seeded inventory master data for the take/return scenario. Stock is
   // seeded through record_inventory_movement so the ledger starts consistent.
   inventory: {

@@ -34,6 +34,7 @@ export const CACHE_TAGS = {
     `organization-user-preferences-${orgId}-${userId}`,
   clients: (orgId: string) => `clients-${orgId}`,
   requests: (orgId: string) => `requests-${orgId}`,
+  personnel: (orgId: string) => `personnel-${orgId}`,
   jobs: (orgId: string) => `jobs-${orgId}`,
   projects: (orgId: string) => `projects-${orgId}`,
   documents: (orgId: string) => `documents-${orgId}`,

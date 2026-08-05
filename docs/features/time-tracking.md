@@ -42,7 +42,7 @@ Important current limitations:
 
 - Travel time is shown as a disabled action and is not a distinct implemented time type.
 - The vacation widget is static placeholder presentation (`9 von 30`) rather than a real entitlement, absence, or balance workflow.
-- The dashboard uses a fixed eight-hour daily goal. It does not yet derive date-effective targets from each employee's employment conditions or work schedule.
+- The dashboard uses a fixed eight-hour daily goal. Date-effective employment conditions (employment type, weekly hours) exist per employee since `P1-03` in `employment_conditions`, but nothing in time tracking consumes them yet — `P1-04` (work schedules and targets) is the first consumer, and it must apply the condition version effective on each date rather than the current one.
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
 - On-call/standby time, deployments during on-call periods, night/Sunday/holiday supplements, paid/unpaid classifications, and explicit overtime approval are not implemented as complete product concepts.
 - Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.

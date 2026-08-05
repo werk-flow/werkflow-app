@@ -18,7 +18,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline on 23 July 2026 includes:
+The implemented baseline (updated 5 August 2026 with slice `P1-03`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -30,14 +30,27 @@ The implemented baseline on 23 July 2026 includes:
 - Contextual employee documents through the document-management system. These links are manager-facing and do not give field workers access to the central document library.
 - Job assignments that connect employees to operational work and determine important field-worker access paths.
 
+Employment identity and conditions (`P1-03`, 2026-08-05):
+
+- An org-scoped personnel identity in `employee_records`, deliberately separate from the global per-user `profiles` table so employment data never leaks between the organizations a user belongs to. One record per person per organization; `user_id` is nullable, so future starters and non-login personnel exist as records without an account.
+- Every membership-creation path (organization creation, invite redemption, join-by-code) auto-creates the record via a database trigger; existing members were backfilled additively with the join date as visible, editable entry-date default. No employee numbers or conditions were invented for migrated members.
+- Practical master data on the `/mitarbeiter` detail (section **Personalien**): manual org-unique employee number (`MA-NNN` auto-suggestion via `generate_personnel_number`, manual override allowed), phone, private email, address, emergency contact, entry/exit date, notes. For linked records the profile name stays authoritative; name fields belong only to non-login records.
+- Date-effective employment conditions in `employment_conditions` (section **Beschäftigung**): versions keyed by `valid_from`; the condition effective on a date is the newest version on or before that date. Fields: employment type (`Vollzeit`, `Teilzeit`, `Ausbildung`, `Minijob`, `Sonstiges`), weekly hours, and vacation days per year — the latter two stored but not yet consumed (`P1-04` and `P1-06` are the first consumers), plus a free-text note. Current, historical, and scheduled versions are labeled `Aktuell` / `Früher` / `Geplant` and stay simultaneously visible. Compensation fields deliberately do not exist (owner decision, 2026-08-05).
+- Derived, never-stored states shown as badges: employment `Aktiv` / `Geplant` / `Ausgeschieden` (from entry/exit dates; the exit date counts inclusively) and access `Mit Zugang` / `Eingeladen` / `Ohne Zugang`. Non-member records (future starters, non-login personnel, exited people) appear in a separate **Weiteres Personal** section on `/mitarbeiter`; active members stay in the members table.
+- A personnel record without login can be connected to a future account: **Zugang einladen** on the record sends the normal organization invite and remembers it; redeeming the invite links the login to the existing record (inside the redemption RPC, race-safe, before the membership trigger) instead of creating a duplicate.
+- Append-only audit in `employee_record_events` (**Verlauf** section, actor-attributed): record creation, master-data changes with before/after values, condition add/change/delete with full before/after, invite connection, login linking, membership removal. Historical conditions may be corrected by Admin/Büro, but never silently.
+- Authorization: manager-only SELECT RLS (`app_private.get_user_admin_or_manager_org_ids`) on all three tables; all writes go through service-role server actions with org-validation triggers. Employees have no self-service personnel surface yet (deliberate; later scope).
+- Realtime: `employee_records` and `employment_conditions` are published and wired into the provider; the events table stays unpublished like other per-domain audit logs.
+
 Important current limitations:
 
-- The employee detail record is still primarily membership plus basic profile data. There is no complete personnel master record, employment history, team structure, skill/certification model, employment-condition model, work-schedule model, or emergency-contact workflow.
-- There is no implemented vacation, leave, sick-notice, entitlement, approval, or absence-planning domain. The vacation card currently visible in the time dashboard is static presentation, not a real balance.
-- Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents.
+- There is no work-schedule model, holiday calendar, or target-hour consumption of the stored weekly hours (`P1-04`), no team structure, and no skill/certification model (`P1-09`).
+- There is no implemented vacation, leave, sick-notice, entitlement, approval, or absence-planning domain. The stored vacation-days-per-year value is display-only until `P1-06`; the vacation card in the time dashboard is static presentation, not a real balance.
+- Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents (`P1-24`).
 - There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, payroll profile, payroll export, or accounting handoff.
-- Current member removal is destructive: it attempts to close an active session, deletes that member's organization time entries, and then deletes the membership. This is not the intended future offboarding or retention behavior and must not be treated as an archive workflow.
+- Current member removal remains destructive: it attempts to close an active session, deletes that member's organization time entries, and then deletes the membership. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
 - Custom roles, custom role names, and granular permission editing are not implemented.
+- Employees cannot yet view or propose corrections to their own personnel record; the self-service surface is later scope.
 
 Current application code and live database state remain authoritative if this baseline drifts.
 
@@ -259,7 +272,9 @@ Every intelligent action must show its source, proposed result, confidence or un
 
 ## Open Product Decisions
 
-- Which personnel fields are genuinely required for the first SHK customer profiles, and which remain optional?
+Resolved with `P1-03` (2026-08-05): the V1 master-data and condition field set (all optional except a last name for non-login records), manual org-unique `MA-NNN` employee numbers with auto-suggestion, the derived state vocabulary (`Aktiv`/`Geplant`/`Ausgeschieden` × `Mit Zugang`/`Eingeladen`/`Ohne Zugang`), no compensation storage in this slice, no employee self-service surface yet, and the personnel record surviving destructive member removal as `Ausgeschieden`.
+
+- Which additional personnel fields are genuinely required for the first SHK customer profiles beyond the `P1-03` set, and which remain optional?
 - Should custom roles ship in Phase 1, or should default roles plus scoped responsibilities cover the initial need?
 - Which project-lead and leave-approver responsibilities can be delegated without creating another global role?
 - Which skills and certification templates should WerkFlow provide by default for SHK, and who verifies them?

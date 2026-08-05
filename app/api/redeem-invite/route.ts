@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { updateTag } from 'next/cache';
+import { revalidateTag } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
@@ -97,8 +97,10 @@ export async function POST(req: NextRequest) {
       path: '/'
     });
 
-    updateTag(CACHE_TAGS.memberships(user.id));
-    updateTag(CACHE_TAGS.memberCount(orgId));
+    // Route Handlers must use revalidateTag; updateTag is Server-Action-only
+    // and threw "updateTag can only be called from within a Server Action" here.
+    revalidateTag(CACHE_TAGS.memberships(user.id), 'max');
+    revalidateTag(CACHE_TAGS.memberCount(orgId), 'max');
 
     return NextResponse.json({
       success: true,
