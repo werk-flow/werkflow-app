@@ -172,8 +172,10 @@ export function CreatePersonnelDialog() {
               />
             </div>
             <div className="grid gap-2">
-              <Label>Eintrittsdatum</Label>
+              <Label htmlFor="personnel-entry-date">Eintrittsdatum</Label>
               <DatePicker
+                id="personnel-entry-date"
+                ariaLabel="Eintrittsdatum"
                 value={entryDate ? new Date(`${entryDate}T00:00:00`) : undefined}
                 onChange={(date) =>
                   setEntryDate(date ? toLocalDateString(date) : '')

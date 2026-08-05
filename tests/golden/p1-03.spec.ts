@@ -25,14 +25,26 @@ test.describe.configure({ mode: 'serial' });
 // Shared across the serial tests below.
 let noraRecordId = '';
 
+// Business dates are Europe/Berlin dates (sv-SE formats as YYYY-MM-DD).
+function toBerlinIsoDate(value: string | Date): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(typeof value === 'string' ? new Date(value) : value);
+}
+
 test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
   test('Bestehende Mitglieder wurden automatisch migriert', async ({ world }) => {
     // The backfill/trigger created exactly one record per member with the
-    // join date as entry-date default; nothing invented an employee number.
+    // membership's join date (as a Berlin business date) as the entry-date
+    // default; nothing invented an employee number.
     for (const user of [world.users.admin, world.users.buero, world.users.employee]) {
       const record = await getEmployeeRecordStateByUser(world.orgId, user.id);
       expect(record.recordCountForUser).toBe(1);
-      expect(record.entryDate).not.toBeNull();
+      expect(record.membershipJoinedAt).not.toBeNull();
+      expect(record.entryDate).toBe(toBerlinIsoDate(record.membershipJoinedAt!));
       expect(record.exitDate).toBeNull();
     }
   });
@@ -99,10 +111,13 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     adminPage,
     world,
   }) => {
+    // Entry date in the next calendar year so the record is always a future
+    // starter, regardless of when the suite runs.
+    const nextYear = new Date().getFullYear() + 1;
     noraRecordId = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Nora',
       lastName: `Neuling-${world.runId}`,
-      entryDateDigits: '01012027',
+      entryDateDigits: `0101${nextYear}`,
     });
 
     // The record detail shows the derived states for a future starter.

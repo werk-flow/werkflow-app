@@ -16,7 +16,9 @@ const EVENT_LABELS: Record<string, string> = {
 };
 
 function formatTimestamp(value: string): string {
+  // Pin the timezone so server-side rendering (UTC) and every browser agree.
   return new Date(value).toLocaleString('de-DE', {
+    timeZone: 'Europe/Berlin',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

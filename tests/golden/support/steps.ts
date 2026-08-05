@@ -540,12 +540,14 @@ export async function editPersonnelTextField(
 }
 
 // The segmented DatePicker (dd.mm.yyyy) is driven by typing digits after
-// focusing the group; segments auto-advance after two/two/four digits.
+// focusing the group; segments auto-advance after two/two/four digits. The
+// group's accessible name is the field label (e.g. "Gültig ab").
 async function typeIntoDatePicker(
   scope: Locator,
+  groupName: string,
   digits: string
 ): Promise<void> {
-  const group = scope.getByRole('group', { name: 'Datum' });
+  const group = scope.getByRole('group', { name: groupName });
   await group.click();
   // The click may land on any segment; ArrowLeft twice normalizes to the day
   // segment (it is a no-op when already there).
@@ -572,7 +574,7 @@ export async function addConditionViaDialog(
 
   const dialog = page.getByRole('dialog');
   if (options.validFromDigits) {
-    await typeIntoDatePicker(dialog, options.validFromDigits);
+    await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
   }
 
   await page.locator('#condition-type').click();
@@ -605,7 +607,7 @@ export async function editConditionWeeklyHours(
     .filter({ visible: true })
     .first();
   await row
-    .getByRole('button', { name: `Kondition vom ${validFromLabel} bearbeiten` })
+    .getByRole('button', { name: `Aktionen für Kondition vom ${validFromLabel}` })
     .click();
   await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
   await expect(
@@ -649,7 +651,7 @@ export async function createPersonnelRecordViaDialog(
     });
   }
   if (options.entryDateDigits) {
-    await typeIntoDatePicker(dialog, options.entryDateDigits);
+    await typeIntoDatePicker(dialog, 'Eintrittsdatum', options.entryDateDigits);
   }
 
   await dialog

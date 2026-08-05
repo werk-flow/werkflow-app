@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ContactRound } from 'lucide-react';
 
@@ -80,10 +81,12 @@ export function PersonnelRecordsSection({
         {sorted.map(({ record, hasPendingInvite }) => {
           const name = formatEmployeeRecordName(record, profileNames[record.id]);
           return (
-            <div
+            // A real link so keyboard, middle-click, and copy-link work.
+            <Link
               key={record.id}
-              className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-              onClick={() => router.push(`/mitarbeiter/${record.id}`)}
+              href={`/mitarbeiter/${record.id}`}
+              aria-label={`Personalakte öffnen: ${name}`}
+              className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
@@ -106,7 +109,7 @@ export function PersonnelRecordsSection({
                   </p>
                 )}
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
@@ -137,7 +140,17 @@ export function PersonnelRecordsSection({
                   className="cursor-pointer transition-colors hover:bg-accent/50"
                   onClick={() => router.push(`/mitarbeiter/${record.id}`)}
                 >
-                  <TableCell className="font-medium">{name}</TableCell>
+                  <TableCell className="max-w-0">
+                    {/* Real link inside the clickable row for keyboard users,
+                        middle-click, and Cmd+Click. */}
+                    <Link
+                      href={`/mitarbeiter/${record.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block truncate rounded-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                      {name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {record.employeeNumber || '—'}
                   </TableCell>

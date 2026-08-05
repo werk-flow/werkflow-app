@@ -71,6 +71,8 @@ export type EmployeeRecordState = {
   entryDate: string | null;
   exitDate: string | null;
   recordCountForUser: number;
+  // Null once the membership was removed (e.g. the destructive-removal check).
+  membershipJoinedAt: string | null;
 };
 
 // P1-03: DB-side proof for personnel facts the UI cannot show directly —
@@ -80,7 +82,8 @@ export async function getEmployeeRecordStateByUser(
   orgId: string,
   userId: string
 ): Promise<EmployeeRecordState> {
-  const { data, error } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from('employee_records')
     .select('id, user_id, employee_number, entry_date, exit_date')
     .eq('organization_id', orgId)
@@ -90,6 +93,13 @@ export async function getEmployeeRecordStateByUser(
     throw new Error(`No employee record found for user ${userId}: ${error?.message}`);
   }
 
+  const { data: membership } = await admin
+    .from('organization_members')
+    .select('joined_at')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
   const row = data[0];
   return {
     id: row.id as string,
@@ -98,6 +108,7 @@ export async function getEmployeeRecordStateByUser(
     entryDate: (row.entry_date as string | null) ?? null,
     exitDate: (row.exit_date as string | null) ?? null,
     recordCountForUser: data.length,
+    membershipJoinedAt: (membership?.joined_at as string | null) ?? null,
   };
 }
 

@@ -8,6 +8,7 @@ import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
 import { formatProfileName } from '@/lib/members/profile-name';
 import {
   EMPLOYMENT_TYPES,
+  getBusinessTodayIso,
   toEmployeeRecord,
   toEmploymentCondition,
   toEmployeeRecordEvent,
@@ -128,7 +129,9 @@ export async function getPersonnelRecords(): Promise<
         .from('employment_conditions')
         .select('*')
         .eq('organization_id', orgId)
-        .lte('valid_from', new Date().toISOString().slice(0, 10))
+        // Same Europe/Berlin business date the derived states use — a UTC
+        // date here would disagree with them around midnight.
+        .lte('valid_from', getBusinessTodayIso())
         .order('valid_from', { ascending: false }),
     ]);
 
@@ -434,11 +437,6 @@ export async function updatePersonnelMasterData(
     for (const key of Object.keys(patch) as (keyof PersonnelMasterDataPatch)[]) {
       if (!(key in MASTER_DATA_COLUMNS)) continue;
 
-      // For linked records the global profile name is authoritative.
-      if ((key === 'firstName' || key === 'lastName') && record.userId) {
-        return { success: false, error: 'name_managed_by_profile' };
-      }
-
       const normalized = normalizeOptionalText(patch[key]);
 
       if (
@@ -451,6 +449,12 @@ export async function updatePersonnelMasterData(
 
       const previous = record[key];
       if (previous === normalized) continue;
+
+      // For linked records the global profile name is authoritative; only an
+      // actual name change is rejected, unchanged values pass through above.
+      if ((key === 'firstName' || key === 'lastName') && record.userId) {
+        return { success: false, error: 'name_managed_by_profile' };
+      }
 
       update[MASTER_DATA_COLUMNS[key]] = normalized;
       changes[MASTER_DATA_COLUMNS[key]] = { from: previous, to: normalized };
@@ -763,6 +767,25 @@ export async function sendPersonnelInvite(
 
     if (record.userId) {
       return { success: false, error: 'already_has_login' };
+    }
+
+    // A previously connected invite that is still pending would stay
+    // redeemable after being replaced and could create a duplicate person on
+    // redemption; cancel it first. Redeemed/expired invites stay untouched.
+    if (record.inviteId) {
+      const { error: cancelError } = await admin
+        .from('organization_invites')
+        .update({ status: 'cancelled' })
+        .eq('id', record.inviteId)
+        .eq('organization_id', orgId)
+        .eq('status', 'pending');
+      if (cancelError) {
+        console.error(
+          'Failed to cancel previously connected invite:',
+          cancelError
+        );
+        return { success: false, error: 'invite_failed' };
+      }
     }
 
     const inviteResult = await sendOrgInvite(email, role);

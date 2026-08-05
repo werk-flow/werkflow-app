@@ -17,6 +17,10 @@ interface DatePickerProps {
   onChange: (date: Date | undefined) => void;
   placeholder?: string;
   disabled?: boolean;
+  // Lets a form Label point at the picker (htmlFor/id) and gives the group a
+  // field-specific accessible name instead of the generic "Datum".
+  id?: string;
+  ariaLabel?: string;
 }
 
 type Segment = 'day' | 'month' | 'year';
@@ -39,7 +43,9 @@ export function DatePicker({
   value,
   onChange,
   placeholder = 'Datum wählen',
-  disabled = false
+  disabled = false,
+  id,
+  ariaLabel = 'Datum'
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -253,8 +259,9 @@ export function DatePicker({
   return (
     <div
       ref={containerRef}
+      id={id}
       role="group"
-      aria-label="Datum"
+      aria-label={ariaLabel}
       tabIndex={disabled ? -1 : 0}
       onFocus={handleFocus}
       onBlur={handleBlur}

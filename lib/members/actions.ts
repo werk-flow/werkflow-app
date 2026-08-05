@@ -6,6 +6,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
+import { getBusinessTodayIso } from '@/lib/personnel/types';
 
 // Role hierarchy for permission checks
 // Lower number = higher rank
@@ -303,8 +304,8 @@ export async function removeMember(
     // distinguishable in history. P1-33 replaces this whole flow with real
     // offboarding.
     try {
-      const today = new Date();
-      const todayIso = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, '0')}-${`${today.getDate()}`.padStart(2, '0')}`;
+      // Europe/Berlin business date, like every other personnel-state check.
+      const todayIso = getBusinessTodayIso();
 
       const { data: personnelRecord } = await admin
         .from('employee_records')
@@ -320,7 +321,8 @@ export async function removeMember(
         const { error: exitError } = await admin
           .from('employee_records')
           .update({ exit_date: todayIso })
-          .eq('id', personnelRecord.id);
+          .eq('id', personnelRecord.id)
+          .eq('organization_id', orgId);
 
         if (exitError) {
           console.error(

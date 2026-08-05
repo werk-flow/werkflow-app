@@ -203,7 +203,7 @@ export function EmploymentConditionsSection({
                           variant="ghost"
                           size="icon"
                           className="size-7 shrink-0"
-                          aria-label={`Kondition vom ${formatDate(condition.validFrom)} bearbeiten`}
+                          aria-label={`Aktionen für Kondition vom ${formatDate(condition.validFrom)}`}
                         >
                           <MoreVertical className="size-4" />
                         </Button>
@@ -391,6 +391,8 @@ function ConditionDialog({
             <div className="grid gap-2">
               <Label htmlFor="condition-valid-from">Gültig ab</Label>
               <DatePicker
+                id="condition-valid-from"
+                ariaLabel="Gültig ab"
                 value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
                 onChange={(date) =>
                   setValidFrom(date ? toLocalDateString(date) : '')

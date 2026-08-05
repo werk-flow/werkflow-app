@@ -167,18 +167,29 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   sonstiges: 'Sonstiges',
 };
 
-function toLocalIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+// Business dates are Europe/Berlin dates regardless of where the code runs:
+// the server (UTC on Vercel) and every browser must agree on "today" or
+// derived states flip around midnight. sv-SE formats as YYYY-MM-DD.
+const BERLIN_DATE_FORMATTER = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Berlin',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+export function toBusinessIsoDate(date: Date): string {
+  return BERLIN_DATE_FORMATTER.format(date);
+}
+
+export function getBusinessTodayIso(): string {
+  return toBusinessIsoDate(new Date());
 }
 
 export function getEmploymentState(
   record: Pick<EmployeeRecord, 'entryDate' | 'exitDate'>,
   today: Date = new Date()
 ): EmploymentState {
-  const todayIso = toLocalIsoDate(today);
+  const todayIso = toBusinessIsoDate(today);
   // A person counts as exited from their exit date on — a member removed today
   // must immediately read as ausgeschieden, not tomorrow.
   if (record.exitDate && record.exitDate <= todayIso) return 'ausgeschieden';
@@ -202,7 +213,7 @@ export function getEffectiveCondition(
   conditions: EmploymentCondition[],
   onDate: Date = new Date()
 ): EmploymentCondition | null {
-  const dateIso = toLocalIsoDate(onDate);
+  const dateIso = toBusinessIsoDate(onDate);
   const applicable = conditions
     .filter((condition) => condition.validFrom <= dateIso)
     .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
