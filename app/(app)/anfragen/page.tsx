@@ -11,24 +11,13 @@ import {
   AnfragenContent,
   type RequestListEntry,
 } from '@/components/anfragen/anfragen-content';
-import {
-  CreateRequestDialog,
-  type RequestAssigneeOption,
-} from '@/components/anfragen/create-request-dialog';
+import { CreateRequestDialog } from '@/components/anfragen/create-request-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { OrgRole } from '@/lib/members/actions';
-
-function formatProfileName(profile: {
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-}): string {
-  return (
-    [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
-    profile.email ||
-    'Unbekannt'
-  );
-}
+import {
+  formatProfileName,
+  getManagerAssigneeOptions,
+} from '@/lib/members/profile-name';
 
 async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
@@ -49,8 +38,7 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
     console.error('Error fetching client requests:', requestsResult.error);
     return (
       <p className="text-destructive">
-        Fehler beim Laden der Anfragen:{' '}
-        {requestsResult.error.message || 'Unbekannter Fehler'}
+        Die Anfragen konnten nicht geladen werden. Bitte versuche es erneut.
       </p>
     );
   }
@@ -82,12 +70,17 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
           .in('id', assigneeIds)
       : Promise.resolve({ data: [] }),
     convertedJobIds.length > 0
-      ? admin.from('jobs').select('id, title, job_number').in('id', convertedJobIds)
+      ? admin
+          .from('jobs')
+          .select('id, title, job_number')
+          .eq('organization_id', activeOrgId)
+          .in('id', convertedJobIds)
       : Promise.resolve({ data: [] }),
     convertedProjectIds.length > 0
       ? admin
           .from('projects')
           .select('id, name, project_number')
+          .eq('organization_id', activeOrgId)
           .in('id', convertedProjectIds)
       : Promise.resolve({ data: [] }),
   ]);
@@ -131,34 +124,16 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
 async function CreateRequestDialogData({ activeOrgId }: { activeOrgId: string }) {
   const admin = createSupabaseAdminClient();
 
-  const [clientsResult, membersResult] = await Promise.all([
+  const [clientsResult, assignees] = await Promise.all([
     admin
       .from('clients')
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
-    admin
-      .from('organization_members')
-      .select('user_id, role, profiles(id, first_name, last_name, email)')
-      .eq('organization_id', activeOrgId),
+    getManagerAssigneeOptions(admin, activeOrgId),
   ]);
 
   const clients = (clientsResult.data ?? []).map(toClient);
-  // Requests are handled by the office; only admin/Büro appear as responsible.
-  const assignees: RequestAssigneeOption[] = (membersResult.data ?? [])
-    .filter((member) => member.role === 'admin' || member.role === 'buero')
-    .map((member) => {
-      const profile = member.profiles as unknown as {
-        first_name: string | null;
-        last_name: string | null;
-        email: string | null;
-      } | null;
-      return {
-        userId: member.user_id,
-        name: profile ? formatProfileName(profile) : 'Unbekannt',
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
   return <CreateRequestDialog clients={clients} assignees={assignees} />;
 }

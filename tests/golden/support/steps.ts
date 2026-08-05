@@ -282,6 +282,21 @@ export async function returnMaterialOnJobPage(
 
 // P1-01: customer contact and work-site management on the customer detail.
 
+// The customer detail refreshes itself after each save, but under suite load
+// that refresh has repeatedly landed only after 15-30s (or been superseded by
+// a concurrent Realtime-triggered refresh). One manual reload keeps the
+// business assertion strict — the saved row must exist and render — without
+// making the gate a latency lottery. GG-00's dedicated Realtime test remains
+// the freshness guard.
+async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
+  try {
+    await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
+  } catch {
+    await page.reload();
+    await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
+  }
+}
+
 export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
   await page.goto('/kunden');
   await visibleText(page, customerName).click();
@@ -301,9 +316,7 @@ export async function addContactOnCustomerDetail(
   if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  // The list appears after a router.refresh of the heavy customer detail;
-  // shared-database latency spikes have pushed this past 15s in real runs.
-  await expect(visibleText(page, contact.name)).toBeVisible({ timeout: 30_000 });
+  await expectVisibleAfterSave(page, contact.name);
 }
 
 export async function addSiteOnCustomerDetail(
@@ -320,8 +333,7 @@ export async function addSiteOnCustomerDetail(
   if (site.city) await page.locator('#site-city').fill(site.city);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  // Same slow-refresh allowance as addContactOnCustomerDetail.
-  await expect(visibleText(page, site.name)).toBeVisible({ timeout: 30_000 });
+  await expectVisibleAfterSave(page, site.name);
 }
 
 export async function editSiteStreetOnCustomerDetail(
@@ -341,7 +353,7 @@ export async function editSiteStreetOnCustomerDetail(
   await page.locator('#site-street').fill(newStreet);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, newStreet)).toBeVisible({ timeout: 15_000 });
+  await expectVisibleAfterSave(page, newStreet);
 }
 
 export async function searchCustomers(page: Page, query: string): Promise<void> {
@@ -364,7 +376,11 @@ export async function createRequestViaDialog(
     categoryLabel?: string;
     urgencyLabel?: string;
   }
-): Promise<void> {
+): Promise<string> {
+  if ((options.siteName || options.contactName) && !options.clientName) {
+    throw new Error('createRequestViaDialog: siteName/contactName require clientName');
+  }
+
   await page.goto('/anfragen');
   await page.getByRole('button', { name: 'Anfrage erfassen' }).click();
   await expect(page.getByRole('heading', { name: 'Neue Anfrage erfassen' })).toBeVisible();
@@ -418,6 +434,12 @@ export async function createRequestViaDialog(
   await page.getByRole('dialog').getByRole('button', { name: 'Anfrage erfassen' }).click();
   await page.waitForURL(/\/anfragen\/[0-9a-f-]{36}/, { timeout: 20_000 });
   await expect(visibleText(page, options.summary)).toBeVisible({ timeout: 15_000 });
+
+  const match = page.url().match(/\/anfragen\/([0-9a-f-]{36})/);
+  if (!match) {
+    throw new Error('createRequestViaDialog: could not read the request id from the URL');
+  }
+  return match[1];
 }
 
 export async function uploadDocumentOnRequestDetail(

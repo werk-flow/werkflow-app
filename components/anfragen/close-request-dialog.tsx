@@ -32,6 +32,8 @@ import {
 const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu schließen.',
   request_not_found: 'Die Anfrage wurde nicht gefunden.',
+  request_not_editable:
+    'Diese Anfrage kann nicht mehr geschlossen werden (bereits umgewandelt oder geschlossen).',
   close_failed:
     'Die Anfrage konnte nicht geschlossen werden. Möglicherweise wurde sie bereits umgewandelt.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
@@ -128,7 +130,7 @@ export function CloseRequestDialog({
                 disabled={isLoading}
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button

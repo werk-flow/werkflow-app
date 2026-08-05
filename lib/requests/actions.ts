@@ -120,6 +120,10 @@ async function requireManagerAndRequest(requestId: string): Promise<
   };
 }
 
+function isValidTimestamp(value: string): boolean {
+  return !Number.isNaN(Date.parse(value));
+}
+
 async function validateAssignee(
   admin: AdminClient,
   orgId: string,
@@ -199,6 +203,10 @@ export async function createClientRequest(
       if (existingNumber) {
         return { success: false, error: 'request_number_taken' };
       }
+    }
+
+    if (input.receivedAt && !isValidTimestamp(input.receivedAt)) {
+      return { success: false, error: 'invalid_received_at' };
     }
 
     const { data, error } = await admin
@@ -289,6 +297,9 @@ export async function updateClientRequest(
     if (input.urgency !== undefined) updateData.urgency = input.urgency;
     if (input.source !== undefined) updateData.source = input.source;
     if (input.receivedAt !== undefined && input.receivedAt) {
+      if (!isValidTimestamp(input.receivedAt)) {
+        return { success: false, error: 'invalid_received_at' };
+      }
       updateData.received_at = input.receivedAt;
     }
     if (input.status !== undefined) updateData.status = input.status;
@@ -491,6 +502,14 @@ export async function closeClientRequest(
     const auth = await requireManagerAndRequest(requestId);
     if (!auth.success) return auth;
     const { orgId, userId, admin } = auth.context;
+
+    if (
+      !EDITABLE_STATUSES.includes(
+        auth.request.status as (typeof EDITABLE_STATUSES)[number]
+      )
+    ) {
+      return { success: false, error: 'request_not_editable' };
+    }
 
     const { data, error } = await admin
       .from('client_requests')
@@ -736,11 +755,17 @@ export async function convertRequestToJob(
     if (!claimed) {
       // A concurrent conversion won; remove the work this attempt created so
       // no duplicate job remains.
-      await admin
+      const { error: rollbackError } = await admin
         .from('jobs')
         .delete()
         .eq('id', created.job.id)
         .eq('organization_id', orgId);
+      if (rollbackError) {
+        console.error(
+          'Failed to roll back job after losing conversion race:',
+          rollbackError
+        );
+      }
       updateTag(CACHE_TAGS.jobs(orgId));
       return { success: false, error: 'already_converted' };
     }
@@ -767,8 +792,9 @@ export async function convertRequestToJob(
     updateTag(CACHE_TAGS.requests(orgId));
     return {
       success: true,
+      target: 'job',
       jobId: created.job.id,
-      jobNumber: created.job.jobNumber ?? undefined,
+      jobNumber: created.job.jobNumber,
     };
   } catch (error) {
     console.error('Unexpected error in convertRequestToJob:', error);
@@ -805,11 +831,17 @@ export async function convertRequestToProject(
     });
 
     if (!claimed) {
-      await admin
+      const { error: rollbackError } = await admin
         .from('projects')
         .delete()
         .eq('id', created.project.id)
         .eq('organization_id', orgId);
+      if (rollbackError) {
+        console.error(
+          'Failed to roll back project after losing conversion race:',
+          rollbackError
+        );
+      }
       updateTag(CACHE_TAGS.projects(orgId));
       return { success: false, error: 'already_converted' };
     }
@@ -836,8 +868,9 @@ export async function convertRequestToProject(
     updateTag(CACHE_TAGS.requests(orgId));
     return {
       success: true,
+      target: 'project',
       projectId: created.project.id,
-      projectNumber: created.project.projectNumber ?? undefined,
+      projectNumber: created.project.projectNumber,
     };
   } catch (error) {
     console.error('Unexpected error in convertRequestToProject:', error);

@@ -175,7 +175,8 @@ export type ClientRequestListResult =
   | { success: false; error: string };
 
 export type ConvertRequestResult =
-  | { success: true; jobId?: string; jobNumber?: string; projectId?: string; projectNumber?: string }
+  | { success: true; target: 'job'; jobId: string; jobNumber: string | null }
+  | { success: true; target: 'project'; projectId: string; projectNumber: string | null }
   | { success: false; error: string };
 
 // ============================================

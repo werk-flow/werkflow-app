@@ -77,6 +77,8 @@ export function EditRequestDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Keyed on open and request.id only: Realtime refreshes replace the request
+  // object with equal content, and re-running the effect would wipe edits.
   useEffect(() => {
     if (!open) return;
     setSummary(request.summary);
@@ -91,7 +93,8 @@ export function EditRequestDialog({
     setSource(request.source);
     setAssignedTo(request.assignedTo ?? '');
     setError(null);
-  }, [open, request]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, request.id]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -310,7 +313,7 @@ export function EditRequestDialog({
               </Select>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button

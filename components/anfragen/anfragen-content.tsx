@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Inbox, RefreshCw, Search } from 'lucide-react';
 
@@ -166,13 +167,14 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
         </div>
       ) : (
         <>
-          {/* Mobile view - card layout */}
+          {/* Mobile view - card layout (a real link for keyboard/middle-click) */}
           <div className="space-y-2 md:hidden">
             {filteredEntries.map((entry) => (
-              <div
+              <Link
                 key={entry.request.id}
-                className="cursor-pointer rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-                onClick={() => router.push(`/anfragen/${entry.request.id}`)}
+                href={`/anfragen/${entry.request.id}`}
+                aria-label={`Anfrage öffnen: ${entry.request.summary}`}
+                className="block rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium">
@@ -195,7 +197,7 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
                     </span>
                   )}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 
@@ -225,7 +227,15 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
                       {entry.request.requestNumber || '—'}
                     </TableCell>
                     <TableCell className="max-w-0">
-                      <p className="truncate font-medium">{entry.request.summary}</p>
+                      {/* Real link inside the clickable row for keyboard users,
+                          middle-click, and Cmd+Click. */}
+                      <Link
+                        href={`/anfragen/${entry.request.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="block truncate font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
+                      >
+                        {entry.request.summary}
+                      </Link>
                       {entry.convertedLabel && (
                         <p className="truncate text-xs text-muted-foreground">
                           → {entry.convertedLabel}

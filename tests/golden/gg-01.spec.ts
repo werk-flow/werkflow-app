@@ -25,6 +25,10 @@ import { ARTIFACTS_DIR } from './support/world';
 
 test.describe.configure({ mode: 'serial' });
 
+// The first request's id, captured on creation for the direct-URL
+// authorization checks at the end of the serial suite.
+let firstRequestId = '';
+
 test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
   test('Admin legt einen Gewerbekunden mit Ansprechpartnern und Einsatzorten an', async ({
     adminPage,
@@ -63,7 +67,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     bueroPage,
     world,
   }) => {
-    await createRequestViaDialog(bueroPage, {
+    firstRequestId = await createRequestViaDialog(bueroPage, {
       summary: 'Durchlauferhitzer in der Backstube ausgefallen',
       requestNumber: `ANF-${world.runId}-1`,
       clientName: `Bäckerei Brotmann ${world.runId}`,
@@ -207,6 +211,11 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
 
   test('Mitarbeiter hat keinen Zugriff auf Anfragen', async ({ employeePage }) => {
     await expectRedirectedAway(employeePage, '/anfragen');
+    // The direct detail URL is equally protected.
+    await expectRedirectedAway(employeePage, `/anfragen/${firstRequestId}`);
+    await expect(
+      employeePage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
+    ).toHaveCount(0);
     await employeePage.goto('/dashboard');
     await expect(
       employeePage.getByRole('link', { name: 'Anfragen' })
@@ -223,5 +232,12 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await expect(
       outsiderPage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
     ).toHaveCount(0);
+
+    // The direct detail URL of the other organization's request is not found.
+    await outsiderPage.goto(`/anfragen/${firstRequestId}`);
+    await expect(
+      outsiderPage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
+    ).toHaveCount(0);
+    await expect(outsiderPage.getByText(`ANF-${world.runId}-1`)).toHaveCount(0);
   });
 });

@@ -405,7 +405,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
               </Select>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={isLoading || !summary.trim()}>

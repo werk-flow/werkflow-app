@@ -67,7 +67,7 @@ export type RequestDetailData = {
   contactLabel: string | null;
   contactPhone: string | null;
   assigneeName: string | null;
-  convertedLink: { label: string; href: string } | null;
+  convertedLink: { label: string; href: string | null } | null;
   documents: OrganizationDocument[];
   events: RequestEventEntry[];
   clients: Client[];
@@ -275,12 +275,16 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
           <CircleCheck className="size-5 shrink-0 text-green-600 dark:text-green-400" />
           <p className="text-sm">
             Diese Anfrage wurde umgewandelt:{' '}
-            <Link
-              href={data.convertedLink.href}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {data.convertedLink.label}
-            </Link>
+            {data.convertedLink.href ? (
+              <Link
+                href={data.convertedLink.href}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {data.convertedLink.label}
+              </Link>
+            ) : (
+              <span className="font-medium">{data.convertedLink.label}</span>
+            )}
           </p>
         </div>
       )}

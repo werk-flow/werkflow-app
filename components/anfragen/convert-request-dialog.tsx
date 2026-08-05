@@ -92,8 +92,9 @@ export function ConvertRequestDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Prefill from the request each time the dialog opens and suggest the next
-  // free number for the selected work type.
+  // Prefill from the request each time the dialog opens. Keyed on open and
+  // request.id only: Realtime refreshes replace the request object with equal
+  // content, and re-running the effect would wipe the user's in-dialog edits.
   useEffect(() => {
     if (!open) return;
     setTitle(request.summary);
@@ -106,7 +107,8 @@ export function ConvertRequestDialog({
     setPlannedTime('');
     setLocation('');
     setError(null);
-  }, [open, request]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, request.id]);
 
   const lastSuggestedNumberRef = useRef('');
 
@@ -360,7 +362,7 @@ export function ConvertRequestDialog({
               />
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button

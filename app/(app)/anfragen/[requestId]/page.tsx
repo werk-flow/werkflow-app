@@ -14,18 +14,10 @@ import {
   type RequestEventEntry,
 } from '@/components/anfragen/request-detail-content';
 import type { OrgRole } from '@/lib/members/actions';
-
-function formatProfileName(profile: {
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-}): string {
-  return (
-    [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
-    profile.email ||
-    'Unbekannt'
-  );
-}
+import {
+  formatProfileName,
+  getManagerAssigneeOptions,
+} from '@/lib/members/profile-name';
 
 export default async function AnfrageDetailPage({
   params,
@@ -85,7 +77,7 @@ export default async function AnfrageDetailPage({
     convertedProjectResult,
     eventsResult,
     clientsResult,
-    membersResult,
+    assignees,
     documentsResult,
   ] = await Promise.all([
     request.clientId
@@ -93,6 +85,7 @@ export default async function AnfrageDetailPage({
           .from('clients')
           .select('id, name')
           .eq('id', request.clientId)
+          .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     request.siteId
@@ -100,6 +93,7 @@ export default async function AnfrageDetailPage({
           .from('client_sites')
           .select('*')
           .eq('id', request.siteId)
+          .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     request.contactId
@@ -107,6 +101,7 @@ export default async function AnfrageDetailPage({
           .from('client_contacts')
           .select('*')
           .eq('id', request.contactId)
+          .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     request.assignedTo
@@ -121,6 +116,7 @@ export default async function AnfrageDetailPage({
           .from('jobs')
           .select('id, title, job_number')
           .eq('id', request.convertedJobId)
+          .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     request.convertedProjectId
@@ -128,6 +124,7 @@ export default async function AnfrageDetailPage({
           .from('projects')
           .select('id, name, project_number')
           .eq('id', request.convertedProjectId)
+          .eq('organization_id', activeOrgId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
     admin
@@ -141,10 +138,7 @@ export default async function AnfrageDetailPage({
       .select('*')
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
-    admin
-      .from('organization_members')
-      .select('user_id, role, profiles(id, first_name, last_name, email)')
-      .eq('organization_id', activeOrgId),
+    getManagerAssigneeOptions(admin, activeOrgId),
     getRequestDocuments(requestId),
   ]);
 
@@ -177,21 +171,6 @@ export default async function AnfrageDetailPage({
   const convertedJob = convertedJobResult.data;
   const convertedProject = convertedProjectResult.data;
 
-  const assignees = (membersResult.data ?? [])
-    .filter((member) => member.role === 'admin' || member.role === 'buero')
-    .map((member) => {
-      const profile = member.profiles as unknown as {
-        first_name: string | null;
-        last_name: string | null;
-        email: string | null;
-      } | null;
-      return {
-        userId: member.user_id,
-        name: profile ? formatProfileName(profile) : 'Unbekannt',
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
-
   const data: RequestDetailData = {
     request,
     clientName: clientResult.data?.name ?? null,
@@ -216,15 +195,21 @@ export default async function AnfrageDetailPage({
     assigneeName: assigneeResult.data
       ? formatProfileName(assigneeResult.data)
       : null,
+    // Detail routes are keyed by number; without one, show plain text instead
+    // of a broken link.
     convertedLink: convertedJob
       ? {
           label: `Auftrag ${convertedJob.job_number ?? convertedJob.title}`,
-          href: `/auftraege/${convertedJob.job_number ?? ''}`,
+          href: convertedJob.job_number
+            ? `/auftraege/${encodeURIComponent(convertedJob.job_number)}`
+            : null,
         }
       : convertedProject
         ? {
             label: `Projekt ${convertedProject.project_number ?? convertedProject.name}`,
-            href: `/auftraege/projekt/${convertedProject.project_number ?? ''}`,
+            href: convertedProject.project_number
+              ? `/auftraege/projekt/${encodeURIComponent(convertedProject.project_number)}`
+              : null,
           }
         : null,
     documents: documentsResult.success ? documentsResult.documents : [],
