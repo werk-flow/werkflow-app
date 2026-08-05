@@ -16,9 +16,11 @@ interface KundenContentProps {
   searchIndex?: Record<string, string>;
 }
 
+const EMPTY_SEARCH_INDEX: Record<string, string> = {};
+
 export function KundenContent({
   clients: initialClients,
-  searchIndex = {},
+  searchIndex = EMPTY_SEARCH_INDEX,
 }: KundenContentProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();

@@ -45,6 +45,13 @@ async function KundenData({ activeOrgId }: { activeOrgId: string }) {
 
   const clientList = (clientsResult.data ?? []).map(toClient);
 
+  if (contactsResult.error) {
+    console.error('Error fetching client contacts for search:', contactsResult.error);
+  }
+  if (sitesResult.error) {
+    console.error('Error fetching client sites for search:', sitesResult.error);
+  }
+
   // Per-customer search haystack so the list search also finds customers via
   // contact names and site addresses (CRM spec §3).
   const searchIndex: Record<string, string> = {};

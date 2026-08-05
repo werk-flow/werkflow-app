@@ -59,10 +59,17 @@ const ERROR_MESSAGES: Record<string, string> = {
   contact_not_found: 'Der Ansprechpartner wurde nicht gefunden.',
   site_not_found: 'Der Einsatzort wurde nicht gefunden.',
   no_changes: 'Keine Änderungen zum Speichern.',
+  primary_flag_failed:
+    'Gespeichert, aber die bisherige Hauptmarkierung konnte nicht entfernt werden. Bitte prüfe die Markierungen.',
 };
 
 function errorMessage(error: string): string {
   return ERROR_MESSAGES[error] ?? 'Speichern fehlgeschlagen. Bitte versuche es erneut.';
+}
+
+// tel: links work most reliably with digits and a leading + only.
+function normalizePhoneHref(phone: string): string {
+  return phone.replace(/(?!^\+)[^\d]/g, '');
 }
 
 const NO_CONTACT_VALUE = '__none__';
@@ -260,7 +267,7 @@ export function ClientRelationsSection({
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
                       {contact.phone && (
                         <a
-                          href={`tel:${contact.phone}`}
+                          href={`tel:${normalizePhoneHref(contact.phone)}`}
                           className="inline-flex items-center gap-1 hover:text-foreground"
                         >
                           <Phone className="size-3.5" />
@@ -771,12 +778,19 @@ export function ClientRelationsSection({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NO_CONTACT_VALUE}>Nicht festgelegt</SelectItem>
-                    {activeContacts.map((contact) => (
-                      <SelectItem key={contact.id} value={contact.id}>
-                        {contact.name}
-                        {contact.role ? ` (${contact.role})` : ''}
-                      </SelectItem>
-                    ))}
+                    {contacts
+                      .filter(
+                        (contact) =>
+                          contact.isActive ||
+                          contact.id === siteDialog.draft.primaryContactId
+                      )
+                      .map((contact) => (
+                        <SelectItem key={contact.id} value={contact.id}>
+                          {contact.name}
+                          {contact.role ? ` (${contact.role})` : ''}
+                          {!contact.isActive ? ' · archiviert' : ''}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

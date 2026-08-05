@@ -153,8 +153,12 @@ export function KundenDetailContent({
         currentValue: client.customerNumber ?? '',
         onSave: async (v) => {
           const result = await updateClient(client.id, { customerNumber: v });
-          if (!result.success && result.error === 'customer_number_taken') {
-            throw new Error('Diese Kundennummer ist bereits vergeben.');
+          if (!result.success) {
+            throw new Error(
+              result.error === 'customer_number_taken'
+                ? 'Diese Kundennummer ist bereits vergeben.'
+                : 'Kundennummer konnte nicht gespeichert werden.'
+            );
           }
         },
         placeholder: 'z. B. K-1001',

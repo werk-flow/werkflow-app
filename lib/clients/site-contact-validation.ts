@@ -2,9 +2,17 @@ import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
+export type SiteContactValidationError =
+  | 'site_requires_client'
+  | 'site_not_found'
+  | 'site_client_mismatch'
+  | 'contact_requires_client'
+  | 'contact_not_found'
+  | 'contact_client_mismatch';
+
 export type SiteContactValidationResult =
   | { success: true }
-  | { success: false; error: string };
+  | { success: false; error: SiteContactValidationError };
 
 // A job or project may only reference a site/contact that belongs to its own
 // customer (and organization). Called by the jobs/projects server actions

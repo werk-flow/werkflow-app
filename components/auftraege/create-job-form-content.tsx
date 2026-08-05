@@ -106,7 +106,9 @@ export function CreateJobFormContent({
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
   // Prefill from the project's default site/contact when creating inside one.
-  const defaultProject = projects.find((p) => p.id === defaultProjectId);
+  const defaultProject = projects.find(
+    (project) => project.id === defaultProjectId
+  );
   const [siteId, setSiteId] = useState<string>(defaultProject?.siteId ?? '');
   const [contactId, setContactId] = useState<string>(
     defaultProject?.contactId ?? ''

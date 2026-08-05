@@ -112,9 +112,9 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     await expect(
       visibleText(employeePage, 'Sabine Krause (Hausverwaltung)')
     ).toBeVisible();
-    // The contact's phone number is a click-to-call link.
+    // The contact's phone number is a click-to-call link (normalized href).
     await expect(
-      employeePage.locator('a[href="tel:030 1234567"]').first()
+      employeePage.locator('a[href="tel:0301234567"]').first()
     ).toBeVisible();
   });
 
@@ -133,6 +133,8 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     ).toBeVisible();
 
     await searchCustomers(bueroPage, 'gibtsnicht-xyz');
+    // Wait for the filtered result count before asserting absence.
+    await expect(visibleText(bueroPage, '0 Kunden')).toBeVisible();
     await expect(
       bueroPage.getByText(`Hausverwaltung Weber ${world.runId}`)
     ).toHaveCount(0);

@@ -56,6 +56,10 @@ export async function createJob(
       .click();
   }
 
+  if ((options.siteName || options.contactName) && !options.clientName) {
+    throw new Error('createJob: siteName/contactName require clientName');
+  }
+
   if (options.siteName) {
     // The site select appears once the customer's sites finished loading.
     await expect(page.locator('#job-site')).toBeVisible({ timeout: 15_000 });

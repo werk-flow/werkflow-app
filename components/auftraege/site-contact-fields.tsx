@@ -52,14 +52,20 @@ export function SiteContactFields({
     if (!clientId) return;
 
     let isCurrent = true;
-    getClientRelations(clientId).then((result) => {
-      if (!isCurrent) return;
-      setLoaded({
-        forClientId: clientId,
-        sites: result.success ? result.sites : [],
-        contacts: result.success ? result.contacts : [],
+    getClientRelations(clientId)
+      .then((result) => {
+        if (!isCurrent) return;
+        setLoaded({
+          forClientId: clientId,
+          sites: result.success ? result.sites : [],
+          contacts: result.success ? result.contacts : [],
+        });
+      })
+      .catch(() => {
+        // A rejected fetch must not leave the pickers in a loading state.
+        if (!isCurrent) return;
+        setLoaded({ forClientId: clientId, sites: [], contacts: [] });
       });
-    });
 
     return () => {
       isCurrent = false;

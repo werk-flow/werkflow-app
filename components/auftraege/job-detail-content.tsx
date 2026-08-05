@@ -1039,7 +1039,7 @@ export function JobDetailContent({
                 </span>
                 {job.contact.phone && (
                   <a
-                    href={`tel:${job.contact.phone}`}
+                    href={`tel:${job.contact.phone.replace(/(?!^\+)[^\d]/g, '')}`}
                     className="text-xs text-primary hover:underline"
                   >
                     {job.contact.phone}

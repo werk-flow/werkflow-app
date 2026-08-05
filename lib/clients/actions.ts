@@ -291,23 +291,29 @@ async function requireManagerAndClient(
   return { success: true, context: { orgId, userId } };
 }
 
-// Only one contact/site per customer carries the primary marker.
-async function clearPrimaryFlag(
+// Only one contact/site per customer carries the primary marker. Runs after
+// the row itself was written, so a failed write never leaves the customer
+// without any primary; a failed clear is surfaced to the caller.
+async function clearOtherPrimaryFlags(
   table: 'client_contacts' | 'client_sites',
   orgId: string,
-  clientId: string
-): Promise<void> {
+  clientId: string,
+  keepId: string
+): Promise<boolean> {
   const admin = createSupabaseAdminClient();
   const { error } = await admin
     .from(table)
     .update({ is_primary: false })
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
-    .eq('is_primary', true);
+    .eq('is_primary', true)
+    .neq('id', keepId);
 
   if (error) {
     console.error(`Error clearing primary flag on ${table}:`, error);
+    return false;
   }
+  return true;
 }
 
 export async function createClientContact(
@@ -321,10 +327,6 @@ export async function createClientContact(
 
     if (!input.name.trim()) {
       return { success: false, error: 'name_required' };
-    }
-
-    if (input.isPrimary) {
-      await clearPrimaryFlag('client_contacts', orgId, clientId);
     }
 
     const admin = createSupabaseAdminClient();
@@ -347,6 +349,18 @@ export async function createClientContact(
     if (error || !data) {
       console.error('Error creating client contact:', error);
       return { success: false, error: 'create_failed' };
+    }
+
+    if (input.isPrimary) {
+      const cleared = await clearOtherPrimaryFlags(
+        'client_contacts',
+        orgId,
+        clientId,
+        data.id
+      );
+      if (!cleared) {
+        return { success: false, error: 'primary_flag_failed' };
+      }
     }
 
     updateTag(CACHE_TAGS.clients(orgId));
@@ -382,10 +396,6 @@ export async function updateClientContact(
       return { success: false, error: 'contact_not_found' };
     }
 
-    if (input.isPrimary) {
-      await clearPrimaryFlag('client_contacts', orgId, existing.client_id);
-    }
-
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) {
       if (!input.name.trim()) return { success: false, error: 'name_required' };
@@ -415,6 +425,18 @@ export async function updateClientContact(
       return { success: false, error: 'update_failed' };
     }
 
+    if (input.isPrimary) {
+      const cleared = await clearOtherPrimaryFlags(
+        'client_contacts',
+        orgId,
+        existing.client_id,
+        contactId
+      );
+      if (!cleared) {
+        return { success: false, error: 'primary_flag_failed' };
+      }
+    }
+
     updateTag(CACHE_TAGS.clients(orgId));
     return { success: true, contact: toClientContact(data) };
   } catch (error) {
@@ -434,10 +456,6 @@ export async function createClientSite(
 
     if (!input.name.trim()) {
       return { success: false, error: 'name_required' };
-    }
-
-    if (input.isPrimary) {
-      await clearPrimaryFlag('client_sites', orgId, clientId);
     }
 
     const admin = createSupabaseAdminClient();
@@ -462,6 +480,18 @@ export async function createClientSite(
     if (error || !data) {
       console.error('Error creating client site:', error);
       return { success: false, error: 'create_failed' };
+    }
+
+    if (input.isPrimary) {
+      const cleared = await clearOtherPrimaryFlags(
+        'client_sites',
+        orgId,
+        clientId,
+        data.id
+      );
+      if (!cleared) {
+        return { success: false, error: 'primary_flag_failed' };
+      }
     }
 
     updateTag(CACHE_TAGS.clients(orgId));
@@ -497,10 +527,6 @@ export async function updateClientSite(
       return { success: false, error: 'site_not_found' };
     }
 
-    if (input.isPrimary) {
-      await clearPrimaryFlag('client_sites', orgId, existing.client_id);
-    }
-
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) {
       if (!input.name.trim()) return { success: false, error: 'name_required' };
@@ -533,6 +559,18 @@ export async function updateClientSite(
     if (error || !data) {
       console.error('Error updating client site:', error);
       return { success: false, error: 'update_failed' };
+    }
+
+    if (input.isPrimary) {
+      const cleared = await clearOtherPrimaryFlags(
+        'client_sites',
+        orgId,
+        existing.client_id,
+        siteId
+      );
+      if (!cleared) {
+        return { success: false, error: 'primary_flag_failed' };
+      }
     }
 
     updateTag(CACHE_TAGS.clients(orgId));
