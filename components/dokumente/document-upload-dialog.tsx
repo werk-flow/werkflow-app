@@ -41,6 +41,7 @@ type UploadTarget = {
   projectId?: string;
   clientId?: string;
   employeeId?: string;
+  requestId?: string;
 };
 
 type DocumentUploadDialogProps = {
@@ -201,6 +202,7 @@ export function DocumentUploadDialog({
               projectId: target.projectId ?? null,
               clientId: target.clientId ?? null,
               employeeId: target.employeeId ?? null,
+              requestId: target.requestId ?? null,
             },
             category: row.category,
             onProgress: (fraction) => updateRow(row.id, { progress: fraction }),

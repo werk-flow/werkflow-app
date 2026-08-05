@@ -68,6 +68,7 @@ export type DocumentLink = {
   projectId: string | null;
   clientId: string | null;
   employeeId: string | null;
+  requestId: string | null;
   jobTitle: string | null;
   jobNumber: string | null;
   projectName: string | null;
@@ -75,6 +76,8 @@ export type DocumentLink = {
   clientName: string | null;
   employeeName: string | null;
   employeeEmail: string | null;
+  requestNumber: string | null;
+  requestSummary: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -318,6 +321,8 @@ export function toDocumentLink(
     clientName?: string | null;
     employeeName?: string | null;
     employeeEmail?: string | null;
+    requestNumber?: string | null;
+    requestSummary?: string | null;
   }
 ): DocumentLink {
   return {
@@ -328,6 +333,7 @@ export function toDocumentLink(
     projectId: row.project_id,
     clientId: row.client_id,
     employeeId: row.employee_id,
+    requestId: row.request_id,
     jobTitle: context?.jobTitle ?? null,
     jobNumber: context?.jobNumber ?? null,
     projectName: context?.projectName ?? null,
@@ -335,6 +341,8 @@ export function toDocumentLink(
     clientName: context?.clientName ?? null,
     employeeName: context?.employeeName ?? null,
     employeeEmail: context?.employeeEmail ?? null,
+    requestNumber: context?.requestNumber ?? null,
+    requestSummary: context?.requestSummary ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

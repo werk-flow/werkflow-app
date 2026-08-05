@@ -57,6 +57,7 @@ The core work domain is job/project management.
 Concepts:
 
 - Customer (`Kunde`): private or commercial client, with an optional manual org-unique customer number.
+- Request (`Anfrage`): an operational customer request captured during intake. It references (never copies) the customer/contact/site when known, or carries provisional free-text caller identity until matched or promoted to a customer. Lifecycle: `offen` → optional `in_klaerung` → terminal `umgewandelt` (converted exactly once into a new standalone job or project, race-safe, attributable) or `geschlossen` (with reason, reopenable). Attachments are documents linked via `document_links`; conversion adds a second link to the created work. Every material change is recorded in an append-only per-request event log. Requests are a manager-only surface.
 - Contact (`Ansprechpartner`): a person belonging to exactly one customer, with a free-text role, channels, a primary marker, and an archive state. Contacts are never shared across customers or silently merged.
 - Work site (`Einsatzort`): a durable operational location belonging to exactly one customer, with a structured address, access notes, an optional on-site contact, a primary marker, and an archive state. A site is master data, not copied address text.
 - Project (`Projekt`): a larger body of work that may contain multiple jobs. A project may carry a default site/contact that prefills new jobs; each job can override it (no forced sync).

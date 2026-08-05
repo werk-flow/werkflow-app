@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,12 @@ const navItems: NavItem[] = [
     href: '/zeiterfassung',
     label: 'Zeiterfassung',
     icon: Clock
+  },
+  {
+    href: '/anfragen',
+    label: 'Anfragen',
+    icon: Inbox,
+    managerOrAbove: true
   },
   {
     href: '/auftraege',

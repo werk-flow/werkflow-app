@@ -84,6 +84,231 @@ export type Database = {
           },
         ]
       }
+      client_request_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          request_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          request_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_request_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_request_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_request_events_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_requests: {
+        Row: {
+          assigned_to: string | null
+          caller_address: string | null
+          caller_email: string | null
+          caller_name: string | null
+          caller_phone: string | null
+          category: Database["public"]["Enums"]["request_category"]
+          client_id: string | null
+          closed_at: string | null
+          closed_by: string | null
+          closed_note: string | null
+          closed_reason:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null
+          contact_id: string | null
+          converted_at: string | null
+          converted_by: string | null
+          converted_job_id: string | null
+          converted_project_id: string | null
+          created_at: string
+          created_by: string | null
+          details: string | null
+          id: string
+          organization_id: string
+          received_at: string
+          request_number: string | null
+          site_id: string | null
+          source: Database["public"]["Enums"]["request_source"]
+          status: Database["public"]["Enums"]["request_status"]
+          summary: string
+          updated_at: string
+          urgency: Database["public"]["Enums"]["request_urgency"]
+        }
+        Insert: {
+          assigned_to?: string | null
+          caller_address?: string | null
+          caller_email?: string | null
+          caller_name?: string | null
+          caller_phone?: string | null
+          category?: Database["public"]["Enums"]["request_category"]
+          client_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          closed_note?: string | null
+          closed_reason?:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null
+          contact_id?: string | null
+          converted_at?: string | null
+          converted_by?: string | null
+          converted_job_id?: string | null
+          converted_project_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
+          id?: string
+          organization_id: string
+          received_at?: string
+          request_number?: string | null
+          site_id?: string | null
+          source?: Database["public"]["Enums"]["request_source"]
+          status?: Database["public"]["Enums"]["request_status"]
+          summary: string
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["request_urgency"]
+        }
+        Update: {
+          assigned_to?: string | null
+          caller_address?: string | null
+          caller_email?: string | null
+          caller_name?: string | null
+          caller_phone?: string | null
+          category?: Database["public"]["Enums"]["request_category"]
+          client_id?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          closed_note?: string | null
+          closed_reason?:
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null
+          contact_id?: string | null
+          converted_at?: string | null
+          converted_by?: string | null
+          converted_job_id?: string | null
+          converted_project_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
+          id?: string
+          organization_id?: string
+          received_at?: string
+          request_number?: string | null
+          site_id?: string | null
+          source?: Database["public"]["Enums"]["request_source"]
+          status?: Database["public"]["Enums"]["request_status"]
+          summary?: string
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["request_urgency"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_requests_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_converted_by_fkey"
+            columns: ["converted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_converted_job_id_fkey"
+            columns: ["converted_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_converted_project_id_fkey"
+            columns: ["converted_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_requests_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "client_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_sites: {
         Row: {
           access_notes: string | null
@@ -345,6 +570,7 @@ export type Database = {
           job_id: string | null
           organization_id: string
           project_id: string | null
+          request_id: string | null
         }
         Insert: {
           client_id?: string | null
@@ -356,6 +582,7 @@ export type Database = {
           job_id?: string | null
           organization_id: string
           project_id?: string | null
+          request_id?: string | null
         }
         Update: {
           client_id?: string | null
@@ -367,6 +594,7 @@ export type Database = {
           job_id?: string | null
           organization_id?: string
           project_id?: string | null
+          request_id?: string | null
         }
         Relationships: [
           {
@@ -416,6 +644,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_links_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -2116,6 +2351,7 @@ export type Database = {
       }
       generate_job_number: { Args: { p_org_id: string }; Returns: string }
       generate_project_number: { Args: { p_org_id: string }; Returns: string }
+      generate_request_number: { Args: { p_org_id: string }; Returns: string }
       get_invite_by_code: {
         Args: { p_invite_code: string }
         Returns: {
@@ -2232,6 +2468,24 @@ export type Database = {
         | "in_bearbeitung"
         | "abgeschlossen"
         | "geparkt"
+      request_category:
+        | "notfall"
+        | "stoerung_reparatur"
+        | "wartung"
+        | "angebotsanfrage"
+        | "installation_umbau"
+        | "garantie_mangel"
+        | "allgemeine_frage"
+        | "sonstiges"
+      request_close_reason:
+        | "kein_bedarf"
+        | "abgelehnt"
+        | "duplikat"
+        | "anderweitig_geloest"
+        | "sonstiges"
+      request_source: "telefon" | "email" | "vor_ort" | "sonstiges"
+      request_status: "offen" | "in_klaerung" | "umgewandelt" | "geschlossen"
+      request_urgency: "niedrig" | "normal" | "hoch" | "notfall"
       subscription_status: "active" | "inactive" | "canceled" | "trialing"
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete"
       time_tracking_break_mode: "manual" | "automatic"
@@ -2375,6 +2629,26 @@ export const Constants = {
         "abgeschlossen",
         "geparkt",
       ],
+      request_category: [
+        "notfall",
+        "stoerung_reparatur",
+        "wartung",
+        "angebotsanfrage",
+        "installation_umbau",
+        "garantie_mangel",
+        "allgemeine_frage",
+        "sonstiges",
+      ],
+      request_close_reason: [
+        "kein_bedarf",
+        "abgelehnt",
+        "duplikat",
+        "anderweitig_geloest",
+        "sonstiges",
+      ],
+      request_source: ["telefon", "email", "vor_ort", "sonstiges"],
+      request_status: ["offen", "in_klaerung", "umgewandelt", "geschlossen"],
+      request_urgency: ["niedrig", "normal", "hoch", "notfall"],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_tracking_break_mode: ["manual", "automatic"],

@@ -21,6 +21,7 @@ type DocumentUploadTargetInput = {
   projectId?: string | null;
   clientId?: string | null;
   employeeId?: string | null;
+  requestId?: string | null;
 };
 
 // Shorter than the signed upload URL lifetime (30 min) so a stalled transfer

@@ -497,6 +497,28 @@ async function ensureClientManagerAccess(
   return { success: true };
 }
 
+// Requests (Anfragen) are a manager-only surface; attachments follow suit.
+async function ensureRequestManagerAccess(
+  context: AuthorizedDocumentContext,
+  requestId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const manager = requireManager(context);
+  if (!manager.success) return manager;
+
+  const { data: request } = await context.admin
+    .from('client_requests')
+    .select('id')
+    .eq('id', requestId)
+    .eq('organization_id', context.orgId)
+    .maybeSingle();
+
+  if (!request) {
+    return { success: false, error: 'request_not_found' };
+  }
+
+  return { success: true };
+}
+
 async function ensureEmployeeManagerAccess(
   context: AuthorizedDocumentContext,
   employeeId: string
@@ -649,8 +671,15 @@ async function hydrateDocuments(
         .filter((id): id is string => Boolean(id))
     )
   );
+  const requestIds = Array.from(
+    new Set(
+      linkRows
+        .map((link) => link.request_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
 
-  const [jobsResult, projectsResult, clientsResult, employeesResult] = await Promise.all([
+  const [jobsResult, projectsResult, clientsResult, employeesResult, requestsResult] = await Promise.all([
     jobIds.length > 0
       ? admin
           .from('jobs')
@@ -674,6 +703,12 @@ async function hydrateDocuments(
           .from('profiles')
           .select('id, first_name, last_name, email')
           .in('id', employeeIds)
+      : Promise.resolve({ data: [] }),
+    requestIds.length > 0
+      ? admin
+          .from('client_requests')
+          .select('id, request_number, summary')
+          .in('id', requestIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -705,6 +740,13 @@ async function hydrateDocuments(
       email: string | null;
     }>).map((employee) => [employee.id, employee])
   );
+  const requestsById = new Map(
+    ((requestsResult.data ?? []) as Array<{
+      id: string;
+      request_number: string | null;
+      summary: string;
+    }>).map((request) => [request.id, request])
+  );
 
   const linksByDocumentId = new Map<string, DocumentLink[]>();
   for (const linkRow of linkRows) {
@@ -712,6 +754,7 @@ async function hydrateDocuments(
     const project = linkRow.project_id ? projectsById.get(linkRow.project_id) : null;
     const client = linkRow.client_id ? clientsById.get(linkRow.client_id) : null;
     const employee = linkRow.employee_id ? employeesById.get(linkRow.employee_id) : null;
+    const request = linkRow.request_id ? requestsById.get(linkRow.request_id) : null;
     const employeeName = employee
       ? [employee.first_name, employee.last_name].filter(Boolean).join(' ') || employee.email
       : null;
@@ -725,6 +768,8 @@ async function hydrateDocuments(
         clientName: client?.name ?? null,
         employeeName: employeeName ?? null,
         employeeEmail: employee?.email ?? null,
+        requestNumber: request?.request_number ?? null,
+        requestSummary: request?.summary ?? null,
       })
     );
     linksByDocumentId.set(linkRow.document_id, links);
@@ -1311,6 +1356,57 @@ export async function getJobDocuments(jobId: string): Promise<DocumentListResult
 
   if (documentsError) {
     console.error('Failed to load job documents:', documentsError);
+    return { success: false, error: 'documents_failed' };
+  }
+
+  return {
+    success: true,
+    documents: await hydrateDocuments(
+      auth.context.admin,
+      (documents ?? []) as DocumentRow[]
+    ),
+  };
+}
+
+// Attachments of one request (Anfrage); manager-only like the request surface.
+export async function getRequestDocuments(
+  requestId: string
+): Promise<DocumentListResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+
+  const access = await ensureRequestManagerAccess(auth.context, requestId);
+  if (!access.success) return access;
+
+  const { data: links, error: linksError } = await auth.context.admin
+    .from('document_links')
+    .select('document_id')
+    .eq('organization_id', auth.context.orgId)
+    .eq('request_id', requestId);
+
+  if (linksError) {
+    console.error('Failed to load request document links:', linksError);
+    return { success: false, error: 'documents_failed' };
+  }
+
+  const documentIds = ((links ?? []) as Pick<DocumentLinkRow, 'document_id'>[]).map(
+    (link) => link.document_id
+  );
+
+  if (documentIds.length === 0) {
+    return { success: true, documents: [] };
+  }
+
+  const { data: documents, error: documentsError } = await auth.context.admin
+    .from('documents')
+    .select('*')
+    .in('id', documentIds)
+    .eq('organization_id', auth.context.orgId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
+
+  if (documentsError) {
+    console.error('Failed to load request documents:', documentsError);
     return { success: false, error: 'documents_failed' };
   }
 
@@ -2047,6 +2143,7 @@ type DocumentUploadTargetInput = {
   projectId?: string | null;
   clientId?: string | null;
   employeeId?: string | null;
+  requestId?: string | null;
 };
 
 type NormalizedUploadTarget = {
@@ -2055,6 +2152,7 @@ type NormalizedUploadTarget = {
   projectId: string | null;
   clientId: string | null;
   employeeId: string | null;
+  requestId: string | null;
 };
 
 type CreateDocumentUploadTicketInput = DocumentUploadTargetInput & {
@@ -2076,6 +2174,7 @@ function normalizeUploadTarget(input: DocumentUploadTargetInput): NormalizedUplo
     projectId: (input.projectId ?? '').trim() || null,
     clientId: (input.clientId ?? '').trim() || null,
     employeeId: (input.employeeId ?? '').trim() || null,
+    requestId: (input.requestId ?? '').trim() || null,
   };
 }
 
@@ -2086,9 +2185,9 @@ async function authorizeDocumentUploadTarget(
   context: AuthorizedDocumentContext,
   target: NormalizedUploadTarget
 ): Promise<{ success: true } | { success: false; error: string }> {
-  const { folderId, jobId, projectId, clientId, employeeId } = target;
+  const { folderId, jobId, projectId, clientId, employeeId, requestId } = target;
 
-  if ([jobId, projectId, clientId, employeeId].filter(Boolean).length > 1) {
+  if ([jobId, projectId, clientId, employeeId, requestId].filter(Boolean).length > 1) {
     return { success: false, error: 'invalid_target' };
   }
 
@@ -2103,6 +2202,9 @@ async function authorizeDocumentUploadTarget(
     if (!access.success) return access;
   } else if (employeeId) {
     const access = await ensureEmployeeManagerAccess(context, employeeId);
+    if (!access.success) return access;
+  } else if (requestId) {
+    const access = await ensureRequestManagerAccess(context, requestId);
     if (!access.success) return access;
   } else {
     const manager = requireManager(context);
@@ -2172,7 +2274,7 @@ export async function finalizeDocumentUpload(
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) return access;
 
-  const { folderId, jobId, projectId, clientId, employeeId } = target;
+  const { folderId, jobId, projectId, clientId, employeeId, requestId } = target;
   const originalFileName = trimName(input.fileName) || 'Dokument';
   // The storage path is recomputed server-side from the authenticated org and
   // the document id, so a client can never register a foreign object key.
@@ -2252,7 +2354,7 @@ export async function finalizeDocumentUpload(
     return { success: false, error: 'create_failed' };
   }
 
-  if (jobId || projectId || clientId || employeeId) {
+  if (jobId || projectId || clientId || employeeId || requestId) {
     const { error: linkError } = await auth.context.admin
       .from('document_links')
       .insert({
@@ -2262,6 +2364,7 @@ export async function finalizeDocumentUpload(
         project_id: projectId,
         client_id: clientId,
         employee_id: employeeId,
+        request_id: requestId,
         created_by: auth.context.userId,
       });
 
@@ -2291,14 +2394,15 @@ export async function finalizeDocumentUpload(
       projectId,
       clientId,
       employeeId,
+      requestId,
     },
   });
 
-  if (jobId || projectId || clientId || employeeId) {
+  if (jobId || projectId || clientId || employeeId || requestId) {
     await recordDocumentAuditEvent(auth.context, {
       documentId: input.documentId,
       eventType: 'linked',
-      eventPayload: { jobId, projectId, clientId, employeeId },
+      eventPayload: { jobId, projectId, clientId, employeeId, requestId },
     });
   }
 
@@ -2790,6 +2894,7 @@ export async function unlinkDocument(
       projectId: linkRow.project_id,
       clientId: linkRow.client_id,
       employeeId: linkRow.employee_id,
+      requestId: linkRow.request_id,
     },
   });
 

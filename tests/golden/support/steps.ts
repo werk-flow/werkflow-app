@@ -9,11 +9,19 @@ export function visibleText(page: Page, text: string): Locator {
 // Reusable business-step helpers. Golden-gate specs compose these steps; when
 // a slice changes the UI, update the step here once and every gate follows.
 
-export async function createCustomer(page: Page, name: string): Promise<void> {
+export async function createCustomer(
+  page: Page,
+  name: string,
+  options?: { type?: 'Privat' | 'Gewerblich' }
+): Promise<void> {
   await page.goto('/kunden');
   await page.getByRole('button', { name: 'Kunde hinzufügen' }).click();
   await expect(page.getByRole('heading', { name: 'Neuen Kunden anlegen' })).toBeVisible();
   await page.locator('#client-name').fill(name);
+  if (options?.type) {
+    await page.locator('#client-type').click();
+    await page.getByRole('option', { name: options.type, exact: true }).click();
+  }
   await page.getByRole('button', { name: 'Kunde erstellen' }).click();
   await expect(page.getByText('Kunde erfolgreich erstellt!')).toBeVisible();
   // Dialog closes itself after the success flash.
@@ -107,13 +115,13 @@ export async function createJob(
   ).toBeHidden({ timeout: 15_000 });
 }
 
-export async function uploadDocumentOnJobPage(
+// Uploads into the "Dokumente & Bilder" section of the page currently open.
+// Shared by the job-page and request-page upload steps.
+async function uploadIntoDocumentsSection(
   page: Page,
-  jobNumber: string,
   filePath: string,
   expectedFileName: string
 ): Promise<void> {
-  await page.goto(`/auftraege/${jobNumber}`);
   await expect(page.getByText('Dokumente & Bilder')).toBeVisible();
 
   const section = page
@@ -135,6 +143,16 @@ export async function uploadDocumentOnJobPage(
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
 
   await expect(visibleText(page, expectedFileName)).toBeVisible({ timeout: 15_000 });
+}
+
+export async function uploadDocumentOnJobPage(
+  page: Page,
+  jobNumber: string,
+  filePath: string,
+  expectedFileName: string
+): Promise<void> {
+  await page.goto(`/auftraege/${jobNumber}`);
+  await uploadIntoDocumentsSection(page, filePath, expectedFileName);
 }
 
 export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void> {
@@ -283,7 +301,9 @@ export async function addContactOnCustomerDetail(
   if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, contact.name)).toBeVisible();
+  // The list appears after a router.refresh of the heavy customer detail;
+  // shared-database latency spikes have pushed this past 15s in real runs.
+  await expect(visibleText(page, contact.name)).toBeVisible({ timeout: 30_000 });
 }
 
 export async function addSiteOnCustomerDetail(
@@ -300,7 +320,8 @@ export async function addSiteOnCustomerDetail(
   if (site.city) await page.locator('#site-city').fill(site.city);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, site.name)).toBeVisible();
+  // Same slow-refresh allowance as addContactOnCustomerDetail.
+  await expect(visibleText(page, site.name)).toBeVisible({ timeout: 30_000 });
 }
 
 export async function editSiteStreetOnCustomerDetail(
@@ -326,6 +347,146 @@ export async function editSiteStreetOnCustomerDetail(
 export async function searchCustomers(page: Page, query: string): Promise<void> {
   await page.goto('/kunden');
   await page.getByLabel('Kunden durchsuchen').fill(query);
+}
+
+// P1-02: Anfragen (customer requests) and their conversion into work.
+
+export async function createRequestViaDialog(
+  page: Page,
+  options: {
+    summary: string;
+    requestNumber?: string;
+    clientName?: string;
+    siteName?: string;
+    contactName?: string;
+    callerName?: string;
+    callerPhone?: string;
+    categoryLabel?: string;
+    urgencyLabel?: string;
+  }
+): Promise<void> {
+  await page.goto('/anfragen');
+  await page.getByRole('button', { name: 'Anfrage erfassen' }).click();
+  await expect(page.getByRole('heading', { name: 'Neue Anfrage erfassen' })).toBeVisible();
+
+  await page.locator('#request-summary').fill(options.summary);
+  if (options.requestNumber !== undefined) {
+    await page.locator('#request-number').fill(options.requestNumber);
+  }
+
+  if (options.categoryLabel) {
+    await page.locator('#request-category').click();
+    await page.getByRole('option', { name: options.categoryLabel, exact: true }).click();
+  }
+  if (options.urgencyLabel) {
+    await page.locator('#request-urgency').click();
+    await page.getByRole('option', { name: options.urgencyLabel, exact: true }).click();
+  }
+
+  if (options.clientName) {
+    // Same searchable customer combobox as the job dialog.
+    await page.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
+    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: options.clientName })
+      .first()
+      .click();
+  }
+
+  if (options.siteName) {
+    await expect(page.locator('#request-site')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#request-site').click();
+    await page.getByRole('option').filter({ hasText: options.siteName }).first().click();
+  }
+  if (options.contactName) {
+    await expect(page.locator('#request-contact')).toBeVisible({ timeout: 15_000 });
+    await page.locator('#request-contact').click();
+    await page.getByRole('option').filter({ hasText: options.contactName }).first().click();
+  }
+
+  if (options.callerName) {
+    await page.locator('#request-caller-name').fill(options.callerName);
+  }
+  if (options.callerPhone) {
+    await page.locator('#request-caller-phone').fill(options.callerPhone);
+  }
+
+  // The submit button carries the same label as the header trigger; scope it
+  // to the dialog. Success navigates straight to the new request detail.
+  await page.getByRole('dialog').getByRole('button', { name: 'Anfrage erfassen' }).click();
+  await page.waitForURL(/\/anfragen\/[0-9a-f-]{36}/, { timeout: 20_000 });
+  await expect(visibleText(page, options.summary)).toBeVisible({ timeout: 15_000 });
+}
+
+export async function uploadDocumentOnRequestDetail(
+  page: Page,
+  filePath: string,
+  expectedFileName: string
+): Promise<void> {
+  // Assumes the request detail page is already open.
+  await uploadIntoDocumentsSection(page, filePath, expectedFileName);
+}
+
+export async function convertRequestToJobViaDialog(
+  page: Page,
+  options?: { clientName?: string; plannedDate?: string }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Umwandeln' }).click();
+  await expect(page.getByRole('heading', { name: 'Anfrage umwandeln' })).toBeVisible();
+
+  if (options?.clientName) {
+    // Unknown-caller requests must resolve the customer inside the dialog.
+    await page
+      .getByRole('dialog')
+      .getByRole('combobox')
+      .filter({ hasText: 'Kein Kunde' })
+      .click();
+    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: options.clientName })
+      .first()
+      .click();
+  }
+
+  if (options?.plannedDate) {
+    await page.locator('#convert-date').fill(options.plannedDate);
+  }
+
+  // The job number is suggested asynchronously after the dialog opens;
+  // submitting before it arrives fails validation like it would for a user.
+  await expect(page.locator('#convert-number')).toHaveValue(/.+/, {
+    timeout: 15_000,
+  });
+
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'In Auftrag umwandeln' })
+    .click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
+  await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function closeRequestViaDialog(
+  page: Page,
+  reasonLabel: string
+): Promise<void> {
+  await page.getByRole('button', { name: 'Schließen', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Anfrage ohne Auftrag schließen' })
+  ).toBeVisible();
+  await page.locator('#close-reason').click();
+  await page.getByRole('option', { name: reasonLabel, exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Anfrage schließen' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, 'Ohne Auftrag geschlossen:')).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {

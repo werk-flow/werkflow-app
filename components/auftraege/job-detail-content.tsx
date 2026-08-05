@@ -212,6 +212,8 @@ interface JobDetailContentProps {
   inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
   currentUserId: string;
+  // Set when this job was created by converting an Anfrage (P1-02).
+  originRequest?: { label: string; href: string } | null;
 }
 
 export function JobDetailContent({
@@ -227,6 +229,7 @@ export function JobDetailContent({
   inventoryItems,
   inventoryLocations,
   currentUserId,
+  originRequest,
 }: JobDetailContentProps) {
   const router = useRouter();
   const [liveJob, setLiveJob] = useState(job);
@@ -1142,6 +1145,17 @@ export function JobDetailContent({
       />
 
       <div className="flex-1 overflow-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6">
+        {isAdminOrManager && originRequest && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            Entstanden aus{' '}
+            <Link
+              href={originRequest.href}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {originRequest.label}
+            </Link>
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
           {/* Left Column: Metadata + Client + Employees */}
           <div className="space-y-6">

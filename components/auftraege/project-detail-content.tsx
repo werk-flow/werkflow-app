@@ -181,6 +181,8 @@ interface ProjectDetailContentProps {
   materialSummary: ProjectMaterialSummary;
   inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
+  // Set when this project was created by converting an Anfrage (P1-02).
+  originRequest?: { label: string; href: string } | null;
 }
 
 export function ProjectDetailContent({
@@ -195,6 +197,7 @@ export function ProjectDetailContent({
   materialSummary,
   inventoryItems,
   inventoryLocations,
+  originRequest,
 }: ProjectDetailContentProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -713,6 +716,17 @@ export function ProjectDetailContent({
       />
 
       <div className="flex-1 overflow-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6">
+        {isAdminOrManager && originRequest && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            Entstanden aus{' '}
+            <Link
+              href={originRequest.href}
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
+              {originRequest.label}
+            </Link>
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
           {/* Left Column: Metadata + Client */}
           <div className="space-y-6">

@@ -26,6 +26,7 @@ export type RealtimeTable =
   | 'clients'
   | 'client_contacts'
   | 'client_sites'
+  | 'client_requests'
   | 'jobs'
   | 'projects'
   | 'job_assignments'
@@ -70,6 +71,7 @@ const TABLES: RealtimeTable[] = [
   'clients',
   'client_contacts',
   'client_sites',
+  'client_requests',
   'jobs',
   'projects',
   'job_assignments',
@@ -269,6 +271,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('client_sites', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'client_requests',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('client_requests', p)
         )
         .on(
           'postgres_changes',

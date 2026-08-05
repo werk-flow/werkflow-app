@@ -107,6 +107,16 @@ async function ProjectDetailData({
       ? inventoryOptionsResult.locations
       : [];
 
+  // Origin request (P1-02); the banner itself is manager-only in the component.
+  const { data: originRequestRow } = isAdminOrManager
+    ? await admin
+        .from('client_requests')
+        .select('id, request_number, summary')
+        .eq('organization_id', activeOrgId)
+        .eq('converted_project_id', project.id)
+        .maybeSingle()
+    : { data: null };
+
   return (
     <>
       <Suspense fallback={null}>
@@ -129,6 +139,16 @@ async function ProjectDetailData({
         materialSummary={materialSummary}
         inventoryItems={inventoryItems}
         inventoryLocations={inventoryLocations}
+        originRequest={
+          originRequestRow
+            ? {
+                label: originRequestRow.request_number
+                  ? `Anfrage ${originRequestRow.request_number}`
+                  : `Anfrage „${originRequestRow.summary}“`,
+                href: `/anfragen/${originRequestRow.id}`,
+              }
+            : null
+        }
       />
     </>
   );

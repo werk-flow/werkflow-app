@@ -25,6 +25,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Work Structure And Identity
 
 - Managers (`admin` and `buero`) can create, edit, and delete jobs and projects.
+- **Request handoff (P1-02):** a captured customer request (`Anfrage`) can be deliberately converted exactly once into a new standalone job or project without re-entering the customer, contact, site, summary, details, urgency, or attachments. The conversion dialog prefills everything and stays fully editable; urgency maps onto job priority; the site address becomes the job's `Ort` snapshot (P1-01 rule); attachments gain a second document link to the work. Converted work shows its origin ("Entstanden aus Anfrage …", manager-only) and the request links to the work. Direct job/project creation without a request is unchanged and remains first-class — no synthetic request is ever required.
 - A job can remain standalone or belong to one project. A project can exist without jobs and can later receive existing or newly created jobs.
 - Jobs and projects have organization-scoped numbers and dedicated detail routes.
 - A standalone job can have its own customer. Jobs inside a project use the project's customer; changing the project customer synchronizes its jobs.
@@ -60,7 +61,7 @@ The following behavior exists today and is the baseline future work must preserv
 
 ### Important Current Limitations
 
-- There is no structured request/intake object that carries a customer enquiry into execution.
+- Request intake and once-only conversion exist (P1-02), but the work record does not yet show what changed during qualification, and converting a request into an update of existing work is deferred to the service slices.
 - The status model does not yet express blocked reasons, dependencies, readiness gates, customer waiting states, or separate completion and handover.
 - Instruction items are useful checklists, not a complete task/dependency system or reusable template library.
 - Site diaries, structured measurements, defects, change-work records, formal approvals, handover packages, and customer signatures are not implemented as dedicated operational artifacts.

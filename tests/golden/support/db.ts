@@ -30,6 +30,40 @@ export async function getPendingInviteCode(orgId: string, email: string): Promis
   return data.invite_code as string;
 }
 
+export type RequestConversionState = {
+  status: string;
+  convertedJobId: string | null;
+  convertedProjectId: string | null;
+  convertedAt: string | null;
+  convertedBy: string | null;
+};
+
+// P1-02: DB-side proof that a conversion happened exactly once and is
+// attributable — the UI shows the link, this shows the once-only facts.
+export async function getRequestConversionState(
+  orgId: string,
+  requestNumber: string
+): Promise<RequestConversionState> {
+  const { data, error } = await createAdminClient()
+    .from('client_requests')
+    .select('status, converted_job_id, converted_project_id, converted_at, converted_by')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
+    .single();
+
+  if (error || !data) {
+    throw new Error(`No request found with number ${requestNumber}: ${error?.message}`);
+  }
+
+  return {
+    status: data.status as string,
+    convertedJobId: (data.converted_job_id as string | null) ?? null,
+    convertedProjectId: (data.converted_project_id as string | null) ?? null,
+    convertedAt: (data.converted_at as string | null) ?? null,
+    convertedBy: (data.converted_by as string | null) ?? null,
+  };
+}
+
 export type InventoryLedgerState = {
   quantityOnHand: number;
   movementTotal: number;

@@ -74,6 +74,7 @@ type ContextualDocumentsSectionProps = {
   projectId?: string;
   clientId?: string;
   employeeId?: string;
+  requestId?: string;
   contextLabel?: string;
   canUpload: boolean;
   canManage: boolean;
@@ -95,13 +96,20 @@ function formatDate(date: string): string {
 
 function getContextLink(
   document: OrganizationDocument,
-  context: { jobId?: string; projectId?: string; clientId?: string; employeeId?: string }
+  context: {
+    jobId?: string;
+    projectId?: string;
+    clientId?: string;
+    employeeId?: string;
+    requestId?: string;
+  }
 ) {
   return document.links.find((link) => {
     if (context.jobId) return link.jobId === context.jobId;
     if (context.projectId) return link.projectId === context.projectId;
     if (context.clientId) return link.clientId === context.clientId;
     if (context.employeeId) return link.employeeId === context.employeeId;
+    if (context.requestId) return link.requestId === context.requestId;
     return false;
   });
 }
@@ -121,11 +129,13 @@ function getUnlinkLabel(context: {
   projectId?: string;
   clientId?: string;
   employeeId?: string;
+  requestId?: string;
 }): string {
   if (context.jobId) return 'Verknüpfung zu diesem Auftrag entfernen';
   if (context.projectId) return 'Verknüpfung zu diesem Projekt entfernen';
   if (context.clientId) return 'Verknüpfung zu diesem Kunden entfernen';
   if (context.employeeId) return 'Verknüpfung zu diesem Mitarbeiter entfernen';
+  if (context.requestId) return 'Verknüpfung zu dieser Anfrage entfernen';
   return 'Verknüpfung entfernen';
 }
 
@@ -133,7 +143,13 @@ type DocumentRowProps = {
   document: OrganizationDocument;
   isPending: boolean;
   canManage: boolean;
-  context: { jobId?: string; projectId?: string; clientId?: string; employeeId?: string };
+  context: {
+    jobId?: string;
+    projectId?: string;
+    clientId?: string;
+    employeeId?: string;
+    requestId?: string;
+  };
   indented?: boolean;
   onOpen: (document: OrganizationDocument) => void;
   onManageLinks: (document: OrganizationDocument) => void;
@@ -233,6 +249,7 @@ export function ContextualDocumentsSection({
   projectId,
   clientId,
   employeeId,
+  requestId,
   contextLabel,
   canUpload,
   canManage,
@@ -257,7 +274,7 @@ export function ContextualDocumentsSection({
   const [deleteDocumentTarget, setDeleteDocumentTarget] =
     useState<OrganizationDocument | null>(null);
 
-  const context = { jobId, projectId, clientId, employeeId };
+  const context = { jobId, projectId, clientId, employeeId, requestId };
   const totalDocumentCount =
     documents.length +
     jobDocumentGroups.reduce((total, group) => total + group.documents.length, 0);
@@ -499,7 +516,7 @@ export function ContextualDocumentsSection({
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         items={uploadItems}
-        target={{ jobId, projectId, clientId, employeeId }}
+        target={{ jobId, projectId, clientId, employeeId, requestId }}
         onComplete={(failedCount) => {
           if (failedCount > 0) {
             showFeedback(

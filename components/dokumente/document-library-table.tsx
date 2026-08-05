@@ -266,6 +266,10 @@ function getLinkBadges(document: OrganizationDocument): string[] {
       return link.employeeName ? `Mitarbeiter: ${link.employeeName}` : 'Mitarbeiter';
     }
 
+    if (link.requestId) {
+      return link.requestNumber ? `Anfrage ${link.requestNumber}` : 'Anfrage';
+    }
+
     return link.projectNumber
       ? `Projekt ${link.projectNumber}`
       : link.projectName

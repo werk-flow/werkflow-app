@@ -122,6 +122,16 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     );
   }
 
+  // Origin request (P1-02): read through the RLS-enforced client, so only
+  // managers (who may see requests) get the back-link.
+  const { data: originRequestRow } = isAdminOrManager
+    ? await supabase
+        .from('client_requests')
+        .select('id, request_number, summary')
+        .eq('converted_job_id', job.id)
+        .maybeSingle()
+    : { data: null };
+
   return (
     <JobDetailContent
       job={job}
@@ -135,6 +145,16 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       inventoryItems={inventoryItems}
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
+      originRequest={
+        originRequestRow
+          ? {
+              label: originRequestRow.request_number
+                ? `Anfrage ${originRequestRow.request_number}`
+                : `Anfrage „${originRequestRow.summary}“`,
+              href: `/anfragen/${originRequestRow.id}`,
+            }
+          : null
+      }
     />
   );
 }

@@ -146,7 +146,7 @@ Key principle: **Postgres holds organization, folder structure, links, categorie
 | --- | --- |
 | `document_folders` | Manual folder tree per organization (`parent_folder_id`, soft-delete via `deleted_at`) |
 | `documents` | Current document metadata + latest file pointer |
-| `document_links` | Links a document to exactly one of: `job_id`, `project_id`, `client_id`, or `employee_id` |
+| `document_links` | Links a document to exactly one of: `job_id`, `project_id`, `client_id`, `employee_id`, or `request_id` (P1-02) |
 | `document_audit_events` | Append-only operational history |
 | `document_versions` | Previous file revisions for versioned business documents |
 
@@ -165,10 +165,10 @@ Key principle: **Postgres holds organization, folder structure, links, categorie
 `document_links` enforces **exactly one target** via check constraint:
 
 ```sql
-num_nonnulls(job_id, project_id, client_id, employee_id) = 1
+num_nonnulls(job_id, project_id, client_id, employee_id, request_id) = 1
 ```
 
-A document can have **multiple links** (e.g. linked to both a job and a project) by having multiple `document_links` rows. Each row still points to one target type.
+A document can have **multiple links** (e.g. linked to both a job and a project) by having multiple `document_links` rows. Each row still points to one target type. Request (`Anfrage`) attachments use this mechanism (P1-02): uploading on a request detail creates a `request_id` link; converting the request adds a second link to the created job/project — same file, no copies. Request-linked documents are manager-only, like the request surface itself; attach-existing from the library targets jobs/projects/customers/employees only.
 
 Links are metadata only. They do **not** move Storage objects or change `folder_id`.
 

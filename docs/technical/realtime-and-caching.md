@@ -31,6 +31,7 @@ Current cache tag areas include:
 - Organization settings.
 - User preferences within an organization.
 - Clients.
+- Requests (Anfragen).
 - Jobs.
 - Projects.
 
@@ -51,6 +52,7 @@ The provider subscribes to tables that affect active operational views, includin
 - `clients`
 - `client_contacts`
 - `client_sites`
+- `client_requests`
 - `jobs`
 - `projects`
 - `job_assignments`
