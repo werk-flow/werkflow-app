@@ -21,10 +21,14 @@ export function ResponsibilitySummarySection({
         (holder) => holder.employeeRecordId === employeeRecordId
       )
   );
-  const relatedDelegations = data.delegations.filter(
+  const activeDelegations = data.delegations.filter(
     (delegation) =>
-      delegation.delegatorEmployeeRecordId === employeeRecordId ||
-      delegation.substituteEmployeeRecordId === employeeRecordId
+      delegation.validFrom <= data.businessDate &&
+      delegation.validUntil >= data.businessDate &&
+      (delegation.revokedFrom === null ||
+        delegation.revokedFrom > data.businessDate) &&
+      (delegation.delegatorEmployeeRecordId === employeeRecordId ||
+        delegation.substituteEmployeeRecordId === employeeRecordId)
   );
 
   return (
@@ -59,14 +63,13 @@ export function ResponsibilitySummarySection({
             Aktuell keine Freigabeverantwortung.
           </span>
         )}
-        {relatedDelegations.length > 0 ? (
+        {activeDelegations.length > 0 ? (
           <Badge variant="outline">
-            {relatedDelegations.length}{' '}
-            {relatedDelegations.length === 1 ? 'Vertretung' : 'Vertretungen'}
+            {activeDelegations.length}{' '}
+            {activeDelegations.length === 1 ? 'Vertretung' : 'Vertretungen'}
           </Badge>
         ) : null}
       </div>
     </section>
   );
 }
-

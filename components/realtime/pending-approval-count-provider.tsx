@@ -51,7 +51,10 @@ export function PendingApprovalCountProvider({
 
     try {
       const nextCount = await getPendingApprovalCount(activeOrgId, isAdmin);
-      if (generation === refreshGenerationRef.current) {
+      if (
+        nextCount !== null &&
+        generation === refreshGenerationRef.current
+      ) {
         setPendingApprovalCount(nextCount);
       }
     } catch (error) {

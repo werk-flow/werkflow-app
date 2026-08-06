@@ -21,7 +21,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated 5 August 2026 through `P1-05`) includes:
+The implemented baseline (updated 6 August 2026 through `P1-05`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
@@ -312,7 +312,7 @@ Every intelligent action must show its source, proposed change, uncertainty, hum
 
 ## Open Product Decisions
 
-Resolved with `P1-05` (2026-08-05): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer, the complete correction request model, batch decisions, and closed-period behavior remain later scope.
+Resolved with `P1-05` (2026-08-06): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer, the complete correction request model, batch decisions, and closed-period behavior remain later scope.
 
 - Which time categories and internal activities should ship as defaults for SHK businesses?
 - Is job selection required for all field work, required only for selected roles, or handled through an unallocated-time queue?

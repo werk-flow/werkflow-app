@@ -228,7 +228,7 @@ export async function removeMember(
     if (strandedResponsibilities.length > 0) {
       return {
         success: false,
-        error: `last_responsibility_holder:${strandedResponsibilities[0]}`,
+        error: `last_responsibility_holders:${strandedResponsibilities.join(',')}`,
       };
     }
 

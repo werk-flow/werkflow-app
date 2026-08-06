@@ -550,7 +550,7 @@ export async function typeIntoDatePicker(
   const group = scope.getByRole('group', { name: groupName });
   await group.click();
   // The click may land on any segment; ArrowLeft twice normalizes to the day
-  // segment (it is a no-op when already there).
+  // segment because the control has exactly day, month, and year segments.
   await group.press('ArrowLeft');
   await group.press('ArrowLeft');
   await group.pressSequentially(digits, { delay: 50 });
@@ -575,6 +575,9 @@ export async function previewResponsibilityChange(
   if (options.selectedNames) {
     await dialog.locator(`#${options.responsibility}-mode`).click();
     await page.getByRole('option', { name: 'Bestimmte Personen' }).click();
+    await expect(dialog.getByRole('checkbox').first()).toBeVisible({
+      timeout: 15_000,
+    });
     for (const checkbox of await dialog.getByRole('checkbox').all()) {
       if (await checkbox.isChecked()) await checkbox.uncheck();
     }
@@ -591,12 +594,8 @@ export async function previewResponsibilityChange(
   await dialog.getByRole('button', { name: 'Wirkung prüfen' }).click();
   const preview = page.getByTestId('effective-access-preview');
   await expect(preview).toBeVisible({ timeout: 15_000 });
-  const gainedSection = preview
-    .getByText('Erhält Zugriff', { exact: true })
-    .locator('..');
-  const lostSection = preview
-    .getByText('Verliert Zugriff', { exact: true })
-    .locator('..');
+  const gainedSection = preview.getByTestId('preview-gained');
+  const lostSection = preview.getByTestId('preview-lost');
   for (const name of options.gainedNames ?? []) {
     await expect(gainedSection.getByText(name, { exact: false })).toBeVisible();
   }
@@ -628,15 +627,36 @@ export async function createResponsibilityDelegationViaSettings(
   await card.getByRole('button', { name: 'Vertretung eintragen' }).click();
   const dialog = page.getByRole('dialog');
 
-  await dialog.locator(`#${options.responsibility}-delegator`).click();
-  await page.getByRole('option', { name: options.delegatorName }).click();
+  const delegatorTrigger = dialog.locator(
+    `#${options.responsibility}-delegator`
+  );
+  await expect(delegatorTrigger).toBeVisible({ timeout: 15_000 });
+  if (!(await delegatorTrigger.textContent())?.includes(options.delegatorName)) {
+    await delegatorTrigger.click();
+    await page.getByRole('option', { name: options.delegatorName }).click();
+  }
   await dialog.locator(`#${options.responsibility}-substitute`).click();
   await page.getByRole('option', { name: options.substituteName }).click();
   await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
   await typeIntoDatePicker(dialog, 'Gültig bis', options.validUntilDigits);
   await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expectVisibleAfterSave(page, options.substituteName);
+  const activeDelegationRow = (scope: Locator) =>
+    scope
+      .locator('li')
+      .filter({ hasText: options.substituteName })
+      .filter({ has: page.getByRole('button', { name: 'Heute beenden' }) })
+      .first();
+  try {
+    await expect(activeDelegationRow(card)).toBeVisible({ timeout: 15_000 });
+  } catch {
+    await page.reload();
+    await expect(
+      activeDelegationRow(
+        page.getByTestId(`responsibility-${options.responsibility}`)
+      )
+    ).toBeVisible({ timeout: 15_000 });
+  }
 }
 
 export async function endResponsibilityDelegationViaSettings(
@@ -652,7 +672,11 @@ export async function endResponsibilityDelegationViaSettings(
     .filter({ has: page.getByRole('button', { name: 'Heute beenden' }) })
     .first();
   await row.getByRole('button', { name: 'Heute beenden' }).click();
-  const endedRow = card.locator('li').filter({ hasText: substituteName }).first();
+  const endedRow = card
+    .locator('li')
+    .filter({ hasText: substituteName })
+    .filter({ has: page.getByText('Beendet', { exact: true }) })
+    .first();
   await expect(endedRow.getByText('Beendet', { exact: true })).toBeVisible({
     timeout: 15_000,
   });
@@ -665,6 +689,7 @@ async function typeIntoTimeInput(
 ): Promise<void> {
   const group = dialog.locator(`#${id}`);
   await group.click();
+  // TimeInput has hour and minute segments, so one ArrowLeft reaches hours.
   await group.press('ArrowLeft');
   await group.pressSequentially(digits, { delay: 50 });
 }
@@ -698,16 +723,31 @@ export async function createOwnManualTimeEntry(
 
 export async function openTimeApprovals(page: Page): Promise<void> {
   await page.goto('/zeiterfassung?tab=approvals');
-  await expect(page.getByRole('tab', { name: /Anträge/ })).toBeVisible({
+  await expect(page.getByRole('tab', { name: /Anträge/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+    { timeout: 15_000 }
+  );
+  await expect(page.getByTestId('pending-approvals-panel')).toHaveAttribute(
+    'data-loaded',
+    'true',
+    {
     timeout: 15_000,
-  });
+    }
+  );
+}
+
+function pendingTimeApprovalCard(page: Page, userId: string): Locator {
+  return page.locator(
+    `[data-testid^="pending-session-"][data-user-id="${userId}"]`
+  );
 }
 
 export async function expectPendingTimeApprovalVisible(
   page: Page,
   userId: string
 ): Promise<void> {
-  await expect(page.getByTestId(`pending-session-${userId}`)).toBeVisible({
+  await expect(pendingTimeApprovalCard(page, userId)).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -716,7 +756,7 @@ export async function expectPendingTimeApprovalHidden(
   page: Page,
   userId: string
 ): Promise<void> {
-  await expect(page.getByTestId(`pending-session-${userId}`)).toHaveCount(0, {
+  await expect(pendingTimeApprovalCard(page, userId)).toHaveCount(0, {
     timeout: 15_000,
   });
 }
@@ -725,7 +765,7 @@ export async function approvePendingTimeEntry(
   page: Page,
   userId: string
 ): Promise<void> {
-  const card = page.getByTestId(`pending-session-${userId}`);
+  const card = pendingTimeApprovalCard(page, userId);
   await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
   await expect(card).toHaveCount(0, { timeout: 15_000 });
 }
@@ -734,7 +774,7 @@ export async function expectExpiredResponsibilityDeniedAtAction(
   page: Page,
   userId: string
 ): Promise<void> {
-  const card = page.getByTestId(`pending-session-${userId}`);
+  const card = pendingTimeApprovalCard(page, userId);
   await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
   await expect(
     page.getByText(

@@ -55,7 +55,7 @@ async function getInitialAppRuntimeState({
   return {
     clockState: clockStateResult.success ? clockStateResult.state : null,
     activeJobIds: activeJobsResult.success ? activeJobsResult.activeJobIds : [],
-    pendingApprovalCount,
+    pendingApprovalCount: pendingApprovalCount ?? 0,
   };
 }
 

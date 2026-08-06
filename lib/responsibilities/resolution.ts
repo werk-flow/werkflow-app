@@ -208,10 +208,22 @@ export function resolveEffectiveResponsibility({
     baseHolders.map((holder) => [holder.employeeRecordId, holder])
   );
 
-  for (const delegation of delegations) {
+  const effectiveDelegations = delegations
+    .filter(
+      (delegation) =>
+        delegation.responsibility === responsibility &&
+        isDelegationEffective(delegation, businessDate)
+    )
+    .toSorted((left, right) => {
+      const startComparison = right.validFrom.localeCompare(left.validFrom);
+      if (startComparison !== 0) return startComparison;
+      const endComparison = left.validUntil.localeCompare(right.validUntil);
+      if (endComparison !== 0) return endComparison;
+      return left.id.localeCompare(right.id);
+    });
+
+  for (const delegation of effectiveDelegations) {
     if (
-      delegation.responsibility !== responsibility ||
-      !isDelegationEffective(delegation, businessDate) ||
       holders.has(delegation.substituteEmployeeRecordId)
     ) {
       continue;

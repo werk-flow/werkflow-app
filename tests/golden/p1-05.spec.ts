@@ -2,7 +2,7 @@ import { expect, test } from './support/fixtures';
 import {
   expectOwnerRoleMutationRejected,
   getEmployeeRecordStateByUser,
-  getLatestPendingTimeEntryState,
+  getLatestManualTimeEntryState,
   getLatestResponsibilityConfigurationState,
   getVisibleResponsibilityEmployeeRecordIdsAs,
 } from './support/db';
@@ -79,7 +79,7 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     expect(after.mode).toBe('selected');
   });
 
-  test('Eine gezielt verantwortliche Person kann freigeben, Büro ohne Verantwortung nicht', async ({
+  test('Eine gezielt verantwortliche Person kann freigeben', async ({
     bueroPage,
     employeePage,
     world,
@@ -88,6 +88,18 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       shiftIsoDate(berlinTodayIso(), -1)
     );
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
+    const [adminRecord, employeeRecord] = await Promise.all([
+      getEmployeeRecordStateByUser(world.orgId, world.users.admin.id),
+      getEmployeeRecordStateByUser(world.orgId, world.users.employee.id),
+    ]);
+    const configuration = await getLatestResponsibilityConfigurationState(
+      world.orgId,
+      'time_approval'
+    );
+    expect(configuration.mode).toBe('selected');
+    expect(configuration.holderEmployeeRecordIds).toEqual(
+      [adminRecord.id, employeeRecord.id].sort()
+    );
 
     await createOwnManualTimeEntry(bueroPage, {
       memberName: bueroName,
@@ -96,24 +108,22 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       clockOutDigits: '0700',
     });
     expect(
-      (await getLatestPendingTimeEntryState(world.orgId, world.users.buero.id))
+      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
         .status
     ).toBe('pending');
-
-    await openTimeApprovals(bueroPage);
-    await expectPendingTimeApprovalHidden(bueroPage, world.users.buero.id);
 
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalVisible(employeePage, world.users.buero.id);
     await approvePendingTimeEntry(employeePage, world.users.buero.id);
     expect(
-      (await getLatestPendingTimeEntryState(world.orgId, world.users.buero.id))
+      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
         .status
     ).toBe('approved');
   });
 
   test('Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip', async ({
     adminPage,
+    bueroPage,
     employeePage,
     world,
   }) => {
@@ -126,6 +136,8 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       clockInDigits: '0600',
       clockOutDigits: '0700',
     });
+    await openTimeApprovals(bueroPage);
+    await expectPendingTimeApprovalHidden(bueroPage, world.users.employee.id);
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalHidden(employeePage, world.users.employee.id);
 
@@ -134,7 +146,7 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     await approvePendingTimeEntry(adminPage, world.users.employee.id);
     expect(
       (
-        await getLatestPendingTimeEntryState(
+        await getLatestManualTimeEntryState(
           world.orgId,
           world.users.employee.id
         )
@@ -191,7 +203,7 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       world.users.buero.id
     );
     expect(
-      (await getLatestPendingTimeEntryState(world.orgId, world.users.buero.id))
+      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
         .status
     ).toBe('pending');
 
@@ -223,6 +235,12 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       world.orgId,
       world.users.employee.id
     );
+    const configuration = await getLatestResponsibilityConfigurationState(
+      world.orgId,
+      'time_approval'
+    );
+    expect(configuration.mode).toBe('selected');
+    expect(configuration.holderEmployeeRecordIds).toEqual([employeeRecord.id]);
     const visibleToEmployee =
       await getVisibleResponsibilityEmployeeRecordIdsAs(
         world.users.employee,
@@ -248,7 +266,10 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     await expect(visibleText(employeePage, 'Zeitfreigaben')).toBeVisible();
 
     await outsiderPage.goto('/einstellungen/mitarbeiter');
+    await expect(visibleText(outsiderPage, world.outsider.orgName)).toBeVisible();
+    await expect(
+      visibleText(outsiderPage, 'Verantwortlichkeiten und Freigaben')
+    ).toBeVisible();
     await expect(visibleText(outsiderPage, world.orgName)).toHaveCount(0);
   });
 });
-

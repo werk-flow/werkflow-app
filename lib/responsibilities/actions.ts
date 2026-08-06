@@ -46,6 +46,21 @@ function normalizeDatabaseError(message: string): string {
   return knownCodes.find((code) => message.includes(code)) ?? 'save_failed';
 }
 
+function isValidIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
 async function requireOwner() {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
@@ -103,7 +118,8 @@ export async function previewResponsibilityConfiguration(input: {
     return { success: false, error: 'responsibility_holder_not_active_member' };
   }
 
-  const actionTime = new Date().toISOString();
+  const previewBaseTime = Date.now();
+  const actionTime = new Date(previewBaseTime).toISOString();
   const businessDate = getBusinessTodayIso();
   const current = resolveEffectiveResponsibility({
     responsibility: input.responsibility,
@@ -138,17 +154,19 @@ export async function previewResponsibilityConfiguration(input: {
             },
           ];
         });
+  // Advance the synthetic version and resolver timestamps by one millisecond
+  // each so the proposed version wins without depending on equal timestamps.
   const previewConfiguration: ResponsibilityConfiguration = {
     id: previewConfigurationId,
     responsibility: input.responsibility,
     mode: input.mode,
-    effectiveFrom: new Date(Date.now() + 1).toISOString(),
-    createdAt: new Date(Date.now() + 1).toISOString(),
+    effectiveFrom: new Date(previewBaseTime + 1).toISOString(),
+    createdAt: new Date(previewBaseTime + 1).toISOString(),
     assignments,
   };
   const proposed = resolveEffectiveResponsibility({
     responsibility: input.responsibility,
-    actionTime: new Date(Date.now() + 2).toISOString(),
+    actionTime: new Date(previewBaseTime + 2).toISOString(),
     businessDate,
     members: state.members,
     configurations: [...state.configurations, previewConfiguration],
@@ -219,8 +237,11 @@ export async function createResponsibilityDelegation(input: {
 }): Promise<ActionResult> {
   const owner = await requireOwner();
   if (!owner.success) return owner;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.validFrom) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(input.validUntil)) {
+  if (
+    !isValidIsoDate(input.validFrom) ||
+    !isValidIsoDate(input.validUntil) ||
+    input.validUntil < input.validFrom
+  ) {
     return { success: false, error: 'responsibility_delegation_invalid_dates' };
   }
 
@@ -268,4 +289,3 @@ export async function endResponsibilityDelegation(
   refreshResponsibilitySurfaces(owner.context.orgId);
   return { success: true };
 }
-

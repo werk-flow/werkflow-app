@@ -181,9 +181,9 @@ export async function getLatestResponsibilityConfigurationState(
   return {
     id: configuration.id as string,
     mode: configuration.mode as string,
-    holderEmployeeRecordIds: (assignments ?? []).map(
-      (assignment) => assignment.employee_record_id as string
-    ),
+    holderEmployeeRecordIds: (assignments ?? [])
+      .map((assignment) => assignment.employee_record_id as string)
+      .sort(),
   };
 }
 
@@ -217,7 +217,7 @@ export async function getVisibleResponsibilityEmployeeRecordIdsAs(
   ].sort();
 }
 
-export async function getLatestPendingTimeEntryState(
+export async function getLatestManualTimeEntryState(
   orgId: string,
   userId: string
 ): Promise<{ id: string; status: string }> {
@@ -247,6 +247,18 @@ export async function expectOwnerRoleMutationRejected(
     .eq('organization_id', orgId)
     .eq('user_id', ownerUserId);
   if (!error?.message.includes('organization_owner_is_protected')) {
+    if (!error) {
+      const { error: restoreError } = await admin
+        .from('organization_members')
+        .update({ role: 'admin' })
+        .eq('organization_id', orgId)
+        .eq('user_id', ownerUserId);
+      if (restoreError) {
+        throw new Error(
+          `Owner role mutation unexpectedly succeeded and restoration failed: ${restoreError.message}`
+        );
+      }
+    }
     throw new Error(
       `Owner role mutation was not rejected by the database: ${error?.message ?? 'no error'}`
     );
@@ -258,7 +270,10 @@ export async function expectOwnerRoleMutationRejected(
     .eq('organization_id', orgId)
     .eq('user_id', ownerUserId)
     .single();
-  if (readError || membership?.role !== 'admin') {
+  if (readError) {
+    throw new Error(`Owner membership verification failed: ${readError.message}`);
+  }
+  if (membership.role !== 'admin') {
     throw new Error('Owner membership changed despite last-admin protection.');
   }
 }

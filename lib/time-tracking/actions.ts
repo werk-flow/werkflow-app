@@ -1850,7 +1850,7 @@ export async function getPendingEntries(
 export async function getPendingApprovalCount(
   orgId: string,
   _isAdmin: boolean
-): Promise<number> {
+): Promise<number | null> {
   void _isAdmin;
 
   try {
@@ -1864,7 +1864,7 @@ export async function getPendingApprovalCount(
 
     const pendingSessionsResult = await getPendingSessions(orgId);
     if (!pendingSessionsResult.success) {
-      return 0;
+      return null;
     }
 
     let count = pendingSessionsResult.sessions.length;
@@ -1873,12 +1873,15 @@ export async function getPendingApprovalCount(
       const changeRequestsResult = await getPendingChangeRequests(orgId);
       if (changeRequestsResult.success) {
         count += changeRequestsResult.requests.length;
+      } else {
+        return null;
       }
     }
 
     return count;
-  } catch {
-    return 0;
+  } catch (error) {
+    console.error('Unexpected error in getPendingApprovalCount:', error);
+    return null;
   }
 }
 
@@ -1934,31 +1937,16 @@ export async function getPendingSessions(
       return { success: true, sessions: [] };
     }
 
-    // Get unique user IDs and fetch their profiles
-    const userIds = [...new Set(pendingEntries.map((e) => e.user_id))];
-    const { data: profiles } = await admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', userIds);
-
-    // Create a map for quick profile lookup
-    const profileMap = new Map<
-      string,
-      { first_name: string | null; last_name: string | null }
-    >();
-    for (const profile of profiles || []) {
-      profileMap.set(profile.id, {
-        first_name: profile.first_name,
-        last_name: profile.last_name
-      });
-    }
-
     const uniqueUserIds = [...new Set(pendingEntries.map((e) => e.user_id))];
-    const { data: memberRows } = await admin
+    const { data: memberRows, error: memberRowsError } = await admin
       .from('organization_members')
       .select('user_id, role')
       .eq('organization_id', orgId)
       .in('user_id', uniqueUserIds);
+    if (memberRowsError) {
+      console.error('Error fetching pending-entry member roles:', memberRowsError);
+      return { success: false, error: 'fetch_failed' };
+    }
     const roleMap = new Map<string, OrgRole>();
     for (const member of memberRows || []) {
       roleMap.set(member.user_id, member.role as OrgRole);
@@ -1973,6 +1961,36 @@ export async function getPendingSessions(
           })
       );
     });
+
+    // Fetch personal display data only for targets this approver may actually
+    // see. Authorization is resolved before any profile lookup.
+    const visibleUserIds = [
+      ...new Set(filteredEntries.map((entry) => entry.user_id)),
+    ];
+    const profilesResult =
+      visibleUserIds.length > 0
+        ? await admin
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', visibleUserIds)
+        : { data: [], error: null };
+    if (profilesResult.error) {
+      console.error(
+        'Error fetching pending-entry profiles:',
+        profilesResult.error
+      );
+      return { success: false, error: 'fetch_failed' };
+    }
+    const profileMap = new Map<
+      string,
+      { first_name: string | null; last_name: string | null }
+    >();
+    for (const profile of profilesResult.data ?? []) {
+      profileMap.set(profile.id, {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+      });
+    }
 
     // Group entries into sessions (pairs of clock_in/clock_out with same createdAt within 5 seconds)
     const sessions: PendingSession[] = [];

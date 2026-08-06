@@ -198,6 +198,51 @@ describe('resolveEffectiveResponsibility', () => {
     ).toBe(true);
   });
 
+  test('resolves overlapping anomalous delegations independently of input order', () => {
+    const delegations: ResponsibilityDelegation[] = [
+      {
+        id: 'older-delegation',
+        responsibility: 'time_approval',
+        delegatorEmployeeRecordId: 'admin-record',
+        substituteEmployeeRecordId: 'employee-record',
+        validFrom: '2026-08-09',
+        validUntil: '2026-08-15',
+        revokedFrom: null,
+      },
+      {
+        id: 'newer-delegation',
+        responsibility: 'time_approval',
+        delegatorEmployeeRecordId: 'buero-record',
+        substituteEmployeeRecordId: 'employee-record',
+        validFrom: '2026-08-10',
+        validUntil: '2026-08-12',
+        revokedFrom: null,
+      },
+    ];
+    const resolve = (inputDelegations: ResponsibilityDelegation[]) =>
+      resolveEffectiveResponsibility({
+        responsibility: 'time_approval',
+        actionTime: '2026-08-10T10:00:00.000Z',
+        businessDate: '2026-08-10',
+        members,
+        configurations: [],
+        delegations: inputDelegations,
+      });
+
+    const forward = resolve(delegations).holders.find(
+      (holder) => holder.employeeRecordId === 'employee-record'
+    );
+    const reversed = resolve(delegations.toReversed()).holders.find(
+      (holder) => holder.employeeRecordId === 'employee-record'
+    );
+
+    expect(forward?.source).toEqual(reversed?.source);
+    expect(forward?.source.kind).toBe('delegation');
+    if (forward?.source.kind === 'delegation') {
+      expect(forward.source.delegationId).toBe('newer-delegation');
+    }
+  });
+
   test('never allows a holder to approve their own entry', () => {
     const result = resolveEffectiveResponsibility({
       responsibility: 'time_approval',

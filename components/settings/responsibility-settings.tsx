@@ -256,19 +256,26 @@ function ResponsibilityCard({
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
           <ul className="grid gap-2">
-            {effective.holders.map((holder) => (
-              <li
-                key={holder.employeeRecordId}
-                className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="text-sm font-medium">
-                  {personName(data.people, holder.employeeRecordId)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {holderSourceLabel(holder)}
-                </span>
+            {effective.holders.length > 0 ? (
+              effective.holders.map((holder) => (
+                <li
+                  key={holder.employeeRecordId}
+                  className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="text-sm font-medium">
+                    {personName(data.people, holder.employeeRecordId)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {holderSourceLabel(holder)}
+                  </span>
+                </li>
+              ))
+            ) : (
+              <li className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                Aktuell ist keine aktive Person verfügbar. Bitte prüfe die
+                Verantwortlichkeit.
               </li>
-            ))}
+            )}
           </ul>
         </section>
 
@@ -310,12 +317,14 @@ function ResponsibilityCard({
       </CardFooter>
 
       <ConfigurationDialog
+        key={`configuration-${effective.configurationId ?? 'default'}`}
         data={data}
         responsibility={responsibility}
         open={configurationOpen}
         onOpenChange={setConfigurationOpen}
       />
       <DelegationDialog
+        key={`delegation-${effective.configurationId ?? 'default'}`}
         data={data}
         responsibility={responsibility}
         open={delegationOpen}
@@ -351,6 +360,9 @@ function DelegationList({
       }
       router.refresh();
       showBanner({ message: 'Die Vertretung wurde beendet.', variant: 'success' });
+    } catch (error) {
+      console.error('Unexpected error ending responsibility delegation:', error);
+      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
     } finally {
       setEndingId(null);
     }
@@ -395,7 +407,9 @@ function DelegationList({
                   disabled={endingId !== null}
                   onClick={() => void handleEnd(delegation.id)}
                 >
-                  {endingId === delegation.id ? 'Beendet...' : 'Heute beenden'}
+                  {endingId === delegation.id
+                    ? 'Wird beendet…'
+                    : 'Heute beenden'}
                 </Button>
               ) : null}
             </div>
@@ -461,6 +475,9 @@ function ConfigurationDialog({
         return;
       }
       setPreview(result.preview);
+    } catch (error) {
+      console.error('Unexpected error previewing responsibility configuration:', error);
+      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
     } finally {
       setIsLoadingPreview(false);
     }
@@ -489,6 +506,9 @@ function ConfigurationDialog({
         message: `${RESPONSIBILITY_LABELS[responsibility]} wurden gespeichert.`,
         variant: 'success',
       });
+    } catch (error) {
+      console.error('Unexpected error applying responsibility configuration:', error);
+      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
     } finally {
       setIsSaving(false);
     }
@@ -579,18 +599,21 @@ function ConfigurationDialog({
               </div>
               <PreviewNames
                 label="Erhält Zugriff"
+                testId="preview-gained"
                 ids={preview.gainedHolderIds}
                 people={data.people}
                 emptyLabel="Niemand zusätzlich"
               />
               <PreviewNames
                 label="Verliert Zugriff"
+                testId="preview-lost"
                 ids={preview.lostHolderIds}
                 people={data.people}
                 emptyLabel="Niemand"
               />
               <PreviewNames
                 label="Danach verantwortlich"
+                testId="preview-effective"
                 ids={preview.effectiveHolderIds}
                 people={data.people}
               />
@@ -625,17 +648,19 @@ function ConfigurationDialog({
 
 function PreviewNames({
   label,
+  testId,
   ids,
   people,
   emptyLabel = 'Niemand',
 }: {
   label: string;
+  testId: string;
   ids: string[];
   people: ResponsibilityPerson[];
   emptyLabel?: string;
 }) {
   return (
-    <div className="text-sm">
+    <div className="text-sm" data-testid={testId}>
       <p className="font-medium">{label}</p>
       <p className="text-muted-foreground">
         {ids.length > 0
@@ -670,8 +695,24 @@ function DelegationDialog({
   const [validUntil, setValidUntil] = useState(data.businessDate);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const hasInvalidDateRange = validUntil < validFrom;
+  const canSave =
+    Boolean(delegatorId) && Boolean(substituteId) && !hasInvalidDateRange;
+
+  const reset = () => {
+    setDelegatorId(baseHolders[0]?.employeeRecordId ?? '');
+    setSubstituteId('');
+    setValidFrom(data.businessDate);
+    setValidUntil(data.businessDate);
+    setNote('');
+  };
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset();
+    onOpenChange(nextOpen);
+  };
 
   const handleSave = async () => {
+    if (hasInvalidDateRange) return;
     setIsSaving(true);
     try {
       const result = await createResponsibilityDelegation({
@@ -689,16 +730,19 @@ function DelegationDialog({
         });
         return;
       }
-      onOpenChange(false);
+      handleOpenChange(false);
       router.refresh();
       showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
+    } catch (error) {
+      console.error('Unexpected error creating responsibility delegation:', error);
+      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Vertretung für {RESPONSIBILITY_LABELS[responsibility]}</DialogTitle>
@@ -768,24 +812,31 @@ function DelegationDialog({
               maxLength={500}
             />
           </div>
-          <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
-            <p className="flex items-center gap-2 font-medium">
-              <CalendarClock className="size-4" /> Wirkung
+          {canSave ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
+              <p className="flex items-center gap-2 font-medium">
+                <CalendarClock className="size-4" /> Wirkung
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                Die Vertretung gilt einschließlich {formatDate(validFrom)} und{' '}
+                {formatDate(validUntil)}. Ab dem Folgetag endet der Zugriff
+                automatisch.
+              </p>
+            </div>
+          ) : null}
+          {hasInvalidDateRange ? (
+            <p role="alert" className="text-sm text-destructive sm:col-span-2">
+              Das Enddatum darf nicht vor dem Startdatum liegen.
             </p>
-            <p className="mt-1 text-muted-foreground">
-              Die Vertretung gilt einschließlich {formatDate(validFrom)} und{' '}
-              {formatDate(validUntil)}. Ab dem Folgetag endet der Zugriff
-              automatisch.
-            </p>
-          </div>
+          ) : null}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             Abbrechen
           </Button>
           <Button
             type="button"
-            disabled={isSaving || !delegatorId || !substituteId}
+            disabled={isSaving || !canSave}
             onClick={() => void handleSave()}
           >
             {isSaving && <Loader2 className="animate-spin" />}

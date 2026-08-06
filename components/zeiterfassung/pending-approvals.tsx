@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Check,
@@ -52,6 +52,22 @@ type RequestItem =
   | { type: 'edit'; data: ChangeRequestWithDetails }
   | { type: 'delete'; data: ChangeRequestWithDetails };
 
+const APPROVAL_ERROR_MESSAGES: Record<string, string> = {
+  self_approval_not_allowed:
+    'Eigene Arbeitszeiten können nicht selbst freigegeben werden.',
+  not_responsible:
+    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
+  responsibility_load_failed:
+    'Die aktuelle Freigabeverantwortung konnte nicht geprüft werden. Bitte versuche es erneut.',
+  fetch_failed: 'Die ausstehenden Anträge konnten nicht geladen werden.',
+  not_authenticated: 'Bitte melde dich erneut an.',
+  not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
+  not_authorized: 'Du darfst diesen Antrag nicht bearbeiten.',
+  request_not_found: 'Der Antrag wurde nicht gefunden.',
+  request_already_reviewed: 'Der Antrag wurde bereits bearbeitet.',
+  unexpected_error: 'Die Freigabe konnte nicht gespeichert werden.',
+};
+
 function formatTime(timestamp: string): string {
   return new Date(timestamp).toLocaleTimeString('de-DE', {
     hour: '2-digit',
@@ -93,16 +109,11 @@ function formatDuration(clockIn: string, clockOut: string): string {
 }
 
 function getApprovalErrorMessage(error: string): string {
-  if (error === 'self_approval_not_allowed') {
-    return 'Eigene Arbeitszeiten können nicht selbst freigegeben werden.';
+  const message = APPROVAL_ERROR_MESSAGES[error];
+  if (!message) {
+    console.error('Unexpected time approval error code:', error);
   }
-  if (error === 'not_responsible') {
-    return 'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.';
-  }
-  if (error === 'responsibility_load_failed') {
-    return 'Die aktuelle Freigabeverantwortung konnte nicht geprüft werden. Bitte versuche es erneut.';
-  }
-  return 'Die Freigabe konnte nicht gespeichert werden.';
+  return message ?? 'Die Freigabe konnte nicht gespeichert werden.';
 }
 
 // Badge component for request type
@@ -156,9 +167,11 @@ export function PendingApprovals({
     id: string;
     action: 'approve' | 'reject';
   } | null>(null);
+  const fetchGenerationRef = useRef(0);
 
   const fetchPendingItems = useCallback(
     async (isRefresh = false) => {
+      const generation = ++fetchGenerationRef.current;
       if (isRefresh) {
         setIsRefreshing(true);
       }
@@ -168,12 +181,13 @@ export function PendingApprovals({
         // Fetch pending sessions (for all admin/manager)
         const sessionsResult = await getPendingSessions(organizationId);
         if (!sessionsResult.success) {
-          setError(sessionsResult.error);
+          if (generation === fetchGenerationRef.current) {
+            setError(getApprovalErrorMessage(sessionsResult.error));
+          }
           return;
         }
 
         const newSessions = sessionsResult.sessions;
-        setSessions(newSessions);
 
         // Fetch change requests (admin only)
         let newChangeRequests: ChangeRequestWithDetails[] = [];
@@ -183,18 +197,28 @@ export function PendingApprovals({
           );
           if (changeRequestsResult.success) {
             newChangeRequests = changeRequestsResult.requests;
-            setChangeRequests(newChangeRequests);
+          } else {
+            if (generation === fetchGenerationRef.current) {
+              setError(getApprovalErrorMessage(changeRequestsResult.error));
+            }
+            return;
           }
-        } else {
-          setChangeRequests([]);
         }
 
+        if (generation === fetchGenerationRef.current) {
+          setSessions(newSessions);
+          setChangeRequests(newChangeRequests);
+        }
       } catch (err) {
         console.error('Error fetching pending items:', err);
-        setError('Fehler beim Laden');
+        if (generation === fetchGenerationRef.current) {
+          setError('Die ausstehenden Anträge konnten nicht geladen werden.');
+        }
       } finally {
-        setIsInitialLoading(false);
-        setIsRefreshing(false);
+        if (generation === fetchGenerationRef.current) {
+          setIsInitialLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [organizationId, isAdmin]
@@ -269,7 +293,7 @@ export function PendingApprovals({
         setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
       } else {
         console.error('Failed to approve change request:', result.error);
-        setError(`Fehler: ${result.error}`);
+        setError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error approving change request:', err);
@@ -290,7 +314,7 @@ export function PendingApprovals({
         setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
       } else {
         console.error('Failed to reject change request:', result.error);
-        setError(`Fehler: ${result.error}`);
+        setError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error rejecting change request:', err);
@@ -446,7 +470,11 @@ export function PendingApprovals({
   };
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      data-testid="pending-approvals-panel"
+      data-loaded={isInitialLoading ? 'false' : 'true'}
+    >
       {/* Header with refresh button - always visible */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
@@ -561,7 +589,10 @@ function SessionRequestCard({
 
   return (
     <>
-      <Card data-testid={`pending-session-${session.userId}`}>
+      <Card
+        data-testid={`pending-session-${session.id}`}
+        data-user-id={session.userId}
+      >
         <CardContent className="flex items-center justify-between p-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">

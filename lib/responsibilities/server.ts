@@ -43,6 +43,7 @@ export async function loadResponsibilityRuntimeState(
   organizationId: string
 ): Promise<ResponsibilityRuntimeState | null> {
   const admin = createSupabaseAdminClient();
+  const businessDate = getBusinessTodayIso();
   const [
     configurationsResult,
     assignmentsResult,
@@ -114,14 +115,16 @@ export async function loadResponsibilityRuntimeState(
     const role = membershipByUserId.get(record.user_id);
     if (!role) continue;
     const profile = profileByUserId.get(record.user_id);
+    const isActive =
+      record.exit_date === null || record.exit_date > businessDate;
 
     members.push({
       employeeRecordId: record.id,
       userId: record.user_id,
       role,
-      active: record.exit_date === null,
+      active: isActive,
     });
-    if (record.exit_date === null) {
+    if (isActive) {
       people.push({
         employeeRecordId: record.id,
         userId: record.user_id,
