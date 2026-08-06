@@ -176,6 +176,7 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 - Documentation and shell examples should default to Bun commands.
 - Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
 - Also important: this app uses bun for local development but is hosted on Vercel and uses the node runtime on Vercel so the existance of a package-lock.json file is completely fine.
+- Windows workstation note: the repository path contains spaces and Next.js route folders contain parentheses (`app/(app)/...`). In PowerShell, always quote such paths or use `-LiteralPath`; unquoted `(app)` is parsed as a subexpression and fails. Prefer Bash/`bunx` invocations for anything path-heavy.
 
 ### Product Context Reminder
 

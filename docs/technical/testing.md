@@ -22,6 +22,9 @@ Hard-earned operational rules (2026-08-04):
 4. `KEEP_WORLD=1` skips teardown for manual debugging of a seeded world; the next run's leftover sweeper cleans it up.
 5. Chromium is already installed (`bunx playwright install chromium` has been run on this machine); do not reinstall unless `playwright test` itself reports a missing browser.
 6. `GOLDEN_BASE_URL` can point the run at another server, but direct-to-R2 uploads will fail on any origin the bucket CORS does not allow — stick to port 3000 unless the CORS policy was deliberately extended.
+7. **The production server must outlive the entire suite.** Start `bun start` as a detached/background process with no tool time limit and health-check `http://localhost:3000` before starting Playwright. A foreground server under a tool timeout dies mid-suite and invalidates the whole run (`ERR_CONNECTION_REFUSED` on every remaining test — this happened in the P1-05 cycle).
+8. **Freeze code before the final gate run.** Order per slice: implement → self-review and every intended quality/skill pass → review fixes → `bunx tsc --noEmit` + lint + `bun run test:unit` → production build → focused slice spec → full suite exactly once. Any later application-code change invalidates the build and full-suite evidence and forces a rerun; after the confirmation run passes, only documentation may change.
+9. **After a harness-only fix, rerun the focused spec (`--grep @P1-XX`) before another full suite.** A full run costs 5–7 minutes; the focused spec answers the same question in a fraction of that. The full suite is for proving the shared-state chain, not for iterating on one selector.
 
 ## Debugging Failed Runs
 
@@ -32,6 +35,8 @@ Playwright writes three artifacts per failure into `tests/golden/.results/<test>
 3. `trace.zip` — full replay (`bunx playwright show-trace <path>`), rarely needed.
 
 Known interaction gotchas are documented as comments in `tests/golden/support/steps.ts` — read them before writing new steps. The recurring classes so far: duplicate desktop/mobile text nodes (use `visibleText`), Escape closing the whole dialog instead of an inner popover (dismiss by clicking elsewhere), success flashes that do or don't exist per dialog (assert resulting state, not flashes), upload dialogs whose "abgeschlossen" counter includes failed files (also assert the absence of error text), and a pre-hydration login race (the setup retries; the form itself is hardened with `method="post"`).
+
+Before rerunning anything, classify the failure: **product defect** (fix the app), **harness defect** (fix the step/locator, then focused spec first), **environment** (server died, browser missing, sandbox — fix the environment, the run proves nothing about code), or **known transient** (the documented Resend timeout and Realtime-freshness intermittents — rerun before debugging code you didn't change). Two failures of the same class in a row mean stop and investigate instead of trying variations.
 
 A test that passes must mean the business outcome happened: pair every positive assertion with the state it produced (row exists, URL changed, count is zero for the other role) rather than trusting transient UI feedback.
 
@@ -57,6 +62,8 @@ A test that passes must mean the business outcome happened: pair every positive 
 - Success signals differ per dialog: some show a flash (`Kunde erfolgreich erstellt!`), some close immediately — assert the resulting row/state, not only flashes.
 - Seeded identities use `@werkflow-golden.test` emails and org names prefixed `Golden Test SHK` / `Fremde Firma`; the invite scenario additionally uses Resend's bounce-safe test address pattern `delivered+gg-<runId>@resend.dev` so the real invite email sends without harming sender reputation. The leftover cleaner keys on exactly these markers. Never use these markers for real data.
 - `tests/golden/support/db.ts` holds read-only service-role lookups for assertions the UI cannot prove (the invite code inside the email link, stock-ledger consistency). Specs still drive every user-visible action through the UI.
+- **Specs inherit state from every earlier spec** (serial, alphabetical, one shared world): members joined in `@P1-03`, schedules and the holiday calendar from `@P1-04`, and so on. A step that passes in a focused run can legitimately fail only in the full run because names appear in more places or extra action buttons exist — that is the full run doing its job. Scope locators semantically (the exact section/row, `exact: true` names), never by count or position.
+- **Expect Realtime-driven re-renders mid-step.** Re-locate a row after any mutation that re-renders it (a saved locator can hold a detached node), and never re-open or re-select a control whose desired value is already set — a router refresh can detach a Radix option between open and click.
 
 ## Shared-Database Caution
 

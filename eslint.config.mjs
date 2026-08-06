@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright writes generated report/trace bundles on every golden-gate
+    // run; without these ignores, lint walks thousands of generated files.
+    "tests/golden/.report/**",
+    "tests/golden/.results/**",
+    "tests/golden/.artifacts/**",
   ]),
 ]);
 

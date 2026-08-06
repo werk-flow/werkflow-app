@@ -212,6 +212,7 @@ Key rules the prompt encodes:
 2. **Per-review context goes on the command line** with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature spec(s) the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
 3. **Scope to the slice's diff**: `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
 4. Findings are verified against the code before fixing; invalid findings are skipped with a stated reason; after fixes, lint/typecheck and the slice's golden-gate spec are rerun.
+5. **Every intended review pass happens before the confirmation gate run** — CodeRabbit fixes, self-review, and any quality/skill checklists (React patterns, design review) included. Once the post-review full suite is green, only documentation may change; a later application-code change invalidates that evidence and forces another build + full run (this cost the P1-05 cycle an extra build and two full-suite runs).
 
 ## WerkFlow-Specific Review Priorities
 
