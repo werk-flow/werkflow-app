@@ -73,6 +73,9 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('organization_closure_days', () => {
     if (tableSet.has('organization_closure_days')) scheduleRefresh();
   });
+  useRealtimeEvent('vacation_requests', () => {
+    if (tableSet.has('vacation_requests')) scheduleRefresh();
+  });
   useRealtimeEvent('organization_responsibility_configurations', () => {
     if (tableSet.has('organization_responsibility_configurations')) {
       scheduleRefresh();

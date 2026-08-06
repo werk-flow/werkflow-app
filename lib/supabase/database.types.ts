@@ -2795,6 +2795,139 @@ export type Database = {
           },
         ]
       }
+      vacation_request_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          vacation_request_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          vacation_request_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          vacation_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_request_events_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_request_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_request_events_vacation_request_id_fkey"
+            columns: ["vacation_request_id"]
+            isOneToOne: false
+            referencedRelation: "vacation_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vacation_requests: {
+        Row: {
+          approved_days_by_year: Json | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          comment: string | null
+          created_at: string
+          day_portion: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_comment: string | null
+          employee_record_id: string
+          end_date: string
+          id: string
+          organization_id: string
+          requested_by: string | null
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_days_by_year?: Json | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          comment?: string | null
+          created_at?: string
+          day_portion?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_comment?: string | null
+          employee_record_id: string
+          end_date: string
+          id?: string
+          organization_id: string
+          requested_by?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_days_by_year?: Json | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          comment?: string | null
+          created_at?: string
+          day_portion?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_comment?: string | null
+          employee_record_id?: string
+          end_date?: string
+          id?: string
+          organization_id?: string
+          requested_by?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vacation_requests_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vacation_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_schedules: {
         Row: {
           created_at: string

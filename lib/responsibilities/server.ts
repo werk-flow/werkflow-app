@@ -26,6 +26,35 @@ export type ResponsibilityRuntimeState = {
   delegations: ResponsibilityDelegation[];
 };
 
+/**
+ * Action time for effective-responsibility resolution. Configurations are
+ * stamped with the database clock (`clock_timestamp()` in
+ * `apply_responsibility_configuration`); when the app server's clock trails
+ * the database, a just-applied configuration would otherwise not be effective
+ * yet — leaving a freshly revoked holder authorized for the skew window (a
+ * real race surfaced by the P1-06 gate). Configurations are never
+ * future-dated, so flooring the local time to the newest configuration
+ * timestamp is safe and keeps all config-to-config ordering intact.
+ */
+function getSkewGuardedActionTime(
+  configurations: ResponsibilityConfiguration[]
+): string {
+  const localNow = new Date().toISOString();
+  let newest: string | null = null;
+  for (const configuration of configurations) {
+    if (
+      newest === null ||
+      Date.parse(configuration.effectiveFrom) > Date.parse(newest)
+    ) {
+      newest = configuration.effectiveFrom;
+    }
+  }
+  if (newest !== null && Date.parse(newest) > Date.parse(localNow)) {
+    return newest;
+  }
+  return localNow;
+}
+
 export type ResponsibilitySettingsData = {
   organizationId: string;
   currentUserId: string;
@@ -199,7 +228,7 @@ export async function getResponsibilitySettingsData(): Promise<
   }
 
   const businessDate = getBusinessTodayIso();
-  const actionTime = new Date().toISOString();
+  const actionTime = getSkewGuardedActionTime(state.configurations);
   const currentEmployeeRecordId =
     state.members.find((member) => member.userId === userId)?.employeeRecordId ??
     null;
@@ -286,7 +315,7 @@ export async function authorizeResponsibilityForTarget(input: {
 
   const effective = resolveEffectiveResponsibility({
     responsibility: input.responsibility,
-    actionTime: new Date().toISOString(),
+    actionTime: getSkewGuardedActionTime(state.configurations),
     businessDate: getBusinessTodayIso(),
     ...state,
   });
@@ -320,7 +349,7 @@ export async function getEffectiveResponsibilityHolderForActor(input: {
 
   const effective = resolveEffectiveResponsibility({
     responsibility: input.responsibility,
-    actionTime: new Date().toISOString(),
+    actionTime: getSkewGuardedActionTime(state.configurations),
     businessDate: getBusinessTodayIso(),
     ...state,
   });
@@ -342,7 +371,7 @@ export async function getResponsibilitiesStrandedByMemberRemoval(input: {
   )?.employeeRecordId;
   if (!employeeRecordId) return [];
 
-  const actionTime = new Date().toISOString();
+  const actionTime = getSkewGuardedActionTime(state.configurations);
   const businessDate = getBusinessTodayIso();
   const effective = {
     time_approval: resolveEffectiveResponsibility({

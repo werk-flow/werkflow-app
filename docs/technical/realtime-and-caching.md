@@ -33,6 +33,7 @@ Current cache tag areas include:
 - Clients.
 - Requests (Anfragen).
 - Personnel records, employment conditions, and work schedules (`personnel-<orgId>`, P1-03/P1-04).
+- Vacation requests (`vacation-<orgId>`, P1-06).
 - Scoped responsibility configurations, assignments, and substitutes (`responsibilities-<orgId>`, P1-05).
 - Organization holiday/closure context (`organization-calendar-<orgId>` plus the settings tag, P1-04).
 - Jobs.
@@ -56,6 +57,7 @@ The provider subscribes to tables that affect active operational views, includin
 - `employment_conditions`
 - `work_schedules`
 - `organization_closure_days`
+- `vacation_requests`
 - `organization_responsibility_configurations`
 - `organization_responsibility_assignments`
 - `organization_responsibility_delegations`
@@ -72,7 +74,7 @@ Most subscriptions are scoped by `organization_id`. Profile updates are broader 
 
 Events are debounced inside the provider to avoid refresh storms when multiple related rows change quickly.
 
-The three P1-05 responsibility tables use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit table is not subscribed, matching other per-domain audit logs.
+The three P1-05 responsibility tables and the P1-06 `vacation_requests` table use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit tables are not subscribed, matching other per-domain audit logs. The vacation widget, approver queue, and calendar absence entries refetch on `vacation_requests` events with generation guards and keep last-known data on transient failures; vacation decisions themselves are always re-authorized server-side at action time.
 
 ## Refresh Patterns
 

@@ -117,15 +117,21 @@ async function ZeiterfassungData({
     return getOrgMembersForUser(activeOrgId, userId);
   }
 
-  const [initialOverview, members, timeApprovalHolder] = await Promise.all([
-    getInitialOverview(activeOrgId, userId),
-    fetchMembers(),
-    getEffectiveResponsibilityHolderForActor({
-      organizationId: activeOrgId,
-      responsibility: 'time_approval',
-      actorUserId: userId,
-    }),
-  ]);
+  const [initialOverview, members, timeApprovalHolder, leaveApprovalHolder] =
+    await Promise.all([
+      getInitialOverview(activeOrgId, userId),
+      fetchMembers(),
+      getEffectiveResponsibilityHolderForActor({
+        organizationId: activeOrgId,
+        responsibility: 'time_approval',
+        actorUserId: userId,
+      }),
+      getEffectiveResponsibilityHolderForActor({
+        organizationId: activeOrgId,
+        responsibility: 'leave_approval',
+        actorUserId: userId,
+      }),
+    ]);
 
   return (
     <ZeiterfassungContent
@@ -133,6 +139,7 @@ async function ZeiterfassungData({
       userId={userId}
       isAdminOrManager={isAdminOrManager}
       canApproveTime={Boolean(timeApprovalHolder)}
+      canApproveLeave={Boolean(leaveApprovalHolder)}
       isAdmin={isAdmin}
       currentUserRole={currentUserRole}
       initialTab={tab === 'approvals' ? 'approvals' : 'overview'}

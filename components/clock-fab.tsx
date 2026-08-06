@@ -116,6 +116,15 @@ export function ClockFAB() {
             if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
             bannerTimerRef.current = setTimeout(dismissBanner, 6000);
             setShowJobPicker(false);
+          } else if (result.error === 'on_approved_vacation') {
+            setBanner({
+              title: 'Heute ist Urlaub genehmigt',
+              message:
+                'Für heute ist ein ganztägiger Urlaub genehmigt, deshalb ist Einstempeln nicht möglich. Falls du doch arbeitest, kann eine verantwortliche Person den Urlaub stornieren.'
+            });
+            if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+            bannerTimerRef.current = setTimeout(dismissBanner, 8000);
+            setShowJobPicker(false);
           }
         } catch (err) {
           console.error('Error clocking in:', err);

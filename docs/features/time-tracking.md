@@ -21,7 +21,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated 6 August 2026 through `P1-05`) includes:
+The implemented baseline (updated 6 August 2026 through `P1-06`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
@@ -37,12 +37,13 @@ The implemented baseline (updated 6 August 2026 through `P1-05`) includes:
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
 - Realtime refreshes for time entries and pending-approval counts.
 - Safeguards that close some stale prior-day open sessions and clock an active user out on sign-out or member removal.
+- Since `P1-06`: the dashboard's vacation area is a real balance and entry point (owned by employee management) — entitlement arithmetic or the labeled „Kein Urlaubsanspruch hinterlegt" exception, own requests with status and withdrawal, and the request dialog. Approved vacation reaches daily targets as a discriminated absence input on `resolveDailyTarget` (full day → 0, half day → half base target), so the Tagesziel, ring, weekly `Soll`, member detail, and member list all react through the one target contract; pending requests are provisional and never change targets. Clocking in on an own approved full-day vacation day is denied at the server action („Heute ist Urlaub genehmigt"); the correction path is an authorized cancellation of the vacation. The Anträge tab additionally shows pending vacation requests to effective `leave_approval` holders.
 
 Important current limitations:
 
 - Travel time is shown as a disabled action and is not a distinct implemented time type.
-- The vacation widget is static placeholder presentation (`9 von 30`) rather than a real entitlement, absence, or balance workflow.
-- Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Approved absence does not reduce targets yet — vacation arrives with `P1-06`, sickness with `P1-08`.
+- Resolved with `P1-06` (2026-08-06): the former static „9 von 30" vacation widget is replaced by the real balance workflow. Absence remains owned by employee management; time tracking consumes its effect on targets through the extended `resolveDailyTarget` contract. Sickness and other absence types arrive with `P1-08`.
+- Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Since `P1-06` approved vacation reduces targets through the same contract; sickness follows with `P1-08`.
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
 - On-call/standby time, deployments during on-call periods, night/Sunday/holiday supplements, paid/unpaid classifications, and explicit overtime approval are not implemented as complete product concepts.
 - Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.

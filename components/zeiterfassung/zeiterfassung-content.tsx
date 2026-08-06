@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
+import { VacationApprovals } from './vacation-approvals';
 import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
@@ -46,6 +47,7 @@ interface ZeiterfassungContentProps {
   userId: string;
   isAdminOrManager: boolean;
   canApproveTime: boolean;
+  canApproveLeave: boolean;
   isAdmin: boolean;
   currentUserRole: OrgRole;
   initialTab?: 'overview' | 'approvals' | 'history';
@@ -59,6 +61,7 @@ export function ZeiterfassungContent({
   userId,
   isAdminOrManager,
   canApproveTime,
+  canApproveLeave,
   isAdmin,
   currentUserRole,
   initialTab = 'overview',
@@ -68,7 +71,7 @@ export function ZeiterfassungContent({
   const { pendingApprovalCount } = usePendingApprovalCount();
 
   // For regular employees, just show the dashboard
-  if (!isAdminOrManager && !canApproveTime) {
+  if (!isAdminOrManager && !canApproveTime && !canApproveLeave) {
     return (
       <ZeiterfassungDashboard
         organizationId={organizationId}
@@ -104,7 +107,8 @@ export function ZeiterfassungContent({
         />
       </TabsContent>
 
-      <TabsContent value="approvals" className="mt-4">
+      <TabsContent value="approvals" className="mt-4 space-y-6">
+        <VacationApprovals />
         <PendingApprovals
           organizationId={organizationId}
           isAdmin={isAdmin}

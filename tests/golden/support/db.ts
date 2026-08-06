@@ -1,5 +1,19 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  toWorkSchedule,
+  type WorkSchedule,
+  type WorkScheduleRow,
+} from '../../../lib/personnel/schedule';
+import {
+  toEmploymentCondition,
+  type EmploymentCondition,
+  type EmploymentConditionRow,
+} from '../../../lib/personnel/types';
+import {
+  parseHolidayRegionHistory,
+  type OrganizationHolidayCalendar,
+} from '../../../lib/personnel/targets';
 import { requireEnv } from './env';
 
 // Read-only service-role lookups for gate assertions. Specs drive everything
@@ -276,6 +290,158 @@ export async function expectOwnerRoleMutationRejected(
   if (membership.role !== 'admin') {
     throw new Error('Owner membership changed despite last-admin protection.');
   }
+}
+
+// P1-06: the exact target/counting context the app itself uses, so spec
+// expectations (consumed days, weekly Soll) are computed from the same stored
+// state and in-code rules as the product — never re-invented date logic.
+export type VacationTargetContext = {
+  schedules: WorkSchedule[];
+  conditions: EmploymentCondition[];
+  calendar: OrganizationHolidayCalendar;
+};
+
+export async function getTargetContextForRecord(
+  orgId: string,
+  employeeRecordId: string
+): Promise<VacationTargetContext> {
+  const admin = createAdminClient();
+  const [schedulesResult, conditionsResult, settingsResult, closureResult] =
+    await Promise.all([
+      admin
+        .from('work_schedules')
+        .select('*')
+        .eq('employee_record_id', employeeRecordId),
+      admin
+        .from('employment_conditions')
+        .select('*')
+        .eq('employee_record_id', employeeRecordId),
+      admin
+        .from('organization_settings')
+        .select('holiday_region, holiday_region_history')
+        .eq('organization_id', orgId)
+        .maybeSingle(),
+      admin
+        .from('organization_closure_days')
+        .select('id, closure_date, label')
+        .eq('organization_id', orgId),
+    ]);
+
+  const firstError =
+    schedulesResult.error ??
+    conditionsResult.error ??
+    settingsResult.error ??
+    closureResult.error;
+  if (firstError) {
+    throw new Error(`Target context query failed: ${firstError.message}`);
+  }
+
+  return {
+    schedules: (schedulesResult.data ?? []).map((row) =>
+      toWorkSchedule(row as WorkScheduleRow)
+    ),
+    conditions: (conditionsResult.data ?? []).map((row) =>
+      toEmploymentCondition(row as EmploymentConditionRow)
+    ),
+    calendar: {
+      holidayRegion:
+        (settingsResult.data?.holiday_region as string | null) ?? null,
+      holidayRegionHistory: parseHolidayRegionHistory(
+        settingsResult.data?.holiday_region_history
+      ),
+      closureDays: (closureResult.data ?? []).map((row) => ({
+        id: row.id as string,
+        closureDate: row.closure_date as string,
+        label: (row.label as string | null) ?? null,
+      })),
+    },
+  };
+}
+
+export type VacationRequestState = {
+  id: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  dayPortion: string;
+  approvedDaysByYear: Record<string, number> | null;
+  eventTypes: string[];
+};
+
+// Latest vacation request of a record plus its append-only event trail — the
+// DB-side proof for decision facts, snapshots, and traceable restoration.
+export async function getLatestVacationRequestState(
+  orgId: string,
+  employeeRecordId: string
+): Promise<VacationRequestState> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('vacation_requests')
+    .select('id, status, start_date, end_date, day_portion, approved_days_by_year')
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecordId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error || !data) {
+    throw new Error(
+      `No vacation request found for record ${employeeRecordId}: ${error?.message}`
+    );
+  }
+
+  const { data: events, error: eventsError } = await admin
+    .from('vacation_request_events')
+    .select('event_type, created_at')
+    .eq('vacation_request_id', data.id)
+    .order('created_at', { ascending: true });
+  if (eventsError) {
+    throw new Error(`Vacation event query failed: ${eventsError.message}`);
+  }
+
+  return {
+    id: data.id as string,
+    status: data.status as string,
+    startDate: data.start_date as string,
+    endDate: data.end_date as string,
+    dayPortion: data.day_portion as string,
+    approvedDaysByYear:
+      (data.approved_days_by_year as Record<string, number> | null) ?? null,
+    eventTypes: (events ?? []).map((event) => event.event_type as string),
+  };
+}
+
+// P1-06: which vacation-request rows a real signed-in user can see under RLS
+// (managers all org rows, a person exactly their own, outsiders none).
+export async function getVisibleVacationRequestRecordIdsAs(
+  user: { email: string; password: string },
+  orgId: string
+): Promise<string[]> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (signInError) {
+    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
+  }
+
+  const { data, error } = await client
+    .from('vacation_requests')
+    .select('employee_record_id')
+    .eq('organization_id', orgId);
+  if (error) {
+    throw new Error(
+      `vacation_requests query failed for ${user.email}: ${error.message}`
+    );
+  }
+
+  return [
+    ...new Set((data ?? []).map((row) => row.employee_record_id as string)),
+  ].sort();
 }
 
 export type InventoryLedgerState = {

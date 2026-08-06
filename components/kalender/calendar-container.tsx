@@ -42,6 +42,10 @@ import {
 } from '@/lib/time-tracking/manual-entry-bridge';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import {
+  getVacationCalendarEntries,
+  type VacationCalendarEntry,
+} from '@/lib/vacation/actions';
 import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -121,6 +125,22 @@ export function CalendarContainer({
     null
   );
   const [calendarJobs, setCalendarJobs] = useState<CalendarJob[]>(initialJobs ?? []);
+  // Vacation absence entries (P1-06): approved shown as calm planning state,
+  // pending shown provisionally. Loaded client-side and kept Realtime-fresh.
+  const [vacationEntries, setVacationEntries] = useState<
+    VacationCalendarEntry[]
+  >([]);
+  const vacationGenerationRef = useRef(0);
+  const refetchVacationEntries = useCallback(async () => {
+    const generation = ++vacationGenerationRef.current;
+    const result = await getVacationCalendarEntries();
+    if (generation !== vacationGenerationRef.current) return;
+    // Keep last-known entries on transient failure.
+    if (result.success) setVacationEntries(result.entries);
+  }, []);
+  useEffect(() => {
+    void refetchVacationEntries();
+  }, [refetchVacationEntries]);
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
   const [filters, setFilters] = useState<CalendarFilters>({
@@ -603,6 +623,9 @@ export function CalendarContainer({
   useRealtimeEvent('organization_settings', () => {
     if (Date.now() < realtimePausedUntilRef.current) return;
     scheduleServerPropsRefresh();
+  });
+  useRealtimeEvent('vacation_requests', () => {
+    void refetchVacationEntries();
   });
 
   // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
@@ -1483,6 +1506,7 @@ export function CalendarContainer({
             members={members}
             organizationSettings={organizationSettings}
             holidayCalendar={holidayCalendar}
+            vacationEntries={vacationEntries}
             currentUserId={currentUserId}
             isAdminOrManager={isAdminOrManager}
             onEventClick={handleEventClick}

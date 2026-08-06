@@ -38,11 +38,30 @@ export type DailyTargetSource =
   // Neither exists: the legacy 8h default, visibly labeled as unconfigured.
   | 'default';
 
+/**
+ * Approved absence span feeding target resolution (P1-06). Only APPROVED
+ * absence may ever reach this input — pending requests are provisional and
+ * never change targets. Shaped so P1-08 can add further types (sickness)
+ * without a second mechanism.
+ */
+export type ApprovedAbsenceSpan = {
+  type: 'vacation';
+  /** Inclusive ISO Berlin business dates. */
+  startDate: string;
+  endDate: string;
+  dayPortion: 'full' | 'half_day';
+};
+
+export type DailyTargetAbsence = {
+  type: ApprovedAbsenceSpan['type'];
+  portion: ApprovedAbsenceSpan['dayPortion'];
+};
+
 export type DailyTarget = {
   date: string;
   /** 0 = Montag … 6 = Sonntag */
   weekday: number;
-  /** Effective target after holiday/closure zeroing. */
+  /** Effective target after holiday/closure zeroing and approved absence. */
   targetMinutes: number;
   /** Target from the schedule/derivation before holiday/closure zeroing. */
   baseTargetMinutes: number;
@@ -51,6 +70,8 @@ export type DailyTarget = {
   holidayName: string | null;
   isClosureDay: boolean;
   closureLabel: string | null;
+  /** Approved absence covering this date, if any (P1-06: vacation). */
+  absence: DailyTargetAbsence | null;
 };
 
 // Effective-from history for the org's holiday-region selection, following the
@@ -138,6 +159,8 @@ export type ResolveDailyTargetInput = {
   schedules: WorkSchedule[];
   conditions: EmploymentCondition[];
   calendar: OrganizationHolidayCalendar;
+  /** Approved absence spans for the person (P1-06). Optional and additive. */
+  absences?: ApprovedAbsenceSpan[];
 };
 
 export function resolveDailyTarget({
@@ -145,6 +168,7 @@ export function resolveDailyTarget({
   schedules,
   conditions,
   calendar,
+  absences,
 }: ResolveDailyTargetInput): DailyTarget {
   const weekday = getWeekdayIndex(dateIso);
 
@@ -186,16 +210,39 @@ export function resolveDailyTarget({
   const isHoliday = holidayName !== null;
   const isClosureDay = closure !== undefined;
 
+  const absenceSpan = (absences ?? []).find(
+    (span) => span.startDate <= dateIso && dateIso <= span.endDate
+  );
+  const absence: DailyTargetAbsence | null = absenceSpan
+    ? { type: absenceSpan.type, portion: absenceSpan.dayPortion }
+    : null;
+
+  // Zeroing order: a holiday/closure day already has no target, so absence on
+  // such a day changes nothing (and costs no entitlement — see the vacation
+  // day-counting rule). Otherwise a full absent day is 0 and a half day halves
+  // the base target.
+  let targetMinutes: number;
+  if (isHoliday || isClosureDay) {
+    targetMinutes = 0;
+  } else if (absence?.portion === 'full') {
+    targetMinutes = 0;
+  } else if (absence?.portion === 'half_day') {
+    targetMinutes = Math.round(baseTargetMinutes / 2);
+  } else {
+    targetMinutes = baseTargetMinutes;
+  }
+
   return {
     date: dateIso,
     weekday,
-    targetMinutes: isHoliday || isClosureDay ? 0 : baseTargetMinutes,
+    targetMinutes,
     baseTargetMinutes,
     source,
     isHoliday,
     holidayName,
     isClosureDay,
     closureLabel: closure?.label ?? null,
+    absence,
   };
 }
 

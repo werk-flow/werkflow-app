@@ -72,6 +72,8 @@ import {
   authorizeResponsibilityForTarget,
   getEffectiveResponsibilityHolderForActor,
 } from '@/lib/responsibilities/server';
+import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
+import { getBusinessTodayIso } from '@/lib/personnel/types';
 
 const STALE_SESSION_LOOKBACK_DAYS = 92;
 const STALE_SESSION_LOOKUP_LIMIT = 500;
@@ -611,6 +613,18 @@ export async function clockIn(
     const currentState = deriveCurrentClockState(timeEntries);
     if (currentState.isClockedIn) {
       return { success: false, error: 'already_clocked_in' };
+    }
+
+    // P1-06: an approved full-day vacation day and an active clock are
+    // contradictory states. Resolved at action time against the Berlin
+    // business date; the correction path is cancelling the vacation.
+    const onVacationToday = await hasApprovedFullDayVacationOn(
+      orgId,
+      user.id,
+      getBusinessTodayIso()
+    );
+    if (onVacationToday) {
+      return { success: false, error: 'on_approved_vacation' };
     }
 
     const resolvedJobId = jobId || null;

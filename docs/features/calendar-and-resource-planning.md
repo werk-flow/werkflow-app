@@ -32,7 +32,8 @@ The current `/kalender` implementation already includes:
 - drag-and-drop scheduling between the `Parkplatz` and calendar;
 - pending time-change visualization and entry detail flows;
 - Realtime refresh behavior and undo feedback for selected planning actions;
-- since `P1-04`: the organization's public holidays (selected regional calendar) and closure days („Betriebsruhe") shown as labeled, non-interactive all-day context in the month view — display-only planning context; capacity, conflicts, and per-employee availability remain `P1-11` scope.
+- since `P1-04`: the organization's public holidays (selected regional calendar) and closure days („Betriebsruhe") shown as labeled, non-interactive all-day context in the month view — display-only planning context; capacity, conflicts, and per-employee availability remain `P1-11` scope;
+- since `P1-06`: vacation absence as a differentiated, non-interactive all-day entry type in the month view („Urlaub – <Name>", calm purple planning state). Approved and requested absence stay visually distinct — pending requests render provisionally („angefragt", dashed) and never count as approved availability. Managers see all members' vacation; employees see their own. The display deliberately carries minimal detail so `P1-08` sickness can reuse it with even less. Capacity/conflict behavior remains `P1-11` scope.
 
 This is an operational scheduling foundation. It is not yet the complete resource-planning, recurring-event, route, external-calendar, or maintenance scheduling product described below.
 

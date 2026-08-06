@@ -253,6 +253,26 @@ body.fc-parking .fc-event-dragging {
   pointer-events: none;
 }
 
+/* Approved vacation entries (P1-06): calm purple planning state, stronger
+   than holiday context but still non-interactive. Pending requests appear
+   provisional (dashed, lighter) so requested and approved absence stay
+   visually distinct. */
+.fc .fc-vacation-approved {
+  background-color: color-mix(in oklab, var(--brand-purple) 22%, transparent);
+  border: none;
+  color: var(--foreground);
+  cursor: default;
+  pointer-events: none;
+}
+
+.fc .fc-vacation-pending {
+  background-color: color-mix(in oklab, var(--brand-purple) 8%, transparent);
+  border: 1px dashed color-mix(in oklab, var(--brand-purple) 45%, transparent);
+  color: var(--muted-foreground);
+  cursor: default;
+  pointer-events: none;
+}
+
 /* Hide native time picker indicators for all browsers */
 input[type='time'].hide-time-picker::-webkit-calendar-picker-indicator,
 input[type='time'].hide-time-picker::-webkit-inner-spin-button,

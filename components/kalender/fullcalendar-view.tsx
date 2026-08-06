@@ -28,6 +28,7 @@ import {
   getHolidayContextDays,
   type OrganizationHolidayCalendar,
 } from '@/lib/personnel/targets';
+import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 
 interface CalendarMember {
   user_id: string;
@@ -45,6 +46,8 @@ interface FullCalendarViewProps {
   organizationSettings: OrganizationTimeTrackingSettings;
   /** Holiday/closure context (P1-04): labeled all-day context in the month view. */
   holidayCalendar?: OrganizationHolidayCalendar;
+  /** Vacation absence entries (P1-06): approved plus provisional pending. */
+  vacationEntries?: VacationCalendarEntry[];
   currentUserId: string;
   isAdminOrManager: boolean;
   onEventClick: (session: InteractiveCalendarSession) => void;
@@ -74,6 +77,7 @@ export function FullCalendarView({
   members,
   organizationSettings,
   holidayCalendar,
+  vacationEntries = [],
   currentUserId,
   isAdminOrManager,
   onEventClick,
@@ -467,9 +471,38 @@ export function FullCalendarView({
     return [...holidayEvents, ...closureEvents];
   }, [date, holidayCalendar]);
 
+  // Vacation absence entries (P1-06): labeled, non-interactive all-day
+  // entries. Approved vacation reads as calm planning state; pending requests
+  // stay visibly provisional („angefragt") so requested and approved
+  // availability never look the same.
+  const vacationEvents = useMemo(() => {
+    return vacationEntries.map((entry) => {
+      const [year, month, day] = entry.endDate.split('-').map(Number);
+      const exclusiveEnd = new Date(Date.UTC(year, month - 1, day + 1));
+      const endIso = `${exclusiveEnd.getUTCFullYear()}-${String(exclusiveEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(exclusiveEnd.getUTCDate()).padStart(2, '0')}`;
+      const halfDaySuffix =
+        entry.dayPortion === 'half_day' ? ' (halber Tag)' : '';
+      const pendingSuffix = entry.status === 'pending' ? ' (angefragt)' : '';
+      return {
+        id: `vacation-${entry.id}`,
+        title: `Urlaub – ${entry.personName}${halfDaySuffix}${pendingSuffix}`,
+        start: entry.startDate,
+        end: endIso,
+        allDay: true,
+        editable: false,
+        classNames: [
+          entry.status === 'approved'
+            ? 'fc-vacation-approved'
+            : 'fc-vacation-pending',
+        ],
+        extendedProps: { isHolidayContext: true },
+      };
+    });
+  }, [vacationEntries]);
+
   const allEvents = useMemo(
-    () => [...events, ...jobEvents, ...holidayContextEvents],
-    [events, jobEvents, holidayContextEvents]
+    () => [...events, ...jobEvents, ...holidayContextEvents, ...vacationEvents],
+    [events, jobEvents, holidayContextEvents, vacationEvents]
   );
 
   // Sync date with FullCalendar

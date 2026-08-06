@@ -6,7 +6,6 @@ import {
   Coffee,
   Car,
   Clock,
-  Palmtree,
   ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,6 +21,7 @@ import { getTargetSourceHint } from '@/lib/personnel/targets';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
+import { VacationSection } from './vacation-section';
 import type {
   ClockTimelineSegment,
   ZeiterfassungOverview
@@ -272,6 +272,15 @@ export function ZeiterfassungDashboard({
             {todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} –
             heute keine Sollarbeitszeit.
           </p>
+        ) : todayTarget?.absence?.portion === 'full' ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Urlaub genehmigt – heute keine Sollarbeitszeit.
+          </p>
+        ) : todayTarget?.absence?.portion === 'half_day' ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Halber Urlaubstag – Tagesziel:{' '}
+            {formatDuration(todayTargetMinutes ?? 0)} Arbeitszeit
+          </p>
         ) : todayTarget && todayTarget.targetMinutes === 0 ? (
           <p className="mt-1 text-sm text-muted-foreground">
             Laut Arbeitszeitmodell heute kein Arbeitstag.
@@ -383,45 +392,8 @@ export function ZeiterfassungDashboard({
         />
       </div>
 
-      {/* Vacation Widget */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground px-1">
-          Urlaub & Abwesenheit
-        </h3>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-purple/10">
-                <Palmtree className="h-6 w-6 text-brand-purple" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-medium">Urlaubstage</span>
-                  <span className="text-xs text-muted-foreground">
-                    9 von 30 genutzt
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-brand-purple transition-all"
-                    style={{ width: '30%' }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    <span className="inline-block h-2 w-2 rounded-full bg-brand-purple mr-1" />
-                    9 Verbrauchte Tage
-                  </span>
-                  <span className="font-semibold text-foreground">
-                    21 <span className="font-normal">Tage übrig</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Vacation balance, requests, and entry point (P1-06) */}
+      <VacationSection />
 
       {/* Working Time Status + Weekly Chart */}
       <div className="space-y-3">
