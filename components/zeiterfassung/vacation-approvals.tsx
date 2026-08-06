@@ -70,6 +70,7 @@ export function VacationApprovals() {
   const [pending, setPending] = useState<ApproverVacationRequest[]>([]);
   const [approved, setApproved] = useState<ApproverVacationRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [reasonDialog, setReasonDialog] = useState<ReasonDialogState>({
@@ -77,6 +78,7 @@ export function VacationApprovals() {
   });
   const generationRef = useRef(0);
 
+  const hasDataRef = useRef(false);
   const refetch = useCallback(async () => {
     const generation = ++generationRef.current;
     try {
@@ -85,11 +87,21 @@ export function VacationApprovals() {
         getDecidableApprovedVacationRequests(),
       ]);
       if (generation !== generationRef.current) return;
-      // Keep last-known data on transient failures.
+      // Keep last-known data on transient failures; only an initial load
+      // that yields nothing shows the visible failure state.
       if (pendingResult.success) setPending(pendingResult.requests);
       if (approvedResult.success) setApproved(approvedResult.requests);
+      if (pendingResult.success && approvedResult.success) {
+        hasDataRef.current = true;
+        setLoadFailed(false);
+      } else if (!hasDataRef.current) {
+        setLoadFailed(true);
+      }
     } catch (error) {
       console.error('Error fetching vacation approvals:', error);
+      if (generation === generationRef.current && !hasDataRef.current) {
+        setLoadFailed(true);
+      }
     } finally {
       if (generation === generationRef.current) {
         setIsLoading(false);
@@ -182,6 +194,15 @@ export function VacationApprovals() {
       <div className="space-y-3">
         <Skeleton className="h-24 w-full" />
       </div>
+    );
+  }
+
+  // A failed initial load must be visible, never an empty screen.
+  if (loadFailed && pending.length === 0 && approved.length === 0) {
+    return (
+      <p role="alert" className="px-1 text-sm text-muted-foreground">
+        Die Urlaubsanträge konnten nicht geladen werden.
+      </p>
     );
   }
 

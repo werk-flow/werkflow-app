@@ -267,7 +267,9 @@ body.fc-parking .fc-event-dragging {
 
 .fc .fc-vacation-pending {
   background-color: color-mix(in oklab, var(--brand-purple) 8%, transparent);
-  border: 1px dashed color-mix(in oklab, var(--brand-purple) 45%, transparent);
+  /* !important: the daygrid base rule strips borders with !important; the
+     dashed outline is the pending/approved distinction and must survive it. */
+  border: 1px dashed color-mix(in oklab, var(--brand-purple) 45%, transparent) !important;
   color: var(--muted-foreground);
   cursor: default;
   pointer-events: none;

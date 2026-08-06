@@ -311,10 +311,12 @@ export async function getTargetContextForRecord(
       admin
         .from('work_schedules')
         .select('*')
+        .eq('organization_id', orgId)
         .eq('employee_record_id', employeeRecordId),
       admin
         .from('employment_conditions')
         .select('*')
+        .eq('organization_id', orgId)
         .eq('employee_record_id', employeeRecordId),
       admin
         .from('organization_settings')

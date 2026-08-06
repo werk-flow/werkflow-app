@@ -22,14 +22,18 @@ export async function loadVacationCountingContext(
   employeeRecordId: string
 ): Promise<VacationCountingContext | null> {
   const admin = createSupabaseAdminClient();
+  // organization_id is redundant with the record filter but keeps the
+  // service-role read organization-scoped even against a mismatched caller.
   const [schedulesResult, conditionsResult, calendar] = await Promise.all([
     admin
       .from('work_schedules')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('employee_record_id', employeeRecordId),
     admin
       .from('employment_conditions')
       .select('*')
+      .eq('organization_id', organizationId)
       .eq('employee_record_id', employeeRecordId),
     getCachedOrganizationCalendar(organizationId),
   ]);

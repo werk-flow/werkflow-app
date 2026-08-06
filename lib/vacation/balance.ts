@@ -44,6 +44,26 @@ export type VacationCountingContext = {
   calendar: OrganizationHolidayCalendar;
 };
 
+/**
+ * Upper bound for one request's inclusive day span, enforced at the insert
+ * boundary (`createVacationRequest`). Generous enough for any real vacation
+ * (a full year including a year boundary) while keeping per-day counting
+ * bounded for every persisted row.
+ */
+export const MAX_VACATION_RANGE_DAYS = 366;
+
+/** Inclusive day span of an ISO date range without materializing the days. */
+export function countCalendarDaysInRange(
+  startDate: string,
+  endDate: string
+): number {
+  const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+  const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+  const startUtc = Date.UTC(startYear, startMonth - 1, startDay);
+  const endUtc = Date.UTC(endYear, endMonth - 1, endDay);
+  return Math.round((endUtc - startUtc) / 86_400_000) + 1;
+}
+
 /** Inclusive ISO-date iteration without timezone drift. */
 export function listIsoDatesInRange(
   startDate: string,

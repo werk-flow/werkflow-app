@@ -1135,13 +1135,12 @@ export async function withdrawOwnPendingVacationRequest(
   page: Page
 ): Promise<void> {
   await openOwnVacationSection(page);
-  // Exactly one pending request is expected when this step runs.
-  const row = page
-    .locator('li')
-    .filter({ has: page.getByRole('button', { name: 'Zurückziehen' }) })
-    .filter({ visible: true })
-    .first();
-  await row.getByRole('button', { name: 'Zurückziehen' }).click();
+  // Exactly one pending request is expected when this step runs. The button's
+  // accessible name carries the request's date range.
+  const withdrawButton = page.getByRole('button', {
+    name: /^Urlaubsantrag vom .* zurückziehen$/,
+  });
+  await withdrawButton.click();
   await expect(visibleText(page, 'Zurückgezogen')).toBeVisible({
     timeout: 15_000,
   });

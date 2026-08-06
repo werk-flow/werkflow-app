@@ -37,6 +37,8 @@ import { cn, toLocalDateString } from '@/lib/utils';
 const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   invalid_dates: 'Bitte gib gültige Daten an.',
   invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
+  range_too_long:
+    'Ein Antrag kann höchstens ein Jahr umfassen. Bitte teile längere Zeiträume auf.',
   invalid_portion: 'Bitte wähle Ganztägig oder Halbtägig aus.',
   half_day_needs_single_day:
     'Ein halber Urlaubstag gilt nur für einen einzelnen Tag.',
@@ -283,6 +285,7 @@ export function VacationSection() {
                         size="sm"
                         onClick={() => void handleWithdraw(request)}
                         disabled={withdrawingId !== null}
+                        aria-label={`Urlaubsantrag vom ${formatRange(request.startDate, request.endDate)} zurückziehen`}
                       >
                         {withdrawingId === request.id ? (
                           <Loader2 className="size-3.5 animate-spin" />

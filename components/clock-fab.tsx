@@ -202,6 +202,7 @@ export function ClockFAB() {
           className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4"
         >
           <div
+            role="alert"
             className={cn(
               'pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 transition-all duration-200 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50',
               isBannerExiting

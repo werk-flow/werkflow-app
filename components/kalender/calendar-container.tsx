@@ -131,16 +131,30 @@ export function CalendarContainer({
     VacationCalendarEntry[]
   >([]);
   const vacationGenerationRef = useRef(0);
+  // Organization switches must never show the previous organization's
+  // absence entries: reset synchronously during render (React's official
+  // adjust-state-on-prop-change pattern) and invalidate in-flight fetches.
+  const [vacationEntriesOrgId, setVacationEntriesOrgId] =
+    useState(organizationId);
+  if (vacationEntriesOrgId !== organizationId) {
+    setVacationEntriesOrgId(organizationId);
+    setVacationEntries([]);
+    vacationGenerationRef.current++;
+  }
   const refetchVacationEntries = useCallback(async () => {
     const generation = ++vacationGenerationRef.current;
-    const result = await getVacationCalendarEntries();
-    if (generation !== vacationGenerationRef.current) return;
-    // Keep last-known entries on transient failure.
-    if (result.success) setVacationEntries(result.entries);
+    try {
+      const result = await getVacationCalendarEntries();
+      if (generation !== vacationGenerationRef.current) return;
+      // Keep last-known entries on transient failure.
+      if (result.success) setVacationEntries(result.entries);
+    } catch (error) {
+      console.error('Error fetching vacation calendar entries:', error);
+    }
   }, []);
   useEffect(() => {
     void refetchVacationEntries();
-  }, [refetchVacationEntries]);
+  }, [organizationId, refetchVacationEntries]);
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
   const [filters, setFilters] = useState<CalendarFilters>({
@@ -679,9 +693,10 @@ export function CalendarContainer({
       if (inflightRef.current > 0) return;
       fetchEntries(true);
       fetchJobs();
+      void refetchVacationEntries();
       if (isAdminOrManager) fetchParkedJobs();
     }, 300);
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, refetchVacationEntries]);
 
   const handleManualEntrySuccess = useCallback(
     (newEntries: TimeEntry[]) => {

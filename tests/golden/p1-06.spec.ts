@@ -250,9 +250,11 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
         ).toBeVisible();
       }
     }
+    // expectedTaken is 0 or 1 here, so German and default integer formatting
+    // are identical.
     await expectVisibleAfterSave(
       employeePage,
-      `${expectedTaken === 0 ? '0' : expectedTaken} von 30 Tagen genommen`
+      `${expectedTaken} von 30 Tagen genommen`
     );
 
     // Approved vacation is a labeled calendar entry without the provisional

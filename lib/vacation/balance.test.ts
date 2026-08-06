@@ -9,9 +9,12 @@ import {
 } from '@/lib/personnel/targets';
 import {
   computeVacationBalance,
+  countCalendarDaysInRange,
   countVacationDays,
   countVacationDaysByYear,
+  formatVacationDays,
   listIsoDatesInRange,
+  MAX_VACATION_RANGE_DAYS,
   resolveVacationEntitlementForYear,
   type VacationCountingContext,
 } from './balance';
@@ -139,6 +142,27 @@ describe('listIsoDatesInRange', () => {
   });
 });
 
+describe('countCalendarDaysInRange', () => {
+  test('inclusive span without materializing days', () => {
+    expect(countCalendarDaysInRange('2026-08-10', '2026-08-10')).toBe(1);
+    expect(countCalendarDaysInRange('2026-12-30', '2027-01-02')).toBe(4);
+    // A full leap-adjacent year stays within the boundary limit.
+    expect(countCalendarDaysInRange('2026-01-01', '2026-12-31')).toBe(365);
+    expect(
+      countCalendarDaysInRange('2026-01-01', '2027-01-01')
+    ).toBeLessThanOrEqual(MAX_VACATION_RANGE_DAYS);
+  });
+});
+
+describe('formatVacationDays', () => {
+  test('German day formatting incl. singular and half days', () => {
+    expect(formatVacationDays(1)).toBe('1 Tag');
+    expect(formatVacationDays(0.5)).toBe('0,5 Tage');
+    expect(formatVacationDays(3)).toBe('3 Tage');
+    expect(formatVacationDays(0)).toBe('0 Tage');
+  });
+});
+
 describe('countVacationDaysByYear', () => {
   test('weekends inside the range cost nothing (full-time schedule)', () => {
     // 2026-08-06 Thursday … 2026-08-10 Monday: Thu, Fri, Mon consume.
@@ -165,8 +189,8 @@ describe('countVacationDaysByYear', () => {
   });
 
   test('holidays of the selected region cost nothing', () => {
-    // Mariä Himmelfahrt 2026-08-15 is a Saturday; use Allerheiligen
-    // 2026-11-01 (Sunday) … use Christi Himmelfahrt 2026-05-14 (Thursday).
+    // Christi Himmelfahrt falls on Thursday 2026-05-14 and reduces the
+    // Montag–Freitag week's consumed days from 5 to 4.
     const consumed = countVacationDays(
       { startDate: '2026-05-11', endDate: '2026-05-15', dayPortion: 'full' },
       {

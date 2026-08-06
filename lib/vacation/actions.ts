@@ -15,8 +15,10 @@ import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server'
 import type { OrgRole } from '@/lib/members/actions';
 import {
   computeVacationBalance,
+  countCalendarDaysInRange,
   countVacationDays,
   countVacationDaysByYear,
+  MAX_VACATION_RANGE_DAYS,
   resolveVacationEntitlementForYear,
   type VacationBalance,
 } from './balance';
@@ -25,6 +27,7 @@ import {
   loadVacationRequestsForRecord,
 } from './server';
 import {
+  sumApprovedDays,
   toVacationRequest,
   type VacationDayPortion,
   type VacationRequest,
@@ -140,10 +143,7 @@ export async function getOwnVacationOverview(): Promise<OwnVacationOverviewResul
             request.status === 'pending'
               ? countVacationDays(request, context)
               : request.approvedDaysByYear
-                ? Object.values(request.approvedDaysByYear).reduce(
-                    (total, days) => total + days,
-                    0
-                  )
+                ? sumApprovedDays(request)
                 : countVacationDays(request, context),
         })),
       },
@@ -181,6 +181,12 @@ export async function createVacationRequest(input: {
     }
     if (input.endDate < input.startDate) {
       return { success: false, error: 'invalid_range' };
+    }
+    if (
+      countCalendarDaysInRange(input.startDate, input.endDate) >
+      MAX_VACATION_RANGE_DAYS
+    ) {
+      return { success: false, error: 'range_too_long' };
     }
     if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
       return { success: false, error: 'invalid_portion' };
@@ -416,6 +422,11 @@ export async function decideVacationRequest(input: {
     if (!auth.success) return auth;
     const { userId, orgId } = auth.context;
 
+    // Runtime guard: an unexpected value must never fall through into the
+    // rejection branch without its required reason.
+    if (input.decision !== 'approve' && input.decision !== 'reject') {
+      return { success: false, error: 'invalid_decision' };
+    }
     const comment = input.comment?.trim() || null;
     if (input.decision === 'reject' && !comment) {
       return { success: false, error: 'reason_required' };
@@ -597,6 +608,93 @@ export async function cancelApprovedVacationRequest(input: {
 // Approver queue (Anträge tab)
 // ============================================
 
+type RequestTargetMaps = {
+  recordById: Map<
+    string,
+    {
+      id: string;
+      user_id: string | null;
+      first_name: string | null;
+      last_name: string | null;
+    }
+  >;
+  roleByUserId: Map<string, OrgRole>;
+  profileByUserId: Map<
+    string,
+    { id: string; first_name: string | null; last_name: string | null }
+  >;
+};
+
+// Shared target-context loading for both approver queues: employee records,
+// their memberships, and display profiles for a set of request record ids.
+async function loadRequestTargetMaps(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  orgId: string,
+  recordIds: string[]
+): Promise<RequestTargetMaps | null> {
+  const { data: records, error: recordsError } = await admin
+    .from('employee_records')
+    .select('id, user_id, first_name, last_name')
+    .in('id', recordIds);
+  if (recordsError) {
+    console.error('Failed to load request records:', recordsError);
+    return null;
+  }
+  const recordById = new Map((records ?? []).map((row) => [row.id, row]));
+
+  const targetUserIds = [
+    ...new Set(
+      (records ?? [])
+        .map((row) => row.user_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+  const [membershipsResult, profilesResult] = await Promise.all([
+    targetUserIds.length > 0
+      ? admin
+          .from('organization_members')
+          .select('user_id, role')
+          .eq('organization_id', orgId)
+          .in('user_id', targetUserIds)
+      : Promise.resolve({ data: [], error: null }),
+    targetUserIds.length > 0
+      ? admin
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', targetUserIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (membershipsResult.error || profilesResult.error) {
+    console.error(
+      'Failed to load request target context:',
+      membershipsResult.error ?? profilesResult.error
+    );
+    return null;
+  }
+
+  return {
+    recordById,
+    roleByUserId: new Map(
+      (membershipsResult.data ?? []).map((row) => [
+        row.user_id,
+        row.role as OrgRole,
+      ])
+    ),
+    profileByUserId: new Map(
+      (profilesResult.data ?? []).map((row) => [row.id, row])
+    ),
+  };
+}
+
+function formatTargetName(
+  record: { first_name: string | null; last_name: string | null },
+  profile: { first_name: string | null; last_name: string | null } | undefined
+): string {
+  const firstName = profile?.first_name ?? record.first_name ?? '';
+  const lastName = profile?.last_name ?? record.last_name ?? '';
+  return `${firstName} ${lastName}`.trim() || 'Unbekannt';
+}
+
 export type ApproverVacationRequest = {
   request: VacationRequest;
   personName: string;
@@ -639,57 +737,44 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
     const recordIds = [
       ...new Set(pendingRows.map((row) => row.employee_record_id)),
     ];
-    const { data: records, error: recordsError } = await admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .in('id', recordIds);
-    if (recordsError) {
-      console.error('Failed to load request records:', recordsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    const recordById = new Map((records ?? []).map((row) => [row.id, row]));
+    const maps = await loadRequestTargetMaps(admin, orgId, recordIds);
+    if (!maps) return { success: false, error: 'fetch_failed' };
+    const { recordById, roleByUserId, profileByUserId } = maps;
 
-    const targetUserIds = [
+    // One batched assignment lookup instead of one query per pending row.
+    const pendingUserIds = [
       ...new Set(
-        (records ?? [])
-          .map((row) => row.user_id)
+        recordIds
+          .map((recordId) => recordById.get(recordId)?.user_id)
           .filter((id): id is string => Boolean(id))
       ),
     ];
-    const [membershipsResult, profilesResult] = await Promise.all([
-      targetUserIds.length > 0
-        ? admin
-            .from('organization_members')
-            .select('user_id, role')
-            .eq('organization_id', orgId)
-            .in('user_id', targetUserIds)
-        : Promise.resolve({ data: [], error: null }),
-      targetUserIds.length > 0
-        ? admin
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', targetUserIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (membershipsResult.error || profilesResult.error) {
-      console.error(
-        'Failed to load request target context:',
-        membershipsResult.error ?? profilesResult.error
-      );
-      return { success: false, error: 'fetch_failed' };
+    const jobIdsByUserId = new Map<string, string[]>();
+    if (pendingUserIds.length > 0) {
+      const { data: assignmentRows } = await admin
+        .from('job_assignments')
+        .select('job_id, user_id')
+        .in('user_id', pendingUserIds);
+      for (const assignment of assignmentRows ?? []) {
+        const jobIds = jobIdsByUserId.get(assignment.user_id) ?? [];
+        jobIds.push(assignment.job_id);
+        jobIdsByUserId.set(assignment.user_id, jobIds);
+      }
     }
-    const roleByUserId = new Map(
-      (membershipsResult.data ?? []).map((row) => [
-        row.user_id,
-        row.role as OrgRole,
-      ])
-    );
-    const profileByUserId = new Map(
-      (profilesResult.data ?? []).map((row) => [row.id, row])
-    );
 
     // Authorization filter: per pending request, keep it only when the actor
     // may decide it right now (self-approval denied by the shared helper).
+    // Per-record work is memoized so duplicate rows never re-query.
+    const authorizationByRecordId = new Map<string, boolean>();
+    const contextByRecordId = new Map<
+      string,
+      Awaited<ReturnType<typeof loadVacationCountingContext>>
+    >();
+    const requestsByRecordId = new Map<
+      string,
+      Awaited<ReturnType<typeof loadVacationRequestsForRecord>>
+    >();
+
     const results: ApproverVacationRequest[] = [];
     for (const row of pendingRows) {
       const record = recordById.get(row.employee_record_id);
@@ -697,22 +782,32 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       const targetRole = roleByUserId.get(record.user_id);
       if (!targetRole) continue;
 
-      const authorization = await authorizeResponsibilityForTarget({
-        organizationId: orgId,
-        responsibility: 'leave_approval',
-        actorUserId: userId,
-        targetUserId: record.user_id,
-        targetRole,
-      });
-      if (!authorization.success) continue;
+      let authorized = authorizationByRecordId.get(record.id);
+      if (authorized === undefined) {
+        const authorization = await authorizeResponsibilityForTarget({
+          organizationId: orgId,
+          responsibility: 'leave_approval',
+          actorUserId: userId,
+          targetUserId: record.user_id,
+          targetRole,
+        });
+        authorized = authorization.success;
+        authorizationByRecordId.set(record.id, authorized);
+      }
+      if (!authorized) continue;
 
-      const context = await loadVacationCountingContext(orgId, record.id);
+      let context = contextByRecordId.get(record.id);
+      if (context === undefined) {
+        context = await loadVacationCountingContext(orgId, record.id);
+        contextByRecordId.set(record.id, context);
+      }
       if (!context) continue;
-      const requests = await loadVacationRequestsForRecord(orgId, record.id);
 
-      const profile = profileByUserId.get(record.user_id);
-      const firstName = profile?.first_name ?? record.first_name ?? '';
-      const lastName = profile?.last_name ?? record.last_name ?? '';
+      let requests = requestsByRecordId.get(record.id);
+      if (requests === undefined) {
+        requests = await loadVacationRequestsForRecord(orgId, record.id);
+        requestsByRecordId.set(record.id, requests);
+      }
 
       const year = Number(row.start_date.slice(0, 4));
       const balance = requests
@@ -733,11 +828,7 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
           endDate: candidate.endDate,
         }));
 
-      const { data: assignmentRows } = await admin
-        .from('job_assignments')
-        .select('job_id')
-        .eq('user_id', record.user_id);
-      const jobIds = (assignmentRows ?? []).map((entry) => entry.job_id);
+      const jobIds = jobIdsByUserId.get(record.user_id) ?? [];
       let assignedJobsInRange: Array<{ title: string; plannedDate: string }> =
         [];
       if (jobIds.length > 0) {
@@ -758,7 +849,10 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
 
       results.push({
         request: toVacationRequest(row),
-        personName: `${firstName} ${lastName}`.trim() || 'Unbekannt',
+        personName: formatTargetName(
+          record,
+          profileByUserId.get(record.user_id)
+        ),
         totalDays: countVacationDays(
           {
             startDate: row.start_date,
@@ -817,55 +911,11 @@ export async function getDecidableApprovedVacationRequests(): Promise<ApproverVa
     const recordIds = [
       ...new Set(approvedRows.map((row) => row.employee_record_id)),
     ];
-    const { data: records, error: recordsError } = await admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .in('id', recordIds);
-    if (recordsError) {
-      console.error('Failed to load approved request records:', recordsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    const recordById = new Map((records ?? []).map((row) => [row.id, row]));
+    const maps = await loadRequestTargetMaps(admin, orgId, recordIds);
+    if (!maps) return { success: false, error: 'fetch_failed' };
+    const { recordById, roleByUserId, profileByUserId } = maps;
 
-    const targetUserIds = [
-      ...new Set(
-        (records ?? [])
-          .map((row) => row.user_id)
-          .filter((id): id is string => Boolean(id))
-      ),
-    ];
-    const [membershipsResult, profilesResult] = await Promise.all([
-      targetUserIds.length > 0
-        ? admin
-            .from('organization_members')
-            .select('user_id, role')
-            .eq('organization_id', orgId)
-            .in('user_id', targetUserIds)
-        : Promise.resolve({ data: [], error: null }),
-      targetUserIds.length > 0
-        ? admin
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', targetUserIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (membershipsResult.error || profilesResult.error) {
-      console.error(
-        'Failed to load approved request context:',
-        membershipsResult.error ?? profilesResult.error
-      );
-      return { success: false, error: 'fetch_failed' };
-    }
-    const roleByUserId = new Map(
-      (membershipsResult.data ?? []).map((row) => [
-        row.user_id,
-        row.role as OrgRole,
-      ])
-    );
-    const profileByUserId = new Map(
-      (profilesResult.data ?? []).map((row) => [row.id, row])
-    );
-
+    const authorizationByRecordId = new Map<string, boolean>();
     const results: ApproverVacationRequest[] = [];
     for (const row of approvedRows) {
       const record = recordById.get(row.employee_record_id);
@@ -873,29 +923,31 @@ export async function getDecidableApprovedVacationRequests(): Promise<ApproverVa
       const targetRole = roleByUserId.get(record.user_id);
       if (!targetRole) continue;
 
-      const authorization = await authorizeResponsibilityForTarget({
-        organizationId: orgId,
-        responsibility: 'leave_approval',
-        actorUserId: userId,
-        targetUserId: record.user_id,
-        targetRole,
-      });
-      if (!authorization.success) continue;
+      let authorized = authorizationByRecordId.get(record.id);
+      if (authorized === undefined) {
+        const authorization = await authorizeResponsibilityForTarget({
+          organizationId: orgId,
+          responsibility: 'leave_approval',
+          actorUserId: userId,
+          targetUserId: record.user_id,
+          targetRole,
+        });
+        authorized = authorization.success;
+        authorizationByRecordId.set(record.id, authorized);
+      }
+      if (!authorized) continue;
 
-      const profile = profileByUserId.get(record.user_id);
-      const firstName = profile?.first_name ?? record.first_name ?? '';
-      const lastName = profile?.last_name ?? record.last_name ?? '';
       const request = toVacationRequest(row);
-
+      // The approved card shows person, range, and snapshot days only:
+      // balance/entitlement context belongs to the pending decision, not the
+      // cancellation surface, so it is deliberately not re-resolved here.
       results.push({
         request,
-        personName: `${firstName} ${lastName}`.trim() || 'Unbekannt',
-        totalDays: request.approvedDaysByYear
-          ? Object.values(request.approvedDaysByYear).reduce(
-              (total, days) => total + days,
-              0
-            )
-          : 0,
+        personName: formatTargetName(
+          record,
+          profileByUserId.get(record.user_id)
+        ),
+        totalDays: sumApprovedDays(request),
         balance: null,
         overlappingApprovedVacation: [],
         assignedJobsInRange: [],
@@ -944,11 +996,18 @@ export async function getVacationCalendarEntries(): Promise<VacationCalendarEntr
     const isManager = role === 'admin' || role === 'buero';
 
     const admin = createSupabaseAdminClient();
+    // Bounded window (one year back, two ahead) mirroring the holiday-context
+    // horizon so the payload cannot grow without bound over the years.
+    const businessDate = getBusinessTodayIso();
+    const windowStartIso = shiftIsoDateByDays(businessDate, -365);
+    const windowEndIso = shiftIsoDateByDays(businessDate, 730);
     let query = admin
       .from('vacation_requests')
       .select('id, employee_record_id, start_date, end_date, day_portion, status')
       .eq('organization_id', orgId)
-      .in('status', ['approved', 'pending']);
+      .in('status', ['approved', 'pending'])
+      .lte('start_date', windowEndIso)
+      .gte('end_date', windowStartIso);
 
     if (!isManager) {
       const { data: ownRecord, error: ownRecordError } = await admin

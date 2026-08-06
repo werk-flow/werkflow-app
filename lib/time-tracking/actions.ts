@@ -588,11 +588,13 @@ export async function clockIn(
 
     const admin = createSupabaseAdminClient();
 
-    // Run membership check, cross-org guard, and today's entries in parallel
-    const [userRole, openOrgs, todayRows] = await Promise.all([
+    // Run membership check, cross-org guard, today's entries, and the
+    // vacation contradiction check in parallel
+    const [userRole, openOrgs, todayRows, onVacationToday] = await Promise.all([
       verifyMembershipFromCache(user.id, orgId),
       getOpenSessionOrgsForUserToday(admin, user.id),
-      getUserTodayEntries(admin, user.id, orgId)
+      getUserTodayEntries(admin, user.id, orgId),
+      hasApprovedFullDayVacationOn(orgId, user.id, getBusinessTodayIso())
     ]);
 
     if (!userRole) {
@@ -618,11 +620,6 @@ export async function clockIn(
     // P1-06: an approved full-day vacation day and an active clock are
     // contradictory states. Resolved at action time against the Berlin
     // business date; the correction path is cancelling the vacation.
-    const onVacationToday = await hasApprovedFullDayVacationOn(
-      orgId,
-      user.id,
-      getBusinessTodayIso()
-    );
     if (onVacationToday) {
       return { success: false, error: 'on_approved_vacation' };
     }

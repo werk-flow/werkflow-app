@@ -4,7 +4,17 @@ import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
-import { VacationApprovals } from './vacation-approvals';
+
+const VacationApprovals = dynamic(
+  () => import('./vacation-approvals').then((mod) => mod.VacationApprovals),
+  {
+    loading: () => (
+      <div className="space-y-3">
+        <Skeleton className="h-24 w-full" />
+      </div>
+    )
+  }
+);
 import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
