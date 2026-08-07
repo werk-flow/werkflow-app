@@ -34,7 +34,10 @@ import {
   REQUEST_URGENCY_LABELS,
 } from '@/lib/requests/types';
 
-const MARK_READ_ERROR = 'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
+const MARK_READ_ERROR =
+  'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
+const MARK_ALL_READ_ERROR =
+  'Die Benachrichtigungen konnten nicht als gelesen markiert werden.';
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
@@ -103,20 +106,35 @@ export function AufgabenContent() {
     void refetch();
   }, [refetch]);
 
-  useRealtimeEvent('time_entries', () => void refetch());
-  useRealtimeEvent('entry_change_requests', () => void refetch());
-  useRealtimeEvent('vacation_requests', () => void refetch());
-  useRealtimeEvent('client_requests', () => void refetch());
-  useRealtimeEvent('attention_read_states', () => void refetch());
-  useRealtimeEvent('organization_responsibility_configurations', () =>
-    void refetch()
-  );
-  useRealtimeEvent('organization_responsibility_assignments', () =>
-    void refetch()
-  );
-  useRealtimeEvent('organization_responsibility_delegations', () =>
-    void refetch()
-  );
+  // One shared 150ms debounce for all Realtime triggers (mirrors the count
+  // provider): a burst of related row changes causes one refetch, not eight.
+  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRefetch = useCallback(() => {
+    if (refetchTimerRef.current) {
+      clearTimeout(refetchTimerRef.current);
+    }
+    refetchTimerRef.current = setTimeout(() => {
+      refetchTimerRef.current = null;
+      void refetch();
+    }, 150);
+  }, [refetch]);
+
+  useEffect(() => {
+    return () => {
+      if (refetchTimerRef.current) {
+        clearTimeout(refetchTimerRef.current);
+      }
+    };
+  }, []);
+
+  useRealtimeEvent('time_entries', scheduleRefetch);
+  useRealtimeEvent('entry_change_requests', scheduleRefetch);
+  useRealtimeEvent('vacation_requests', scheduleRefetch);
+  useRealtimeEvent('client_requests', scheduleRefetch);
+  useRealtimeEvent('attention_read_states', scheduleRefetch);
+  useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
+  useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
+  useRealtimeEvent('organization_responsibility_delegations', scheduleRefetch);
 
   const handleMarkRead = async (notification: AttentionNotification) => {
     if (busyKey) return;
@@ -145,11 +163,11 @@ export function AufgabenContent() {
     try {
       const result = await markAllAttentionNotificationsRead();
       if (!result.success) {
-        toast.error(MARK_READ_ERROR);
+        toast.error(MARK_ALL_READ_ERROR);
       }
     } catch (error) {
       console.error('Error marking all notifications read:', error);
-      toast.error(MARK_READ_ERROR);
+      toast.error(MARK_ALL_READ_ERROR);
     } finally {
       setBusyKey(null);
     }

@@ -50,6 +50,9 @@ export function AttentionCountProvider({
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshGenerationRef = useRef(0);
   const skippedInitialRefreshRef = useRef(false);
+  const lastOrgIdRef = useRef<string | null | undefined>(
+    initialOrganizationId
+  );
 
   const refreshAttentionCounts = useCallback(async () => {
     const generation = ++refreshGenerationRef.current;
@@ -83,6 +86,13 @@ export function AttentionCountProvider({
   }, [refreshAttentionCounts]);
 
   useEffect(() => {
+    // A pending debounced refresh from the previous organization must never
+    // fire into the new one.
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+
     if (
       activeOrgId &&
       activeOrgId === initialOrganizationId &&
@@ -93,7 +103,16 @@ export function AttentionCountProvider({
       return;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- refreshing after org changes is the core responsibility of this provider effect
+    // Switching organizations resets to zero immediately: the previous
+    // organization's numbers are wrong for the new one, and an honest zero
+    // beats a stale claim while the fetch is in flight. Keep-last-known
+    // stays reserved for transient failures within the SAME organization.
+    if (lastOrgIdRef.current !== activeOrgId) {
+      lastOrgIdRef.current = activeOrgId;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting on org change is the core responsibility of this provider effect
+      setCounts(ZERO_COUNTS);
+    }
+
     void refreshAttentionCounts();
   }, [
     activeOrgId,

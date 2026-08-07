@@ -25,13 +25,17 @@ import {
   getOwnVacationOverview,
   getPendingVacationRequestsForApprover,
 } from '@/lib/vacation/actions';
-import { toVacationRequest } from '@/lib/vacation/types';
+import type {
+  VacationDayPortion,
+  VacationRequestStatus,
+} from '@/lib/vacation/types';
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
 import {
   computeOpenSinceDays,
   dedupeAttentionItems,
   isNotificationUnread,
   isWithinNotificationWindow,
+  notificationWindowStartIso,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
 } from './resolution';
@@ -230,13 +234,20 @@ async function deriveOwnNotifications(
   }
   if (!record) return { notifications: [], failed: false };
 
+  const businessToday = getBusinessTodayIso();
+  // Bounded window at the database: only decisions inside the surfaced
+  // 60-day window are loaded (the in-memory check stays authoritative).
+  const windowStart = notificationWindowStartIso(businessToday);
   const [requestsResult, readStatesResult] = await Promise.all([
     admin
       .from('vacation_requests')
-      .select('*')
+      .select(
+        'id, status, start_date, end_date, day_portion, decided_at, cancelled_at, decision_comment, cancellation_reason'
+      )
       .eq('organization_id', context.orgId)
       .eq('employee_record_id', record.id)
-      .in('status', ['approved', 'rejected', 'cancelled']),
+      .in('status', ['approved', 'rejected', 'cancelled'])
+      .or(`decided_at.gte.${windowStart},cancelled_at.gte.${windowStart}`),
     admin
       .from('attention_read_states')
       .select('source_id, state_version')
@@ -259,29 +270,31 @@ async function deriveOwnNotifications(
     ])
   );
 
-  const businessToday = getBusinessTodayIso();
   const notifications: AttentionNotification[] = [];
   for (const row of requestsResult.data ?? []) {
-    const request = toVacationRequest(row);
-    const facts = resolveVacationDecisionFacts(request);
+    const facts = resolveVacationDecisionFacts({
+      status: row.status as VacationRequestStatus,
+      decidedAt: row.decided_at,
+      cancelledAt: row.cancelled_at,
+    });
     if (!facts) continue;
     if (!isWithinNotificationWindow(facts.occurredAt, businessToday)) continue;
     notifications.push({
       sourceType: 'vacation_decision',
-      sourceId: request.id,
+      sourceId: row.id,
       status: facts.status,
-      startDate: request.startDate,
-      endDate: request.endDate,
-      dayPortion: request.dayPortion,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      dayPortion: row.day_portion as VacationDayPortion,
       comment:
         facts.status === 'cancelled'
-          ? request.cancellationReason
-          : request.decisionComment,
+          ? row.cancellation_reason
+          : row.decision_comment,
       stateVersion: facts.stateVersion,
       occurredAt: facts.occurredAt,
       unread: isNotificationUnread(
         facts.stateVersion,
-        readVersionBySourceId.get(request.id) ?? null
+        readVersionBySourceId.get(row.id) ?? null
       ),
     });
   }
@@ -407,8 +420,7 @@ export type MarkNotificationReadResult =
 
 async function persistNotificationReadMarker(
   context: ActionContext,
-  input: { sourceId: string; stateVersion: string },
-  eventPayload: Record<string, unknown>
+  input: { sourceId: string; stateVersion: string }
 ): Promise<MarkNotificationReadResult> {
   const admin = createSupabaseAdminClient();
 
@@ -466,7 +478,7 @@ async function persistNotificationReadMarker(
     source_type: 'vacation_decision',
     source_id: input.sourceId,
     event_type: 'marked_read',
-    event_payload: { state_version: input.stateVersion, ...eventPayload },
+    event_payload: { state_version: input.stateVersion },
   });
   if (eventError) {
     // The marker itself persisted; the missing audit row must not present as
@@ -497,7 +509,7 @@ export async function markAttentionNotificationRead(input: {
     // The stored version is exactly what the user saw. If the domain state
     // moved on in the meantime, the item legitimately stays unread for the
     // newer version — read markers never overwrite unseen state.
-    return await persistNotificationReadMarker(auth.context, input, {});
+    return await persistNotificationReadMarker(auth.context, input);
   } catch (error) {
     console.error('Unexpected error in markAttentionNotificationRead:', error);
     return { success: false, error: 'unexpected_error' };
@@ -508,21 +520,59 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
+    const { context } = auth;
 
-    const derived = await deriveOwnNotifications(auth.context);
+    // Ownership is established once by derivation: deriveOwnNotifications
+    // only ever returns the caller's own decision notifications, so the
+    // per-item request/record validation of the single-item path is
+    // redundant here and the writes can be two batched statements instead
+    // of a sequential per-item loop that could stop halfway.
+    const derived = await deriveOwnNotifications(context);
     if (derived.failed) return { success: false, error: 'load_failed' };
 
-    for (const notification of derived.notifications) {
-      if (!notification.unread) continue;
-      const result = await persistNotificationReadMarker(
-        auth.context,
-        {
-          sourceId: notification.sourceId,
-          stateVersion: notification.stateVersion,
-        },
-        { via: 'mark_all' }
+    const unread = derived.notifications.filter(
+      (notification) => notification.unread
+    );
+    if (unread.length === 0) return { success: true };
+
+    const admin = createSupabaseAdminClient();
+    const now = new Date().toISOString();
+    const { error: upsertError } = await admin
+      .from('attention_read_states')
+      .upsert(
+        unread.map((notification) => ({
+          organization_id: context.orgId,
+          user_id: context.userId,
+          source_type: 'vacation_decision',
+          source_id: notification.sourceId,
+          state_version: notification.stateVersion,
+          read_at: now,
+          updated_at: now,
+        })),
+        { onConflict: 'organization_id,user_id,source_type,source_id' }
       );
-      if (!result.success) return result;
+    if (upsertError) {
+      console.error('Failed to upsert attention read states:', upsertError);
+      return { success: false, error: 'update_failed' };
+    }
+
+    const { error: eventError } = await admin.from('attention_events').insert(
+      unread.map((notification) => ({
+        organization_id: context.orgId,
+        user_id: context.userId,
+        source_type: 'vacation_decision',
+        source_id: notification.sourceId,
+        event_type: 'marked_read',
+        event_payload: {
+          state_version: notification.stateVersion,
+          via: 'mark_all',
+        },
+      }))
+    );
+    if (eventError) {
+      // The markers themselves persisted; the missing audit rows must not
+      // present as a failed user action, but must be visible in the logs.
+      console.error('Failed to record attention events:', eventError);
     }
 
     return { success: true };

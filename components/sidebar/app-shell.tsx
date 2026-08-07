@@ -253,6 +253,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   ? approvalsCount
                   : 0;
             const showBadge = badgeCount > 0;
+            const badgeLabel =
+              item.href === '/aufgaben'
+                ? `${badgeCount} offene Aufgaben und Benachrichtigungen`
+                : `${badgeCount} ausstehende Freigaben`;
 
             return (
               <li key={item.href}>
@@ -269,9 +273,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   <Icon className="size-4" />
                   <span className="flex-1">{item.label}</span>
                   {showBadge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
-                      {badgeCount}
-                    </span>
+                    <>
+                      <span
+                        aria-hidden="true"
+                        data-testid="sidebar-badge"
+                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary"
+                      >
+                        {badgeCount}
+                      </span>
+                      <span className="sr-only">{badgeLabel}</span>
+                    </>
                   )}
                 </Link>
               </li>

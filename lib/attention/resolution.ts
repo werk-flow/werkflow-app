@@ -85,6 +85,21 @@ export function isNotificationUnread(
 export const NOTIFICATION_WINDOW_DAYS = 60;
 
 /**
+ * Inclusive lower bound of the notification window as an ISO timestamp. UTC
+ * midnight of the business date, matching computeOpenSinceDays — a fixed
+ * Berlin offset would shift the boundary by an hour across DST changes.
+ */
+export function notificationWindowStartIso(
+  businessTodayIso: string,
+  windowDays: number = NOTIFICATION_WINDOW_DAYS
+): string {
+  return new Date(
+    Date.parse(`${businessTodayIso}T00:00:00Z`) -
+      windowDays * 24 * 60 * 60 * 1000
+  ).toISOString();
+}
+
+/**
  * Whether a decision timestamp still falls into the surfaced window relative
  * to the Europe/Berlin business date (inclusive boundary).
  */
@@ -95,10 +110,9 @@ export function isWithinNotificationWindow(
 ): boolean {
   const occurredMs = Date.parse(occurredAtIso);
   if (Number.isNaN(occurredMs)) return false;
-  const windowStartMs =
-    Date.parse(`${businessTodayIso}T00:00:00+02:00`) -
-    windowDays * 24 * 60 * 60 * 1000;
-  return occurredMs >= windowStartMs;
+  return (
+    occurredMs >= Date.parse(notificationWindowStartIso(businessTodayIso, windowDays))
+  );
 }
 
 /**

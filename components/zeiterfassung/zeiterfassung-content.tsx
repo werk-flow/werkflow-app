@@ -101,9 +101,15 @@ export function ZeiterfassungContent({
         <TabsTrigger value="approvals" className="group">
           Anträge
           {approvalsCount > 0 && (
-            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
-              {approvalsCount}
-            </span>
+            <>
+              <span
+                aria-hidden="true"
+                className="ml-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground"
+              >
+                {approvalsCount}
+              </span>
+              <span className="sr-only">{`${approvalsCount} ausstehende Freigaben`}</span>
+            </>
           )}
         </TabsTrigger>
         {isAdminOrManager ? (

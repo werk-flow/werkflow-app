@@ -1264,7 +1264,7 @@ export async function markAllAttentionNotificationsReadViaButton(
 // The sidebar badge on the Aufgaben entry (desktop sidebar only; the mobile
 // drawer is unmounted while closed, so this locator never double-matches).
 export function aufgabenSidebarBadge(page: Page): Locator {
-  return page.locator('aside a[href="/aufgaben"] span.rounded-full');
+  return page.locator('aside a[href="/aufgaben"] [data-testid="sidebar-badge"]');
 }
 
 // Assigns a responsible person on the currently open request detail page via

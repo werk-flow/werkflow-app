@@ -5,7 +5,7 @@ import {
   dedupeAttentionItems,
   isNotificationUnread,
   isWithinNotificationWindow,
-  NOTIFICATION_WINDOW_DAYS,
+  notificationWindowStartIso,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
 } from './resolution';
@@ -169,14 +169,17 @@ describe('isWithinNotificationWindow', () => {
     ).toBe(false);
   });
 
-  test('the boundary day is inclusive', () => {
-    // Exactly NOTIFICATION_WINDOW_DAYS ago at the Berlin day start.
+  test('the boundary day is inclusive and DST-independent', () => {
+    // Exactly NOTIFICATION_WINDOW_DAYS ago at the UTC day start.
     const businessToday = '2026-08-07';
-    const boundary = new Date(
-      Date.parse(`${businessToday}T00:00:00+02:00`) -
-        NOTIFICATION_WINDOW_DAYS * 24 * 60 * 60 * 1000
-    ).toISOString();
+    const boundary = notificationWindowStartIso(businessToday);
     expect(isWithinNotificationWindow(boundary, businessToday)).toBe(true);
+    expect(
+      isWithinNotificationWindow(
+        new Date(Date.parse(boundary) - 1).toISOString(),
+        businessToday
+      )
+    ).toBe(false);
   });
 
   test('unparseable timestamps are excluded, not crashing', () => {

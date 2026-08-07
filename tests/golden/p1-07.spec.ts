@@ -356,7 +356,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
       `Zeitfreigabe von ${bueroName} öffnen`
     );
     await expect(timeTask).toHaveCount(1);
-    await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1');
+    await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', {
+      timeout: 15_000,
+    });
 
     // Deep link into the owning surface; the decision runs through the SAME
     // reviewSession action as always.
@@ -380,7 +382,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await expect(
       employeePage.getByTestId('attention-time-tasks')
     ).toHaveCount(0);
-    await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0);
+    await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, {
+      timeout: 15_000,
+    });
   });
 
   test('Überschneidender Urlaub bleibt blockiert; Zurückziehen bleibt transparent und vorläufige Einträge verschwinden', async ({
@@ -610,7 +614,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await expect(
       approvedRow.getByText('Projekttermin verschoben')
     ).toBeVisible();
-    await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1');
+    await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', {
+      timeout: 15_000,
+    });
     await markAttentionNotificationReadViaButton(
       employeePage,
       approvedRequest!.id
