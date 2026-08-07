@@ -1858,43 +1858,9 @@ export async function getPendingEntries(
  * Uses the same grouped-session semantics as the approvals list so paired
  * clock-in/clock-out requests count as exactly one everywhere.
  */
-export async function getPendingApprovalCount(
-  orgId: string,
-  _isAdmin: boolean
-): Promise<number | null> {
-  void _isAdmin;
-
-  try {
-    const user = await getAuthenticatedUser();
-    if (!user) return 0;
-
-    const callerRole = await verifyMembershipFromCache(user.id, orgId);
-    if (!callerRole) {
-      return 0;
-    }
-
-    const pendingSessionsResult = await getPendingSessions(orgId);
-    if (!pendingSessionsResult.success) {
-      return null;
-    }
-
-    let count = pendingSessionsResult.sessions.length;
-
-    if (callerRole === 'admin') {
-      const changeRequestsResult = await getPendingChangeRequests(orgId);
-      if (changeRequestsResult.success) {
-        count += changeRequestsResult.requests.length;
-      } else {
-        return null;
-      }
-    }
-
-    return count;
-  } catch (error) {
-    console.error('Unexpected error in getPendingApprovalCount:', error);
-    return null;
-  }
-}
+// getPendingApprovalCount was removed in P1-07: the unified attention counts
+// (lib/attention/actions.ts) are the single counting pipeline behind every
+// badge and derive the time share from getPendingSessions/getPendingChangeRequests.
 
 /**
  * Get pending sessions (entries grouped as pairs with user profile info)

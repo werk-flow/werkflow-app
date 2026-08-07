@@ -58,6 +58,8 @@ The provider subscribes to tables that affect active operational views, includin
 - `work_schedules`
 - `organization_closure_days`
 - `vacation_requests`
+- `attention_read_states`
+- `attention_events`
 - `organization_responsibility_configurations`
 - `organization_responsibility_assignments`
 - `organization_responsibility_delegations`
@@ -74,7 +76,9 @@ Most subscriptions are scoped by `organization_id`. Profile updates are broader 
 
 Events are debounced inside the provider to avoid refresh storms when multiple related rows change quickly.
 
-The three P1-05 responsibility tables and the P1-06 `vacation_requests` table use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit tables are not subscribed, matching other per-domain audit logs. The vacation widget, approver queue, and calendar absence entries refetch on `vacation_requests` events with generation guards and keep last-known data on transient failures; vacation decisions themselves are always re-authorized server-side at action time.
+The three P1-05 responsibility tables and the P1-06 `vacation_requests` table use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit tables are not subscribed, matching other per-domain audit logs — with one deliberate P1-07 exception: `attention_events` is published so a future consumer can react to pattern-level facts, and `attention_read_states` is subscribed so read markers set on one device update badges everywhere. The vacation widget, approver queue, and calendar absence entries refetch on `vacation_requests` events with generation guards and keep last-known data on transient failures; vacation decisions themselves are always re-authorized server-side at action time.
+
+P1-07's unified attention counts replace the former time-only pending-approval pipeline: `components/realtime/attention-count-provider.tsx` is the ONE counting pipeline behind the sidebar badges (Aufgaben = actionable + unread, Zeiterfassung = approvals), the Anträge tab badge, and the member quick stats. It refreshes on `time_entries`, `entry_change_requests`, `vacation_requests`, `client_requests`, `attention_read_states`, and the responsibility tables, debounced with a generation guard and keep-last-known behavior. The `/aufgaben` surface itself refetches on the same events. Attention data is deliberately NOT `unstable_cache`d and has no cache tag: every read is a live action query derived from the owning domains, because a stale "nothing to do" claim is worse than the query cost, and the expensive loaders early-return when their pending sets are empty (the steady state).
 
 ## Refresh Patterns
 

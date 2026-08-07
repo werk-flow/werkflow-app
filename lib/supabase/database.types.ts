@@ -14,6 +14,91 @@ export type Database = {
   }
   public: {
     Tables: {
+      attention_events: {
+        Row: {
+          created_at: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          source_id?: string
+          source_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attention_read_states: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          read_at: string
+          source_id: string
+          source_type: string
+          state_version: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          read_at?: string
+          source_id: string
+          source_type: string
+          state_version: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          read_at?: string
+          source_id?: string
+          source_type?: string
+          state_version?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_read_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           client_id: string

@@ -1136,11 +1136,15 @@ export async function withdrawOwnPendingVacationRequest(
 ): Promise<void> {
   await openOwnVacationSection(page);
   // Exactly one pending request is expected when this step runs. The button's
-  // accessible name carries the request's date range.
+  // accessible name carries the request's date range. Success is the button
+  // disappearing — a "Zurückgezogen" text alone would be satisfied by an
+  // older withdrawn request inherited from an earlier spec before the new
+  // withdrawal has actually committed (a race GG-02's full run exposed).
   const withdrawButton = page.getByRole('button', {
     name: /^Urlaubsantrag vom .* zurückziehen$/,
   });
   await withdrawButton.click();
+  await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
   await expect(visibleText(page, 'Zurückgezogen')).toBeVisible({
     timeout: 15_000,
   });
@@ -1198,6 +1202,101 @@ export async function cancelApprovedVacationFor(
     .getByRole('button', {
       name: `Genehmigten Urlaub von ${personName} stornieren`,
     })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(
+    dialog.getByRole('heading', { name: 'Genehmigten Urlaub stornieren' })
+  ).toBeVisible();
+  await dialog.locator('#vacation-decision-reason').fill(reason);
+  await dialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+// ============================================
+// P1-07 — Shared attention pattern (/aufgaben)
+// ============================================
+
+export async function openAufgaben(page: Page): Promise<void> {
+  await page.goto('/aufgaben');
+  await expect(
+    page.locator('[data-testid="aufgaben-content"][data-loaded="true"]')
+  ).toBeVisible({ timeout: 15_000 });
+}
+
+// Task links carry stable German aria-labels (`Urlaubsantrag von X öffnen`,
+// `Zeitfreigabe von X öffnen`, `Anfrage <Nummer> öffnen`). Counting via the
+// accessible name doubles as the per-viewer deduplication assertion.
+export function attentionTaskLink(page: Page, ariaLabel: string): Locator {
+  return page.getByRole('link', { name: ariaLabel, exact: true });
+}
+
+export function attentionNotificationRow(
+  page: Page,
+  sourceId: string
+): Locator {
+  return page.locator(`[data-notification-source="${sourceId}"]`);
+}
+
+export async function markAttentionNotificationReadViaButton(
+  page: Page,
+  sourceId: string
+): Promise<void> {
+  const row = attentionNotificationRow(page, sourceId);
+  await row
+    .getByRole('button', { name: /^Benachrichtigung vom .* als gelesen markieren$/ })
+    .click();
+  await expect(row).toHaveAttribute('data-unread', 'false', {
+    timeout: 15_000,
+  });
+}
+
+export async function markAllAttentionNotificationsReadViaButton(
+  page: Page
+): Promise<void> {
+  await page
+    .getByRole('button', { name: 'Alle als gelesen markieren' })
+    .click();
+  await expect(page.locator('[data-unread="true"]')).toHaveCount(0, {
+    timeout: 15_000,
+  });
+}
+
+// The sidebar badge on the Aufgaben entry (desktop sidebar only; the mobile
+// drawer is unmounted while closed, so this locator never double-matches).
+export function aufgabenSidebarBadge(page: Page): Locator {
+  return page.locator('aside a[href="/aufgaben"] span.rounded-full');
+}
+
+// Assigns a responsible person on the currently open request detail page via
+// the edit dialog (P1-02 storage, first surfaced as an ownership signal here).
+export async function assignRequestAssigneeViaEditDialog(
+  page: Page,
+  assigneeName: string
+): Promise<void> {
+  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('#edit-request-assignee').click();
+  await page.getByRole('option', { name: assigneeName, exact: true }).click();
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expectVisibleAfterSave(page, assigneeName);
+}
+
+// Cancels one specific approved vacation when a person has several approved
+// ranges: the range text disambiguates where the per-person aria-label alone
+// would be ambiguous (strict mode).
+export async function cancelApprovedVacationForRangeText(
+  page: Page,
+  personName: string,
+  rangeText: string,
+  reason: string
+): Promise<void> {
+  await openVacationApprovals(page);
+  await page
+    .locator('[data-slot="card"]')
+    .filter({ hasText: rangeText })
+    .getByRole('button', { name: `Genehmigten Urlaub von ${personName} stornieren` })
     .click();
   const dialog = page.getByRole('dialog');
   await expect(

@@ -62,6 +62,16 @@ Responsibilities restrict a small number of operational actions without turning 
 - The pure `resolveEffectiveResponsibility` result identifies holders via `role_default`, `direct_assignment`, or `delegation` (including the inherited base source). Approval scope and self-approval checks consume that result; the responsibility data is not a second independent permission matrix.
 - Reads are self-or-manager through `app_private` SECURITY DEFINER helpers; ordinary employees can see only rows involving their own employee record. Writes use owner-authorized service-role RPCs plus organization-validation triggers. A unique partial constraint and ownership triggers keep exactly one owner/admin membership; selected sets cannot be empty and their sole base holder cannot be removed.
 
+## Shared Attention Pattern (P1-07)
+
+One role-aware task/approval/notification pattern serves every feature instead of per-feature inboxes. Its data-model rule is strict: **attention items are derived, never stored.**
+
+- An attention item is identified by `source_type` + `source_id` (e.g. `vacation_request_approval` + the request id). The V1 vocabulary: `time_session_approval`, `time_change_request_approval`, `vacation_request_approval`, `client_request_open`, `vacation_decision`. Later slices (sickness `P1-08`, qualification warnings `P1-09`, follow-ups `P1-10`, corrections `P1-22`, procurement approvals `P1-29`) extend this vocabulary and the database CHECK constraints — they never add parallel item storage.
+- Items are resolved live by the server boundary (`lib/attention/actions.ts` + the pure helpers in `lib/attention/resolution.ts`) from the owning domains through their own loaders and authorization paths (`time_approval`/`leave_approval` responsibility resolution at derivation time, manager role for requests). There is no materialized task table, so a decision made on any surface can never leave a stale copy behind. Deduplication (one item per source record per viewer, regardless of how many authorization paths apply) happens in the resolver.
+- The only stored pattern state: `attention_read_states` (per-user read markers keyed by item identity plus an opaque `state_version`; a domain state change — e.g. approve → cancel — produces a new version and makes the same item unread again) and append-only `attention_events` (pattern-level audit: who marked what read, when). Neither table duplicates a domain column; every disappearance of an item is explainable from the owning domain's own history.
+- Access: read markers are strictly self-scoped SELECT (`user_id = auth.uid()`), pattern events self-or-manager; all writes are service-role server actions. A validation trigger checks membership and that the referenced source row lives in the same organization. Both tables are Realtime-published with replica identity full.
+- Decision notifications are derived from the domain rows themselves (a decided/cancelled vacation request within a bounded window), not materialized at decision time — the P1-06 actions stay untouched and notification truth cannot drift.
+
 ## Personnel Domain (P1-03)
 
 Employment identity is organization-scoped and deliberately separate from the global profile:

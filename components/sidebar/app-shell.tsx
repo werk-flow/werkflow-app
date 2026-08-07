@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox, ListTodo } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -28,9 +28,10 @@ import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-pag
 import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
-  PendingApprovalCountProvider,
-  usePendingApprovalCount,
-} from '@/components/realtime/pending-approval-count-provider';
+  AttentionCountProvider,
+  useAttentionCounts,
+} from '@/components/realtime/attention-count-provider';
+import type { AttentionCounts } from '@/lib/attention/types';
 
 const OrganizationSwitcher = dynamic(
   () =>
@@ -58,6 +59,11 @@ const navItems: NavItem[] = [
     href: '/dashboard',
     label: 'Dashboard',
     icon: LayoutDashboard
+  },
+  {
+    href: '/aufgaben',
+    label: 'Aufgaben',
+    icon: ListTodo
   },
   {
     href: '/kalender',
@@ -178,7 +184,8 @@ function SidebarSkeleton() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { activeOrg } = useOrganization();
-  const { pendingApprovalCount } = usePendingApprovalCount();
+  const { actionableCount, approvalsCount, unreadNotificationCount } =
+    useAttentionCounts();
 
   const isAdminOrManager =
     activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
@@ -237,10 +244,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             const isActive =
               activePath === item.href || activePath.startsWith(item.href + '/');
             const Icon = item.icon;
-            const showBadge =
-              item.href === '/zeiterfassung' &&
-              isAdminOrManager &&
-              pendingApprovalCount > 0;
+            // Badges are viewer-scoped: the counts already exclude everything
+            // the viewer cannot act on, so no extra role gate is needed.
+            const badgeCount =
+              item.href === '/aufgaben'
+                ? actionableCount + unreadNotificationCount
+                : item.href === '/zeiterfassung'
+                  ? approvalsCount
+                  : 0;
+            const showBadge = badgeCount > 0;
 
             return (
               <li key={item.href}>
@@ -258,7 +270,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   <span className="flex-1">{item.label}</span>
                   {showBadge && (
                     <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">
-                      {pendingApprovalCount}
+                      {badgeCount}
                     </span>
                   )}
                 </Link>
@@ -439,11 +451,11 @@ function OrgSwitchOverlay() {
 // Main app shell component — static frame with no direct data dependencies
 export function AppShell({
   children,
-  initialPendingApprovalCount,
+  initialAttentionCounts,
   initialOrganizationId,
 }: {
   children: React.ReactNode;
-  initialPendingApprovalCount?: number;
+  initialAttentionCounts?: AttentionCounts;
   initialOrganizationId?: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -451,8 +463,8 @@ export function AppShell({
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
-      <PendingApprovalCountProvider
-        initialPendingApprovalCount={initialPendingApprovalCount}
+      <AttentionCountProvider
+        initialCounts={initialAttentionCounts}
         initialOrganizationId={initialOrganizationId}
       >
         <div className="flex h-screen flex-col bg-background md:flex-row">
@@ -472,7 +484,7 @@ export function AppShell({
             <OrgSwitchOverlay />
           </div>
         </div>
-      </PendingApprovalCountProvider>
+      </AttentionCountProvider>
     </SidebarContext.Provider>
   );
 }

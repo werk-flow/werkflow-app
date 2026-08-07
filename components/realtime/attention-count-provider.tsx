@@ -1,5 +1,10 @@
 'use client';
 
+// P1-07: the one counting pipeline behind every attention badge. Replaces the
+// former time-only PendingApprovalCountProvider; counts come from the same
+// server-side derivation as the /aufgaben surface, so a badge can never count
+// an item its viewer cannot act on.
+
 import {
   createContext,
   useCallback,
@@ -13,54 +18,58 @@ import {
 
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useOrganization } from '@/components/organization/organization-context';
-import { getPendingApprovalCount } from '@/lib/time-tracking/actions';
+import { getAttentionCounts } from '@/lib/attention/actions';
+import type { AttentionCounts } from '@/lib/attention/types';
 
-type PendingApprovalCountContextValue = {
-  pendingApprovalCount: number;
-  refreshPendingApprovalCount: () => Promise<void>;
+const ZERO_COUNTS: AttentionCounts = {
+  actionableCount: 0,
+  approvalsCount: 0,
+  unreadNotificationCount: 0,
 };
 
-const PendingApprovalCountContext =
-  createContext<PendingApprovalCountContextValue | null>(null);
+type AttentionCountContextValue = AttentionCounts & {
+  refreshAttentionCounts: () => Promise<void>;
+};
 
-export function PendingApprovalCountProvider({
+const AttentionCountContext =
+  createContext<AttentionCountContextValue | null>(null);
+
+export function AttentionCountProvider({
   children,
-  initialPendingApprovalCount,
+  initialCounts,
   initialOrganizationId,
 }: {
   children: ReactNode;
-  initialPendingApprovalCount?: number;
+  initialCounts?: AttentionCounts;
   initialOrganizationId?: string | null;
 }) {
-  const { activeOrgId, activeOrg } = useOrganization();
-  const activeRole = activeOrg?.role;
-  const isAdmin = activeRole === 'admin';
-  const [pendingApprovalCount, setPendingApprovalCount] = useState(
-    initialPendingApprovalCount ?? 0
+  const { activeOrgId } = useOrganization();
+  const [counts, setCounts] = useState<AttentionCounts>(
+    initialCounts ?? ZERO_COUNTS
   );
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refreshGenerationRef = useRef(0);
   const skippedInitialRefreshRef = useRef(false);
 
-  const refreshPendingApprovalCount = useCallback(async () => {
+  const refreshAttentionCounts = useCallback(async () => {
     const generation = ++refreshGenerationRef.current;
     if (!activeOrgId) {
-      setPendingApprovalCount(0);
+      setCounts(ZERO_COUNTS);
       return;
     }
 
     try {
-      const nextCount = await getPendingApprovalCount(activeOrgId, isAdmin);
-      if (
-        nextCount !== null &&
-        generation === refreshGenerationRef.current
-      ) {
-        setPendingApprovalCount(nextCount);
+      const result = await getAttentionCounts();
+      // Keep the last-known counts on transient failures (documented rule
+      // since P1-04/P1-05): a badge briefly showing stale numbers is better
+      // than one that silently claims "nothing to do".
+      if (result.success && generation === refreshGenerationRef.current) {
+        setCounts(result.counts);
       }
     } catch (error) {
-      console.error('Error fetching pending approval count:', error);
+      console.error('Error fetching attention counts:', error);
     }
-  }, [activeOrgId, isAdmin]);
+  }, [activeOrgId]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
@@ -69,15 +78,15 @@ export function PendingApprovalCountProvider({
 
     refreshTimerRef.current = setTimeout(() => {
       refreshTimerRef.current = null;
-      void refreshPendingApprovalCount();
+      void refreshAttentionCounts();
     }, 150);
-  }, [refreshPendingApprovalCount]);
+  }, [refreshAttentionCounts]);
 
   useEffect(() => {
     if (
       activeOrgId &&
       activeOrgId === initialOrganizationId &&
-      initialPendingApprovalCount !== undefined &&
+      initialCounts !== undefined &&
       !skippedInitialRefreshRef.current
     ) {
       skippedInitialRefreshRef.current = true;
@@ -85,12 +94,12 @@ export function PendingApprovalCountProvider({
     }
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- refreshing after org changes is the core responsibility of this provider effect
-    void refreshPendingApprovalCount();
+    void refreshAttentionCounts();
   }, [
     activeOrgId,
     initialOrganizationId,
-    initialPendingApprovalCount,
-    refreshPendingApprovalCount,
+    initialCounts,
+    refreshAttentionCounts,
   ]);
 
   useEffect(() => {
@@ -120,6 +129,15 @@ export function PendingApprovalCountProvider({
   useRealtimeEvent('entry_change_requests', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('vacation_requests', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('client_requests', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('attention_read_states', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('organization_responsibility_configurations', () => {
     scheduleRefresh();
   });
@@ -130,26 +148,26 @@ export function PendingApprovalCountProvider({
     scheduleRefresh();
   });
 
-  const value = useMemo<PendingApprovalCountContextValue>(
+  const value = useMemo<AttentionCountContextValue>(
     () => ({
-      pendingApprovalCount,
-      refreshPendingApprovalCount,
+      ...counts,
+      refreshAttentionCounts,
     }),
-    [pendingApprovalCount, refreshPendingApprovalCount]
+    [counts, refreshAttentionCounts]
   );
 
   return (
-    <PendingApprovalCountContext.Provider value={value}>
+    <AttentionCountContext.Provider value={value}>
       {children}
-    </PendingApprovalCountContext.Provider>
+    </AttentionCountContext.Provider>
   );
 }
 
-export function usePendingApprovalCount() {
-  const context = useContext(PendingApprovalCountContext);
+export function useAttentionCounts() {
+  const context = useContext(AttentionCountContext);
   if (!context) {
     throw new Error(
-      'usePendingApprovalCount must be used within PendingApprovalCountProvider'
+      'useAttentionCounts must be used within AttentionCountProvider'
     );
   }
 

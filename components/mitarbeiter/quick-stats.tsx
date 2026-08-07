@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Users, Clock, AlertCircle } from 'lucide-react';
-import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
+import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 
 interface QuickStatsProps {
   organizationId: string;
@@ -17,8 +17,9 @@ export function QuickStats({
   totalMembers,
   activeWorkingCount,
 }: QuickStatsProps) {
-  const { pendingApprovalCount } = usePendingApprovalCount();
-  const pendingCount = pendingApprovalCount;
+  // Time and vacation approvals — matches the Anträge tab this card links to.
+  const { approvalsCount } = useAttentionCounts();
+  const pendingCount = approvalsCount;
 
   return (
     <div className="flex flex-wrap gap-4 mb-4">

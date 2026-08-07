@@ -20,42 +20,45 @@ import { reportAuthUsersStringColumnHealth } from '@/lib/supabase/auth-health';
 import {
   getActiveJobIdsForOrg,
   getCurrentClockState,
-  getPendingApprovalCount,
 } from '@/lib/time-tracking/actions';
+import { getAttentionCounts } from '@/lib/attention/actions';
+import type { AttentionCounts } from '@/lib/attention/types';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { ONBOARDING_START_PATH } from '@/lib/auth/redirects';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 
 async function getInitialAppRuntimeState({
   activeOrgId,
-  role,
 }: {
   activeOrgId: string | null;
-  role: string | undefined;
 }): Promise<{
   clockState: LiveClockState | null;
   activeJobIds: string[];
-  pendingApprovalCount: number;
+  attentionCounts: AttentionCounts | undefined;
 }> {
   if (!activeOrgId) {
     return {
       clockState: null,
       activeJobIds: [],
-      pendingApprovalCount: 0,
+      attentionCounts: undefined,
     };
   }
 
-  const [clockStateResult, activeJobsResult, pendingApprovalCount] =
+  const [clockStateResult, activeJobsResult, attentionCountsResult] =
     await Promise.all([
       getCurrentClockState(activeOrgId),
       getActiveJobIdsForOrg(activeOrgId),
-      getPendingApprovalCount(activeOrgId, role === 'admin'),
+      getAttentionCounts(),
     ]);
 
   return {
     clockState: clockStateResult.success ? clockStateResult.state : null,
     activeJobIds: activeJobsResult.success ? activeJobsResult.activeJobIds : [],
-    pendingApprovalCount: pendingApprovalCount ?? 0,
+    // undefined lets the provider fetch on mount instead of trusting a failed
+    // initial load as "zero".
+    attentionCounts: attentionCountsResult.success
+      ? attentionCountsResult.counts
+      : undefined,
   };
 }
 
@@ -80,10 +83,8 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
     redirect(ONBOARDING_START_PATH);
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const initialRuntimeState = await getInitialAppRuntimeState({
     activeOrgId,
-    role: currentMembership?.role,
   });
 
   return (
@@ -100,9 +101,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
           >
             <ClockStateProvider initialState={initialRuntimeState.clockState}>
               <AppShell
-                initialPendingApprovalCount={
-                  initialRuntimeState.pendingApprovalCount
-                }
+                initialAttentionCounts={initialRuntimeState.attentionCounts}
                 initialOrganizationId={activeOrgId}
               >
                 {children}

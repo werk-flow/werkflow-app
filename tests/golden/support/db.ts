@@ -446,6 +446,175 @@ export async function getVisibleVacationRequestRecordIdsAs(
   ].sort();
 }
 
+// P1-07: pattern-level attention state — read markers and append-only pattern
+// events for one user. Proves that a marked-read fact is stored and audited
+// (the "an item that disappears is explainable" contract).
+export type AttentionPatternState = {
+  readStates: Array<{
+    sourceType: string;
+    sourceId: string;
+    stateVersion: string;
+  }>;
+  events: Array<{ sourceType: string; sourceId: string; eventType: string }>;
+};
+
+export async function getAttentionPatternStateForUser(
+  orgId: string,
+  userId: string
+): Promise<AttentionPatternState> {
+  const admin = createAdminClient();
+  const [readStatesResult, eventsResult] = await Promise.all([
+    admin
+      .from('attention_read_states')
+      .select('source_type, source_id, state_version')
+      .eq('organization_id', orgId)
+      .eq('user_id', userId),
+    admin
+      .from('attention_events')
+      .select('source_type, source_id, event_type, created_at')
+      .eq('organization_id', orgId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true }),
+  ]);
+  if (readStatesResult.error || eventsResult.error) {
+    throw new Error(
+      `Attention state query failed: ${
+        readStatesResult.error?.message ?? eventsResult.error?.message
+      }`
+    );
+  }
+
+  return {
+    readStates: (readStatesResult.data ?? []).map((row) => ({
+      sourceType: row.source_type as string,
+      sourceId: row.source_id as string,
+      stateVersion: row.state_version as string,
+    })),
+    events: (eventsResult.data ?? []).map((row) => ({
+      sourceType: row.source_type as string,
+      sourceId: row.source_id as string,
+      eventType: row.event_type as string,
+    })),
+  };
+}
+
+// P1-07: which attention rows a real signed-in user can see under RLS.
+// Read markers are strictly self-scoped (even managers see only their own);
+// pattern events are self-or-manager. Outsiders see nothing.
+export async function getVisibleAttentionOwnersAs(
+  user: { email: string; password: string },
+  orgId: string
+): Promise<{ readStateUserIds: string[]; eventUserIds: string[] }> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (signInError) {
+    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
+  }
+
+  const [readStatesResult, eventsResult] = await Promise.all([
+    client
+      .from('attention_read_states')
+      .select('user_id')
+      .eq('organization_id', orgId),
+    client
+      .from('attention_events')
+      .select('user_id')
+      .eq('organization_id', orgId),
+  ]);
+  if (readStatesResult.error || eventsResult.error) {
+    throw new Error(
+      `Attention RLS query failed for ${user.email}: ${
+        readStatesResult.error?.message ?? eventsResult.error?.message
+      }`
+    );
+  }
+
+  return {
+    readStateUserIds: [
+      ...new Set(
+        (readStatesResult.data ?? []).map((row) => row.user_id as string)
+      ),
+    ].sort(),
+    eventUserIds: [
+      ...new Set(
+        (eventsResult.data ?? []).map((row) => row.user_id as string)
+      ),
+    ].sort(),
+  };
+}
+
+// P1-07: the one open client request GG-01 leaves behind, by number.
+export async function getClientRequestByNumber(
+  orgId: string,
+  requestNumber: string
+): Promise<{ id: string; status: string; assignedTo: string | null }> {
+  const { data, error } = await createAdminClient()
+    .from('client_requests')
+    .select('id, status, assigned_to')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
+    .single();
+  if (error || !data) {
+    throw new Error(
+      `No client request found with number ${requestNumber}: ${error?.message}`
+    );
+  }
+  return {
+    id: data.id as string,
+    status: data.status as string,
+    assignedTo: (data.assigned_to as string | null) ?? null,
+  };
+}
+
+// P1-07: how many client requests are currently open (offen/in_klaerung) —
+// the mode-independent input for unified-badge expectations.
+export async function countOpenClientRequests(orgId: string): Promise<number> {
+  const { count, error } = await createAdminClient()
+    .from('client_requests')
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .in('status', ['offen', 'in_klaerung']);
+  if (error) {
+    throw new Error(`Open request count failed: ${error.message}`);
+  }
+  return count ?? 0;
+}
+
+// P1-07: all vacation requests of one record keyed by start date, so specs can
+// address a specific request's id (the attention item identity) even when the
+// person has several.
+export async function getVacationRequestIdsByStartDate(
+  orgId: string,
+  employeeRecordId: string
+): Promise<Map<string, { id: string; status: string }>> {
+  const { data, error } = await createAdminClient()
+    .from('vacation_requests')
+    .select('id, status, start_date, created_at')
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecordId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new Error(`Vacation request lookup failed: ${error.message}`);
+  }
+  const byStartDate = new Map<string, { id: string; status: string }>();
+  for (const row of data ?? []) {
+    // Later requests win: a withdrawn request and its re-submission share the
+    // start date and the newer one is the acting item.
+    byStartDate.set(row.start_date as string, {
+      id: row.id as string,
+      status: row.status as string,
+    });
+  }
+  return byStartDate;
+}
+
 export type InventoryLedgerState = {
   quantityOnHand: number;
   movementTotal: number;

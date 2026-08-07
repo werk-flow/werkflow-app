@@ -28,6 +28,8 @@ export type RealtimeTable =
   | 'work_schedules'
   | 'organization_closure_days'
   | 'vacation_requests'
+  | 'attention_read_states'
+  | 'attention_events'
   | 'organization_responsibility_configurations'
   | 'organization_responsibility_assignments'
   | 'organization_responsibility_delegations'
@@ -81,6 +83,8 @@ const TABLES: RealtimeTable[] = [
   'work_schedules',
   'organization_closure_days',
   'vacation_requests',
+  'attention_read_states',
+  'attention_events',
   'organization_responsibility_configurations',
   'organization_responsibility_assignments',
   'organization_responsibility_delegations',

@@ -15,7 +15,7 @@ const VacationApprovals = dynamic(
     )
   }
 );
-import { usePendingApprovalCount } from '@/components/realtime/pending-approval-count-provider';
+import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 
@@ -78,7 +78,9 @@ export function ZeiterfassungContent({
   members = [],
   initialOverview
 }: ZeiterfassungContentProps) {
-  const { pendingApprovalCount } = usePendingApprovalCount();
+  // Approvals only: the tab shows time and vacation approvals, so its badge
+  // counts exactly those (P1-06's documented undercount is resolved here).
+  const { approvalsCount } = useAttentionCounts();
 
   // For regular employees, just show the dashboard
   if (!isAdminOrManager && !canApproveTime && !canApproveLeave) {
@@ -98,9 +100,9 @@ export function ZeiterfassungContent({
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
         <TabsTrigger value="approvals" className="group">
           Anträge
-          {pendingApprovalCount > 0 && (
+          {approvalsCount > 0 && (
             <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
-              {pendingApprovalCount}
+              {approvalsCount}
             </span>
           )}
         </TabsTrigger>

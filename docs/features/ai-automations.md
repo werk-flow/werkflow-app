@@ -83,6 +83,8 @@ WerkFlow needs one understandable way to present:
 
 Each feature should not invent a separate AI inbox. Automation work should enter the same role-aware task, approval, and notification experience as human work.
 
+**Current baseline (`P1-07`, 2026-08-07):** this shared experience now exists for human work. Attention items are derived live by one server-side resolver (`lib/attention/`) from the owning domains — pending time sessions/change requests, pending vacation requests, open client requests — discriminated by a stable `source_type` + `source_id` identity, deduplicated per viewer, authorization-scoped through the P1-05 responsibility resolution at derivation time, and surfaced role-aware at `/aufgaben` with deep links into the owning context. Decision notifications for the affected person, strictly personal read markers, and an append-only pattern audit are the only stored pattern state. Phase 2 automation items (drafts requiring review, blocked automations, failed external actions, recommendations) are expected to enter this pattern as new `source_type`s with their own derivation — never as a parallel inbox or a materialized task table.
+
 ### Integration And Identity Boundaries
 
 Before external automation, the product must define:
