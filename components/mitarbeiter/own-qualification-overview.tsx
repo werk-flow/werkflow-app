@@ -1,11 +1,9 @@
 'use client';
 
 import { Award, Users } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useTransition } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
   getCapabilityKindLabel,
@@ -17,15 +15,14 @@ export function OwnQualificationOverview({
 }: {
   profile: OwnQualificationProfile | null;
 }) {
-  const router = useRouter();
-  const [, startRefreshTransition] = useTransition();
-  const refresh = useCallback(() => {
-    startRefreshTransition(() => router.refresh());
-  }, [router]);
-  useRealtimeEvent('teams', refresh);
-  useRealtimeEvent('team_memberships', refresh);
-  useRealtimeEvent('organization_capabilities', refresh);
-  useRealtimeEvent('employee_capabilities', refresh);
+  useRealtimeRouterRefresh({
+    tables: [
+      'teams',
+      'team_memberships',
+      'organization_capabilities',
+      'employee_capabilities',
+    ],
+  });
   const today = getBusinessTodayIso();
   const formatDate = (value: string) =>
     new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');

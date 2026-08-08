@@ -46,6 +46,8 @@ export function EmployeeMultiSelect({
     let active = true;
     void getAssignmentTeamOptions().then((result) => {
       if (active && result.success) setTeams(result.teams);
+    }).catch(() => {
+      // Team shortcuts remain hidden when the options cannot be loaded.
     });
     return () => {
       active = false;

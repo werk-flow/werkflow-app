@@ -218,15 +218,23 @@ export function QualificationManagementSection({
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={pendingAction !== null}
                   onClick={async () => {
-                    const result = await retireCapabilityDefinition(
-                      capability.id
-                    );
-                    if (!result.success) {
+                    setPendingAction(`retire:${capability.id}`);
+                    try {
+                      const result = await retireCapabilityDefinition(
+                        capability.id
+                      );
+                      if (!result.success) {
+                        toast.error('Der Begriff konnte nicht archiviert werden.');
+                        return;
+                      }
+                      refresh();
+                    } catch {
                       toast.error('Der Begriff konnte nicht archiviert werden.');
-                      return;
+                    } finally {
+                      setPendingAction(null);
                     }
-                    refresh();
                   }}
                 >
                   Archivieren
@@ -392,6 +400,12 @@ export function QualificationManagementSection({
                 pendingAction !== null
               }
               onClick={async () => {
+                if (validUntil && validUntil < validFrom) {
+                  toast.error(
+                    '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
+                  );
+                  return;
+                }
                 const sharedInput = {
                   validFrom,
                   validUntil: validUntil || null,
@@ -514,36 +528,46 @@ export function QualificationManagementSection({
                       </Button>
                       {definition.kind === 'certification' && (
                         <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={async () => {
-                            const result = await updateEmployeeCapability({
-                              recordId: record.id,
-                              validFrom: record.validFrom,
-                              validUntil: record.validUntil,
-                              issuer: record.issuer,
-                              renewalDueDate: record.renewalDueDate,
-                              confirmationStatus:
-                                record.confirmationStatus === 'confirmed'
-                                  ? 'unconfirmed'
-                                  : 'confirmed',
-                              evidenceState: record.evidenceState,
-                              operationalNote: record.operationalNote,
-                            });
-                            if (!result.success) {
-                              toast.error(
-                                'Die Bestätigung konnte nicht geändert werden.'
-                              );
-                              return;
-                            }
-                            refresh();
-                          }}
-                        >
-                          {record.confirmationStatus === 'confirmed'
-                            ? 'Bestätigung aufheben'
-                            : 'Bestätigen'}
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={pendingAction !== null}
+                            onClick={async () => {
+                              setPendingAction(`confirm:${record.id}`);
+                              try {
+                                const result = await updateEmployeeCapability({
+                                  recordId: record.id,
+                                  validFrom: record.validFrom,
+                                  validUntil: record.validUntil,
+                                  issuer: record.issuer,
+                                  renewalDueDate: record.renewalDueDate,
+                                  confirmationStatus:
+                                    record.confirmationStatus === 'confirmed'
+                                      ? 'unconfirmed'
+                                      : 'confirmed',
+                                  evidenceState: record.evidenceState,
+                                  operationalNote: record.operationalNote,
+                                });
+                                if (!result.success) {
+                                  toast.error(
+                                    'Die Bestätigung konnte nicht geändert werden.'
+                                  );
+                                  return;
+                                }
+                                refresh();
+                              } catch {
+                                toast.error(
+                                  'Die Bestätigung konnte nicht geändert werden.'
+                                );
+                              } finally {
+                                setPendingAction(null);
+                              }
+                            }}
+                          >
+                            {record.confirmationStatus === 'confirmed'
+                              ? 'Bestätigung aufheben'
+                              : 'Bestätigen'}
+                          </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -583,20 +607,23 @@ export function QualificationManagementSection({
         </div>
         <Checkbox
           checked={apprenticeWarningEnabled}
-          disabled={!isAdmin}
+          disabled={!isAdmin || pendingAction !== null}
           aria-label="Ausbildungs-Hinweis aktivieren"
           onCheckedChange={async (checked) => {
             const enabled = checked === true;
-            const result = await setApprenticeWarningEnabled(enabled);
-            if (!result.success) {
-              toast.error(
-                isAdmin
-                  ? 'Die Einstellung konnte nicht gespeichert werden.'
-                  : 'Nur Admins können diese Einstellung ändern.'
-              );
-              return;
+            setPendingAction('apprentice-warning');
+            try {
+              const result = await setApprenticeWarningEnabled(enabled);
+              if (!result.success) {
+                toast.error('Die Einstellung konnte nicht gespeichert werden.');
+                return;
+              }
+              refresh();
+            } catch {
+              toast.error('Die Einstellung konnte nicht gespeichert werden.');
+            } finally {
+              setPendingAction(null);
             }
-            refresh();
           }}
         />
       </section>

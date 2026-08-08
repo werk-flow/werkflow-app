@@ -900,7 +900,12 @@ export async function updateJob(
         approval: input.assignmentApproval,
         teamSourceId: input.assignmentTeamSourceId,
       });
-      if (!assignmentResult.success) return assignmentResult;
+      if (!assignmentResult.success) {
+        updateTag(CACHE_TAGS.jobs(orgId));
+        updateTag(CACHE_TAGS.qualifications(orgId));
+        revalidatePath('/auftraege', 'layout');
+        return { success: false, error: 'partial_update' };
+      }
     }
 
     updateTag(CACHE_TAGS.jobs(orgId));

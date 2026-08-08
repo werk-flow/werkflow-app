@@ -1816,14 +1816,18 @@ export async function assignJobWithQualificationWarning(
       .filter({ hasText: options.employeeName })
       .first()
       .click();
-    await assignmentDialog.getByRole('heading').click();
+    await assignmentDialog
+      .getByRole('heading', { name: 'Mitarbeiter zuweisen' })
+      .click();
   }
   await assignmentDialog.getByRole('button', { name: 'Speichern' }).click();
   const warningDialog = page
     .getByRole('dialog')
     .filter({ has: page.getByRole('heading', { name: 'Zuweisung prüfen' }) });
   await expect(warningDialog).toBeVisible({ timeout: 15_000 });
-  await expect(warningDialog.getByText(options.expectedStatus)).toBeVisible();
+  await expect(
+    warningDialog.getByText(options.expectedStatus).first()
+  ).toBeVisible();
   await warningDialog
     .locator('#qualification-override-reason')
     .fill(options.overrideReason);

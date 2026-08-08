@@ -163,6 +163,19 @@ describe('qualification coverage resolution', () => {
     expect(result.requirementCoverage[0].status).toBe('missing');
     expect(result.requiresOverride).toBe(false);
   });
+
+  test('requires an override when a selected person leaves a requirement uncovered', () => {
+    const result = resolveAssignmentEvaluation({
+      jobId: 'job-1',
+      assessedForDate: '2026-06-01',
+      candidates: [candidate({ capabilityRecords: [] })],
+      requirements: [requirement],
+      apprenticeWarningEnabled: false,
+    });
+
+    expect(result.requirementCoverage[0].status).toBe('missing');
+    expect(result.requiresOverride).toBe(true);
+  });
 });
 
 describe('apprentice assignment signal', () => {
@@ -228,6 +241,9 @@ describe('evaluation fingerprints and expiry attention', () => {
     expect(
       resolveCertificationExpiryPhase('2026-08-07', '2026-08-08', 0)
     ).toBe('expired');
+    expect(
+      resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', Number.NaN)
+    ).toBe('none');
     expect(
       getCertificationAttentionVersion({
         validUntil: '2026-08-31',

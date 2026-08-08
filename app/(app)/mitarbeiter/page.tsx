@@ -56,6 +56,13 @@ async function MitarbeiterData({
       getQualificationWorkspace(),
     ]);
 
+  if (!qualificationWorkspaceResult.success) {
+    console.error(
+      'Error fetching qualification workspace:',
+      qualificationWorkspaceResult.error
+    );
+  }
+
   const memberList = membersResult as OrgMember[];
   const inviteList = (invitesResult.data as Invite[]) || [];
 

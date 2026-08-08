@@ -300,18 +300,20 @@ export function TeamManagementSection({
                               setPendingAction(`end:${membership.id}`);
                               try {
                                 const result = await endTeamMembership({
-                                membershipId: membership.id,
-                                validUntil: today,
-                              });
-                              if (!result.success) {
+                                  membershipId: membership.id,
+                                  validUntil: today,
+                                });
+                                if (!result.success) {
+                                  toast.error(
+                                    'Die Teamzugehörigkeit konnte nicht beendet werden.'
+                                  );
+                                  return;
+                                }
+                                refresh();
+                              } catch {
                                 toast.error(
                                   'Die Teamzugehörigkeit konnte nicht beendet werden.'
                                 );
-                                return;
-                              }
-                                refresh();
-                              } catch {
-                                toast.error('Die Teamzugehörigkeit konnte nicht beendet werden.');
                               } finally {
                                 setPendingAction(null);
                               }
@@ -354,22 +356,21 @@ export function TeamManagementSection({
                     <div className="space-y-1.5">
                       <Label htmlFor={`team-${team.id}-valid-from`}>Gültig ab</Label>
                       <Input
-                      id={`team-${team.id}-valid-from`}
-                      type="date"
-                      value={
-                        membershipWindowByTeam[team.id]?.validFrom ?? today
-                      }
-                      onChange={(event) =>
-                        setMembershipWindowByTeam((current) => ({
-                          ...current,
-                          [team.id]: {
-                            validFrom: event.target.value,
-                            validUntil:
-                              current[team.id]?.validUntil ?? '',
-                          },
-                        }))
-                      }
-                      aria-label={`Teamzugehörigkeit zu ${team.name} gültig ab`}
+                        id={`team-${team.id}-valid-from`}
+                        type="date"
+                        value={
+                          membershipWindowByTeam[team.id]?.validFrom ?? today
+                        }
+                        onChange={(event) =>
+                          setMembershipWindowByTeam((current) => ({
+                            ...current,
+                            [team.id]: {
+                              validFrom: event.target.value,
+                              validUntil: current[team.id]?.validUntil ?? '',
+                            },
+                          }))
+                        }
+                        aria-label={`Teamzugehörigkeit zu ${team.name} gültig ab`}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -377,49 +378,55 @@ export function TeamManagementSection({
                         Gültig bis (optional)
                       </Label>
                       <Input
-                      id={`team-${team.id}-valid-until`}
-                      type="date"
-                      value={
-                        membershipWindowByTeam[team.id]?.validUntil ?? ''
-                      }
-                      onChange={(event) =>
-                        setMembershipWindowByTeam((current) => ({
-                          ...current,
-                          [team.id]: {
-                            validFrom:
-                              current[team.id]?.validFrom ?? today,
-                            validUntil: event.target.value,
-                          },
-                        }))
-                      }
-                      aria-label={`Teamzugehörigkeit zu ${team.name} gültig bis`}
+                        id={`team-${team.id}-valid-until`}
+                        type="date"
+                        value={membershipWindowByTeam[team.id]?.validUntil ?? ''}
+                        onChange={(event) =>
+                          setMembershipWindowByTeam((current) => ({
+                            ...current,
+                            [team.id]: {
+                              validFrom: current[team.id]?.validFrom ?? today,
+                              validUntil: event.target.value,
+                            },
+                          }))
+                        }
+                        aria-label={`Teamzugehörigkeit zu ${team.name} gültig bis`}
                       />
                     </div>
                     <Button
                       variant="outline"
-                      disabled={!selectedEmployeeByTeam[team.id] || pendingAction !== null}
+                      disabled={
+                        !selectedEmployeeByTeam[team.id] || pendingAction !== null
+                      }
                       onClick={async () => {
                         const employeeRecordId =
                           selectedEmployeeByTeam[team.id];
                         if (!employeeRecordId) return;
-                        setPendingAction(`add:${team.id}`);
-                        try {
-                          const result = await addTeamMembership({
-                          teamId: team.id,
-                          employeeRecordId,
-                          validFrom:
-                            membershipWindowByTeam[team.id]?.validFrom ?? today,
-                          validUntil:
-                            membershipWindowByTeam[team.id]?.validUntil || null,
-                        });
-                        if (!result.success) {
+                        const membershipWindow = membershipWindowByTeam[team.id];
+                        const validFrom = membershipWindow?.validFrom ?? today;
+                        const validUntil = membershipWindow?.validUntil || null;
+                        if (validUntil && validUntil < validFrom) {
                           toast.error(
-                            result.error === 'overlap'
-                              ? 'Diese Teamzugehörigkeit besteht bereits.'
-                              : 'Das Teammitglied konnte nicht hinzugefügt werden.'
+                            '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
                           );
                           return;
                         }
+                        setPendingAction(`add:${team.id}`);
+                        try {
+                          const result = await addTeamMembership({
+                            teamId: team.id,
+                            employeeRecordId,
+                            validFrom,
+                            validUntil,
+                          });
+                          if (!result.success) {
+                            toast.error(
+                              result.error === 'overlap'
+                                ? 'Diese Teamzugehörigkeit besteht bereits.'
+                                : 'Das Teammitglied konnte nicht hinzugefügt werden.'
+                            );
+                            return;
+                          }
                           setSelectedEmployeeByTeam((current) => ({
                             ...current,
                             [team.id]: '',

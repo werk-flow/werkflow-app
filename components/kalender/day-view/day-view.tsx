@@ -34,7 +34,7 @@ import {
   reassignEntries,
   reassignEntryBatch
 } from '@/lib/time-tracking/actions';
-import { updateJob, unassignEmployee, assignEmployee } from '@/lib/jobs/actions';
+import { updateJob } from '@/lib/jobs/actions';
 import type { JobMoveResizeResult } from './job-block';
 import { ActionBanner, type ActionBannerState } from './undo-banner';
 import type { MoveResizeResult } from './work-session-block';
@@ -115,6 +115,7 @@ interface DayViewProps {
   onRefresh: () => void;
   onSilentRefresh?: () => void;
   onOperationStart?: () => void;
+  onUpdateJob?: typeof updateJob;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   onJobSuccess?: () => void | Promise<void>;
   changeRequestMap?: EntryChangeRequestMap;
@@ -139,6 +140,7 @@ export function DayView({
   onRefresh,
   onSilentRefresh,
   onOperationStart,
+  onUpdateJob: updateCalendarJob = updateJob,
   onManualEntrySuccess,
   onJobSuccess,
   changeRequestMap = {},
@@ -534,7 +536,7 @@ export function DayView({
           next.set(jobId, { plannedTime: originalPlannedTime, estimatedDurationMinutes: originalDurationMinutes });
           return next;
         });
-        await updateJob(jobId, {
+        await updateCalendarJob(jobId, {
           plannedTime: originalPlannedTime,
           estimatedDurationMinutes: originalDurationMinutes,
         });
@@ -542,7 +544,7 @@ export function DayView({
       },
     });
 
-    const updateResult = await updateJob(jobId, {
+    const updateResult = await updateCalendarJob(jobId, {
       plannedTime: newPlannedTime,
       estimatedDurationMinutes: newDurationMinutes,
     });
@@ -564,7 +566,7 @@ export function DayView({
         message: isMove ? 'Auftrag konnte nicht verschoben werden.' : 'Auftrag konnte nicht geändert werden.',
       });
     }
-  }, [silentRefresh, onOperationStart]);
+  }, [silentRefresh, onOperationStart, updateCalendarJob]);
 
   // ── Cross-row drag state ──
   type DragBlockPayload =
@@ -1056,36 +1058,23 @@ export function DayView({
             });
             return next;
           });
-          await unassignEmployee(job.id, targetMember.user_id);
-          await assignEmployee(job.id, origUserId);
-          if (newTime !== origTime || newDuration !== origDuration) {
-            await updateJob(job.id, {
-              plannedTime: origTime,
-              estimatedDurationMinutes: origDuration,
-            });
-          }
+          await updateCalendarJob(job.id, {
+            selectedUserIds: job.assignedUserIds,
+            plannedTime: origTime,
+            estimatedDurationMinutes: origDuration,
+          });
           silentRefresh();
         },
       });
 
-      const unassignResult = await unassignEmployee(job.id, origUserId);
+      const moveResult = await updateCalendarJob(job.id, {
+        selectedUserIds: newAssignedUserIds,
+        plannedTime: newTime,
+        estimatedDurationMinutes: newDuration,
+      });
       if (undone.current) { silentRefresh(); return; }
 
-      const assignResult = unassignResult.success
-        ? await assignEmployee(job.id, targetMember.user_id)
-        : { success: false, error: 'unassign_failed' };
-
-      if (undone.current) { silentRefresh(); return; }
-
-      const assignOk = unassignResult.success && assignResult.success;
-
-      if (assignOk) {
-        if (newTime !== origTime || newDuration !== origDuration) {
-          await updateJob(job.id, {
-            plannedTime: newTime,
-            estimatedDurationMinutes: newDuration,
-          });
-        }
+      if (moveResult.success) {
         silentRefresh();
       } else {
         setJobOverrides(prev => {
@@ -1105,7 +1094,7 @@ export function DayView({
         });
       }
     },
-    [effectiveHourWidth, silentRefresh, onOperationStart]
+    [effectiveHourWidth, silentRefresh, onOperationStart, updateCalendarJob]
   );
 
   const initiateCrossRowDrag = useCallback(

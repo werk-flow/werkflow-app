@@ -86,7 +86,7 @@ function buildQualificationSummary(
     teamNames: workspace.teams
       .filter((team) => !team.dissolvedAt && teamIds.has(team.id))
       .map((team) => team.name)
-      .sort(),
+      .sort((left, right) => left.localeCompare(right, 'de-DE')),
     entries: workspace.employeeCapabilities.flatMap((record) => {
       if (
         record.employeeRecordId !== employeeRecordId ||

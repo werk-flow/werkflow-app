@@ -93,6 +93,17 @@ function sicknessNotificationText(
     : `Krankmeldung: ${notification.personName}, ${range}${portion}.`;
 }
 
+function certificationNotificationText(
+  notification: Extract<
+    AttentionNotification,
+    { sourceType: 'employee_certification_expiry' }
+  >
+): string {
+  const phaseText =
+    notification.phase === 'expired' ? 'ist abgelaufen' : 'läuft bald ab';
+  return `${notification.capabilityName} von ${notification.personName} ${phaseText} (gültig bis ${formatDate(notification.validUntil)}).`;
+}
+
 export function AufgabenContent() {
   const [overview, setOverview] = useState<AttentionOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -358,11 +369,7 @@ export function AufgabenContent() {
                           ? sicknessNotificationText(notification)
                           : notification.sourceType ===
                               'employee_certification_expiry'
-                            ? `${notification.capabilityName} von ${notification.personName} ${
-                                notification.phase === 'expired'
-                                  ? 'ist abgelaufen'
-                                  : 'läuft bald ab'
-                              } (gültig bis ${range}).`
+                            ? certificationNotificationText(notification)
                             : `Urlaub vom ${range}${
                                 notification.dayPortion === 'half_day'
                                   ? ' (halbtags)'
@@ -377,6 +384,8 @@ export function AufgabenContent() {
                         )}
                       {notification.sourceType ===
                         'employee_certification_expiry' && (
+                        // The detail route resolves both user IDs and
+                        // employee-record IDs for personnel without a login.
                         <Link
                           href={`/mitarbeiter/${notification.employeeRecordId}`}
                           className="mt-0.5 inline-block text-xs text-primary hover:underline"

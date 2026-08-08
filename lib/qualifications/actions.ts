@@ -35,6 +35,13 @@ function isIsoDate(value: string | null | undefined): value is string {
   return Boolean(value && ISO_DATE_PATTERN.test(value));
 }
 
+function isOrderedRange(
+  validFrom: string,
+  validUntil: string | null | undefined
+): boolean {
+  return !validUntil || validUntil >= validFrom;
+}
+
 async function recordTeamEvent(input: {
   orgId: string;
   teamId: string;
@@ -533,7 +540,8 @@ export async function addTeamMembership(input: {
   }
   if (
     !isIsoDate(input.validFrom) ||
-    (input.validUntil && !isIsoDate(input.validUntil))
+    (input.validUntil && !isIsoDate(input.validUntil)) ||
+    !isOrderedRange(input.validFrom, input.validUntil)
   ) {
     return { success: false, error: 'invalid_input' };
   }
@@ -602,6 +610,16 @@ export async function endTeamMembership(input: {
     return { success: false, error: 'invalid_input' };
   }
   const admin = createSupabaseAdminClient();
+  const { data: membership } = await admin
+    .from('team_memberships')
+    .select('valid_from')
+    .eq('id', input.membershipId)
+    .eq('organization_id', auth.context.orgId)
+    .maybeSingle();
+  if (!membership) return { success: false, error: 'record_not_found' };
+  if (!isOrderedRange(membership.valid_from, input.validUntil)) {
+    return { success: false, error: 'invalid_input' };
+  }
   const { data, error } = await admin
     .from('team_memberships')
     .update({
@@ -645,7 +663,12 @@ export async function createCapability(input: {
   const name = input.name.trim();
   const warningDays =
     input.kind === 'certification' ? input.expiryWarningDays ?? 30 : 0;
-  if (!name || warningDays < 0 || warningDays > 365) {
+  if (
+    !name ||
+    !Number.isInteger(warningDays) ||
+    warningDays < 0 ||
+    warningDays > 365
+  ) {
     return { success: false, error: 'invalid_input' };
   }
   const { data, error } = await createSupabaseAdminClient()
@@ -703,7 +726,12 @@ export async function updateCapabilityDefinition(input: {
       ? input.expiryWarningDays ?? current.default_expiry_warning_days
       : 0;
   const name = input.name.trim();
-  if (!name || warningDays < 0 || warningDays > 365) {
+  if (
+    !name ||
+    !Number.isInteger(warningDays) ||
+    warningDays < 0 ||
+    warningDays > 365
+  ) {
     return { success: false, error: 'invalid_input' };
   }
   const description = normalizeOptionalText(input.description);
@@ -797,6 +825,9 @@ export async function addEmployeeCapability(input: {
     (input.validUntil && !isIsoDate(input.validUntil)) ||
     (input.renewalDueDate && !isIsoDate(input.renewalDueDate))
   ) {
+    return { success: false, error: 'invalid_input' };
+  }
+  if (!isOrderedRange(input.validFrom, input.validUntil)) {
     return { success: false, error: 'invalid_input' };
   }
   const admin = createSupabaseAdminClient();
@@ -935,7 +966,8 @@ export async function updateEmployeeCapability(input: {
     (input.validUntil && !isIsoDate(input.validUntil)) ||
     (input.renewalDueDate && !isIsoDate(input.renewalDueDate)) ||
     !CONFIRMATION_STATUSES.includes(input.confirmationStatus) ||
-    !EVIDENCE_STATES.includes(input.evidenceState)
+    !EVIDENCE_STATES.includes(input.evidenceState) ||
+    !isOrderedRange(input.validFrom, input.validUntil)
   ) {
     return { success: false, error: 'invalid_input' };
   }
@@ -1112,7 +1144,11 @@ export async function getJobQualificationDetail(
         .eq('job_id', jobId)
         .order('created_at', { ascending: true })
         .limit(100),
-      admin.from('job_assignments').select('user_id').eq('job_id', jobId),
+      admin
+        .from('job_assignments')
+        .select('user_id')
+        .eq('job_id', jobId)
+        .limit(201),
       admin
         .from('job_qualification_assessments')
         .select('created_at, override_reason, coverage_fingerprint')
@@ -1282,7 +1318,10 @@ export async function getAssignmentTeamOptions(): Promise<
     .eq('organization_id', auth.context.orgId)
     .is('dissolved_at', null)
     .order('name', { ascending: true })
-    .limit(100);
+    .limit(101);
   if (error) return { success: false, error: 'load_failed' };
+  if ((data?.length ?? 0) > 100) {
+    return { success: false, error: 'load_failed' };
+  }
   return { success: true, teams: data ?? [] };
 }

@@ -133,7 +133,12 @@ export function CalendarContainer({
           result.error === 'stale_evaluation') &&
         'evaluation' in result
       ) {
+        // The dialog blocks on human input and can outlive the mutation pause.
+        realtimePausedUntilRef.current = Date.now() + 120_000;
         const approval = await requestApproval(result.evaluation);
+        if (!approval) {
+          realtimePausedUntilRef.current = Date.now() + 1000;
+        }
         if (approval) {
           // The confirmation dialog may stay open longer than the original
           // mutation pause. Extend it before the approved retry so its own
@@ -1631,6 +1636,7 @@ export function CalendarContainer({
                 onRefresh={handleManualRefresh}
                 onSilentRefresh={handleSilentRefresh}
                 onOperationStart={handleOperationStart}
+                onUpdateJob={updateJob}
                 onManualEntrySuccess={handleManualEntrySuccess}
                 onJobSuccess={handleSilentRefresh}
                 changeRequestMap={changeRequestMap}

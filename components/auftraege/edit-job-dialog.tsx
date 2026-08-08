@@ -74,6 +74,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
   update_failed: 'Fehler beim Aktualisieren des Auftrags.',
+  partial_update:
+    'Die Auftragsdaten wurden gespeichert, aber die Zuweisungen konnten nicht vollständig aktualisiert werden. Bitte lade die Ansicht neu und prüfe den Auftrag.',
+  rollback_failed:
+    'Der Auftrag konnte nicht vollständig angelegt werden. Bitte lade die Ansicht neu und prüfe die Auftragsliste.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
 
@@ -258,6 +262,8 @@ export function EditJobDialog({
           setQualificationWarning(result.evaluation);
           return;
         }
+        setQualificationWarning(null);
+        setConfirmedDateRemovalForWarning(false);
         if (result.error === 'title_or_description_required') {
           setContentError(ERROR_MESSAGES[result.error]);
         } else {

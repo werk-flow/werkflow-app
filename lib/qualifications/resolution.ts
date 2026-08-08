@@ -252,7 +252,7 @@ export function resolveCertificationExpiryPhase(
 ): CertificationExpiryPhase {
   if (!validUntil) return 'none';
   if (validUntil < today) return 'expired';
-  if (warningDays === 0) return 'none';
+  if (!Number.isFinite(warningDays) || warningDays <= 0) return 'none';
 
   const todayDate = new Date(`${today}T00:00:00Z`);
   const warningDate = new Date(todayDate);
