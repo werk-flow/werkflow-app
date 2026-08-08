@@ -70,6 +70,38 @@ export function resolveVacationDecisionFacts(
   return null;
 }
 
+export type SicknessReportFacts = {
+  status: 'reported' | 'cancelled';
+  /**
+   * Opaque item-state version built from the availability-relevant facts
+   * (status, dates, portion). A correction changes the version and makes the
+   * SAME notification unread again; evidence bookkeeping deliberately does
+   * not — it is office-internal and no news to either audience.
+   */
+  stateVersion: string;
+  /** When the latest material fact happened (cancellation wins). */
+  occurredAt: string;
+};
+
+/** The notification facts of one sickness report (P1-08). */
+export function resolveSicknessReportFacts(report: {
+  status: 'reported' | 'cancelled';
+  startDate: string;
+  endDate: string | null;
+  dayPortion: 'full' | 'half_day';
+  updatedAt: string;
+  cancelledAt: string | null;
+}): SicknessReportFacts {
+  return {
+    status: report.status,
+    stateVersion: `${report.status}:${report.startDate}:${report.endDate ?? 'open'}:${report.dayPortion}`,
+    occurredAt:
+      report.status === 'cancelled'
+        ? (report.cancelledAt ?? report.updatedAt)
+        : report.updatedAt,
+  };
+}
+
 /**
  * A notification is unread until the user has seen exactly the current state
  * version; any later domain state change makes it unread again.

@@ -185,6 +185,16 @@ export function getBusinessTodayIso(): string {
   return toBusinessIsoDate(new Date());
 }
 
+/**
+ * Shift an ISO business date by whole days. Noon UTC anchors the calendar
+ * date across DST changes (same technique as the target resolver).
+ */
+export function shiftIsoDateByDays(dateIso: string, days: number): string {
+  const date = new Date(`${dateIso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function getEmploymentState(
   record: Pick<EmployeeRecord, 'entryDate' | 'exitDate'>,
   today: Date = new Date()

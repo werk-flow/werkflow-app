@@ -58,14 +58,39 @@ function formatOpenSince(days: number): string {
   return `offen seit ${days} Tagen`;
 }
 
-const NOTIFICATION_STATUS_TEXT: Record<
-  AttentionNotification['status'],
+const VACATION_DECISION_STATUS_TEXT: Record<
+  'approved' | 'rejected' | 'cancelled',
   string
 > = {
   approved: 'genehmigt',
   rejected: 'abgelehnt',
   cancelled: 'storniert',
 };
+
+// P1-08: sickness ranges are honest about open ends („bis auf Weiteres").
+function formatSicknessRange(startDate: string, endDate: string | null): string {
+  if (endDate === null) return `${formatDate(startDate)} – bis auf Weiteres`;
+  return formatRange(startDate, endDate);
+}
+
+// Neutral, minimal notification copy (privacy matrix: dates only, no type).
+function sicknessNotificationText(
+  notification: Extract<AttentionNotification, { sourceType: 'sickness_report' }>
+): string {
+  const range = formatSicknessRange(
+    notification.startDate,
+    notification.endDate
+  );
+  const portion = notification.dayPortion === 'half_day' ? ' (halbtags)' : '';
+  if (notification.isOwn) {
+    return notification.status === 'cancelled'
+      ? `Deine Krankmeldung vom ${range}${portion} wurde storniert.`
+      : `Für dich wurde eine Krankmeldung erfasst: ${range}${portion}.`;
+  }
+  return notification.status === 'cancelled'
+    ? `Krankmeldung storniert: ${notification.personName}, ${range}${portion}.`
+    : `Krankmeldung: ${notification.personName}, ${range}${portion}.`;
+}
 
 export function AufgabenContent() {
   const [overview, setOverview] = useState<AttentionOverview | null>(null);
@@ -130,6 +155,7 @@ export function AufgabenContent() {
   useRealtimeEvent('time_entries', scheduleRefetch);
   useRealtimeEvent('entry_change_requests', scheduleRefetch);
   useRealtimeEvent('vacation_requests', scheduleRefetch);
+  useRealtimeEvent('sickness_reports', scheduleRefetch);
   useRealtimeEvent('client_requests', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
@@ -141,6 +167,7 @@ export function AufgabenContent() {
     setBusyKey(notification.sourceId);
     try {
       const result = await markAttentionNotificationRead({
+        sourceType: notification.sourceType,
         sourceId: notification.sourceId,
         stateVersion: notification.stateVersion,
       });
@@ -295,13 +322,16 @@ export function AufgabenContent() {
         ) : (
           <Card className="gap-0 divide-y py-0">
             {overview.notifications.map((notification) => {
-              const range = formatRange(
-                notification.startDate,
-                notification.endDate
-              );
+              const range =
+                notification.sourceType === 'sickness_report'
+                  ? formatSicknessRange(
+                      notification.startDate,
+                      notification.endDate
+                    )
+                  : formatRange(notification.startDate, notification.endDate);
               return (
                 <div
-                  key={notification.sourceId}
+                  key={`${notification.sourceType}:${notification.sourceId}`}
                   className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
                   data-notification-source={notification.sourceId}
                   data-unread={notification.unread ? 'true' : 'false'}
@@ -317,17 +347,20 @@ export function AufgabenContent() {
                       <p
                         className={`text-sm ${notification.unread ? 'font-medium' : ''}`}
                       >
-                        Urlaub vom {range}
-                        {notification.dayPortion === 'half_day'
-                          ? ' (halbtags)'
-                          : ''}{' '}
-                        wurde {NOTIFICATION_STATUS_TEXT[notification.status]}.
+                        {notification.sourceType === 'sickness_report'
+                          ? sicknessNotificationText(notification)
+                          : `Urlaub vom ${range}${
+                              notification.dayPortion === 'half_day'
+                                ? ' (halbtags)'
+                                : ''
+                            } wurde ${VACATION_DECISION_STATUS_TEXT[notification.status]}.`}
                       </p>
-                      {notification.comment && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Grund: {notification.comment}
-                        </p>
-                      )}
+                      {notification.sourceType === 'vacation_decision' &&
+                        notification.comment && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Grund: {notification.comment}
+                          </p>
+                        )}
                     </div>
                   </div>
                   {notification.unread && (

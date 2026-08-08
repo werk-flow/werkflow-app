@@ -39,13 +39,15 @@ export type DailyTargetSource =
   | 'default';
 
 /**
- * Approved absence span feeding target resolution (P1-06). Only APPROVED
- * absence may ever reach this input — pending requests are provisional and
- * never change targets. Shaped so P1-08 can add further types (sickness)
- * without a second mechanism.
+ * Effective absence span feeding target resolution. Only EFFECTIVE absence
+ * may ever reach this input: approved vacation (P1-06; pending requests are
+ * provisional and never change targets) and active sickness reports (P1-08;
+ * a report is a fact and effective immediately, cancelled reports never
+ * qualify, open-ended reports are clamped to the caller's window by the
+ * loader). One union, one mechanism — no parallel absence pathway.
  */
 export type ApprovedAbsenceSpan = {
-  type: 'vacation';
+  type: 'vacation' | 'sickness';
   /** Inclusive ISO Berlin business dates. */
   startDate: string;
   endDate: string;
@@ -210,9 +212,15 @@ export function resolveDailyTarget({
   const isHoliday = holidayName !== null;
   const isClosureDay = closure !== undefined;
 
-  const absenceSpan = (absences ?? []).find(
+  // A day can be covered by several spans (sickness during approved vacation
+  // is a real case). Deterministic precedence: vacation wins the display
+  // attribution so pre-P1-08 behavior stays bit-identical; the target math is
+  // unaffected on full days either way.
+  const coveringSpans = (absences ?? []).filter(
     (span) => span.startDate <= dateIso && dateIso <= span.endDate
   );
+  const absenceSpan =
+    coveringSpans.find((span) => span.type === 'vacation') ?? coveringSpans[0];
   const absence: DailyTargetAbsence | null = absenceSpan
     ? { type: absenceSpan.type, portion: absenceSpan.dayPortion }
     : null;

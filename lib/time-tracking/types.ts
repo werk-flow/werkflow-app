@@ -183,7 +183,17 @@ export type ZeiterfassungOverview = {
 };
 
 export type ClockResult =
-  | { success: true; entry: TimeEntry; jobInfo?: ClockJobInfo | null }
+  | {
+      success: true;
+      entry: TimeEntry;
+      jobInfo?: ClockJobInfo | null;
+      /**
+       * P1-08: clocking in on a day covered by an active sickness report
+       * succeeds (a recovered person showing up early is reality, not an
+       * error) but carries this visible notice so the report gets corrected.
+       */
+      notice?: 'sickness_reported_today';
+    }
   | {
       success: false;
       error: 'working_in_other_org';

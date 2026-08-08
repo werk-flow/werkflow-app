@@ -36,6 +36,7 @@ import {
   isNotificationUnread,
   isWithinNotificationWindow,
   notificationWindowStartIso,
+  resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
 } from './resolution';
@@ -307,6 +308,196 @@ async function deriveOwnNotifications(
   };
 }
 
+// P1-08: sickness notices for both audiences of the privacy matrix — the
+// affected person (office-recorded or office-cancelled reports on their own
+// record) and admin/büro managers (reports they did not record themselves).
+// One item identity per report: when both audiences apply to one viewer, the
+// own-flavored item is listed first and deduplication keeps it.
+async function deriveSicknessNotifications(context: ActionContext): Promise<{
+  notifications: AttentionNotification[];
+  failed: boolean;
+}> {
+  const admin = createSupabaseAdminClient();
+  const isManager = context.role === 'admin' || context.role === 'buero';
+
+  const { data: ownRecord, error: ownRecordError } = await admin
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', context.orgId)
+    .eq('user_id', context.userId)
+    .maybeSingle();
+  if (ownRecordError) {
+    console.error('Failed to load own record for sickness notices:', ownRecordError);
+    return { notifications: [], failed: true };
+  }
+  const ownRecordId = ownRecord?.id ?? null;
+  if (!isManager && !ownRecordId) return { notifications: [], failed: false };
+
+  const businessToday = getBusinessTodayIso();
+  // Corrections and cancellations bump updated_at, so one bound covers every
+  // material change inside the surfaced window.
+  const windowStart = notificationWindowStartIso(businessToday);
+  let reportsQuery = admin
+    .from('sickness_reports')
+    .select(
+      'id, employee_record_id, status, start_date, end_date, day_portion, reported_by, cancelled_by, cancelled_at, updated_at'
+    )
+    .eq('organization_id', context.orgId)
+    .gte('updated_at', windowStart);
+  if (!isManager && ownRecordId) {
+    reportsQuery = reportsQuery.eq('employee_record_id', ownRecordId);
+  }
+
+  const [reportsResult, readStatesResult] = await Promise.all([
+    reportsQuery,
+    admin
+      .from('attention_read_states')
+      .select('source_id, state_version')
+      .eq('organization_id', context.orgId)
+      .eq('user_id', context.userId)
+      .eq('source_type', 'sickness_report'),
+  ]);
+  if (reportsResult.error || readStatesResult.error) {
+    console.error(
+      'Failed to load sickness notifications:',
+      reportsResult.error ?? readStatesResult.error
+    );
+    return { notifications: [], failed: true };
+  }
+
+  const readVersionBySourceId = new Map(
+    (readStatesResult.data ?? []).map((row) => [
+      row.source_id,
+      row.state_version,
+    ])
+  );
+
+  type ReportRow = NonNullable<typeof reportsResult.data>[number];
+  const rows = reportsResult.data ?? [];
+
+  const isOwnAudience = (row: ReportRow): boolean => {
+    if (!ownRecordId || row.employee_record_id !== ownRecordId) return false;
+    // Own self-managed reports are no news; office involvement is.
+    if (row.reported_by !== context.userId) return true;
+    return row.cancelled_by !== null && row.cancelled_by !== context.userId;
+  };
+  const isManagerAudience = (row: ReportRow): boolean => {
+    if (!isManager) return false;
+    // The recording (or cancelling) manager already knows their own action.
+    if (row.reported_by === context.userId && row.status === 'reported') {
+      return false;
+    }
+    if (row.status === 'cancelled' && row.cancelled_by === context.userId) {
+      return false;
+    }
+    return true;
+  };
+
+  const ownRows = rows.filter(isOwnAudience);
+  const managerRows = rows.filter(
+    (row) => isManagerAudience(row) && !isOwnAudience(row)
+  );
+
+  // Names only for manager-audience items (two-step lookup; no FK path from
+  // employee_records to profiles for PostgREST embeds).
+  const nameRecordIds = [
+    ...new Set(managerRows.map((row) => row.employee_record_id)),
+  ];
+  let nameByRecordId = new Map<string, string>();
+  if (nameRecordIds.length > 0) {
+    const { data: records, error: recordsError } = await admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name')
+      .in('id', nameRecordIds);
+    if (recordsError) {
+      console.error('Failed to load records for sickness notices:', recordsError);
+      return { notifications: [], failed: true };
+    }
+    const userIds = [
+      ...new Set(
+        (records ?? [])
+          .map((row) => row.user_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    const profilesResult =
+      userIds.length > 0
+        ? await admin
+            .from('profiles')
+            .select('id, first_name, last_name, email')
+            .in('id', userIds)
+        : { data: [], error: null };
+    if (profilesResult.error) {
+      console.error(
+        'Failed to load profiles for sickness notices:',
+        profilesResult.error
+      );
+      return { notifications: [], failed: true };
+    }
+    const profileById = new Map(
+      (profilesResult.data ?? []).map((profile) => [profile.id, profile])
+    );
+    nameByRecordId = new Map(
+      (records ?? []).map((record) => {
+        const profile = record.user_id
+          ? profileById.get(record.user_id)
+          : undefined;
+        const name = profile
+          ? formatProfileName(profile)
+          : `${record.first_name ?? ''} ${record.last_name ?? ''}`.trim();
+        return [record.id, name || 'Unbekannt'];
+      })
+    );
+  }
+
+  const toNotification = (
+    row: ReportRow,
+    isOwn: boolean
+  ): AttentionNotification | null => {
+    const facts = resolveSicknessReportFacts({
+      status: row.status as 'reported' | 'cancelled',
+      startDate: row.start_date,
+      endDate: row.end_date,
+      dayPortion: row.day_portion as VacationDayPortion,
+      updatedAt: row.updated_at,
+      cancelledAt: row.cancelled_at,
+    });
+    if (!isWithinNotificationWindow(facts.occurredAt, businessToday)) {
+      return null;
+    }
+    return {
+      sourceType: 'sickness_report',
+      sourceId: row.id,
+      personName: isOwn
+        ? null
+        : (nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt'),
+      isOwn,
+      status: facts.status,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      dayPortion: row.day_portion as VacationDayPortion,
+      stateVersion: facts.stateVersion,
+      occurredAt: facts.occurredAt,
+      unread: isNotificationUnread(
+        facts.stateVersion,
+        readVersionBySourceId.get(row.id) ?? null
+      ),
+    };
+  };
+
+  const notifications: AttentionNotification[] = [];
+  for (const row of ownRows) {
+    const notification = toNotification(row, true);
+    if (notification) notifications.push(notification);
+  }
+  for (const row of managerRows) {
+    const notification = toNotification(row, false);
+    if (notification) notifications.push(notification);
+  }
+
+  return { notifications, failed: false };
+}
+
 // ============================================
 // Overview and counts
 // ============================================
@@ -321,13 +512,19 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     if (!auth.success) return auth;
     const { context } = auth;
 
-    const [approvals, openRequests, notifications, ownOverviewResult] =
-      await Promise.all([
-        deriveApprovalTasks(context),
-        deriveOpenRequestTasks(context),
-        deriveOwnNotifications(context),
-        getOwnVacationOverview(),
-      ]);
+    const [
+      approvals,
+      openRequests,
+      notifications,
+      sicknessNotifications,
+      ownOverviewResult,
+    ] = await Promise.all([
+      deriveApprovalTasks(context),
+      deriveOpenRequestTasks(context),
+      deriveOwnNotifications(context),
+      deriveSicknessNotifications(context),
+      getOwnVacationOverview(),
+    ]);
 
     // A partially failed derivation must be visible, never a silently
     // shortened list that reads as "nothing to do".
@@ -335,6 +532,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       approvals.failed ||
       openRequests.failed ||
       notifications.failed ||
+      sicknessNotifications.failed ||
       !ownOverviewResult.success
     ) {
       return { success: false, error: 'load_failed' };
@@ -358,7 +556,12 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
           ...approvals.tasks,
           ...openRequests.tasks,
         ]),
-        notifications: notifications.notifications,
+        notifications: sortNotificationsNewestFirst(
+          dedupeAttentionItems([
+            ...notifications.notifications,
+            ...sicknessNotifications.notifications,
+          ])
+        ),
         ownRequests,
       },
     };
@@ -383,23 +586,34 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     if (!auth.success) return auth;
     const { context } = auth;
 
-    const [approvals, openRequests, notifications] = await Promise.all([
-      deriveApprovalTasks(context),
-      deriveOpenRequestTasks(context),
-      deriveOwnNotifications(context),
-    ]);
-    if (approvals.failed || openRequests.failed || notifications.failed) {
+    const [approvals, openRequests, notifications, sicknessNotifications] =
+      await Promise.all([
+        deriveApprovalTasks(context),
+        deriveOpenRequestTasks(context),
+        deriveOwnNotifications(context),
+        deriveSicknessNotifications(context),
+      ]);
+    if (
+      approvals.failed ||
+      openRequests.failed ||
+      notifications.failed ||
+      sicknessNotifications.failed
+    ) {
       return { success: false, error: 'load_failed' };
     }
 
     const approvalTasks = dedupeAttentionItems(approvals.tasks);
     const requestTasks = dedupeAttentionItems(openRequests.tasks);
+    const allNotifications = dedupeAttentionItems([
+      ...notifications.notifications,
+      ...sicknessNotifications.notifications,
+    ]);
     return {
       success: true,
       counts: {
         approvalsCount: approvalTasks.length,
         actionableCount: approvalTasks.length + requestTasks.length,
-        unreadNotificationCount: notifications.notifications.filter(
+        unreadNotificationCount: allNotifications.filter(
           (notification) => notification.unread
         ).length,
       },
@@ -418,38 +632,77 @@ export type MarkNotificationReadResult =
   | { success: true }
   | { success: false; error: string };
 
+type ReadableNotificationSourceType = 'vacation_decision' | 'sickness_report';
+
 async function persistNotificationReadMarker(
   context: ActionContext,
-  input: { sourceId: string; stateVersion: string }
+  input: {
+    sourceType: ReadableNotificationSourceType;
+    sourceId: string;
+    stateVersion: string;
+  }
 ): Promise<MarkNotificationReadResult> {
   const admin = createSupabaseAdminClient();
 
-  // Self-only: the notification's request must belong to the caller's own
-  // employee record in the active organization.
-  const { data: request, error: requestError } = await admin
-    .from('vacation_requests')
-    .select('id, employee_record_id, organization_id')
-    .eq('organization_id', context.orgId)
-    .eq('id', input.sourceId)
-    .maybeSingle();
-  if (requestError) {
-    console.error('Failed to load request for read marker:', requestError);
-    return { success: false, error: 'update_failed' };
-  }
-  if (!request) return { success: false, error: 'request_not_found' };
+  if (input.sourceType === 'vacation_decision') {
+    // Self-only: the notification's request must belong to the caller's own
+    // employee record in the active organization.
+    const { data: request, error: requestError } = await admin
+      .from('vacation_requests')
+      .select('id, employee_record_id, organization_id')
+      .eq('organization_id', context.orgId)
+      .eq('id', input.sourceId)
+      .maybeSingle();
+    if (requestError) {
+      console.error('Failed to load request for read marker:', requestError);
+      return { success: false, error: 'update_failed' };
+    }
+    if (!request) return { success: false, error: 'request_not_found' };
 
-  const { data: record, error: recordError } = await admin
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .eq('user_id', context.userId)
-    .maybeSingle();
-  if (recordError) {
-    console.error('Failed to load own record for read marker:', recordError);
-    return { success: false, error: 'update_failed' };
-  }
-  if (!record || record.id !== request.employee_record_id) {
-    return { success: false, error: 'not_authorized' };
+    const { data: record, error: recordError } = await admin
+      .from('employee_records')
+      .select('id')
+      .eq('organization_id', context.orgId)
+      .eq('user_id', context.userId)
+      .maybeSingle();
+    if (recordError) {
+      console.error('Failed to load own record for read marker:', recordError);
+      return { success: false, error: 'update_failed' };
+    }
+    if (!record || record.id !== request.employee_record_id) {
+      return { success: false, error: 'not_authorized' };
+    }
+  } else {
+    // Sickness notices have two audiences (privacy matrix): the affected
+    // person and admin/büro managers. Either may mark their own copy read.
+    const { data: report, error: reportError } = await admin
+      .from('sickness_reports')
+      .select('id, employee_record_id, organization_id')
+      .eq('organization_id', context.orgId)
+      .eq('id', input.sourceId)
+      .maybeSingle();
+    if (reportError) {
+      console.error('Failed to load report for read marker:', reportError);
+      return { success: false, error: 'update_failed' };
+    }
+    if (!report) return { success: false, error: 'request_not_found' };
+
+    const isManager = context.role === 'admin' || context.role === 'buero';
+    if (!isManager) {
+      const { data: record, error: recordError } = await admin
+        .from('employee_records')
+        .select('id')
+        .eq('organization_id', context.orgId)
+        .eq('user_id', context.userId)
+        .maybeSingle();
+      if (recordError) {
+        console.error('Failed to load own record for read marker:', recordError);
+        return { success: false, error: 'update_failed' };
+      }
+      if (!record || record.id !== report.employee_record_id) {
+        return { success: false, error: 'not_authorized' };
+      }
+    }
   }
 
   const now = new Date().toISOString();
@@ -459,7 +712,7 @@ async function persistNotificationReadMarker(
       {
         organization_id: context.orgId,
         user_id: context.userId,
-        source_type: 'vacation_decision',
+        source_type: input.sourceType,
         source_id: input.sourceId,
         state_version: input.stateVersion,
         read_at: now,
@@ -475,7 +728,7 @@ async function persistNotificationReadMarker(
   const { error: eventError } = await admin.from('attention_events').insert({
     organization_id: context.orgId,
     user_id: context.userId,
-    source_type: 'vacation_decision',
+    source_type: input.sourceType,
     source_id: input.sourceId,
     event_type: 'marked_read',
     event_payload: { state_version: input.stateVersion },
@@ -490,6 +743,7 @@ async function persistNotificationReadMarker(
 }
 
 export async function markAttentionNotificationRead(input: {
+  sourceType: ReadableNotificationSourceType;
   sourceId: string;
   stateVersion: string;
 }): Promise<MarkNotificationReadResult> {
@@ -498,7 +752,9 @@ export async function markAttentionNotificationRead(input: {
       typeof input.sourceId !== 'string' ||
       typeof input.stateVersion !== 'string' ||
       input.stateVersion.length === 0 ||
-      input.stateVersion.length > 200
+      input.stateVersion.length > 200 ||
+      (input.sourceType !== 'vacation_decision' &&
+        input.sourceType !== 'sickness_report')
     ) {
       return { success: false, error: 'invalid_input' };
     }
@@ -522,17 +778,24 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
     if (!auth.success) return auth;
     const { context } = auth;
 
-    // Ownership is established once by derivation: deriveOwnNotifications
-    // only ever returns the caller's own decision notifications, so the
-    // per-item request/record validation of the single-item path is
-    // redundant here and the writes can be two batched statements instead
-    // of a sequential per-item loop that could stop halfway.
-    const derived = await deriveOwnNotifications(context);
-    if (derived.failed) return { success: false, error: 'load_failed' };
+    // Ownership is established once by derivation: the derivations only ever
+    // return notifications this viewer may see (own decisions; sickness
+    // notices per the privacy-matrix audiences), so the per-item validation
+    // of the single-item path is redundant here and the writes can be two
+    // batched statements instead of a sequential per-item loop that could
+    // stop halfway.
+    const [derived, derivedSickness] = await Promise.all([
+      deriveOwnNotifications(context),
+      deriveSicknessNotifications(context),
+    ]);
+    if (derived.failed || derivedSickness.failed) {
+      return { success: false, error: 'load_failed' };
+    }
 
-    const unread = derived.notifications.filter(
-      (notification) => notification.unread
-    );
+    const unread = dedupeAttentionItems([
+      ...derived.notifications,
+      ...derivedSickness.notifications,
+    ]).filter((notification) => notification.unread);
     if (unread.length === 0) return { success: true };
 
     const admin = createSupabaseAdminClient();
@@ -543,7 +806,7 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
         unread.map((notification) => ({
           organization_id: context.orgId,
           user_id: context.userId,
-          source_type: 'vacation_decision',
+          source_type: notification.sourceType,
           source_id: notification.sourceId,
           state_version: notification.stateVersion,
           read_at: now,
@@ -560,7 +823,7 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
       unread.map((notification) => ({
         organization_id: context.orgId,
         user_id: context.userId,
-        source_type: 'vacation_decision',
+        source_type: notification.sourceType,
         source_id: notification.sourceId,
         event_type: 'marked_read',
         event_payload: {

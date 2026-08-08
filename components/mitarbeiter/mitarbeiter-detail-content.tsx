@@ -47,6 +47,7 @@ import { StatusBadge } from './status-badge';
 import { PersonalienSection } from './personalien-section';
 import { EmploymentConditionsSection } from './employment-conditions-section';
 import { WorkScheduleSection } from './work-schedule-section';
+import { SicknessReportsSection } from './sickness-reports-section';
 import { PersonnelHistorySection } from './personnel-history-section';
 import { ResponsibilitySummarySection } from './responsibility-summary-section';
 import { EmploymentStateBadge } from './personnel-state-badges';
@@ -485,6 +486,10 @@ export function MitarbeiterDetailContent({
                 conditions={personnel.conditions}
                 canEdit={isAdminOrManager}
               />
+            )}
+
+            {personnel && isAdminOrManager && (
+              <SicknessReportsSection recordId={personnel.record.id} />
             )}
 
             {personnel && responsibilitySettings ? (

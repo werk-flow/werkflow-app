@@ -28,6 +28,7 @@ export type RealtimeTable =
   | 'work_schedules'
   | 'organization_closure_days'
   | 'vacation_requests'
+  | 'sickness_reports'
   | 'attention_read_states'
   | 'attention_events'
   | 'organization_responsibility_configurations'
@@ -83,6 +84,7 @@ const TABLES: RealtimeTable[] = [
   'work_schedules',
   'organization_closure_days',
   'vacation_requests',
+  'sickness_reports',
   'attention_read_states',
   'attention_events',
   'organization_responsibility_configurations',
@@ -313,6 +315,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('vacation_requests', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sickness_reports',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('sickness_reports', p)
         )
         .on(
           'postgres_changes',

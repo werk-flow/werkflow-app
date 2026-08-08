@@ -1,7 +1,9 @@
 import { expect, test } from './support/fixtures';
 import { getHolidayName } from '../../lib/personnel/holidays';
+import { resolveDailyTarget } from '../../lib/personnel/targets';
 import {
   getEmployeeRecordStateByUser,
+  getTargetContextForRecord,
   getVisibleWorkScheduleRecordIdsAs,
 } from './support/db';
 import {
@@ -221,6 +223,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
   test('Betriebsruhe heute setzt das Tagesziel sichtbar auf null', async ({
     adminPage,
     employeePage,
+    world,
   }) => {
     const todayIso = berlinTodayIso();
     await addClosureDayViaSettings(adminPage, {
@@ -234,10 +237,27 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
       visibleText(employeePage, 'heute keine Sollarbeitszeit.')
     ).toBeVisible();
 
-    // Removing a today/future closure day is allowed; the target returns.
+    // Removing a today/future closure day is allowed; the day returns to its
+    // schedule truth. That truth is weekday-dependent (a weekend run has no
+    // target to return to), so the expected text is computed from the same
+    // stored state and resolver the app uses — never assumed.
     await removeClosureDayViaSettings(adminPage, toGermanDate(todayIso));
+    const employeeRecord = await getEmployeeRecordStateByUser(
+      world.orgId,
+      world.users.employee.id
+    );
+    const context = await getTargetContextForRecord(
+      world.orgId,
+      employeeRecord.id
+    );
+    const todayTarget = resolveDailyTarget({ dateIso: todayIso, ...context });
     await employeePage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(employeePage, 'Tagesziel:');
+    await expectVisibleAfterSave(
+      employeePage,
+      todayTarget.targetMinutes > 0
+        ? 'Tagesziel:'
+        : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'
+    );
     await expect(employeePage.getByText('Betriebsruhe')).toHaveCount(0);
   });
 

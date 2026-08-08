@@ -2793,6 +2793,133 @@ export type Database = {
           },
         ]
       }
+      sickness_report_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          sickness_report_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          sickness_report_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          sickness_report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sickness_report_events_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sickness_report_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sickness_report_events_sickness_report_id_fkey"
+            columns: ["sickness_report_id"]
+            isOneToOne: false
+            referencedRelation: "sickness_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sickness_reports: {
+        Row: {
+          absence_type: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          day_portion: string
+          employee_record_id: string
+          end_date: string | null
+          evidence_required: boolean
+          evidence_status: string
+          id: string
+          organization_id: string
+          reported_by: string | null
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          absence_type?: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          day_portion?: string
+          employee_record_id: string
+          end_date?: string | null
+          evidence_required?: boolean
+          evidence_status?: string
+          id?: string
+          organization_id: string
+          reported_by?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          absence_type?: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          day_portion?: string
+          employee_record_id?: string
+          end_date?: string | null
+          evidence_required?: boolean
+          evidence_status?: string
+          id?: string
+          organization_id?: string
+          reported_by?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sickness_reports_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sickness_reports_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           created_at: string

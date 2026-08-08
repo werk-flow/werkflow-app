@@ -29,6 +29,7 @@ import {
   type OrganizationHolidayCalendar,
 } from '@/lib/personnel/targets';
 import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 
 interface CalendarMember {
   user_id: string;
@@ -48,6 +49,8 @@ interface FullCalendarViewProps {
   holidayCalendar?: OrganizationHolidayCalendar;
   /** Vacation absence entries (P1-06): approved plus provisional pending. */
   vacationEntries?: VacationCalendarEntry[];
+  /** Sickness absence entries (P1-08): neutral „Abwesend", never the type. */
+  sicknessEntries?: SicknessCalendarEntry[];
   currentUserId: string;
   isAdminOrManager: boolean;
   onEventClick: (session: InteractiveCalendarSession) => void;
@@ -78,6 +81,7 @@ export function FullCalendarView({
   organizationSettings,
   holidayCalendar,
   vacationEntries = [],
+  sicknessEntries = [],
   currentUserId,
   isAdminOrManager,
   onEventClick,
@@ -500,9 +504,39 @@ export function FullCalendarView({
     });
   }, [vacationEntries]);
 
+  // Sickness absence entries (P1-08): same calm purple planning state as
+  // approved vacation, but the label is deliberately neutral — the shared
+  // calendar shows WHO is unavailable WHEN, never why (privacy matrix).
+  const sicknessEvents = useMemo(() => {
+    return sicknessEntries.map((entry) => {
+      const [year, month, day] = entry.endDate.split('-').map(Number);
+      const exclusiveEnd = new Date(Date.UTC(year, month - 1, day + 1));
+      const endIso = `${exclusiveEnd.getUTCFullYear()}-${String(exclusiveEnd.getUTCMonth() + 1).padStart(2, '0')}-${String(exclusiveEnd.getUTCDate()).padStart(2, '0')}`;
+      const halfDaySuffix =
+        entry.dayPortion === 'half_day' ? ' (halber Tag)' : '';
+      const openEndSuffix = entry.openEnded ? ' (bis auf Weiteres)' : '';
+      return {
+        id: `sickness-${entry.id}`,
+        title: `Abwesend – ${entry.personName}${halfDaySuffix}${openEndSuffix}`,
+        start: entry.startDate,
+        end: endIso,
+        allDay: true,
+        editable: false,
+        classNames: ['fc-vacation-approved'],
+        extendedProps: { isHolidayContext: true },
+      };
+    });
+  }, [sicknessEntries]);
+
   const allEvents = useMemo(
-    () => [...events, ...jobEvents, ...holidayContextEvents, ...vacationEvents],
-    [events, jobEvents, holidayContextEvents, vacationEvents]
+    () => [
+      ...events,
+      ...jobEvents,
+      ...holidayContextEvents,
+      ...vacationEvents,
+      ...sicknessEvents,
+    ],
+    [events, jobEvents, holidayContextEvents, vacationEvents, sicknessEvents]
   );
 
   // Sync date with FullCalendar

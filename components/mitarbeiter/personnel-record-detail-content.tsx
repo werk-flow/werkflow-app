@@ -4,6 +4,7 @@ import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { PersonalienSection } from '@/components/mitarbeiter/personalien-section';
 import { EmploymentConditionsSection } from '@/components/mitarbeiter/employment-conditions-section';
 import { WorkScheduleSection } from '@/components/mitarbeiter/work-schedule-section';
+import { SicknessReportsSection } from '@/components/mitarbeiter/sickness-reports-section';
 import { PersonnelHistorySection } from '@/components/mitarbeiter/personnel-history-section';
 import { PersonnelInviteDialog } from '@/components/mitarbeiter/personnel-invite-dialog';
 import {
@@ -91,6 +92,7 @@ export function PersonnelRecordDetailContent({
             conditions={conditions}
             canEdit={canEdit}
           />
+          <SicknessReportsSection recordId={record.id} />
           <PersonnelHistorySection events={events} actorNames={actorNames} />
         </div>
       </div>

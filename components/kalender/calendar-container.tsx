@@ -46,6 +46,10 @@ import {
   getVacationCalendarEntries,
   type VacationCalendarEntry,
 } from '@/lib/vacation/actions';
+import {
+  getSicknessCalendarEntries,
+  type SicknessCalendarEntry,
+} from '@/lib/sickness/actions';
 import { toLocalDateString } from '@/lib/utils';
 
 export type CalendarView = 'day' | 'week' | 'month';
@@ -155,6 +159,33 @@ export function CalendarContainer({
   useEffect(() => {
     void refetchVacationEntries();
   }, [organizationId, refetchVacationEntries]);
+  // Sickness absence entries (P1-08): deliberately neutral („Abwesend") — the
+  // shared calendar shows unavailability, never the absence type.
+  const [sicknessEntries, setSicknessEntries] = useState<
+    SicknessCalendarEntry[]
+  >([]);
+  const sicknessGenerationRef = useRef(0);
+  const [sicknessEntriesOrgId, setSicknessEntriesOrgId] =
+    useState(organizationId);
+  if (sicknessEntriesOrgId !== organizationId) {
+    setSicknessEntriesOrgId(organizationId);
+    setSicknessEntries([]);
+    sicknessGenerationRef.current++;
+  }
+  const refetchSicknessEntries = useCallback(async () => {
+    const generation = ++sicknessGenerationRef.current;
+    try {
+      const result = await getSicknessCalendarEntries();
+      if (generation !== sicknessGenerationRef.current) return;
+      // Keep last-known entries on transient failure.
+      if (result.success) setSicknessEntries(result.entries);
+    } catch (error) {
+      console.error('Error fetching sickness calendar entries:', error);
+    }
+  }, []);
+  useEffect(() => {
+    void refetchSicknessEntries();
+  }, [organizationId, refetchSicknessEntries]);
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
   const [filters, setFilters] = useState<CalendarFilters>({
@@ -641,6 +672,9 @@ export function CalendarContainer({
   useRealtimeEvent('vacation_requests', () => {
     void refetchVacationEntries();
   });
+  useRealtimeEvent('sickness_reports', () => {
+    void refetchSicknessEntries();
+  });
 
   // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
   const handleManualRefresh = useCallback(() => {
@@ -694,9 +728,10 @@ export function CalendarContainer({
       fetchEntries(true);
       fetchJobs();
       void refetchVacationEntries();
+      void refetchSicknessEntries();
       if (isAdminOrManager) fetchParkedJobs();
     }, 300);
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, refetchVacationEntries]);
+  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, refetchVacationEntries, refetchSicknessEntries]);
 
   const handleManualEntrySuccess = useCallback(
     (newEntries: TimeEntry[]) => {
@@ -1522,6 +1557,7 @@ export function CalendarContainer({
             organizationSettings={organizationSettings}
             holidayCalendar={holidayCalendar}
             vacationEntries={vacationEntries}
+            sicknessEntries={sicknessEntries}
             currentUserId={currentUserId}
             isAdminOrManager={isAdminOrManager}
             onEventClick={handleEventClick}

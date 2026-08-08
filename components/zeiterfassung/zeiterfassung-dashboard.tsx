@@ -22,6 +22,7 @@ import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
 import { useClockState } from '@/components/clock-state-provider';
 import { VacationSection } from './vacation-section';
+import { SicknessSection } from './sickness-section';
 import type {
   ClockTimelineSegment,
   ZeiterfassungOverview
@@ -274,11 +275,15 @@ export function ZeiterfassungDashboard({
           </p>
         ) : todayTarget?.absence?.portion === 'full' ? (
           <p className="mt-1 text-sm text-muted-foreground">
-            Urlaub genehmigt – heute keine Sollarbeitszeit.
+            {todayTarget.absence.type === 'sickness'
+              ? 'Krankmeldung – heute keine Sollarbeitszeit.'
+              : 'Urlaub genehmigt – heute keine Sollarbeitszeit.'}
           </p>
         ) : todayTarget?.absence?.portion === 'half_day' ? (
           <p className="mt-1 text-sm text-muted-foreground">
-            Halber Urlaubstag – Tagesziel:{' '}
+            {todayTarget.absence.type === 'sickness'
+              ? 'Halber Tag Krankmeldung – Tagesziel: '
+              : 'Halber Urlaubstag – Tagesziel: '}
             {formatDuration(todayTargetMinutes ?? 0)} Arbeitszeit
           </p>
         ) : todayTarget && todayTarget.targetMinutes === 0 ? (
@@ -394,6 +399,9 @@ export function ZeiterfassungDashboard({
 
       {/* Vacation balance, requests, and entry point (P1-06) */}
       <VacationSection />
+
+      {/* Sickness self-report and own reports (P1-08) */}
+      <SicknessSection />
 
       {/* Working Time Status + Weekly Chart */}
       <div className="space-y-3">

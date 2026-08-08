@@ -16,6 +16,7 @@ import {
   type DailyTarget,
 } from '@/lib/personnel/targets';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
+import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
 
 // Server-side assembly of the P1-04 target contract. Targets are computed,
 // never stored; employees may only request their own targets, managers any
@@ -76,7 +77,7 @@ export async function getWeeklyTargets(input: {
       };
     }
 
-    const [schedulesResult, conditionsResult, calendar, vacationSpans] =
+    const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans] =
       await Promise.all([
         admin
           .from('work_schedules')
@@ -88,6 +89,11 @@ export async function getWeeklyTargets(input: {
           .eq('employee_record_id', record.id),
         calendarPromise,
         loadApprovedVacationSpansByRecord(
+          orgId,
+          weekDates[0],
+          weekDates[weekDates.length - 1]
+        ),
+        loadActiveSicknessSpansByRecord(
           orgId,
           weekDates[0],
           weekDates[weekDates.length - 1]
@@ -108,7 +114,12 @@ export async function getWeeklyTargets(input: {
         schedules: (schedulesResult.data ?? []).map(toWorkSchedule),
         conditions: (conditionsResult.data ?? []).map(toEmploymentCondition),
         calendar,
-        absences: vacationSpans.get(record.id) ?? [],
+        // Vacation first: the resolver also prefers vacation attribution on
+        // days covered by both span kinds.
+        absences: [
+          ...(vacationSpans.get(record.id) ?? []),
+          ...(sicknessSpans.get(record.id) ?? []),
+        ],
       }),
     };
   } catch (error) {
@@ -143,8 +154,14 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
     const admin = createSupabaseAdminClient();
 
     const todayIso = getBusinessTodayIso();
-    const [recordsResult, schedulesResult, conditionsResult, calendar, vacationSpans] =
-      await Promise.all([
+    const [
+      recordsResult,
+      schedulesResult,
+      conditionsResult,
+      calendar,
+      vacationSpans,
+      sicknessSpans,
+    ] = await Promise.all([
         admin
           .from('employee_records')
           .select('id, user_id')
@@ -157,6 +174,7 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
           .eq('organization_id', orgId),
         getCachedOrganizationCalendar(orgId),
         loadApprovedVacationSpansByRecord(orgId, todayIso, todayIso),
+        loadActiveSicknessSpansByRecord(orgId, todayIso, todayIso),
       ]);
 
     if (recordsResult.error || schedulesResult.error || conditionsResult.error) {
@@ -190,7 +208,10 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
         schedules: schedulesByRecord.get(record.id) ?? [],
         conditions: conditionsByRecord.get(record.id) ?? [],
         calendar,
-        absences: vacationSpans.get(record.id) ?? [],
+        absences: [
+          ...(vacationSpans.get(record.id) ?? []),
+          ...(sicknessSpans.get(record.id) ?? []),
+        ],
       });
       targetsByUserId[record.user_id] = target;
     }

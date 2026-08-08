@@ -73,6 +73,7 @@ import {
   getEffectiveResponsibilityHolderForActor,
 } from '@/lib/responsibilities/server';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
+import { hasActiveSicknessOn } from '@/lib/sickness/server';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 
 const STALE_SESSION_LOOKBACK_DAYS = 92;
@@ -589,13 +590,15 @@ export async function clockIn(
     const admin = createSupabaseAdminClient();
 
     // Run membership check, cross-org guard, today's entries, and the
-    // vacation contradiction check in parallel
-    const [userRole, openOrgs, todayRows, onVacationToday] = await Promise.all([
-      verifyMembershipFromCache(user.id, orgId),
-      getOpenSessionOrgsForUserToday(admin, user.id),
-      getUserTodayEntries(admin, user.id, orgId),
-      hasApprovedFullDayVacationOn(orgId, user.id, getBusinessTodayIso())
-    ]);
+    // vacation/sickness contradiction checks in parallel
+    const [userRole, openOrgs, todayRows, onVacationToday, sickToday] =
+      await Promise.all([
+        verifyMembershipFromCache(user.id, orgId),
+        getOpenSessionOrgsForUserToday(admin, user.id),
+        getUserTodayEntries(admin, user.id, orgId),
+        hasApprovedFullDayVacationOn(orgId, user.id, getBusinessTodayIso()),
+        hasActiveSicknessOn(orgId, user.id, getBusinessTodayIso())
+      ]);
 
     if (!userRole) {
       return { success: false, error: 'not_a_member' };
@@ -654,7 +657,14 @@ export async function clockIn(
       });
     }
 
-    return { success: true, entry: toTimeEntry(newEntry), jobInfo };
+    return {
+      success: true,
+      entry: toTimeEntry(newEntry),
+      jobInfo,
+      // P1-08: warn, never block — the visible notice is the correction
+      // nudge; the office sees the contradiction on the management surface.
+      ...(sickToday ? { notice: 'sickness_reported_today' as const } : {})
+    };
   } catch (error) {
     console.error('Unexpected error in clockIn:', error);
     return { success: false, error: 'unexpected_error' };

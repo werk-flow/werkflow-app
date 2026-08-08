@@ -17,16 +17,18 @@ export type AttentionEventRow =
 
 // Attention items are derived live from the owning domains; this identity is
 // the only thing pattern-level storage (read markers, pattern events) keys on.
-// Keep in sync with the CHECK constraints in migration
-// add_attention_pattern_state. Later slices (sickness P1-08, qualifications
-// P1-09, follow-ups P1-10, corrections P1-22, procurement P1-29) extend this
-// union plus the database CHECK — they never add parallel storage.
+// Keep in sync with the CHECK constraints in migrations
+// add_attention_pattern_state + extend_attention_taxonomy_sickness. Later
+// slices (qualifications P1-09, follow-ups P1-10, corrections P1-22,
+// procurement P1-29) extend this union plus the database CHECK — they never
+// add parallel storage.
 export type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
   | 'vacation_request_approval'
   | 'client_request_open'
-  | 'vacation_decision';
+  | 'vacation_decision'
+  | 'sickness_report';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -81,10 +83,10 @@ export type AttentionTask =
       assignedToMe: boolean;
     };
 
-// Informational decision notice for the affected person. Deduplicated per
-// request: re-deciding (approve → cancel) changes the state version of the
-// same item instead of creating a second one.
-export type AttentionNotification = {
+// Informational notices, deduplicated per source record: a domain state
+// change (approve → cancel, sickness correction) changes the state version of
+// the SAME item instead of creating a second one.
+export type VacationDecisionNotification = {
   sourceType: 'vacation_decision';
   sourceId: string;
   status: 'approved' | 'rejected' | 'cancelled';
@@ -96,6 +98,31 @@ export type AttentionNotification = {
   occurredAt: string;
   unread: boolean;
 };
+
+// P1-08: sickness notice. Two audiences share the item identity — managers
+// learn of reports they did not record themselves; the affected person learns
+// of reports the office recorded or cancelled for them. The payload is
+// deliberately minimal (privacy matrix): dates and portion only, NEVER the
+// absence type — that stays on the self/manager management surfaces.
+export type SicknessReportNotification = {
+  sourceType: 'sickness_report';
+  sourceId: string;
+  /** null = the viewer's own report (person audience). */
+  personName: string | null;
+  isOwn: boolean;
+  status: 'reported' | 'cancelled';
+  startDate: string;
+  /** null = open-ended („bis auf Weiteres"). */
+  endDate: string | null;
+  dayPortion: VacationDayPortion;
+  stateVersion: string;
+  occurredAt: string;
+  unread: boolean;
+};
+
+export type AttentionNotification =
+  | VacationDecisionNotification
+  | SicknessReportNotification;
 
 // Own requests for the employee-transparency section ("Meine Anträge").
 export type OwnAttentionRequest = {

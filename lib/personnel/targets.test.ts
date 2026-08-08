@@ -310,3 +310,116 @@ describe('week helpers', () => {
     expect(sumTargetMinutes(targets)).toBe(3 * 480 + 2 * 240);
   });
 });
+
+describe('resolveDailyTarget — sickness absence (P1-08)', () => {
+  // 2026-08-04 is a Tuesday with a 480-minute schedule target.
+  const base = {
+    schedules: [makeSchedule('2026-01-01', FULL_TIME)],
+    conditions: [],
+    calendar: EMPTY_HOLIDAY_CALENDAR,
+  };
+
+  test('a full-day sickness span zeroes the target', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        {
+          type: 'sickness',
+          startDate: '2026-08-03',
+          endDate: '2026-08-05',
+          dayPortion: 'full',
+        },
+      ],
+    });
+    expect(target.targetMinutes).toBe(0);
+    expect(target.baseTargetMinutes).toBe(480);
+    expect(target.absence).toEqual({ type: 'sickness', portion: 'full' });
+  });
+
+  test('a half-day sickness span halves the base target', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        {
+          type: 'sickness',
+          startDate: '2026-08-04',
+          endDate: '2026-08-04',
+          dayPortion: 'half_day',
+        },
+      ],
+    });
+    expect(target.targetMinutes).toBe(240);
+    expect(target.absence).toEqual({ type: 'sickness', portion: 'half_day' });
+  });
+
+  test('holiday zeroing stays first: sickness on a holiday changes nothing', () => {
+    const calendar: OrganizationHolidayCalendar = {
+      holidayRegion: 'BY',
+      holidayRegionHistory: [
+        { region: 'BY', effectiveFrom: '2025-01-01T00:00:00Z' },
+      ],
+      closureDays: [],
+    };
+    // 2026-01-06 Heilige Drei Könige (BY), a Tuesday.
+    const target = resolveDailyTarget({
+      dateIso: '2026-01-06',
+      schedules: [makeSchedule('2025-01-01', FULL_TIME)],
+      conditions: [],
+      calendar,
+      absences: [
+        {
+          type: 'sickness',
+          startDate: '2026-01-06',
+          endDate: '2026-01-06',
+          dayPortion: 'full',
+        },
+      ],
+    });
+    expect(target.isHoliday).toBe(true);
+    expect(target.targetMinutes).toBe(0);
+  });
+
+  test('a day covered by vacation and sickness keeps the vacation attribution', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        {
+          type: 'sickness',
+          startDate: '2026-08-04',
+          endDate: '2026-08-06',
+          dayPortion: 'full',
+        },
+        {
+          type: 'vacation',
+          startDate: '2026-08-03',
+          endDate: '2026-08-04',
+          dayPortion: 'full',
+        },
+      ],
+    });
+    // Deterministic precedence regardless of span order: vacation wins the
+    // display attribution; the target is 0 either way.
+    expect(target.targetMinutes).toBe(0);
+    expect(target.absence).toEqual({ type: 'vacation', portion: 'full' });
+  });
+
+  test('sickness before its start date and after its end date has no effect', () => {
+    const span = {
+      type: 'sickness' as const,
+      startDate: '2026-08-04',
+      endDate: '2026-08-05',
+      dayPortion: 'full' as const,
+    };
+    expect(
+      resolveDailyTarget({ dateIso: '2026-08-03', ...base, absences: [span] })
+        .targetMinutes
+    ).toBe(480);
+    expect(
+      resolveDailyTarget({ dateIso: '2026-08-06', ...base, absences: [span] })
+        .targetMinutes
+    ).toBe(480);
+  });
+});

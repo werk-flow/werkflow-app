@@ -151,6 +151,9 @@ export function AttentionCountProvider({
   useRealtimeEvent('vacation_requests', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('sickness_reports', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('client_requests', () => {
     scheduleRefresh();
   });

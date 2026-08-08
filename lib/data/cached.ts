@@ -40,6 +40,7 @@ export const CACHE_TAGS = {
   requests: (orgId: string) => `requests-${orgId}`,
   personnel: (orgId: string) => `personnel-${orgId}`,
   vacation: (orgId: string): string => `vacation-${orgId}`,
+  sickness: (orgId: string): string => `sickness-${orgId}`,
   responsibilities: (orgId: string) => `responsibilities-${orgId}`,
   organizationCalendar: (orgId: string) => `organization-calendar-${orgId}`,
   jobs: (orgId: string) => `jobs-${orgId}`,

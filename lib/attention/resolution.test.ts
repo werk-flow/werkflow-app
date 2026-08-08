@@ -6,6 +6,7 @@ import {
   isNotificationUnread,
   isWithinNotificationWindow,
   notificationWindowStartIso,
+  resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
 } from './resolution';
@@ -232,5 +233,69 @@ describe('sortNotificationsNewestFirst', () => {
       'r1',
       'r2',
     ]);
+  });
+});
+
+describe('resolveSicknessReportFacts (P1-08)', () => {
+  const baseReport = {
+    status: 'reported' as const,
+    startDate: '2026-08-03',
+    endDate: null,
+    dayPortion: 'full' as const,
+    updatedAt: '2026-08-03T06:45:00Z',
+    cancelledAt: null,
+  };
+
+  test('the version is built from the availability-relevant facts', () => {
+    const facts = resolveSicknessReportFacts(baseReport);
+    expect(facts.status).toBe('reported');
+    expect(facts.stateVersion).toBe('reported:2026-08-03:open:full');
+    expect(facts.occurredAt).toBe('2026-08-03T06:45:00Z');
+  });
+
+  test('setting the end date changes the version (correction re-surfaces the same item)', () => {
+    const before = resolveSicknessReportFacts(baseReport);
+    const after = resolveSicknessReportFacts({
+      ...baseReport,
+      endDate: '2026-08-05',
+      updatedAt: '2026-08-05T14:00:00Z',
+    });
+    expect(after.stateVersion).toBe('reported:2026-08-03:2026-08-05:full');
+    expect(after.stateVersion).not.toBe(before.stateVersion);
+  });
+
+  test('evidence-only bookkeeping keeps the version stable', () => {
+    // Evidence fields are deliberately not version inputs: only updatedAt
+    // differs, the version must not move and the item stays read.
+    const before = resolveSicknessReportFacts(baseReport);
+    const after = resolveSicknessReportFacts({
+      ...baseReport,
+      updatedAt: '2026-08-04T10:00:00Z',
+    });
+    expect(after.stateVersion).toBe(before.stateVersion);
+  });
+
+  test('cancellation changes the version and occurredAt uses the cancellation time', () => {
+    const facts = resolveSicknessReportFacts({
+      ...baseReport,
+      status: 'cancelled',
+      updatedAt: '2026-08-06T09:00:00Z',
+      cancelledAt: '2026-08-06T08:59:00Z',
+    });
+    expect(facts.stateVersion).toBe('cancelled:2026-08-03:open:full');
+    expect(facts.occurredAt).toBe('2026-08-06T08:59:00Z');
+  });
+
+  test('one report seen by both audiences deduplicates to one item', () => {
+    const shared = {
+      sourceType: 'sickness_report' as const,
+      sourceId: 'report-1',
+    };
+    const deduped = dedupeAttentionItems([
+      { ...shared, audience: 'own' },
+      { ...shared, audience: 'manager' },
+    ]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0].audience).toBe('own');
   });
 });

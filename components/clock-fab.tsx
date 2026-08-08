@@ -104,6 +104,17 @@ export function ClockFAB() {
           const result = await clockIn(jobId);
           if (result.success) {
             setShowJobPicker(false);
+            // P1-08: never block a recovered person, but surface the
+            // contradiction visibly so the report gets its end date.
+            if (result.notice === 'sickness_reported_today') {
+              setBanner({
+                title: 'Für heute liegt eine Krankmeldung vor',
+                message:
+                  'Du bist eingestempelt. Bitte prüfe deine Krankmeldung und trage das Enddatum nach, wenn du wieder arbeitest.'
+              });
+              if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+              bannerTimerRef.current = setTimeout(dismissBanner, 8000);
+            }
           } else if (
             result.error === 'working_in_other_org' &&
             'otherOrgName' in result &&
