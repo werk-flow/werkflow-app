@@ -16,6 +16,7 @@ import {
   type QualificationWorkspace,
   type OwnQualificationProfile,
   type JobQualificationDetail,
+  type PersonnelQualificationSummary,
 } from './types';
 import {
   loadAssignmentEvaluation,
@@ -250,6 +251,153 @@ export async function getQualificationWorkspace(): Promise<
   }
 }
 
+export async function getPersonnelQualificationSummary(
+  employeeRecordIdOrUserId: string
+): Promise<
+  | { success: true; data: PersonnelQualificationSummary | null }
+  | { success: false; error: string }
+> {
+  try {
+    const auth = await authenticateAndAuthorize();
+    if (!auth.success) return auth;
+    if (!auth.context.isManagerOrAbove) {
+      return { success: false, error: 'not_authorized' };
+    }
+
+    const { orgId } = auth.context;
+    const admin = createSupabaseAdminClient();
+    const byUserResult = await admin
+      .from('employee_records')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('user_id', employeeRecordIdOrUserId)
+      .maybeSingle();
+    if (byUserResult.error) {
+      console.error('Failed to resolve qualification employee:', byUserResult.error);
+      return { success: false, error: 'load_failed' };
+    }
+
+    let employeeRecord = byUserResult.data;
+    if (!employeeRecord) {
+      const byRecordResult = await admin
+        .from('employee_records')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('id', employeeRecordIdOrUserId)
+        .maybeSingle();
+      if (byRecordResult.error) {
+        console.error(
+          'Failed to resolve qualification employee record:',
+          byRecordResult.error
+        );
+        return { success: false, error: 'load_failed' };
+      }
+      employeeRecord = byRecordResult.data;
+    }
+    if (!employeeRecord) return { success: true, data: null };
+
+    const today = getBusinessTodayIso();
+    const [membershipsResult, capabilityRowsResult] = await Promise.all([
+      admin
+        .from('team_memberships')
+        .select('team_id')
+        .eq('organization_id', orgId)
+        .eq('employee_record_id', employeeRecord.id)
+        .lte('valid_from', today)
+        .or(`valid_until.gte.${today},valid_until.is.null`)
+        .limit(501),
+      admin
+        .from('employee_capabilities')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('employee_record_id', employeeRecord.id)
+        .is('superseded_at', null)
+        .order('valid_from', { ascending: false })
+        .limit(501),
+    ]);
+    if (membershipsResult.error || capabilityRowsResult.error) {
+      console.error(
+        'Failed to load personnel qualification summary:',
+        membershipsResult.error ?? capabilityRowsResult.error
+      );
+      return { success: false, error: 'load_failed' };
+    }
+    if (
+      (membershipsResult.data?.length ?? 0) > 500 ||
+      (capabilityRowsResult.data?.length ?? 0) > 500
+    ) {
+      console.error('Personnel qualification summary size limit exceeded.');
+      return { success: false, error: 'load_failed' };
+    }
+
+    const teamIds = [
+      ...new Set((membershipsResult.data ?? []).map((row) => row.team_id)),
+    ];
+    const capabilityIds = [
+      ...new Set(
+        (capabilityRowsResult.data ?? []).map((row) => row.capability_id)
+      ),
+    ];
+    const [teamsResult, definitionsResult] = await Promise.all([
+      teamIds.length > 0
+        ? admin
+            .from('teams')
+            .select('id, name')
+            .eq('organization_id', orgId)
+            .is('dissolved_at', null)
+            .in('id', teamIds)
+            .limit(501)
+        : Promise.resolve({ data: [], error: null }),
+      capabilityIds.length > 0
+        ? admin
+            .from('organization_capabilities')
+            .select('*')
+            .eq('organization_id', orgId)
+            .in('id', capabilityIds)
+            .limit(501)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (teamsResult.error || definitionsResult.error) {
+      console.error(
+        'Failed to load personnel qualification references:',
+        teamsResult.error ?? definitionsResult.error
+      );
+      return { success: false, error: 'load_failed' };
+    }
+    if (
+      (teamsResult.data?.length ?? 0) > 500 ||
+      (definitionsResult.data?.length ?? 0) > 500
+    ) {
+      console.error('Personnel qualification reference limit exceeded.');
+      return { success: false, error: 'load_failed' };
+    }
+
+    const definitionById = new Map(
+      (definitionsResult.data ?? []).map((row) => [
+        row.id,
+        toCapabilityDefinition(row),
+      ])
+    );
+    return {
+      success: true,
+      data: {
+        teamNames: (teamsResult.data ?? [])
+          .map((team) => team.name)
+          .sort((left, right) => left.localeCompare(right, 'de-DE')),
+        entries: (capabilityRowsResult.data ?? []).flatMap((row) => {
+          const definition = definitionById.get(row.capability_id);
+          return definition
+            ? [{ definition, record: toEmployeeCapability(row) }]
+            : [];
+        }),
+      },
+    };
+  } catch (error) {
+    console.error('Unexpected error in getPersonnelQualificationSummary:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
 export async function getOwnQualificationProfile(): Promise<
   | { success: true; data: OwnQualificationProfile | null }
   | { success: false; error: string }
@@ -278,7 +426,8 @@ export async function getOwnQualificationProfile(): Promise<
           .lte('valid_from', getBusinessTodayIso())
           .or(
             `valid_until.gte.${getBusinessTodayIso()},valid_until.is.null`
-          ),
+          )
+          .limit(501),
         admin
           .from('employee_capabilities')
           .select('*')
@@ -302,6 +451,10 @@ export async function getOwnQualificationProfile(): Promise<
         'Failed to load own qualification profile:',
         membershipsResult.error ?? capabilityRowsResult.error ?? profileResult.error
       );
+      return { success: false, error: 'load_failed' };
+    }
+    if ((membershipsResult.data?.length ?? 0) > 500) {
+      console.error('Own qualification membership limit exceeded.');
       return { success: false, error: 'load_failed' };
     }
 
@@ -1041,17 +1194,27 @@ export async function setApprenticeWarningEnabled(
   if (auth.context.role !== 'admin') {
     return { success: false, error: 'not_authorized' };
   }
-  const { error } = await createSupabaseAdminClient()
+  const admin = createSupabaseAdminClient();
+  const { data: current, error: loadError } = await admin
     .from('organization_qualification_settings')
-    .upsert(
-      {
+    .select('organization_id')
+    .eq('organization_id', auth.context.orgId)
+    .maybeSingle();
+  if (loadError) return { success: false, error: 'update_failed' };
+  const { error } = current
+    ? await admin
+        .from('organization_qualification_settings')
+        .update({
+          apprentice_warning_enabled: enabled,
+          updated_by: auth.context.userId,
+        })
+        .eq('organization_id', auth.context.orgId)
+    : await admin.from('organization_qualification_settings').insert({
         organization_id: auth.context.orgId,
         apprentice_warning_enabled: enabled,
         created_by: auth.context.userId,
         updated_by: auth.context.userId,
-      },
-      { onConflict: 'organization_id' }
-    );
+      });
   if (error) return { success: false, error: 'update_failed' };
   await recordQualificationEvent({
     orgId: auth.context.orgId,
@@ -1091,6 +1254,9 @@ export async function setJobCapabilityRequirements(input: {
       ])
     ).values(),
   ];
+  if (normalized.length > 100) {
+    return { success: false, error: 'invalid_input' };
+  }
   const { error } = await admin.rpc('replace_job_capability_requirements', {
     p_organization_id: auth.context.orgId,
     p_job_id: input.jobId,

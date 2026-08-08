@@ -158,6 +158,7 @@ export function EditJobDialog({
     setHasAttemptedSubmit(false);
     setAssignmentTeamSourceId(null);
     setConfirmedDateRemovalForWarning(false);
+    setQualificationWarning(null);
 
     if (job.projectId) {
       const linkedProject = projects.find((p) => p.id === job.projectId);

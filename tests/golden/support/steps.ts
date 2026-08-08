@@ -1621,9 +1621,11 @@ export async function addTeamMemberViaManagement(
       .fill(options.validFrom);
   }
   await card.getByRole('button', { name: 'Hinzufügen' }).click();
-  await expect(card.getByText(options.employeeName, { exact: true })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    card
+      .getByTestId('team-member-row')
+      .getByText(options.employeeName, { exact: true })
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 export async function createCapabilityViaManagement(
@@ -1752,6 +1754,9 @@ export async function setApprenticeWarningViaManagement(
   });
   if ((await checkbox.isChecked()) !== enabled) {
     await checkbox.click();
+    await expect(page.getByText('Einstellung gespeichert.')).toBeVisible({
+      timeout: 15_000,
+    });
   }
   await expect(checkbox).toBeChecked({ checked: enabled });
 }

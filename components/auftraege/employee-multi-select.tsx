@@ -65,7 +65,11 @@ export function EmployeeMultiSelect({
   return (
     <div className="space-y-2">
       {teams.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          role="group"
+          aria-label="Team fÃ¼r die Zuweisung Ã¼bernehmen"
+        >
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Users className="size-3.5" />
             Team übernehmen:
@@ -77,8 +81,13 @@ export function EmployeeMultiSelect({
               variant="outline"
               size="sm"
               className="h-7"
-              disabled={disabled || pendingTeamId !== null}
+              aria-busy={pendingTeamId === team.id || undefined}
+              disabled={
+                disabled ||
+                (pendingTeamId !== null && pendingTeamId !== team.id)
+              }
               onClick={async () => {
+                if (pendingTeamId !== null) return;
                 setPendingTeamId(team.id);
                 try {
                   const result = await expandTeamForAssignment({

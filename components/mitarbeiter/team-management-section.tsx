@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { Loader2, Plus, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -35,6 +35,7 @@ import {
 } from '@/lib/qualifications/actions';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 
 type TeamManagementSectionProps = Pick<
   QualificationWorkspace,
@@ -71,9 +72,25 @@ export function TeamManagementSection({
     [employees]
   );
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     startTransition(() => router.refresh());
-  };
+  }, [router]);
+  useBusinessDayRefresh(refresh);
+  const activeMembershipsByTeam = useMemo(() => {
+    const membershipsByTeam = new Map<string, typeof teamMemberships>();
+    for (const membership of teamMemberships) {
+      if (
+        membership.validFrom > today ||
+        (membership.validUntil && membership.validUntil < today)
+      ) {
+        continue;
+      }
+      const memberships = membershipsByTeam.get(membership.teamId) ?? [];
+      memberships.push(membership);
+      membershipsByTeam.set(membership.teamId, memberships);
+    }
+    return membershipsByTeam;
+  }, [teamMemberships, today]);
 
   const handleCreate = async () => {
     setPendingAction('create');
@@ -184,12 +201,7 @@ export function TeamManagementSection({
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {activeTeams.map((team) => {
-              const memberships = teamMemberships.filter(
-                (membership) =>
-                  membership.teamId === team.id &&
-                  membership.validFrom <= today &&
-                  (!membership.validUntil || membership.validUntil >= today)
-              );
+              const memberships = activeMembershipsByTeam.get(team.id) ?? [];
               const currentRecordIds = new Set(
                 memberships.map((membership) => membership.employeeRecordId)
               );
@@ -209,6 +221,7 @@ export function TeamManagementSection({
                         <Users className="size-4 text-muted-foreground" />
                         {editingTeamId === team.id ? (
                           <Input
+                            autoFocus
                             value={editingTeamName}
                             onChange={(event) =>
                               setEditingTeamName(event.target.value)
@@ -281,6 +294,7 @@ export function TeamManagementSection({
                       memberships.map((membership) => (
                         <div
                           key={membership.id}
+                          data-testid="team-member-row"
                           className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm"
                         >
                           <span>
@@ -492,7 +506,8 @@ export function TeamManagementSection({
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={pendingAction !== null}
-              onClick={() => {
+              onClick={(event) => {
+                event.preventDefault();
                 const team = teamToDissolve;
                 if (!team) return;
                 setPendingAction(`dissolve:${team.id}`);

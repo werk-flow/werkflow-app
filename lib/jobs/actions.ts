@@ -41,6 +41,10 @@ import {
   type ClientSite,
 } from '@/lib/clients/types';
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_JOB_ASSIGNMENTS = 200;
+
 // ============================================
 // Input Types
 // ============================================
@@ -1193,6 +1197,15 @@ export async function updateJobAssignments(
     if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
     }
+    const normalizedUserIds = [...new Set(selectedUserIds)];
+    if (
+      normalizedUserIds.length > MAX_JOB_ASSIGNMENTS ||
+      normalizedUserIds.some(
+        (selectedUserId) => !UUID_PATTERN.test(selectedUserId)
+      )
+    ) {
+      return { success: false, error: 'invalid_input' };
+    }
     const admin = createSupabaseAdminClient();
     const { data: job, error } = await admin
       .from('jobs')
@@ -1205,7 +1218,7 @@ export async function updateJobAssignments(
     const assessment = await assessAssignmentSelection({
       context,
       jobId,
-      selectedUserIds,
+      selectedUserIds: normalizedUserIds,
       assessedForDate: job.planned_date,
       approval,
     });
@@ -1213,7 +1226,7 @@ export async function updateJobAssignments(
     const result = await replaceJobAssignmentsAfterAssessment({
       context,
       jobId,
-      selectedUserIds,
+      selectedUserIds: normalizedUserIds,
       evaluation: assessment.evaluation,
       approval,
       teamSourceId,

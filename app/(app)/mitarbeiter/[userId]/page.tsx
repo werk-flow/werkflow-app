@@ -27,9 +27,7 @@ import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-d
 import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel-record-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
-import { getQualificationWorkspace } from '@/lib/qualifications/actions';
-import type { QualificationWorkspace } from '@/lib/qualifications/types';
-import type { PersonnelQualificationSummaryData } from '@/components/mitarbeiter/personnel-qualification-summary';
+import { getPersonnelQualificationSummary } from '@/lib/qualifications/actions';
 import MitarbeiterDetailLoading from './loading';
 
 async function resolveActorNames(
@@ -54,50 +52,6 @@ async function resolveActorNames(
 
 interface MitarbeiterDetailPageProps {
   params: Promise<{ userId: string }>;
-}
-
-function buildQualificationSummary(
-  workspace: QualificationWorkspace | null,
-  employeeRecordId: string | null
-): PersonnelQualificationSummaryData | null {
-  if (!workspace || !employeeRecordId) {
-    return null;
-  }
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-  const teamIds = new Set(
-    workspace.teamMemberships
-      .filter(
-        (membership) =>
-          membership.employeeRecordId === employeeRecordId &&
-          membership.validFrom <= today &&
-          (!membership.validUntil || membership.validUntil >= today)
-      )
-      .map((membership) => membership.teamId)
-  );
-  const definitionById = new Map(
-    workspace.capabilities.map((definition) => [definition.id, definition])
-  );
-  return {
-    teamNames: workspace.teams
-      .filter((team) => !team.dissolvedAt && teamIds.has(team.id))
-      .map((team) => team.name)
-      .sort((left, right) => left.localeCompare(right, 'de-DE')),
-    entries: workspace.employeeCapabilities.flatMap((record) => {
-      if (
-        record.employeeRecordId !== employeeRecordId ||
-        record.supersededAt
-      ) {
-        return [];
-      }
-      const definition = definitionById.get(record.capabilityId);
-      return definition ? [{ definition, record }] : [];
-    }),
-  };
 }
 
 async function MitarbeiterDetailData({
@@ -139,7 +93,7 @@ async function MitarbeiterDetailData({
     organizationSettings,
     organizationUserPreferences,
     responsibilitySettingsResult,
-    qualificationWorkspaceResult,
+    qualificationSummaryResult,
   ] = await Promise.all([
     getMemberDetail(targetUserId),
     getPersonnelDetail(targetUserId),
@@ -163,15 +117,15 @@ async function MitarbeiterDetailData({
     getCachedOrganizationSettings(activeOrgId),
     getCachedOrganizationUserPreferences(activeOrgId, user.id),
     getResponsibilitySettingsData(),
-    getQualificationWorkspace(),
+    getPersonnelQualificationSummary(targetUserId),
   ]);
-  const qualificationWorkspace = qualificationWorkspaceResult.success
-    ? qualificationWorkspaceResult.data
+  const qualificationSummary = qualificationSummaryResult.success
+    ? qualificationSummaryResult.data
     : null;
-  if (!qualificationWorkspaceResult.success) {
+  if (!qualificationSummaryResult.success) {
     console.error(
       'Failed to load personnel qualification summary:',
-      qualificationWorkspaceResult.error
+      qualificationSummaryResult.error
     );
   }
 
@@ -185,10 +139,7 @@ async function MitarbeiterDetailData({
           detail={personnelResult.detail}
           actorNames={actorNames}
           canEdit={isAdminOrManager}
-          qualificationSummary={buildQualificationSummary(
-            qualificationWorkspace,
-            personnelResult.detail.record.id
-          )}
+          qualificationSummary={qualificationSummary}
         />
       );
     }
@@ -293,10 +244,7 @@ async function MitarbeiterDetailData({
           ? responsibilitySettingsResult.data
           : null
       }
-      qualificationSummary={buildQualificationSummary(
-        qualificationWorkspace,
-        personnelDetail?.record.id ?? null
-      )}
+      qualificationSummary={qualificationSummary}
     />
   );
 }

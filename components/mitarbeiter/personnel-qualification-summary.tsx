@@ -4,17 +4,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type {
-  CapabilityDefinition,
-  EmployeeCapabilityRecord,
+  PersonnelQualificationSummary,
 } from '@/lib/qualifications/types';
 
-export type PersonnelQualificationSummaryData = {
-  teamNames: string[];
-  entries: Array<{
-    definition: CapabilityDefinition;
-    record: EmployeeCapabilityRecord;
-  }>;
-};
+export type PersonnelQualificationSummaryData = PersonnelQualificationSummary;
 
 export function PersonnelQualificationSummary({
   data,

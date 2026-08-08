@@ -115,7 +115,13 @@ interface DayViewProps {
   onRefresh: () => void;
   onSilentRefresh?: () => void;
   onOperationStart?: () => void;
-  onUpdateJob?: typeof updateJob;
+  onUpdateJob?: (
+    jobId: string,
+    input: Parameters<typeof updateJob>[1]
+  ) => Promise<
+    | Awaited<ReturnType<typeof updateJob>>
+    | { success: false; error: 'qualification_declined' }
+  >;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   onJobSuccess?: () => void | Promise<void>;
   changeRequestMap?: EntryChangeRequestMap;
@@ -560,6 +566,7 @@ export function DayView({
         return next;
       });
       silentRefresh();
+      if (updateResult.error === 'qualification_declined') return;
       setActiveBanner({
         id: ++bannerSeqRef.current,
         variant: 'error',
@@ -1087,6 +1094,7 @@ export function DayView({
           return next;
         });
         silentRefresh();
+        if (moveResult.error === 'qualification_declined') return;
         setActiveBanner({
           id: ++bannerSeqRef.current,
           variant: 'error',

@@ -1,10 +1,13 @@
 'use client';
 
+import { useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import {
   getCapabilityKindLabel,
   type OwnQualificationProfile,
@@ -15,6 +18,9 @@ export function OwnQualificationOverview({
 }: {
   profile: OwnQualificationProfile | null;
 }) {
+  const router = useRouter();
+  const refreshAtBusinessDayChange = useCallback(() => router.refresh(), [router]);
+  useBusinessDayRefresh(refreshAtBusinessDayChange);
   useRealtimeRouterRefresh({
     tables: [
       'teams',

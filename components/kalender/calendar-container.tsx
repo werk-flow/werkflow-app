@@ -138,6 +138,10 @@ export function CalendarContainer({
         const approval = await requestApproval(result.evaluation);
         if (!approval) {
           realtimePausedUntilRef.current = Date.now() + 1000;
+          return {
+            success: false as const,
+            error: 'qualification_declined' as const,
+          };
         }
         if (approval) {
           // The confirmation dialog may stay open longer than the original
@@ -1096,6 +1100,10 @@ export function CalendarContainer({
         next.splice(Math.min(jobIndex, next.length), 0, job);
         return next;
       });
+      if (result.error === 'qualification_declined') {
+        handleSilentRefresh();
+        return;
+      }
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
         variant: 'error',
@@ -1178,6 +1186,10 @@ export function CalendarContainer({
             : j
         )
       );
+      if (result.error === 'qualification_declined') {
+        handleSilentRefresh();
+        return;
+      }
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
         variant: 'error',
@@ -1254,6 +1266,10 @@ export function CalendarContainer({
             : entry
         )
       );
+      if (result.error === 'qualification_declined') {
+        handleSilentRefresh();
+        return;
+      }
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
         variant: 'error',
@@ -1312,6 +1328,10 @@ export function CalendarContainer({
           j.id === jobId ? { ...j, plannedDate: origDate, plannedTime: origTime } : j
         )
       );
+      if (result.error === 'qualification_declined') {
+        handleSilentRefresh();
+        return;
+      }
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
         variant: 'error',
@@ -1394,6 +1414,10 @@ export function CalendarContainer({
             : entry
         )
       );
+      if (result.error === 'qualification_declined') {
+        handleSilentRefresh();
+        return;
+      }
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
         variant: 'error',

@@ -255,13 +255,16 @@ export function QualificationManagementSection({
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Mitarbeiter</Label>
+            <Label htmlFor="qualification-employee">Mitarbeiter</Label>
             <Select
               value={employeeRecordId}
               onValueChange={setEmployeeRecordId}
               disabled={isRecordIdentityLocked}
             >
-              <SelectTrigger aria-label="Mitarbeiter für Qualifikation">
+              <SelectTrigger
+                id="qualification-employee"
+                aria-label="Mitarbeiter für Qualifikation"
+              >
                 <SelectValue placeholder="Mitarbeiter auswählen" />
               </SelectTrigger>
               <SelectContent>
@@ -277,13 +280,18 @@ export function QualificationManagementSection({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Fähigkeit oder Zertifizierung</Label>
+            <Label htmlFor="qualification-capability">
+              Fähigkeit oder Zertifizierung
+            </Label>
             <Select
               value={capabilityId}
               onValueChange={setCapabilityId}
               disabled={isRecordIdentityLocked}
             >
-              <SelectTrigger aria-label="Qualifikation auswählen">
+              <SelectTrigger
+                id="qualification-capability"
+                aria-label="Qualifikation auswählen"
+              >
                 <SelectValue placeholder="Begriff auswählen" />
               </SelectTrigger>
               <SelectContent>
@@ -340,14 +348,19 @@ export function QualificationManagementSection({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Nachweisstatus</Label>
+                <Label htmlFor="qualification-evidence-state">
+                  Nachweisstatus
+                </Label>
                 <Select
                   value={evidenceState}
                   onValueChange={(value) =>
                     setEvidenceState(value as EvidenceState)
                   }
                 >
-                  <SelectTrigger aria-label="Nachweisstatus">
+                  <SelectTrigger
+                    id="qualification-evidence-state"
+                    aria-label="Nachweisstatus"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -508,6 +521,7 @@ export function QualificationManagementSection({
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={pendingAction !== null}
                         onClick={() => {
                           setEmployeeRecordId(record.employeeRecordId);
                           setCapabilityId(record.capabilityId);
@@ -571,6 +585,7 @@ export function QualificationManagementSection({
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={pendingAction !== null}
                           onClick={() => {
                             setEmployeeRecordId(record.employeeRecordId);
                             setCapabilityId(record.capabilityId);
@@ -618,6 +633,7 @@ export function QualificationManagementSection({
                 toast.error('Die Einstellung konnte nicht gespeichert werden.');
                 return;
               }
+              toast.success('Einstellung gespeichert.');
               refresh();
             } catch {
               toast.error('Die Einstellung konnte nicht gespeichert werden.');

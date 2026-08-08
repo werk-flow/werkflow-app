@@ -231,6 +231,32 @@ describe('evaluation fingerprints and expiry attention', () => {
     expect(before.fingerprint).not.toBe(after.fingerprint);
   });
 
+  test('keeps the fingerprint stable when candidates are reordered', () => {
+    const first = candidate({
+      userId: 'user-1',
+      employeeRecordId: 'employee-1',
+    });
+    const second = candidate({
+      userId: 'user-2',
+      employeeRecordId: 'employee-2',
+    });
+    const forward = resolveAssignmentEvaluation({
+      jobId: 'job-1',
+      assessedForDate: '2026-06-01',
+      candidates: [first, second],
+      requirements: [requirement],
+      apprenticeWarningEnabled: false,
+    });
+    const reversed = resolveAssignmentEvaluation({
+      jobId: 'job-1',
+      assessedForDate: '2026-06-01',
+      candidates: [second, first],
+      requirements: [requirement],
+      apprenticeWarningEnabled: false,
+    });
+    expect(forward.fingerprint).toBe(reversed.fingerprint);
+  });
+
   test('re-surfaces on validity phase changes but evidence is absent from the version', () => {
     expect(
       resolveCertificationExpiryPhase('2026-08-31', '2026-08-08', 30)

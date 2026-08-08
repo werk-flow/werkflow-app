@@ -141,6 +141,14 @@ export type OwnQualificationProfile = {
   }>;
 };
 
+export type PersonnelQualificationSummary = {
+  teamNames: string[];
+  entries: Array<{
+    definition: CapabilityDefinition;
+    record: EmployeeCapabilityRecord;
+  }>;
+};
+
 export type JobQualificationDetail = {
   capabilities: CapabilityDefinition[];
   requirements: JobCapabilityRequirement[];

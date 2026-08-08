@@ -238,10 +238,9 @@ export function JobQualificationSection({
                   {coverage.requirement.capabilityName}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {getCoverageStatusLabel(coverage.status)}
                   {coverage.contributor
-                    ? ' · ' + coverage.contributor.displayName
-                    : ''}
+                    ? `Abgedeckt durch ${coverage.contributor.displayName}`
+                    : 'Keine passende Person zugewiesen'}
                 </p>
               </div>
               <div className="flex items-center gap-1">
