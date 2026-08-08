@@ -18,7 +18,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline (updated 8 August 2026 through slice `P1-08`) includes:
+The implemented baseline (updated 8 August 2026 through slice `P1-09`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -93,9 +93,17 @@ Sickness and privacy-sensitive absence (`P1-08`, 2026-08-08):
 - Attention integration (`P1-07` taxonomy grew by `sickness_report`): version-keyed notifications for two audiences — admin/Büro managers learn of reports they did not record themselves, the affected person learns of office-recorded reports and office cancellations of their own reports. A correction changes the state version and re-surfaces the SAME notification unread; evidence bookkeeping deliberately does not. Payloads are minimal (dates and portion, never the type). In-app only, quiet by default.
 - `sickness_reports` is Realtime-published with replica identity full and wired into the provider, the attention count pipeline, the `/aufgaben` surface, the calendar, and the dashboard sections. All writes are service-role server actions with organization-validation triggers. Deploy-day: zero rows for every real organization; every surface unchanged for organizations that never record sickness.
 
+Teams, skills, certifications, and operational eligibility (`P1-09`, 2026-08-08):
+
+- Organization-scoped `teams` group people for planning convenience only; they grant no role, permission, or responsibility. Date-effective `team_memberships` key to the stable employee record, retain history after a team is dissolved, and include personnel without login. Assignment pickers can expand an effective team into individual active app users and explicitly report skipped no-login members.
+- Admin and Büro maintain an organization-curated vocabulary in `organization_capabilities`, deliberately split into `skill` and `certification` without a WerkFlow default catalog. Date-effective `employee_capabilities` retain issuer, internal confirmation, evidence state, validity, renewal date, operational note, and an immutable renewal/supersession chain. “Intern bestätigt” is an operational fact, not a legal claim.
+- Visibility is layered: employees get a read-only `/qualifikationen` view of only their own teams and qualification records; admin/Büro see and maintain the organization workspace and a targeted summary on each personnel detail; colleagues see nothing. The apprentice-warning switch is admin-only and defaults off. All operational tables have organization-validation triggers, self-or-manager or manager-only RLS as appropriate, Realtime publication, replica identity full, and typed cache invalidation; audit tables stay append-only and unpublished.
+- Job requirements in `job_capability_requirements` evaluate the selected people on the job's planned date (or the current Berlin business date when unscheduled). The resolver explains `covered`, `unconfirmed`, `expired`, `not_yet_valid`, and `missing` per requirement with the strongest attributable contributor. Every assignment entry point re-resolves at write time; incomplete selections remain possible only through a short reasoned override whose fingerprint and optional team source are appended to `job_qualification_assessments`.
+- The optional apprentice signal warns when the selection contains only apprentices or incomplete employment-condition data; it never imposes a quota or hard block. Certification expiry extends the shared `/aufgaben` notification taxonomy as one deduplicated, versioned item per record and expiry phase, visible to managers without exposing it to colleagues.
+
 Important current limitations:
 
-- There is no team structure and no skill/certification model (`P1-09`). Work schedules cover weekly patterns only: no shift rotations, seasonal patterns, or date-specific overrides (`P1-11`).
+- Teams and operational qualification coverage are implemented through `P1-09`. Capacity conflicts, minimum staffing, team availability, shift rotations, seasonal patterns, and date-specific schedule overrides remain `P1-11`.
 - Vacation and sickness/privacy-sensitive absence are the implemented absence types; further vocabulary (training, special leave, compensatory time) and hour-based absence remain later scope. Sickness carries no paid/unpaid classification yet — the type + portion + dates shape is what `P1-23` will classify without rewriting it. Entitlement carryover into the next year, expiry rules, and manual balance adjustments are deliberately deferred: no period-close or time-account concept exists yet (`P1-23`), and carryover without expiry rules would invent policy — an organization adjusts a year's entitlement through a dated condition, which stays visible arithmetic.
 - The shared attention pattern (`P1-07`) covers approvals, open requests, and decision notifications in-app only: no reminders, snooze, or escalation engine, no per-user notification preferences yet (the smallest honest step was quiet-by-default; configurability grows with real usage), and no external delivery (`P1-46`).
 - Capacity conflicts, minimum staffing, and availability planning that combines absence remain `P1-11`; the calendar shows minimal visible absence signals only.

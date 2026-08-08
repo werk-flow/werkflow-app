@@ -48,6 +48,7 @@ The following behavior exists today and is the baseline future work must preserv
 - Managers assign one or more organization members to a job. Employees see work through their assignments; project access is reached through assigned work.
 - Assigned employees can open the relevant job detail, see operational context, record job-linked time, complete instruction items, upload/view documents and photos, and book inventory take/return actions available to them.
 - Managers retain control over work creation, editing, assignment, status changes, and deletion.
+- Since `P1-09`, managers can attach organization-curated skill/certification requirements to a job. The job detail explains whether the selected people cover each requirement (`covered`, internally unconfirmed, expired, not yet valid, or missing) and attributes the strongest matching person. Assignment changes across create, edit, detail, and calendar paths are assessed atomically on the planned date; uncovered selections remain possible only through a reasoned, fingerprinted assessment record. Requirements guide planning and do not claim legal authorization.
 - Calendar views consume job dates, times, duration, customer/location context, project context, priority, status, and employee assignments. Parked jobs are excluded from scheduled calendar work.
 
 ### Instructions, Time, Documents, And Materials
