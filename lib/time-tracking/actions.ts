@@ -2133,19 +2133,12 @@ export async function getCurrentlyClockedIn(
 
     const admin = createSupabaseAdminClient();
 
-    // Get all members of the org (with profile info)
+    // Two-step lookup on purpose: organization_members has no direct foreign
+    // key to profiles (both only reference auth.users), so a PostgREST embed
+    // `profiles(...)` fails with a missing-relationship error.
     const { data: members, error: membersError } = await admin
       .from('organization_members')
-      .select(
-        `
-        user_id,
-        role,
-        profiles (
-          first_name,
-          last_name
-        )
-      `
-      )
+      .select('user_id, role')
       .eq('organization_id', orgId);
 
     if (membersError) {
@@ -2155,6 +2148,20 @@ export async function getCurrentlyClockedIn(
 
     // Admin and Büro can see all members
     const visibleMembers = members || [];
+
+    const { data: memberProfiles, error: profilesError } = await admin
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .in('id', visibleMembers.map((m) => m.user_id));
+
+    if (profilesError) {
+      console.error('Error fetching member profiles:', profilesError);
+      return { success: false, error: 'fetch_failed' };
+    }
+
+    const profileByUserId = new Map(
+      (memberProfiles ?? []).map((profile) => [profile.id, profile])
+    );
 
     // Batch-fetch today's entries for all visible members at once
     // instead of one query per member (N+1 elimination).
@@ -2199,16 +2206,7 @@ export async function getCurrentlyClockedIn(
       const currentState = deriveCurrentClockState(timeEntries);
 
       if (currentState.isClockedIn && currentState.clockInTime) {
-
-        const profileData = member.profiles as unknown;
-        const profile = Array.isArray(profileData)
-          ? (profileData[0] as
-              | { first_name: string | null; last_name: string | null }
-              | undefined)
-          : (profileData as {
-              first_name: string | null;
-              last_name: string | null;
-            } | null);
+        const profile = profileByUserId.get(member.user_id) ?? null;
 
         clockedInUsers.push({
           userId: member.user_id,
