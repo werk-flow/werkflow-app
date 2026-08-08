@@ -41,6 +41,7 @@ export async function createJob(
     siteName?: string;
     contactName?: string;
     qualificationOverrideReason?: string;
+    plannedDateDigits?: string;
   }
 ): Promise<void> {
   await page.goto('/auftraege');
@@ -52,6 +53,14 @@ export async function createJob(
 
   await page.locator('#job-number').fill(options.jobNumber);
   await page.locator('#job-title').fill(options.title);
+
+  if (options.plannedDateDigits) {
+    await typeIntoDatePicker(
+      page.getByRole('dialog'),
+      'Datum',
+      options.plannedDateDigits
+    );
+  }
 
   if (options.clientName) {
     // The customer picker is a searchable combobox showing "Kein Kunde".

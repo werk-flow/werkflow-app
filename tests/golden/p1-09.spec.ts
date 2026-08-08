@@ -177,6 +177,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const apprenticeEffectiveDate = shiftIsoDate(TODAY_ISO, 90);
     await bueroPage.goto('/mitarbeiter');
     await bueroPage
       .getByRole('tab', { name: 'Qualifikationen', exact: true })
@@ -189,7 +190,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
 
     await openMemberDetailFromList(adminPage, employeeName);
     await addConditionViaDialog(adminPage, {
-      validFromDigits: toDatePickerDigits(TODAY_ISO),
+      validFromDigits: toDatePickerDigits(apprenticeEffectiveDate),
       employmentTypeLabel: 'Ausbildung',
       note: 'P1-09 Ausbildungs-Hinweis',
     });
@@ -200,6 +201,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
       jobNumber,
       title: 'P1-09 Ausbildungs-Hinweis',
       assignEmployeeName: employeeName,
+      plannedDateDigits: toDatePickerDigits(apprenticeEffectiveDate),
       qualificationOverrideReason: 'Einsatz wird im Betrieb begleitet',
     });
     const state = await getJobQualificationState(world.orgId, jobNumber);
