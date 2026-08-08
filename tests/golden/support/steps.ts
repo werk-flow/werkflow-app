@@ -121,6 +121,7 @@ export async function createJob(
     await warningDialog
       .getByRole('button', { name: 'Trotz Hinweis zuweisen' })
       .click();
+    await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
   }
   // The dialog closes on success; the caller asserts the job row afterwards.
   await expect(
