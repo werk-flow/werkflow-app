@@ -261,6 +261,8 @@ export function JobDetailContent({
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
     string | null
   >(null);
+  const [isExpandingAssignmentTeam, setIsExpandingAssignmentTeam] =
+    useState(false);
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
   const [isQualificationOverrideSaving, setIsQualificationOverrideSaving] =
     useState(false);
@@ -1699,7 +1701,10 @@ export function JobDetailContent({
         open={showAssignDialog}
         onOpenChange={(open) => {
           setShowAssignDialog(open);
-          if (!open) setAssignmentTeamSourceId(null);
+          if (!open) {
+            setAssignmentTeamSourceId(null);
+            setIsExpandingAssignmentTeam(false);
+          }
         }}
       >
         <DialogContent className="sm:max-w-[400px]">
@@ -1713,6 +1718,7 @@ export function JobDetailContent({
               onSelectionChange={setAssignSelectedIds}
               assessedForDate={liveJob.plannedDate}
               onTeamApplied={setAssignmentTeamSourceId}
+              onTeamExpansionPendingChange={setIsExpandingAssignmentTeam}
             />
             {isLoadingDialogOptions && (
               <div className="mt-3 space-y-2">
@@ -1731,7 +1737,11 @@ export function JobDetailContent({
             </Button>
             <Button
               onClick={handleAssignEmployees}
-              disabled={isAssigning || isLoadingDialogOptions}
+              disabled={
+                isAssigning ||
+                isLoadingDialogOptions ||
+                isExpandingAssignmentTeam
+              }
             >
               {isAssigning && (
                 <Loader2 className="mr-2 size-4 animate-spin" />

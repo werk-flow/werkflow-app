@@ -24,6 +24,7 @@ interface EmployeeMultiSelectProps {
   onSelectionChange: (ids: string[]) => void;
   assessedForDate?: string | null;
   onTeamApplied?: (teamId: string | null) => void;
+  onTeamExpansionPendingChange?: (pending: boolean) => void;
   disabled?: boolean;
 }
 
@@ -38,6 +39,7 @@ export function EmployeeMultiSelect({
   onSelectionChange,
   assessedForDate,
   onTeamApplied,
+  onTeamExpansionPendingChange,
   disabled = false,
 }: EmployeeMultiSelectProps) {
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
@@ -68,7 +70,7 @@ export function EmployeeMultiSelect({
         <div
           className="flex flex-wrap items-center gap-1.5"
           role="group"
-          aria-label="Team fÃ¼r die Zuweisung Ã¼bernehmen"
+          aria-label="Team für die Zuweisung übernehmen"
         >
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Users className="size-3.5" />
@@ -89,6 +91,7 @@ export function EmployeeMultiSelect({
               onClick={async () => {
                 if (pendingTeamId !== null) return;
                 setPendingTeamId(team.id);
+                onTeamExpansionPendingChange?.(true);
                 try {
                   const result = await expandTeamForAssignment({
                     teamId: team.id,
@@ -112,6 +115,7 @@ export function EmployeeMultiSelect({
                   toast.error('Das Team konnte nicht übernommen werden.');
                 } finally {
                   setPendingTeamId(null);
+                  onTeamExpansionPendingChange?.(false);
                 }
               }}
             >
