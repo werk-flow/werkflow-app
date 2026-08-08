@@ -291,11 +291,13 @@ describe('resolveSicknessReportFacts (P1-08)', () => {
       sourceType: 'sickness_report' as const,
       sourceId: 'report-1',
     };
+    // The own-flavored item is listed first by the derivation, so
+    // deduplication keeps it (production field, not an invented one).
     const deduped = dedupeAttentionItems([
-      { ...shared, audience: 'own' },
-      { ...shared, audience: 'manager' },
+      { ...shared, isOwn: true },
+      { ...shared, isOwn: false },
     ]);
     expect(deduped).toHaveLength(1);
-    expect(deduped[0].audience).toBe('own');
+    expect(deduped[0].isOwn).toBe(true);
   });
 });

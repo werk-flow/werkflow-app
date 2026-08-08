@@ -213,14 +213,21 @@ export function resolveDailyTarget({
   const isClosureDay = closure !== undefined;
 
   // A day can be covered by several spans (sickness during approved vacation
-  // is a real case). Deterministic precedence: vacation wins the display
-  // attribution so pre-P1-08 behavior stays bit-identical; the target math is
-  // unaffected on full days either way.
+  // is a real case). Coverage strength and attribution are separate concerns:
+  // any full-day span makes the day fully absent — a half-day vacation must
+  // never weaken a full-day sickness — and among equally strong spans
+  // vacation keeps the attribution, so days with a single span (all pre-P1-08
+  // data) behave bit-identically.
   const coveringSpans = (absences ?? []).filter(
     (span) => span.startDate <= dateIso && dateIso <= span.endDate
   );
+  const fullSpans = coveringSpans.filter(
+    (span) => span.dayPortion === 'full'
+  );
+  const strongestSpans = fullSpans.length > 0 ? fullSpans : coveringSpans;
   const absenceSpan =
-    coveringSpans.find((span) => span.type === 'vacation') ?? coveringSpans[0];
+    strongestSpans.find((span) => span.type === 'vacation') ??
+    strongestSpans[0];
   const absence: DailyTargetAbsence | null = absenceSpan
     ? { type: absenceSpan.type, portion: absenceSpan.dayPortion }
     : null;

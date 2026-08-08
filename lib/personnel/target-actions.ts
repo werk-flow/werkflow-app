@@ -96,7 +96,8 @@ export async function getWeeklyTargets(input: {
         loadActiveSicknessSpansByRecord(
           orgId,
           weekDates[0],
-          weekDates[weekDates.length - 1]
+          weekDates[weekDates.length - 1],
+          record.id
         ),
       ]);
 

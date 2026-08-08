@@ -33,6 +33,7 @@ import {
 } from '@/lib/sickness/actions';
 import {
   formatSicknessRange,
+  SICKNESS_ERROR_MESSAGES,
   SICKNESS_EVIDENCE_LABELS,
   SICKNESS_TYPE_LABELS,
   type SicknessAbsenceType,
@@ -40,34 +41,6 @@ import {
 } from '@/lib/sickness/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { cn, toLocalDateString } from '@/lib/utils';
-
-export const SICKNESS_ERROR_MESSAGES: Record<string, string> = {
-  invalid_dates: 'Bitte gib gültige Daten an.',
-  invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
-  invalid_type: 'Bitte wähle eine Art der Abwesenheit aus.',
-  range_too_long:
-    'Eine Meldung kann höchstens ein Jahr umfassen. Bitte wende dich an dein Büro.',
-  start_too_far_past:
-    'Das Startdatum liegt zu weit in der Vergangenheit. Bitte wende dich an dein Büro.',
-  start_too_far_future: 'Das Startdatum liegt zu weit in der Zukunft.',
-  invalid_portion: 'Bitte wähle Ganztägig oder Halbtägig aus.',
-  half_day_needs_single_day:
-    'Ein halber Tag gilt nur für einen einzelnen Tag mit Enddatum.',
-  overlap_conflict:
-    'Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.',
-  no_employee_record:
-    'Zu deinem Zugang wurde keine Personalakte gefunden. Bitte wende dich an dein Büro.',
-  not_authenticated: 'Bitte melde dich erneut an.',
-  not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
-  not_authorized: 'Du darfst diese Meldung nicht ändern.',
-  report_not_active: 'Die Meldung ist nicht mehr aktiv.',
-  not_found: 'Die Meldung wurde nicht gefunden.',
-  reason_required: 'Bitte gib einen Grund an.',
-  insert_failed: 'Die Meldung konnte nicht gespeichert werden.',
-  update_failed: 'Die Meldung konnte nicht gespeichert werden.',
-  load_failed: 'Die Daten konnten nicht geladen werden.',
-  unexpected_error: 'Die Meldung konnte nicht gespeichert werden.',
-};
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
@@ -166,6 +139,11 @@ export function SicknessSection() {
                     <Thermometer className="size-3.5" />
                     Krank melden
                   </Button>
+                  {overview && !overview.employeeRecordId && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {SICKNESS_ERROR_MESSAGES.no_employee_record}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -315,8 +293,8 @@ function SicknessReportDialog({
       if (result.success) {
         if (result.vacationOverlap) {
           // Informational only: the office decides any vacation consequence.
+          // The dialog stays open until the person confirms the hint.
           setOverlapHint(true);
-          setTimeout(() => onClose(true), 2500);
         } else {
           onClose(true);
         }
@@ -335,7 +313,10 @@ function SicknessReportDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose(false)}>
+    <Dialog
+      open
+      onOpenChange={(open) => !open && !isSaving && onClose(overlapHint)}
+    >
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Krank melden</DialogTitle>
@@ -452,21 +433,31 @@ function SicknessReportDialog({
             )}
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onClose(false)}
-              disabled={isSaving}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSaving || !startDate || (endKnown && !endDate)}
-            >
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
-              {isSaving ? 'Wird gemeldet...' : 'Krank melden'}
-            </Button>
+            {overlapHint ? (
+              // The report is saved; the hint must be acknowledged, not raced
+              // by an auto-close timer.
+              <Button type="button" onClick={() => onClose(true)}>
+                Verstanden
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onClose(false)}
+                  disabled={isSaving}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSaving || !startDate || (endKnown && !endDate)}
+                >
+                  {isSaving && <Loader2 className="size-4 animate-spin" />}
+                  {isSaving ? 'Wird gemeldet...' : 'Krank melden'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

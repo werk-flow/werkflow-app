@@ -83,13 +83,19 @@ function formatGermanDate(dateIso: string): string {
   return `${day}.${month}.${year}`;
 }
 
-const yesterdayIso = () => shiftIsoDate(berlinTodayIso(), -1);
+// Snapshot the business date ONCE at module load: every date the spec
+// derives (report start, range texts) must stay consistent with what the app
+// stored at report-creation time, even if wall-clock assertions run later.
+const TODAY_ISO = berlinTodayIso();
+const YESTERDAY_ISO = shiftIsoDate(TODAY_ISO, -1);
+
+const yesterdayIso = () => YESTERDAY_ISO;
 
 // The employee report's range texts (aria-label identity on both surfaces).
 const openEndedRangeText = () =>
-  `${formatGermanDate(yesterdayIso())} – bis auf Weiteres`;
+  `${formatGermanDate(YESTERDAY_ISO)} – bis auf Weiteres`;
 const endedRangeText = () =>
-  `${formatGermanDate(yesterdayIso())} – ${formatGermanDate(berlinTodayIso())}`;
+  `${formatGermanDate(YESTERDAY_ISO)} – ${formatGermanDate(TODAY_ISO)}`;
 
 test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
   test('Selbstmeldung: rückwirkend und offen, Sollzeit folgt, Kalender bleibt neutral, das Büro wird informiert', async ({
@@ -163,7 +169,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     // Today's Tagesziel explains itself — unless a holiday/closure already
     // zeroes the day with its own label (runtime-checked, never assumed).
     const todayTarget = targets.find(
-      (target) => target.date === berlinTodayIso()
+      (target) => target.date === TODAY_ISO
     );
     if (todayTarget && !todayTarget.isHoliday && !todayTarget.isClosureDay) {
       await expect(
@@ -210,8 +216,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
 
     // A second overlapping own report is impossible, race-safe, explained.
     await expectSicknessOverlapRejectedViaDialog(employeePage, {
-      startDigits: toDatePickerDigits(berlinTodayIso()),
-      endDigits: toDatePickerDigits(berlinTodayIso()),
+      startDigits: toDatePickerDigits(TODAY_ISO),
+      endDigits: toDatePickerDigits(TODAY_ISO),
     });
   });
 
@@ -300,7 +306,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     // „Ich bin wieder da": the person sets the end date themselves.
     await setOwnSicknessEndDateViaDialog(employeePage, {
       rangeText: openEndedRangeText(),
-      endDigits: toDatePickerDigits(berlinTodayIso()),
+      endDigits: toDatePickerDigits(TODAY_ISO),
       expectedRangeText: endedRangeText(),
     });
     const afterEnd = await getLatestSicknessReportState(
@@ -308,7 +314,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       employeeRecord.id
     );
     expect(afterEnd.id).toBe(before.id);
-    expect(afterEnd.endDate).toBe(berlinTodayIso());
+    expect(afterEnd.endDate).toBe(TODAY_ISO);
     expect(afterEnd.eventTypes).toEqual(['reported', 'ended']);
 
     // The correction re-surfaces the SAME manager notice unread — one row,

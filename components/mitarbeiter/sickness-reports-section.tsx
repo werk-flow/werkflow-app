@@ -49,12 +49,12 @@ import {
 } from '@/lib/sickness/actions';
 import {
   formatSicknessRange,
+  SICKNESS_ERROR_MESSAGES,
   SICKNESS_EVIDENCE_LABELS,
   SICKNESS_TYPE_LABELS,
   type SicknessAbsenceType,
   type SicknessReport,
 } from '@/lib/sickness/types';
-import { SICKNESS_ERROR_MESSAGES } from '@/components/zeiterfassung/sickness-section';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { cn, toLocalDateString } from '@/lib/utils';
 
@@ -316,8 +316,8 @@ function RecordSicknessDialog({
       });
       if (result.success) {
         if (result.vacationOverlap) {
+          // Saved; the hint must be acknowledged, never raced by a timer.
           setOverlapHint(true);
-          setTimeout(() => onClose(true), 2500);
         } else {
           onClose(true);
         }
@@ -336,7 +336,10 @@ function RecordSicknessDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose(false)}>
+    <Dialog
+      open
+      onOpenChange={(open) => !open && !isSaving && onClose(overlapHint)}
+    >
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Krankmeldung erfassen</DialogTitle>
@@ -473,21 +476,29 @@ function RecordSicknessDialog({
             )}
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onClose(false)}
-              disabled={isSaving}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSaving || !startDate || (endKnown && !endDate)}
-            >
-              {isSaving && <Loader2 className="size-4 animate-spin" />}
-              {isSaving ? 'Wird gespeichert...' : 'Krankmeldung erfassen'}
-            </Button>
+            {overlapHint ? (
+              <Button type="button" onClick={() => onClose(true)}>
+                Verstanden
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onClose(false)}
+                  disabled={isSaving}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSaving || !startDate || (endKnown && !endDate)}
+                >
+                  {isSaving && <Loader2 className="size-4 animate-spin" />}
+                  {isSaving ? 'Wird gespeichert...' : 'Krankmeldung erfassen'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
@@ -681,6 +692,21 @@ function CorrectSicknessDialog({
               </Select>
             </div>
 
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="correct-sickness-end-known"
+                checked={endKnown}
+                onCheckedChange={(checked) => setEndKnown(checked === true)}
+                disabled={isSaving}
+              />
+              <Label
+                htmlFor="correct-sickness-end-known"
+                className="text-sm font-normal"
+              >
+                Enddatum ist bekannt
+              </Label>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="correct-sickness-start">Ab</Label>
@@ -714,21 +740,6 @@ function CorrectSicknessDialog({
                   />
                 </div>
               )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="correct-sickness-end-known"
-                checked={endKnown}
-                onCheckedChange={(checked) => setEndKnown(checked === true)}
-                disabled={isSaving}
-              />
-              <Label
-                htmlFor="correct-sickness-end-known"
-                className="text-sm font-normal"
-              >
-                Enddatum ist bekannt
-              </Label>
             </div>
 
             {endKnown && (

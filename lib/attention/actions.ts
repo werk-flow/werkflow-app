@@ -343,7 +343,12 @@ async function deriveSicknessNotifications(context: ActionContext): Promise<{
       'id, employee_record_id, status, start_date, end_date, day_portion, reported_by, cancelled_by, cancelled_at, updated_at'
     )
     .eq('organization_id', context.orgId)
-    .gte('updated_at', windowStart);
+    .gte('updated_at', windowStart)
+    // Deterministic order plus a cap keep the manager-side read bounded even
+    // in a large organization; 200 recently-touched reports comfortably
+    // exceeds anything a 60-day window realistically holds.
+    .order('updated_at', { ascending: false })
+    .limit(200);
   if (!isManager && ownRecordId) {
     reportsQuery = reportsQuery.eq('employee_record_id', ownRecordId);
   }

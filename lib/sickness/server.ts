@@ -38,16 +38,22 @@ export async function loadSicknessReportsForRecord(
 export async function loadActiveSicknessSpansByRecord(
   organizationId: string,
   windowStartIso: string,
-  windowEndIso: string
+  windowEndIso: string,
+  /** Narrows the read to one record (single-person target surfaces). */
+  employeeRecordId?: string
 ): Promise<Map<string, ApprovedAbsenceSpan[]>> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  let query = admin
     .from('sickness_reports')
     .select('employee_record_id, start_date, end_date, day_portion')
     .eq('organization_id', organizationId)
     .eq('status', 'reported')
     .lte('start_date', windowEndIso)
     .or(`end_date.gte.${windowStartIso},end_date.is.null`);
+  if (employeeRecordId) {
+    query = query.eq('employee_record_id', employeeRecordId);
+  }
+  const { data, error } = await query;
 
   if (error) {
     // Absence must never break the target surfaces: degrade to "no absence"

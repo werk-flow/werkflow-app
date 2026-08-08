@@ -682,8 +682,19 @@ export function CalendarContainer({
     setIsLoading(true);
     fetchEntries();
     fetchJobs();
+    // Absence entries refresh too — a manual refresh must never leave stale
+    // availability standing when a Realtime event was missed.
+    void refetchVacationEntries();
+    void refetchSicknessEntries();
     if (isAdminOrManager) fetchParkedJobs();
-  }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager]);
+  }, [
+    fetchEntries,
+    fetchJobs,
+    fetchParkedJobs,
+    isAdminOrManager,
+    refetchVacationEntries,
+    refetchSicknessEntries,
+  ]);
 
   const handleOperationStart = useCallback(() => {
     inflightRef.current++;

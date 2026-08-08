@@ -44,6 +44,38 @@ export const SICKNESS_EVIDENCE_LABELS: Record<SicknessEvidenceStatus, string> =
     received: 'Nachweis erhalten',
   };
 
+// Centralized German error copy for every sickness action result (AGENTS.md:
+// keep UI text centralized where practical). Both the employee section and
+// the manager section render from this one map.
+export const SICKNESS_ERROR_MESSAGES: Record<string, string> = {
+  invalid_dates: 'Bitte gib gültige Daten an.',
+  invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
+  invalid_type: 'Bitte wähle eine Art der Abwesenheit aus.',
+  range_too_long:
+    'Eine Meldung kann höchstens ein Jahr umfassen. Bitte wende dich an dein Büro.',
+  start_too_far_past:
+    'Das Startdatum liegt zu weit in der Vergangenheit. Bitte wende dich an dein Büro.',
+  start_too_far_future: 'Das Startdatum liegt zu weit in der Zukunft.',
+  invalid_portion: 'Bitte wähle Ganztägig oder Halbtägig aus.',
+  half_day_needs_single_day:
+    'Ein halber Tag gilt nur für einen einzelnen Tag mit Enddatum.',
+  overlap_conflict:
+    'Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.',
+  no_employee_record:
+    'Zu deinem Zugang wurde keine Personalakte gefunden. Bitte wende dich an dein Büro.',
+  not_authenticated: 'Bitte melde dich erneut an.',
+  not_a_member: 'Du gehörst dieser Organisation nicht mehr an.',
+  not_authorized: 'Du darfst diese Meldung nicht ändern.',
+  report_not_active: 'Die Meldung ist nicht mehr aktiv.',
+  not_found: 'Die Meldung wurde nicht gefunden.',
+  reason_required: 'Bitte gib einen Grund an.',
+  invalid_evidence_state: 'Der Nachweis-Status ist ungültig.',
+  insert_failed: 'Die Meldung konnte nicht gespeichert werden.',
+  update_failed: 'Die Meldung konnte nicht gespeichert werden.',
+  load_failed: 'Die Daten konnten nicht geladen werden.',
+  unexpected_error: 'Die Meldung konnte nicht gespeichert werden.',
+};
+
 // ============================================
 // Application-Level Type (camelCase)
 // ============================================

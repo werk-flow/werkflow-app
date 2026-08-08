@@ -1368,9 +1368,11 @@ export async function reportOwnSicknessViaDialog(
   }
   await dialog.getByRole('button', { name: 'Krank melden' }).click();
   if (options.expectVacationOverlapHint) {
+    // The saved report shows the overlap hint until explicitly acknowledged.
     await expect(
       dialog.getByText('überschneidet sich mit genehmigtem Urlaub')
     ).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole('button', { name: 'Verstanden' }).click();
   }
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
@@ -1459,9 +1461,11 @@ export async function recordSicknessForMemberViaSection(
   }
   await dialog.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
   if (options.expectVacationOverlapHint) {
+    // The saved report shows the overlap hint until explicitly acknowledged.
     await expect(
       dialog.getByText('überschneidet sich mit genehmigtem Urlaub')
     ).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole('button', { name: 'Verstanden' }).click();
   }
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }

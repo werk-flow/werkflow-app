@@ -381,6 +381,31 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
     expect(target.targetMinutes).toBe(0);
   });
 
+  test('a full-day sickness is never weakened by a half-day vacation on the same day', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-04',
+      ...base,
+      absences: [
+        {
+          type: 'vacation',
+          startDate: '2026-08-04',
+          endDate: '2026-08-04',
+          dayPortion: 'half_day',
+        },
+        {
+          type: 'sickness',
+          startDate: '2026-08-04',
+          endDate: '2026-08-04',
+          dayPortion: 'full',
+        },
+      ],
+    });
+    // Any full-day span makes the day fully absent; the attribution follows
+    // the strongest coverage, not the span order.
+    expect(target.targetMinutes).toBe(0);
+    expect(target.absence).toEqual({ type: 'sickness', portion: 'full' });
+  });
+
   test('a day covered by vacation and sickness keeps the vacation attribution', () => {
     const target = resolveDailyTarget({
       dateIso: '2026-08-04',
