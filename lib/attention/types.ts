@@ -28,7 +28,8 @@ export type AttentionSourceType =
   | 'vacation_request_approval'
   | 'client_request_open'
   | 'vacation_decision'
-  | 'sickness_report';
+  | 'sickness_report'
+  | 'employee_certification_expiry';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -120,9 +121,23 @@ export type SicknessReportNotification = {
   unread: boolean;
 };
 
+export type CertificationExpiryNotification = {
+  sourceType: 'employee_certification_expiry';
+  sourceId: string;
+  employeeRecordId: string;
+  personName: string;
+  capabilityName: string;
+  validUntil: string;
+  phase: 'approaching' | 'expired';
+  stateVersion: string;
+  occurredAt: string;
+  unread: boolean;
+};
+
 export type AttentionNotification =
   | VacationDecisionNotification
-  | SicknessReportNotification;
+  | SicknessReportNotification
+  | CertificationExpiryNotification;
 
 // Own requests for the employee-transparency section ("Meine Anträge").
 export type OwnAttentionRequest = {

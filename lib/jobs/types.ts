@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
+import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
 
 // ============================================
@@ -226,12 +227,20 @@ export type DeleteClientResult =
   | { success: true }
   | { success: false; error: string };
 
+export type QualificationWarningResult = {
+  success: false;
+  error: 'qualification_warning' | 'stale_evaluation';
+  evaluation: AssignmentEvaluation;
+};
+
 export type CreateJobResult =
   | { success: true; job: Job }
+  | QualificationWarningResult
   | { success: false; error: string };
 
 export type UpdateJobResult =
   | { success: true; job: Job }
+  | QualificationWarningResult
   | { success: false; error: string };
 
 export type DeleteJobResult =
@@ -252,10 +261,17 @@ export type DeleteProjectResult =
 
 export type AssignEmployeeResult =
   | { success: true; assignment: JobAssignment }
+  | QualificationWarningResult
+  | { success: false; error: string };
+
+export type UpdateJobAssignmentsResult =
+  | { success: true; assignments: JobAssignment[] }
+  | QualificationWarningResult
   | { success: false; error: string };
 
 export type UnassignEmployeeResult =
   | { success: true }
+  | QualificationWarningResult
   | { success: false; error: string };
 
 export type GetJobInstructionItemsResult =

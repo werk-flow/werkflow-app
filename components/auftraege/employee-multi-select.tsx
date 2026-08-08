@@ -1,6 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Users } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import {
+  expandTeamForAssignment,
+  getAssignmentTeamOptions,
+} from '@/lib/qualifications/actions';
 
 import { SearchableMultiSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 
@@ -15,6 +22,8 @@ interface EmployeeMultiSelectProps {
   members: OrgMemberOption[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
+  assessedForDate?: string | null;
+  onTeamApplied?: (teamId: string | null) => void;
   disabled?: boolean;
 }
 
@@ -27,8 +36,20 @@ export function EmployeeMultiSelect({
   members,
   selectedIds,
   onSelectionChange,
+  assessedForDate,
+  onTeamApplied,
   disabled = false,
 }: EmployeeMultiSelectProps) {
+  const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let active = true;
+    void getAssignmentTeamOptions().then((result) => {
+      if (active && result.success) setTeams(result.teams);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   const options: SearchableSelectOption[] = useMemo(
     () =>
       members.map((m) => ({
@@ -39,17 +60,61 @@ export function EmployeeMultiSelect({
   );
 
   return (
-    <SearchableMultiSelect
-      options={options}
-      selectedIds={selectedIds}
-      onSelectionChange={onSelectionChange}
-      placeholder="Mitarbeiter zuweisen"
-      selectedLabel={(count) =>
-        count === 1 ? '1 Mitarbeiter' : `${count} Mitarbeiter`
-      }
-      searchPlaceholder="Mitarbeiter suchen..."
-      emptyMessage="Kein Mitarbeiter gefunden"
-      disabled={disabled}
-    />
+    <div className="space-y-2">
+      {teams.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Users className="size-3.5" />
+            Team übernehmen:
+          </span>
+          {teams.map((team) => (
+            <Button
+              key={team.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7"
+              disabled={disabled}
+              onClick={async () => {
+                const result = await expandTeamForAssignment({
+                  teamId: team.id,
+                  assessedForDate,
+                });
+                if (!result.success) {
+                  toast.error('Das Team konnte nicht übernommen werden.');
+                  return;
+                }
+                onSelectionChange([
+                  ...new Set([...selectedIds, ...result.userIds]),
+                ]);
+                onTeamApplied?.(result.teamSourceId);
+                if (result.skippedNames.length > 0) {
+                  toast.info(
+                    `${result.skippedNames.join(', ')} wurde nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`
+                  );
+                }
+              }}
+            >
+              {team.name}
+            </Button>
+          ))}
+        </div>
+      )}
+      <SearchableMultiSelect
+        options={options}
+        selectedIds={selectedIds}
+        onSelectionChange={(ids) => {
+          onSelectionChange(ids);
+          onTeamApplied?.(null);
+        }}
+        placeholder="Mitarbeiter zuweisen"
+        selectedLabel={(count) =>
+          count === 1 ? '1 Mitarbeiter' : `${count} Mitarbeiter`
+        }
+        searchPlaceholder="Mitarbeiter suchen..."
+        emptyMessage="Kein Mitarbeiter gefunden"
+        disabled={disabled}
+      />
+    </div>
   );
 }

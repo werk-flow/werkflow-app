@@ -19,6 +19,7 @@ import {
 } from '@/lib/members/actions';
 import { getPersonnelRecords } from '@/lib/personnel/actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
+import { getQualificationWorkspace } from '@/lib/qualifications/actions';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';
@@ -38,6 +39,7 @@ async function MitarbeiterData({
     personnelResult,
     targetsResult,
     responsibilitySettingsResult,
+    qualificationWorkspaceResult,
   ] =
     await Promise.all([
       getOrgMembersForUser(activeOrgId, userId),
@@ -51,6 +53,7 @@ async function MitarbeiterData({
       getPersonnelRecords(),
       getTodayTargetsForMembers(),
       getResponsibilitySettingsData(),
+      getQualificationWorkspace(),
     ]);
 
   const memberList = membersResult as OrgMember[];
@@ -109,6 +112,11 @@ async function MitarbeiterData({
       currentUserId={userId}
       currentUserRole={currentUserRole}
       organizationId={activeOrgId}
+      qualificationWorkspace={
+        qualificationWorkspaceResult.success
+          ? qualificationWorkspaceResult.data
+          : null
+      }
     />
   );
 }

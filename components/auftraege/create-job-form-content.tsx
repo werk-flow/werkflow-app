@@ -23,7 +23,11 @@ import { ClientSelectWithCreate } from './client-select-with-create';
 import { SiteContactFields } from './site-contact-fields';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { createJob, getNextJobNumber, type CreateJobInput } from '@/lib/jobs/actions';
-import { assignEmployee } from '@/lib/jobs/actions';
+import { QualificationWarningDialog } from './qualification-warning-dialog';
+import type {
+  AssignmentApproval,
+  AssignmentEvaluation,
+} from '@/lib/qualifications/types';
 import {
   JOB_PRIORITY_LABELS,
   type Client,
@@ -103,6 +107,11 @@ export function CreateJobFormContent({
   const [jobNumber, setJobNumber] = useState(initialJobNumber ?? '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [qualificationWarning, setQualificationWarning] =
+    useState<AssignmentEvaluation | null>(null);
+  const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
+    string | null
+  >(null);
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
   // Prefill from the project's default site/contact when creating inside one.
@@ -207,8 +216,7 @@ export function CreateJobFormContent({
     selectedEmployees
   ]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitJob = async (approval?: AssignmentApproval) => {
     setHasAttemptedSubmit(true);
     setError(null);
     setContentError(null);
@@ -251,12 +259,23 @@ export function CreateJobFormContent({
         plannedWorkingMinutes,
         location: location.trim() || undefined,
         siteId: siteId || undefined,
-        contactId: contactId || undefined
+        contactId: contactId || undefined,
+        selectedUserIds: selectedEmployees,
+        assignmentApproval: approval ?? null,
+        assignmentTeamSourceId,
       };
 
       const result = await createJob(input);
 
       if (!result.success) {
+        if (
+          (result.error === 'qualification_warning' ||
+            result.error === 'stale_evaluation') &&
+          'evaluation' in result
+        ) {
+          setQualificationWarning(result.evaluation);
+          return;
+        }
         if (
           result.error === 'job_number_required' ||
           result.error === 'job_number_taken'
@@ -272,20 +291,7 @@ export function CreateJobFormContent({
         return;
       }
 
-      if (selectedEmployees.length > 0) {
-        const assignResults = await Promise.allSettled(
-          selectedEmployees.map((userId) =>
-            assignEmployee(result.job.id, userId)
-          )
-        );
-        const failed = assignResults.filter(
-          (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)
-        );
-        if (failed.length > 0) {
-          console.error('Some employee assignments failed:', failed);
-        }
-      }
-
+      setQualificationWarning(null);
       setSuccess(true);
       await onSuccess?.({
         job: result.job,
@@ -296,6 +302,11 @@ export function CreateJobFormContent({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await submitJob();
   };
 
   const showContentError = hasAttemptedSubmit && contentError;
@@ -384,6 +395,7 @@ export function CreateJobFormContent({
   const noProjectsForClient = clientId && filteredProjects.length === 0;
 
   return (
+    <>
     <form onSubmit={handleSubmit} noValidate>
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
@@ -556,6 +568,10 @@ export function CreateJobFormContent({
             members={members}
             selectedIds={selectedEmployees}
             onSelectionChange={setSelectedEmployees}
+            assessedForDate={
+              plannedDate ? toLocalDateString(plannedDate) : null
+            }
+            onTeamApplied={setAssignmentTeamSourceId}
             disabled={formDisabled}
           />
         </div>
@@ -595,5 +611,12 @@ export function CreateJobFormContent({
         </Button>
       </div>
     </form>
+    <QualificationWarningDialog
+      evaluation={qualificationWarning}
+      isSubmitting={isLoading}
+      onCancel={() => setQualificationWarning(null)}
+      onConfirm={submitJob}
+    />
+    </>
   );
 }

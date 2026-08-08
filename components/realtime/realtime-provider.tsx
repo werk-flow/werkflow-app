@@ -29,6 +29,12 @@ export type RealtimeTable =
   | 'organization_closure_days'
   | 'vacation_requests'
   | 'sickness_reports'
+  | 'teams'
+  | 'team_memberships'
+  | 'organization_capabilities'
+  | 'employee_capabilities'
+  | 'organization_qualification_settings'
+  | 'job_capability_requirements'
   | 'attention_read_states'
   | 'attention_events'
   | 'organization_responsibility_configurations'
@@ -85,6 +91,12 @@ const TABLES: RealtimeTable[] = [
   'organization_closure_days',
   'vacation_requests',
   'sickness_reports',
+  'teams',
+  'team_memberships',
+  'organization_capabilities',
+  'employee_capabilities',
+  'organization_qualification_settings',
+  'job_capability_requirements',
   'attention_read_states',
   'attention_events',
   'organization_responsibility_configurations',
@@ -326,6 +338,72 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('sickness_reports', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'teams',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('teams', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'team_memberships',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('team_memberships', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_capabilities',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_capabilities', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'employee_capabilities',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('employee_capabilities', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'organization_qualification_settings',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('organization_qualification_settings', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'job_capability_requirements',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_capability_requirements', p)
         )
         .on(
           'postgres_changes',

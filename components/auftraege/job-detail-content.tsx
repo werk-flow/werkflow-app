@@ -58,10 +58,12 @@ import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
+import { QualificationWarningDialog } from './qualification-warning-dialog';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { JobInstructionItemsCard } from './job-instruction-items-card';
+import { JobQualificationSection } from './job-qualification-section';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -69,10 +71,13 @@ import {
   updateJob,
   updateJobStatus,
   deleteJob,
-  assignEmployee,
-  unassignEmployee,
+  updateJobAssignments,
   getAuftraegeDialogOptions,
 } from '@/lib/jobs/actions';
+import type {
+  AssignmentApproval,
+  AssignmentEvaluation,
+} from '@/lib/qualifications/types';
 import { updateProject } from '@/lib/projects/actions';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
@@ -247,6 +252,12 @@ export function JobDetailContent({
     null
   );
   const [assignSelectedIds, setAssignSelectedIds] = useState<string[]>([]);
+  const [qualificationWarning, setQualificationWarning] =
+    useState<AssignmentEvaluation | null>(null);
+  const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
+    string | null
+  >(null);
+  const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
   const [isAssigning, startAssignTransition] = useTransition();
   const [isUpdatingClient, startClientUpdateTransition] = useTransition();
   const [isUpdatingProject, startProjectUpdateTransition] = useTransition();
@@ -605,13 +616,28 @@ export function JobDetailContent({
       const newIds = assignSelectedIds.filter(
         (id) => !liveJob.assignments.some((a) => a.userId === id)
       );
-      const results = await Promise.allSettled(
-        newIds.map((id) => assignEmployee(liveJob.id, id))
+      const nextIds = [
+        ...liveJob.assignments.map((assignment) => assignment.userId),
+        ...newIds,
+      ];
+      const result = await updateJobAssignments(
+        liveJob.id,
+        nextIds,
+        null,
+        assignmentTeamSourceId
       );
-      const successfulIds = newIds.filter((_, index) => {
-        const result = results[index];
-        return result.status === 'fulfilled' && result.value.success;
-      });
+      if (!result.success) {
+        if (
+          (result.error === 'qualification_warning' ||
+            result.error === 'stale_evaluation') &&
+          'evaluation' in result
+        ) {
+          setPendingAssignmentIds(nextIds);
+          setQualificationWarning(result.evaluation);
+        }
+        return;
+      }
+      const successfulIds = newIds;
 
       if (successfulIds.length > 0) {
         const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
@@ -650,13 +676,27 @@ export function JobDetailContent({
 
       setShowAssignDialog(false);
       setAssignSelectedIds([]);
+      setAssignmentTeamSourceId(null);
     });
   };
 
   const handleUnassign = async (userId: string) => {
     setUnassigningUserId(userId);
-    const result = await unassignEmployee(liveJob.id, userId);
+    const nextIds = liveJob.assignments
+      .map((assignment) => assignment.userId)
+      .filter((id) => id !== userId);
+    const result = await updateJobAssignments(liveJob.id, nextIds);
     setUnassigningUserId(null);
+    if (
+      !result.success &&
+      (result.error === 'qualification_warning' ||
+        result.error === 'stale_evaluation') &&
+      'evaluation' in result
+    ) {
+      setPendingAssignmentIds(nextIds);
+      setQualificationWarning(result.evaluation);
+      return;
+    }
     if (result.success) {
       setLiveJob((current) => {
         const nextAssignments = current.assignments.filter(
@@ -673,6 +713,33 @@ export function JobDetailContent({
         };
       });
     }
+  };
+
+  const handleQualificationOverride = async (
+    approval: AssignmentApproval
+  ) => {
+    const result = await updateJobAssignments(
+      liveJob.id,
+      pendingAssignmentIds,
+      approval,
+      assignmentTeamSourceId
+    );
+    if (!result.success) {
+      if (
+        (result.error === 'qualification_warning' ||
+          result.error === 'stale_evaluation') &&
+        'evaluation' in result
+      ) {
+        setQualificationWarning(result.evaluation);
+      }
+      return;
+    }
+    setQualificationWarning(null);
+    setPendingAssignmentIds([]);
+    setShowAssignDialog(false);
+    setAssignSelectedIds([]);
+    setAssignmentTeamSourceId(null);
+    router.refresh();
   };
 
   const handleClientSave = async (clientId: string) => {
@@ -1219,6 +1286,7 @@ export function JobDetailContent({
                       setAssignSelectedIds(
                         liveJob.assignments.map((a) => a.userId)
                       );
+                      setAssignmentTeamSourceId(null);
                       setShowAssignDialog(true);
                     }}
                   >
@@ -1311,6 +1379,12 @@ export function JobDetailContent({
               locations={inventoryLocations}
               isAdminOrManager={isAdminOrManager}
             />
+            {isAdminOrManager && (
+              <JobQualificationSection
+                jobId={liveJob.id}
+                canEdit={isAdminOrManager}
+              />
+            )}
 
             <ContextualDocumentsSection
               title="Dokumente & Bilder"
@@ -1570,7 +1644,13 @@ export function JobDetailContent({
       </AlertDialog>
 
       {/* Assign Employee Dialog */}
-      <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+      <Dialog
+        open={showAssignDialog}
+        onOpenChange={(open) => {
+          setShowAssignDialog(open);
+          if (!open) setAssignmentTeamSourceId(null);
+        }}
+      >
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Mitarbeiter zuweisen</DialogTitle>
@@ -1580,6 +1660,8 @@ export function JobDetailContent({
               members={dialogMembers}
               selectedIds={assignSelectedIds}
               onSelectionChange={setAssignSelectedIds}
+              assessedForDate={liveJob.plannedDate}
+              onTeamApplied={setAssignmentTeamSourceId}
             />
             {isLoadingDialogOptions && (
               <div className="mt-3 space-y-2">
@@ -1650,6 +1732,15 @@ export function JobDetailContent({
         title={displayTitle}
         identifier={liveJob.jobNumber ?? undefined}
         onConfirm={handleParkConfirm}
+      />
+      <QualificationWarningDialog
+        evaluation={qualificationWarning}
+        isSubmitting={isAssigning}
+        onCancel={() => {
+          setQualificationWarning(null);
+          setPendingAssignmentIds([]);
+        }}
+        onConfirm={handleQualificationOverride}
       />
     </div>
   );

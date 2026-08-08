@@ -966,6 +966,104 @@ export type Database = {
         }
         Relationships: []
       }
+      employee_capabilities: {
+        Row: {
+          capability_id: string
+          capability_kind: string
+          confirmation_status: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          evidence_state: string
+          id: string
+          issuer: string | null
+          operational_note: string | null
+          organization_id: string
+          renewal_due_date: string | null
+          superseded_at: string | null
+          supersedes_id: string | null
+          updated_at: string
+          updated_by: string | null
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          capability_id: string
+          capability_kind: string
+          confirmation_status?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          evidence_state?: string
+          id?: string
+          issuer?: string | null
+          operational_note?: string | null
+          organization_id: string
+          renewal_due_date?: string | null
+          superseded_at?: string | null
+          supersedes_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_from: string
+          valid_until?: string | null
+        }
+        Update: {
+          capability_id?: string
+          capability_kind?: string
+          confirmation_status?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          evidence_state?: string
+          id?: string
+          issuer?: string | null
+          operational_note?: string | null
+          organization_id?: string
+          renewal_due_date?: string | null
+          superseded_at?: string | null
+          supersedes_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_capabilities_capability_id_fkey"
+            columns: ["capability_id"]
+            isOneToOne: false
+            referencedRelation: "organization_capabilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_capabilities_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_capabilities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_capabilities_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "employee_capabilities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_record_events: {
         Row: {
           created_at: string
@@ -1941,6 +2039,64 @@ export type Database = {
           },
         ]
       }
+      job_capability_requirements: {
+        Row: {
+          capability_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          job_id: string
+          organization_id: string
+          require_confirmation: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          capability_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id: string
+          organization_id: string
+          require_confirmation?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          capability_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id?: string
+          organization_id?: string
+          require_confirmation?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_capability_requirements_capability_id_fkey"
+            columns: ["capability_id"]
+            isOneToOne: false
+            referencedRelation: "organization_capabilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_capability_requirements_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_capability_requirements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_instruction_items: {
         Row: {
           content: string
@@ -2115,6 +2271,76 @@ export type Database = {
           },
         ]
       }
+      job_qualification_assessments: {
+        Row: {
+          assessed_for_date: string
+          coverage_fingerprint: string
+          coverage_snapshot: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          job_id: string
+          organization_id: string
+          override_reason: string | null
+          requirements_snapshot: Json
+          selected_employee_record_ids: string[]
+          selected_user_ids: string[]
+          team_source_id: string | null
+        }
+        Insert: {
+          assessed_for_date: string
+          coverage_fingerprint: string
+          coverage_snapshot?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id: string
+          organization_id: string
+          override_reason?: string | null
+          requirements_snapshot?: Json
+          selected_employee_record_ids?: string[]
+          selected_user_ids?: string[]
+          team_source_id?: string | null
+        }
+        Update: {
+          assessed_for_date?: string
+          coverage_fingerprint?: string
+          coverage_snapshot?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          job_id?: string
+          organization_id?: string
+          override_reason?: string | null
+          requirements_snapshot?: Json
+          selected_employee_record_ids?: string[]
+          selected_user_ids?: string[]
+          team_source_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_qualification_assessments_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_qualification_assessments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_qualification_assessments_team_source_id_fkey"
+            columns: ["team_source_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           actual_completion_date: string | null
@@ -2227,6 +2453,56 @@ export type Database = {
           },
         ]
       }
+      organization_capabilities: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          default_expiry_warning_days: number
+          description: string | null
+          id: string
+          kind: string
+          name: string
+          organization_id: string
+          retired_at: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          default_expiry_warning_days?: number
+          description?: string | null
+          id?: string
+          kind: string
+          name: string
+          organization_id: string
+          retired_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          default_expiry_warning_days?: number
+          description?: string | null
+          id?: string
+          kind?: string
+          name?: string
+          organization_id?: string
+          retired_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_capabilities_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_closure_days: {
         Row: {
           closure_date: string
@@ -2333,6 +2609,41 @@ export type Database = {
             foreignKeyName: "organization_members_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      organization_qualification_settings: {
+        Row: {
+          apprentice_warning_enabled: boolean
+          created_at: string
+          created_by: string | null
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          apprentice_warning_enabled?: boolean
+          created_at?: string
+          created_by?: string | null
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          apprentice_warning_enabled?: boolean
+          created_at?: string
+          created_by?: string | null
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_qualification_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
@@ -2793,6 +3104,51 @@ export type Database = {
           },
         ]
       }
+      qualification_events: {
+        Row: {
+          capability_id: string | null
+          created_at: string
+          created_by: string | null
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          capability_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          capability_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qualification_events_capability_id_fkey"
+            columns: ["capability_id"]
+            isOneToOne: false
+            referencedRelation: "organization_capabilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qualification_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sickness_report_events: {
         Row: {
           created_at: string
@@ -2946,6 +3302,156 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      team_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_events_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_memberships: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_record_id: string
+          ended_by: string | null
+          id: string
+          organization_id: string
+          team_id: string
+          updated_at: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id: string
+          ended_by?: string | null
+          id?: string
+          organization_id: string
+          team_id: string
+          updated_at?: string
+          valid_from: string
+          valid_until?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_record_id?: string
+          ended_by?: string | null
+          id?: string
+          organization_id?: string
+          team_id?: string
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_memberships_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_memberships_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_memberships_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          dissolved_at: string | null
+          id: string
+          name: string
+          organization_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          dissolved_at?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          dissolved_at?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       time_entries: {
         Row: {
@@ -3362,6 +3868,50 @@ export type Database = {
           org_id: string
           org_name: string
         }[]
+      }
+      renew_employee_capability: {
+        Args: {
+          p_actor_id: string
+          p_capability_id: string
+          p_confirmation_status: string
+          p_employee_record_id: string
+          p_evidence_state: string
+          p_issuer: string
+          p_operational_note: string
+          p_organization_id: string
+          p_renewal_due_date: string
+          p_supersedes_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: string
+      }
+      replace_job_assignments_with_assessment: {
+        Args: {
+          p_actor_id: string
+          p_assessed_for_date: string
+          p_coverage_fingerprint: string
+          p_coverage_snapshot: Json
+          p_job_id: string
+          p_organization_id: string
+          p_override_reason: string
+          p_record_assessment: boolean
+          p_requirements_snapshot: Json
+          p_selected_employee_record_ids: string[]
+          p_selected_user_ids: string[]
+          p_team_source_id: string
+        }
+        Returns: undefined
+      }
+      replace_job_capability_requirements: {
+        Args: {
+          p_actor_id: string
+          p_capability_ids: string[]
+          p_job_id: string
+          p_organization_id: string
+          p_require_confirmations: boolean[]
+        }
+        Returns: undefined
       }
     }
     Enums: {

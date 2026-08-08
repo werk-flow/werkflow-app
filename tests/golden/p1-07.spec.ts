@@ -15,7 +15,9 @@ import {
 } from './support/db';
 import {
   addWorkScheduleViaDialog,
+  addJobCapabilityRequirement,
   approvePendingTimeEntry,
+  assignJobWithQualificationWarning,
   assignRequestAssigneeViaEditDialog,
   attentionNotificationRow,
   attentionTaskLink,
@@ -23,6 +25,8 @@ import {
   cancelApprovedVacationForRangeText,
   closeRequestViaDialog,
   confirmResponsibilityPreview,
+  createCapabilityViaManagement,
+  createJob,
   createOwnManualTimeEntry,
   createOwnVacationRequestViaDialog,
   createRequestViaDialog,
@@ -35,7 +39,9 @@ import {
   openAufgaben,
   openMemberDetailFromList,
   previewResponsibilityChange,
+  reportOwnSicknessViaDialog,
   rejectVacationRequestFor,
+  cancelSicknessReportViaMenuWithReason,
   visibleText,
   withdrawOwnPendingVacationRequest,
 } from './support/steps';
@@ -58,6 +64,10 @@ import {
 // notifications are read in the first test), the approved future half-day
 // vacation (never overlapped by this spec's Tuesday/Wednesday requests), and
 // GG-01's one open, unassigned client request.
+// The additional cross-domain gate below leaves one cancelled sickness report,
+// one run-scoped qualification requirement, and its append-only assignment
+// assessment. Later slices use distinct dates/names and derive counts from the
+// database, so focused and full-suite execution remain equivalent.
 
 test.describe.configure({ mode: 'serial' });
 
@@ -653,6 +663,48 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
           event.eventType === 'marked_read'
       ).length
     ).toBe(2);
+  });
+
+  test('Krankmeldung und Qualifikationswarnung bleiben getrennte, nachvollziehbare Betriebsfakten', async ({
+    adminPage,
+    employeePage,
+    world,
+  }) => {
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const sicknessDayIso = shiftIsoDate(berlinTodayIso(), -2);
+    const sicknessRangeText = formatGermanDate(sicknessDayIso);
+
+    await reportOwnSicknessViaDialog(employeePage, {
+      startDigits: toDatePickerDigits(sicknessDayIso),
+      endDigits: toDatePickerDigits(sicknessDayIso),
+    });
+    await openMemberDetailFromList(adminPage, employeeName);
+    await cancelSicknessReportViaMenuWithReason(
+      adminPage,
+      sicknessRangeText,
+      'GG-02 getrennte Domänenprüfung'
+    );
+
+    const capabilityName = `GG-02 Fachkunde ${world.runId}`;
+    const jobNumber = `AUF-${world.runId}-GG02-QUAL`;
+    await createCapabilityViaManagement(adminPage, {
+      name: capabilityName,
+      kind: 'Fähigkeit',
+    });
+    await createJob(adminPage, {
+      jobNumber,
+      title: 'GG-02 Qualifikationshinweis',
+    });
+    await addJobCapabilityRequirement(adminPage, {
+      jobNumber,
+      capabilityName,
+    });
+    await assignJobWithQualificationWarning(adminPage, {
+      jobNumber,
+      employeeName,
+      expectedStatus: 'Nicht hinterlegt',
+      overrideReason: 'Qualifizierte Begleitung ist eingeplant',
+    });
   });
 
   test('RLS und Organisationsgrenzen: Lesemarken streng persönlich, Musterereignisse selbst-oder-Manager, Außenstehende sehen nichts', async ({

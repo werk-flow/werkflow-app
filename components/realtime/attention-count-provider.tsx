@@ -154,6 +154,12 @@ export function AttentionCountProvider({
   useRealtimeEvent('sickness_reports', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('employee_capabilities', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('organization_capabilities', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('client_requests', () => {
     scheduleRefresh();
   });

@@ -18,6 +18,7 @@ import {
   type UpdateJobResult,
   type DeleteJobResult,
   type AssignEmployeeResult,
+  type UpdateJobAssignmentsResult,
   type UnassignEmployeeResult,
   normalizeJobPlannedTime,
   getJobDisplayTitle,
@@ -26,6 +27,12 @@ import {
   toProject,
   toJobAssignment,
 } from './types';
+import type {
+  AssignmentApproval,
+  AssignmentEvaluation,
+} from '@/lib/qualifications/types';
+import { loadAssignmentEvaluation } from '@/lib/qualifications/server';
+import type { Json } from '@/lib/supabase/database.types';
 import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
 import {
   toClientContact,
@@ -52,6 +59,9 @@ export type CreateJobInput = {
   location?: string;
   siteId?: string;
   contactId?: string;
+  selectedUserIds?: string[];
+  assignmentApproval?: AssignmentApproval | null;
+  assignmentTeamSourceId?: string | null;
 };
 
 export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'> & {
@@ -66,6 +76,126 @@ type ProjectClientContext = {
   id: string;
   client_id: string | null;
 };
+
+type AssignmentContext = {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  orgId: string;
+  actorId: string;
+};
+
+async function assessAssignmentSelection(input: {
+  context: AssignmentContext;
+  jobId?: string | null;
+  selectedUserIds: string[];
+  assessedForDate?: string | null;
+  approval?: AssignmentApproval | null;
+}): Promise<
+  | { success: true; evaluation: AssignmentEvaluation }
+  | {
+      success: false;
+      error: 'qualification_warning' | 'stale_evaluation';
+      evaluation: AssignmentEvaluation;
+    }
+  | { success: false; error: string }
+> {
+  const result = await loadAssignmentEvaluation({
+    admin: input.context.admin,
+    orgId: input.context.orgId,
+    jobId: input.jobId,
+    selectedUserIds: input.selectedUserIds,
+    assessedForDate: input.assessedForDate,
+  });
+  if (!result.success) return result;
+  if (!result.evaluation.requiresOverride) return result;
+  const approval = input.approval;
+  if (!approval) {
+    return {
+      success: false,
+      error: 'qualification_warning',
+      evaluation: result.evaluation,
+    };
+  }
+  if (approval.fingerprint !== result.evaluation.fingerprint) {
+    return {
+      success: false,
+      error: 'stale_evaluation',
+      evaluation: result.evaluation,
+    };
+  }
+  if (approval.reason.trim().length < 3) {
+    return { success: false, error: 'override_reason_required' };
+  }
+  return result;
+}
+
+function toJson(value: unknown): Json {
+  return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+async function replaceJobAssignmentsAfterAssessment(input: {
+  context: AssignmentContext;
+  jobId: string;
+  selectedUserIds: string[];
+  evaluation: AssignmentEvaluation;
+  approval?: AssignmentApproval | null;
+  teamSourceId?: string | null;
+}): Promise<
+  | { success: true; assignments: ReturnType<typeof toJobAssignment>[] }
+  | { success: false; error: string }
+> {
+  const selectedUserIds = [...new Set(input.selectedUserIds)].sort();
+  const recordAssessment =
+    input.evaluation.requirementCoverage.length > 0 ||
+    input.evaluation.apprenticeWarning.status !== 'not_configured';
+  const { error: replaceError } = await input.context.admin.rpc(
+    'replace_job_assignments_with_assessment',
+    {
+      p_organization_id: input.context.orgId,
+      p_job_id: input.jobId,
+      p_selected_user_ids: selectedUserIds,
+      p_actor_id: input.context.actorId,
+      p_assessed_for_date: input.evaluation.assessedForDate,
+      p_selected_employee_record_ids:
+        input.evaluation.selectedEmployeeRecordIds,
+      p_requirements_snapshot: toJson(input.evaluation.requirementCoverage),
+      p_coverage_snapshot: toJson({
+        requirements: input.evaluation.requirementCoverage,
+        apprentice_warning: input.evaluation.apprenticeWarning,
+      }),
+      p_coverage_fingerprint: input.evaluation.fingerprint,
+      p_override_reason: input.evaluation.requiresOverride
+        ? input.approval?.reason.trim() || null
+        : null,
+      p_team_source_id:
+        input.teamSourceId ?? input.approval?.teamSourceId ?? null,
+      p_record_assessment: recordAssessment,
+    }
+  );
+  if (replaceError) {
+    console.error('Failed to replace job assignments:', replaceError);
+    return { success: false, error: 'assign_failed' };
+  }
+  const { data: assignmentRows, error: loadError } =
+    await input.context.admin
+      .from('job_assignments')
+      .select('*')
+      .eq('job_id', input.jobId)
+      .order('assigned_at', { ascending: true });
+  if (loadError) {
+    console.error('Failed to reload job assignments:', loadError);
+    return { success: false, error: 'load_failed' };
+  }
+  const rowsByUserId = new Map(
+    (assignmentRows ?? []).map((row) => [row.user_id, row])
+  );
+  return {
+    success: true,
+    assignments: selectedUserIds.flatMap((userId) => {
+      const row = rowsByUserId.get(userId);
+      return row ? [toJobAssignment(row)] : [];
+    }),
+  };
+}
 
 export type AuftraegeDialogOptionsResult =
   | {
@@ -389,6 +519,19 @@ export async function createJob(
     }
 
     const admin = createSupabaseAdminClient();
+    const assignmentContext: AssignmentContext = {
+      admin,
+      orgId,
+      actorId: userId,
+    };
+    const selectedUserIds = input.selectedUserIds ?? [];
+    const assignmentAssessment = await assessAssignmentSelection({
+      context: assignmentContext,
+      selectedUserIds,
+      assessedForDate: input.plannedDate,
+      approval: input.assignmentApproval,
+    });
+    if (!assignmentAssessment.success) return assignmentAssessment;
 
     const { data: existingNumber } = await admin
       .from('jobs')
@@ -473,6 +616,25 @@ export async function createJob(
       return { success: false, error: 'create_failed' };
     }
 
+    if (selectedUserIds.length > 0) {
+      const assignmentResult = await replaceJobAssignmentsAfterAssessment({
+        context: assignmentContext,
+        jobId: data.id,
+        selectedUserIds,
+        evaluation: assignmentAssessment.evaluation,
+        approval: input.assignmentApproval,
+        teamSourceId: input.assignmentTeamSourceId,
+      });
+      if (!assignmentResult.success) {
+        await admin
+          .from('jobs')
+          .delete()
+          .eq('id', data.id)
+          .eq('organization_id', orgId);
+        return assignmentResult;
+      }
+    }
+
     updateTag(CACHE_TAGS.jobs(orgId));
     if (input.projectId) {
       updateTag(CACHE_TAGS.projects(orgId));
@@ -502,7 +664,9 @@ export async function updateJob(
 
     const { data: existing, error: fetchError } = await admin
       .from('jobs')
-      .select('id, project_id, client_id, site_id, contact_id, status, title, description')
+      .select(
+        'id, project_id, client_id, site_id, contact_id, status, title, description, planned_date'
+      )
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
@@ -647,21 +811,87 @@ export async function updateJob(
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
+    const shouldAssessAssignments =
+      input.selectedUserIds !== undefined || input.plannedDate !== undefined;
+    let assignmentAssessment: AssignmentEvaluation | null = null;
+    let finalSelectedUserIds: string[] | null = null;
+    if (shouldAssessAssignments) {
+      if (input.selectedUserIds !== undefined) {
+        finalSelectedUserIds = input.selectedUserIds;
+      } else {
+        const { data: currentAssignments, error: assignmentLoadError } =
+          await admin
+            .from('job_assignments')
+            .select('user_id')
+            .eq('job_id', jobId);
+        if (assignmentLoadError) {
+          return { success: false, error: 'load_failed' };
+        }
+        finalSelectedUserIds = (currentAssignments ?? []).map(
+          (row) => row.user_id
+        );
+      }
+      const assessmentResult = await assessAssignmentSelection({
+        context: {
+          admin,
+          orgId,
+          actorId: auth.context.userId,
+        },
+        jobId,
+        selectedUserIds: finalSelectedUserIds,
+        assessedForDate:
+          input.plannedDate !== undefined
+            ? input.plannedDate || null
+            : existing.planned_date,
+        approval: input.assignmentApproval,
+      });
+      if (!assessmentResult.success) return assessmentResult;
+      assignmentAssessment = assessmentResult.evaluation;
+    }
+
+    if (
+      Object.keys(updateData).length === 0 &&
+      input.selectedUserIds === undefined
+    ) {
       return { success: false, error: 'no_changes' };
     }
 
-    const { data, error } = await admin
-      .from('jobs')
-      .update(updateData)
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
+    const updateResult =
+      Object.keys(updateData).length > 0
+        ? await admin
+            .from('jobs')
+            .update(updateData)
+            .eq('id', jobId)
+            .eq('organization_id', orgId)
+            .select()
+            .single()
+        : await admin
+            .from('jobs')
+            .select()
+            .eq('id', jobId)
+            .eq('organization_id', orgId)
+            .single();
+    const { data, error } = updateResult;
 
     if (error || !data) {
       console.error('Error updating job:', error);
       return { success: false, error: 'update_failed' };
+    }
+
+    if (assignmentAssessment && finalSelectedUserIds) {
+      const assignmentResult = await replaceJobAssignmentsAfterAssessment({
+        context: {
+          admin,
+          orgId,
+          actorId: auth.context.userId,
+        },
+        jobId,
+        selectedUserIds: finalSelectedUserIds,
+        evaluation: assignmentAssessment,
+        approval: input.assignmentApproval,
+        teamSourceId: input.assignmentTeamSourceId,
+      });
+      if (!assignmentResult.success) return assignmentResult;
     }
 
     updateTag(CACHE_TAGS.jobs(orgId));
@@ -799,7 +1029,8 @@ export async function updateJobStatus(
 
 export async function assignEmployee(
   jobId: string,
-  targetUserId: string
+  targetUserId: string,
+  approval?: AssignmentApproval | null
 ): Promise<AssignEmployeeResult> {
   try {
     const auth = await authenticateAndAuthorize();
@@ -814,7 +1045,7 @@ export async function assignEmployee(
 
     const { data: job, error: jobError } = await admin
       .from('jobs')
-      .select('id')
+      .select('id, planned_date')
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
@@ -823,44 +1054,45 @@ export async function assignEmployee(
       return { success: false, error: 'job_not_found' };
     }
 
-    const { data: member, error: memberError } = await admin
-      .from('organization_members')
-      .select('user_id')
-      .eq('user_id', targetUserId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (memberError || !member) {
-      return { success: false, error: 'member_not_found' };
-    }
-
-    const { data, error } = await admin
+    const { data: existingRows, error: existingError } = await admin
       .from('job_assignments')
-      .insert({
-        job_id: jobId,
-        user_id: targetUserId,
-        assigned_by: userId,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') {
-        return { success: false, error: 'already_assigned' };
-      }
-      console.error('Error assigning employee:', error);
-      return { success: false, error: 'assign_failed' };
+      .select('user_id')
+      .eq('job_id', jobId);
+    if (existingError) return { success: false, error: 'load_failed' };
+    if ((existingRows ?? []).some((row) => row.user_id === targetUserId)) {
+      return { success: false, error: 'already_assigned' };
     }
-
-    if (!data) {
-      return { success: false, error: 'assign_failed' };
-    }
+    const selectedUserIds = [
+      ...(existingRows ?? []).map((row) => row.user_id),
+      targetUserId,
+    ];
+    const context = { admin, orgId, actorId: userId };
+    const assessment = await assessAssignmentSelection({
+      context,
+      jobId,
+      selectedUserIds,
+      assessedForDate: job.planned_date,
+      approval,
+    });
+    if (!assessment.success) return assessment;
+    const result = await replaceJobAssignmentsAfterAssessment({
+      context,
+      jobId,
+      selectedUserIds,
+      evaluation: assessment.evaluation,
+      approval,
+    });
+    if (!result.success) return result;
+    const assignment = result.assignments.find(
+      (row) => row.userId === targetUserId
+    );
+    if (!assignment) return { success: false, error: 'assign_failed' };
 
     updateTag(CACHE_TAGS.jobs(orgId));
     revalidatePath('/auftraege', 'layout');
     revalidatePath('/mitarbeiter', 'layout');
 
-    return { success: true, assignment: toJobAssignment(data) };
+    return { success: true, assignment };
   } catch (error) {
     console.error('Unexpected error in assignEmployee:', error);
     return { success: false, error: 'unexpected_error' };
@@ -869,12 +1101,13 @@ export async function assignEmployee(
 
 export async function unassignEmployee(
   jobId: string,
-  targetUserId: string
+  targetUserId: string,
+  approval?: AssignmentApproval | null
 ): Promise<UnassignEmployeeResult> {
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
+    const { orgId, userId, isManagerOrAbove } = auth.context;
 
     if (!isManagerOrAbove) {
       return { success: false, error: 'not_authorized' };
@@ -884,7 +1117,7 @@ export async function unassignEmployee(
 
     const { data: job, error: jobError } = await admin
       .from('jobs')
-      .select('id')
+      .select('id, planned_date')
       .eq('id', jobId)
       .eq('organization_id', orgId)
       .single();
@@ -893,16 +1126,31 @@ export async function unassignEmployee(
       return { success: false, error: 'job_not_found' };
     }
 
-    const { error } = await admin
+    const { data: existingRows, error: existingError } = await admin
       .from('job_assignments')
-      .delete()
-      .eq('job_id', jobId)
-      .eq('user_id', targetUserId);
-
-    if (error) {
-      console.error('Error unassigning employee:', error);
-      return { success: false, error: 'unassign_failed' };
-    }
+      .select('user_id')
+      .eq('job_id', jobId);
+    if (existingError) return { success: false, error: 'load_failed' };
+    const selectedUserIds = (existingRows ?? [])
+      .map((row) => row.user_id)
+      .filter((id) => id !== targetUserId);
+    const context = { admin, orgId, actorId: userId };
+    const assessment = await assessAssignmentSelection({
+      context,
+      jobId,
+      selectedUserIds,
+      assessedForDate: job.planned_date,
+      approval,
+    });
+    if (!assessment.success) return assessment;
+    const result = await replaceJobAssignmentsAfterAssessment({
+      context,
+      jobId,
+      selectedUserIds,
+      evaluation: assessment.evaluation,
+      approval,
+    });
+    if (!result.success) return result;
 
     updateTag(CACHE_TAGS.jobs(orgId));
     revalidatePath('/auftraege', 'layout');
@@ -911,6 +1159,56 @@ export async function unassignEmployee(
     return { success: true };
   } catch (error) {
     console.error('Unexpected error in unassignEmployee:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+export async function updateJobAssignments(
+  jobId: string,
+  selectedUserIds: string[],
+  approval?: AssignmentApproval | null,
+  teamSourceId?: string | null
+): Promise<UpdateJobAssignmentsResult> {
+  try {
+    const auth = await authenticateAndAuthorize();
+    if (!auth.success) return auth;
+    const { orgId, userId, isManagerOrAbove } = auth.context;
+    if (!isManagerOrAbove) {
+      return { success: false, error: 'not_authorized' };
+    }
+    const admin = createSupabaseAdminClient();
+    const { data: job, error } = await admin
+      .from('jobs')
+      .select('id, planned_date')
+      .eq('id', jobId)
+      .eq('organization_id', orgId)
+      .single();
+    if (error || !job) return { success: false, error: 'job_not_found' };
+    const context = { admin, orgId, actorId: userId };
+    const assessment = await assessAssignmentSelection({
+      context,
+      jobId,
+      selectedUserIds,
+      assessedForDate: job.planned_date,
+      approval,
+    });
+    if (!assessment.success) return assessment;
+    const result = await replaceJobAssignmentsAfterAssessment({
+      context,
+      jobId,
+      selectedUserIds,
+      evaluation: assessment.evaluation,
+      approval,
+      teamSourceId,
+    });
+    if (!result.success) return result;
+    updateTag(CACHE_TAGS.jobs(orgId));
+    updateTag(CACHE_TAGS.qualifications(orgId));
+    revalidatePath('/auftraege', 'layout');
+    revalidatePath('/mitarbeiter', 'layout');
+    return result;
+  } catch (error) {
+    console.error('Unexpected error in updateJobAssignments:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

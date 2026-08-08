@@ -30,6 +30,7 @@ import type {
   VacationRequestStatus,
 } from '@/lib/vacation/types';
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
+import { loadCertificationExpiryNotifications } from '@/lib/qualifications/server';
 import {
   computeOpenSinceDays,
   dedupeAttentionItems,
@@ -503,6 +504,59 @@ async function deriveSicknessNotifications(context: ActionContext): Promise<{
   return { notifications, failed: false };
 }
 
+async function deriveCertificationExpiryNotifications(
+  context: ActionContext
+): Promise<{ notifications: AttentionNotification[]; failed: boolean }> {
+  if (context.role !== 'admin' && context.role !== 'buero') {
+    return { notifications: [], failed: false };
+  }
+  const admin = createSupabaseAdminClient();
+  const [noticesResult, readStatesResult] = await Promise.all([
+    loadCertificationExpiryNotifications({
+      admin,
+      orgId: context.orgId,
+    }),
+    admin
+      .from('attention_read_states')
+      .select('source_id, state_version')
+      .eq('organization_id', context.orgId)
+      .eq('user_id', context.userId)
+      .eq('source_type', 'employee_certification_expiry')
+      .limit(500),
+  ]);
+  if (noticesResult.failed || readStatesResult.error) {
+    console.error(
+      'Failed to load certification attention read states:',
+      readStatesResult.error
+    );
+    return { notifications: [], failed: true };
+  }
+  const readVersionBySourceId = new Map(
+    (readStatesResult.data ?? []).map((row) => [
+      row.source_id,
+      row.state_version,
+    ])
+  );
+  return {
+    notifications: noticesResult.notices.map((notice) => ({
+      sourceType: 'employee_certification_expiry',
+      sourceId: notice.sourceId,
+      employeeRecordId: notice.employeeRecordId,
+      personName: notice.employeeName,
+      capabilityName: notice.capabilityName,
+      validUntil: notice.validUntil,
+      phase: notice.phase,
+      stateVersion: notice.stateVersion,
+      occurredAt: notice.occurredAt,
+      unread: isNotificationUnread(
+        notice.stateVersion,
+        readVersionBySourceId.get(notice.sourceId) ?? null
+      ),
+    })),
+    failed: false,
+  };
+}
+
 // ============================================
 // Overview and counts
 // ============================================
@@ -522,12 +576,14 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       openRequests,
       notifications,
       sicknessNotifications,
+      certificationNotifications,
       ownOverviewResult,
     ] = await Promise.all([
       deriveApprovalTasks(context),
       deriveOpenRequestTasks(context),
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
+      deriveCertificationExpiryNotifications(context),
       getOwnVacationOverview(),
     ]);
 
@@ -538,6 +594,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       openRequests.failed ||
       notifications.failed ||
       sicknessNotifications.failed ||
+      certificationNotifications.failed ||
       !ownOverviewResult.success
     ) {
       return { success: false, error: 'load_failed' };
@@ -565,6 +622,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
           dedupeAttentionItems([
             ...notifications.notifications,
             ...sicknessNotifications.notifications,
+            ...certificationNotifications.notifications,
           ])
         ),
         ownRequests,
@@ -591,18 +649,26 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     if (!auth.success) return auth;
     const { context } = auth;
 
-    const [approvals, openRequests, notifications, sicknessNotifications] =
+    const [
+      approvals,
+      openRequests,
+      notifications,
+      sicknessNotifications,
+      certificationNotifications,
+    ] =
       await Promise.all([
         deriveApprovalTasks(context),
         deriveOpenRequestTasks(context),
         deriveOwnNotifications(context),
         deriveSicknessNotifications(context),
+        deriveCertificationExpiryNotifications(context),
       ]);
     if (
       approvals.failed ||
       openRequests.failed ||
       notifications.failed ||
       sicknessNotifications.failed
+      || certificationNotifications.failed
     ) {
       return { success: false, error: 'load_failed' };
     }
@@ -612,6 +678,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     const allNotifications = dedupeAttentionItems([
       ...notifications.notifications,
       ...sicknessNotifications.notifications,
+      ...certificationNotifications.notifications,
     ]);
     return {
       success: true,
@@ -637,7 +704,10 @@ export type MarkNotificationReadResult =
   | { success: true }
   | { success: false; error: string };
 
-type ReadableNotificationSourceType = 'vacation_decision' | 'sickness_report';
+type ReadableNotificationSourceType =
+  | 'vacation_decision'
+  | 'sickness_report'
+  | 'employee_certification_expiry';
 
 async function persistNotificationReadMarker(
   context: ActionContext,
@@ -677,7 +747,7 @@ async function persistNotificationReadMarker(
     if (!record || record.id !== request.employee_record_id) {
       return { success: false, error: 'not_authorized' };
     }
-  } else {
+  } else if (input.sourceType === 'sickness_report') {
     // Sickness notices have two audiences (privacy matrix): the affected
     // person and admin/büro managers. Either may mark their own copy read.
     const { data: report, error: reportError } = await admin
@@ -708,6 +778,24 @@ async function persistNotificationReadMarker(
         return { success: false, error: 'not_authorized' };
       }
     }
+  } else {
+    const isManager = context.role === 'admin' || context.role === 'buero';
+    if (!isManager) return { success: false, error: 'not_authorized' };
+    const { data: certification, error: certificationError } = await admin
+      .from('employee_capabilities')
+      .select('id')
+      .eq('organization_id', context.orgId)
+      .eq('id', input.sourceId)
+      .eq('capability_kind', 'certification')
+      .maybeSingle();
+    if (certificationError) {
+      console.error(
+        'Failed to load certification for read marker:',
+        certificationError
+      );
+      return { success: false, error: 'update_failed' };
+    }
+    if (!certification) return { success: false, error: 'request_not_found' };
   }
 
   const now = new Date().toISOString();
@@ -759,7 +847,8 @@ export async function markAttentionNotificationRead(input: {
       input.stateVersion.length === 0 ||
       input.stateVersion.length > 200 ||
       (input.sourceType !== 'vacation_decision' &&
-        input.sourceType !== 'sickness_report')
+        input.sourceType !== 'sickness_report' &&
+        input.sourceType !== 'employee_certification_expiry')
     ) {
       return { success: false, error: 'invalid_input' };
     }
@@ -789,17 +878,23 @@ export async function markAllAttentionNotificationsRead(): Promise<MarkNotificat
     // of the single-item path is redundant here and the writes can be two
     // batched statements instead of a sequential per-item loop that could
     // stop halfway.
-    const [derived, derivedSickness] = await Promise.all([
+    const [derived, derivedSickness, derivedCertification] = await Promise.all([
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
+      deriveCertificationExpiryNotifications(context),
     ]);
-    if (derived.failed || derivedSickness.failed) {
+    if (
+      derived.failed ||
+      derivedSickness.failed ||
+      derivedCertification.failed
+    ) {
       return { success: false, error: 'load_failed' };
     }
 
     const unread = dedupeAttentionItems([
       ...derived.notifications,
       ...derivedSickness.notifications,
+      ...derivedCertification.notifications,
     ]).filter((notification) => notification.unread);
     if (unread.length === 0) return { success: true };
 

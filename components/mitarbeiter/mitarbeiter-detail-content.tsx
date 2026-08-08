@@ -49,6 +49,10 @@ import { EmploymentConditionsSection } from './employment-conditions-section';
 import { WorkScheduleSection } from './work-schedule-section';
 import { SicknessReportsSection } from './sickness-reports-section';
 import { PersonnelHistorySection } from './personnel-history-section';
+import {
+  PersonnelQualificationSummary,
+  type PersonnelQualificationSummaryData,
+} from './personnel-qualification-summary';
 import { ResponsibilitySummarySection } from './responsibility-summary-section';
 import { EmploymentStateBadge } from './personnel-state-badges';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
@@ -187,6 +191,7 @@ interface MitarbeiterDetailContentProps {
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
   responsibilitySettings: ResponsibilitySettingsData | null;
+  qualificationSummary: PersonnelQualificationSummaryData;
 }
 
 export function MitarbeiterDetailContent({
@@ -211,6 +216,7 @@ export function MitarbeiterDetailContent({
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
   responsibilitySettings,
+  qualificationSummary,
 }: MitarbeiterDetailContentProps) {
   const router = useRouter();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
@@ -489,7 +495,10 @@ export function MitarbeiterDetailContent({
             )}
 
             {personnel && isAdminOrManager && (
-              <SicknessReportsSection recordId={personnel.record.id} />
+              <>
+                <SicknessReportsSection recordId={personnel.record.id} />
+                <PersonnelQualificationSummary data={qualificationSummary} />
+              </>
             )}
 
             {personnel && responsibilitySettings ? (

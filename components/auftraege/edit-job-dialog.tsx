@@ -35,11 +35,14 @@ import { formatSiteAddress } from '@/lib/clients/types';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import {
   updateJob,
-  assignEmployee,
-  unassignEmployee,
   getJobDetails,
   type UpdateJobInput
 } from '@/lib/jobs/actions';
+import { QualificationWarningDialog } from './qualification-warning-dialog';
+import type {
+  AssignmentApproval,
+  AssignmentEvaluation,
+} from '@/lib/qualifications/types';
 import {
   getJobDisplayTitle,
   JOB_PRIORITY_LABELS,
@@ -112,8 +115,12 @@ export function EditJobDialog({
   const [autoSyncPlannedWorking, setAutoSyncPlannedWorking] = useState(false);
   const [location, setLocation] = useState('');
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-  const [originalAssignees, setOriginalAssignees] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [qualificationWarning, setQualificationWarning] =
+    useState<AssignmentEvaluation | null>(null);
+  const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
+    string | null
+  >(null);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
@@ -143,6 +150,7 @@ export function EditJobDialog({
     setContentError(null);
     setSuccess(false);
     setHasAttemptedSubmit(false);
+    setAssignmentTeamSourceId(null);
 
     if (job.projectId) {
       const linkedProject = projects.find((p) => p.id === job.projectId);
@@ -160,13 +168,15 @@ export function EditJobDialog({
       if (result.success) {
         const ids = result.job.assignments.map((a) => a.userId);
         setSelectedEmployees(ids);
-        setOriginalAssignees(ids);
       }
       setIsLoadingAssignments(false);
     });
   }, [open, job, projects]);
 
-  const submitChanges = async (confirmedDateRemoval = false) => {
+  const submitChanges = async (
+    confirmedDateRemoval = false,
+    approval?: AssignmentApproval
+  ) => {
     setHasAttemptedSubmit(true);
     setError(null);
     setContentError(null);
@@ -227,12 +237,23 @@ export function EditJobDialog({
         plannedWorkingMinutes,
         location: location.trim() || (job.location !== null ? '' : undefined),
         siteId,
-        contactId
+        contactId,
+        selectedUserIds: selectedEmployees,
+        assignmentApproval: approval ?? null,
+        assignmentTeamSourceId,
       };
 
       const result = await updateJob(job.id, input);
 
       if (!result.success && result.error !== 'no_changes') {
+        if (
+          (result.error === 'qualification_warning' ||
+            result.error === 'stale_evaluation') &&
+          'evaluation' in result
+        ) {
+          setQualificationWarning(result.evaluation);
+          return;
+        }
         if (result.error === 'title_or_description_required') {
           setContentError(ERROR_MESSAGES[result.error]);
         } else {
@@ -243,20 +264,7 @@ export function EditJobDialog({
         return;
       }
 
-      const toAssign = selectedEmployees.filter(
-        (id) => !originalAssignees.includes(id)
-      );
-      const toUnassign = originalAssignees.filter(
-        (id) => !selectedEmployees.includes(id)
-      );
-
-      if (toAssign.length > 0 || toUnassign.length > 0) {
-        await Promise.allSettled([
-          ...toAssign.map((userId) => assignEmployee(job.id, userId)),
-          ...toUnassign.map((userId) => unassignEmployee(job.id, userId))
-        ]);
-      }
-
+      setQualificationWarning(null);
       setSuccess(true);
       onOpenChange(false);
       if (onSuccess) {
@@ -386,6 +394,7 @@ export function EditJobDialog({
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]"
@@ -561,6 +570,10 @@ export function EditJobDialog({
                 members={members}
                 selectedIds={selectedEmployees}
                 onSelectionChange={handleSelectedEmployeesChange}
+                assessedForDate={
+                  plannedDate ? toLocalDateString(plannedDate) : null
+                }
+                onTeamApplied={setAssignmentTeamSourceId}
                 disabled={formDisabled || isLoadingAssignments}
               />
               {isLoadingAssignments && (
@@ -626,5 +639,12 @@ export function EditJobDialog({
         />
       </DialogContent>
     </Dialog>
+    <QualificationWarningDialog
+      evaluation={qualificationWarning}
+      isSubmitting={isLoading}
+      onCancel={() => setQualificationWarning(null)}
+      onConfirm={(approval) => submitChanges(false, approval)}
+    />
+    </>
   );
 }

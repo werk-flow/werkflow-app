@@ -21,6 +21,9 @@ import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { OrgRole } from '@/lib/members/actions';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
+import type { QualificationWorkspace } from '@/lib/qualifications/types';
+import { TeamManagementSection } from './team-management-section';
+import { QualificationManagementSection } from './qualification-management-section';
 
 interface MitarbeiterTabsProps {
   members: OrgMember[];
@@ -32,6 +35,7 @@ interface MitarbeiterTabsProps {
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
+  qualificationWorkspace: QualificationWorkspace | null;
 }
 
 export function MitarbeiterTabs({
@@ -43,7 +47,8 @@ export function MitarbeiterTabs({
   removalBlockedByUserId,
   currentUserId,
   currentUserRole,
-  organizationId
+  organizationId,
+  qualificationWorkspace,
 }: MitarbeiterTabsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -120,6 +125,11 @@ export function MitarbeiterTabs({
   useRealtimeEvent('organization_responsibility_configurations', handleRefresh);
   useRealtimeEvent('organization_responsibility_assignments', handleRefresh);
   useRealtimeEvent('organization_responsibility_delegations', handleRefresh);
+  useRealtimeEvent('teams', handleRefresh);
+  useRealtimeEvent('team_memberships', handleRefresh);
+  useRealtimeEvent('organization_capabilities', handleRefresh);
+  useRealtimeEvent('employee_capabilities', handleRefresh);
+  useRealtimeEvent('organization_qualification_settings', handleRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(
@@ -181,6 +191,8 @@ export function MitarbeiterTabs({
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="teams">Teams</TabsTrigger>
+            <TabsTrigger value="qualifications">Qualifikationen</TabsTrigger>
           </TabsList>
 
           <Button
@@ -221,6 +233,38 @@ export function MitarbeiterTabs({
             isLoading={isPending}
             skeletonCount={prevInviteCount}
           />
+        </TabsContent>
+        <TabsContent value="teams" className="mt-4">
+          {qualificationWorkspace ? (
+            <TeamManagementSection
+              teams={qualificationWorkspace.teams}
+              teamMemberships={qualificationWorkspace.teamMemberships}
+              employees={qualificationWorkspace.employees}
+            />
+          ) : (
+            <p role="alert" className="text-sm text-destructive">
+              Die Teams konnten nicht geladen werden.
+            </p>
+          )}
+        </TabsContent>
+        <TabsContent value="qualifications" className="mt-4">
+          {qualificationWorkspace ? (
+            <QualificationManagementSection
+              capabilities={qualificationWorkspace.capabilities}
+              employeeCapabilities={
+                qualificationWorkspace.employeeCapabilities
+              }
+              employees={qualificationWorkspace.employees}
+              apprenticeWarningEnabled={
+                qualificationWorkspace.apprenticeWarningEnabled
+              }
+              isAdmin={qualificationWorkspace.isAdmin}
+            />
+          ) : (
+            <p role="alert" className="text-sm text-destructive">
+              Die Qualifikationen konnten nicht geladen werden.
+            </p>
+          )}
         </TabsContent>
       </Tabs>
     </>

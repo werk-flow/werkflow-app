@@ -17,7 +17,14 @@ import {
   reassignEntries,
   reassignEntryBatch
 } from '@/lib/time-tracking/actions';
-import { getJobsForCalendar, getParkedJobs, updateJob, updateJobStatus, assignEmployee, unassignEmployee } from '@/lib/jobs/actions';
+import {
+  getJobsForCalendar,
+  getParkedJobs,
+  updateJob as updateJobAction,
+  updateJobStatus,
+  type UpdateJobInput,
+} from '@/lib/jobs/actions';
+import { useQualificationWarningConfirmation } from '@/components/auftraege/qualification-warning-dialog';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { ParkplatzPanel } from './parkplatz-panel';
@@ -115,6 +122,29 @@ export function CalendarContainer({
 }: CalendarContainerProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { requestApproval, warningDialog } =
+    useQualificationWarningConfirmation();
+  const updateJob = useCallback(
+    async (jobId: string, input: UpdateJobInput) => {
+      let result = await updateJobAction(jobId, input);
+      if (
+        !result.success &&
+        (result.error === 'qualification_warning' ||
+          result.error === 'stale_evaluation') &&
+        'evaluation' in result
+      ) {
+        const approval = await requestApproval(result.evaluation);
+        if (approval) {
+          result = await updateJobAction(jobId, {
+            ...input,
+            assignmentApproval: approval,
+          });
+        }
+      }
+      return result;
+    },
+    [requestApproval]
+  );
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
   const [entries, setEntries] = useState<TimeEntry[]>(initialEntries ?? []);
@@ -980,7 +1010,7 @@ export function CalendarContainer({
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleUnparkJob = useCallback(async (
     jobId: string,
@@ -1033,7 +1063,7 @@ export function CalendarContainer({
         });
         await updateJobStatus(jobId, 'geparkt');
         if (assignToUserId && !job.assignedUserIds.includes(assignToUserId)) {
-          await unassignEmployee(jobId, assignToUserId);
+          await updateJob(jobId, { selectedUserIds: job.assignedUserIds });
         }
         handleSilentRefresh();
       },
@@ -1046,6 +1076,7 @@ export function CalendarContainer({
       ...(nextDurationMinutes !== job.estimatedDurationMinutes
         ? { estimatedDurationMinutes: nextDurationMinutes }
         : {}),
+      selectedUserIds: newJob.assignedUserIds,
     });
     if (undone.current) { handleSilentRefresh(); return; }
 
@@ -1065,12 +1096,8 @@ export function CalendarContainer({
       return;
     }
 
-    if (assignToUserId && !job.assignedUserIds.includes(assignToUserId)) {
-      await assignEmployee(jobId, assignToUserId);
-    }
-
     if (!undone.current) handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleScheduleJob = useCallback(async (
     jobId: string,
@@ -1121,10 +1148,8 @@ export function CalendarContainer({
         await updateJob(jobId, {
           plannedTime: origTime ?? '',
           estimatedDurationMinutes: origDuration ?? null,
+          selectedUserIds: origAssigned,
         });
-        if (needsAssign) {
-          await unassignEmployee(jobId, memberId);
-        }
         handleSilentRefresh();
       },
     });
@@ -1132,6 +1157,7 @@ export function CalendarContainer({
     const result = await updateJob(jobId, {
       plannedTime: time,
       estimatedDurationMinutes: nextDurationMinutes,
+      selectedUserIds: newAssigned,
     });
     if (undone.current) { handleSilentRefresh(); return; }
 
@@ -1152,12 +1178,8 @@ export function CalendarContainer({
       return;
     }
 
-    if (needsAssign) {
-      await assignEmployee(jobId, memberId);
-    }
-
     if (!undone.current) handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleJobWeekHeaderMove = useCallback(async (
     jobId: string,
@@ -1202,30 +1224,35 @@ export function CalendarContainer({
               : entry
           )
         );
-        const undoPromises: Promise<unknown>[] = [];
-        if (dateChanged) {
-          undoPromises.push(updateJob(jobId, { plannedDate: origDate ?? '' }));
-        }
-        if (memberRemoved && oldMemberId) {
-          undoPromises.push(assignEmployee(jobId, oldMemberId));
-        }
-        await Promise.all(undoPromises);
+        await updateJob(jobId, {
+          ...(dateChanged ? { plannedDate: origDate ?? '' } : {}),
+          selectedUserIds: origAssigned,
+        });
         handleSilentRefresh();
       },
     });
 
-    const serverPromises: Promise<unknown>[] = [];
-    if (dateChanged) {
-      serverPromises.push(updateJob(jobId, { plannedDate: newDate }));
-    }
-    if (memberRemoved && oldMemberId) {
-      serverPromises.push(unassignEmployee(jobId, oldMemberId));
-    }
-
-    await Promise.all(serverPromises);
+    const result = await updateJob(jobId, {
+      ...(dateChanged ? { plannedDate: newDate } : {}),
+      selectedUserIds: newAssigned,
+    });
     if (undone.current) { handleSilentRefresh(); return; }
+    if (!result.success) {
+      setCalendarJobs((prev) =>
+        prev.map((entry) =>
+          entry.id === jobId
+            ? { ...entry, plannedDate: origDate, assignedUserIds: origAssigned }
+            : entry
+        )
+      );
+      setParkplatzBanner({
+        id: ++parkplatzBannerSeqRef.current,
+        variant: 'error',
+        message: 'Auftrag konnte nicht verschoben werden.',
+      });
+    }
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleJobDateChange = useCallback(async (
     jobId: string,
@@ -1284,7 +1311,7 @@ export function CalendarContainer({
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleJobWeekMove = useCallback(async (
     jobId: string,
@@ -1330,40 +1357,42 @@ export function CalendarContainer({
             j.id === jobId ? { ...j, plannedDate: origDate, plannedTime: origTime, assignedUserIds: origAssigned } : j
           )
         );
-        const undoPromises: Promise<unknown>[] = [];
-        if (dateChanged) {
-          undoPromises.push(updateJob(jobId, { plannedDate: origDate ?? '', plannedTime: origTime ?? '' }));
-        }
-        if (memberChanged && origAssigned.length > 0) {
-          undoPromises.push(
-            unassignEmployee(jobId, newMemberId).then(() => assignEmployee(jobId, oldMemberId))
-          );
-        } else if (memberChanged) {
-          undoPromises.push(unassignEmployee(jobId, newMemberId));
-        }
-        await Promise.all(undoPromises);
+        await updateJob(jobId, {
+          ...(dateChanged
+            ? { plannedDate: origDate ?? '', plannedTime: origTime ?? '' }
+            : {}),
+          selectedUserIds: origAssigned,
+        });
         handleSilentRefresh();
       },
     });
 
-    const serverPromises: Promise<unknown>[] = [];
-    if (dateChanged) {
-      serverPromises.push(updateJob(jobId, { plannedDate: newDate }));
-    }
-    if (memberChanged) {
-      if (job.assignedUserIds.length === 0) {
-        serverPromises.push(assignEmployee(jobId, newMemberId));
-      } else {
-        serverPromises.push(
-          unassignEmployee(jobId, oldMemberId).then(() => assignEmployee(jobId, newMemberId))
-        );
-      }
-    }
-
-    await Promise.all(serverPromises);
+    const result = await updateJob(jobId, {
+      ...(dateChanged ? { plannedDate: newDate } : {}),
+      selectedUserIds: newAssigned,
+    });
     if (undone.current) { handleSilentRefresh(); return; }
+    if (!result.success) {
+      setCalendarJobs((prev) =>
+        prev.map((entry) =>
+          entry.id === jobId
+            ? {
+                ...entry,
+                plannedDate: origDate,
+                plannedTime: origTime,
+                assignedUserIds: origAssigned,
+              }
+            : entry
+        )
+      );
+      setParkplatzBanner({
+        id: ++parkplatzBannerSeqRef.current,
+        variant: 'error',
+        message: 'Auftrag konnte nicht verschoben werden.',
+      });
+    }
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob]);
 
   const handleSessionWeekMove = useCallback(async (
     session: WorkSession,
@@ -1712,6 +1741,7 @@ export function CalendarContainer({
           }
         />
       )}
+      {warningDialog}
     </div>
   );
 }

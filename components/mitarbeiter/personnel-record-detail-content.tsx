@@ -18,11 +18,16 @@ import {
   getEmploymentState,
 } from '@/lib/personnel/types';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
+import {
+  PersonnelQualificationSummary,
+  type PersonnelQualificationSummaryData,
+} from './personnel-qualification-summary';
 
 interface PersonnelRecordDetailContentProps {
   detail: PersonnelDetail;
   actorNames: Record<string, string>;
   canEdit: boolean;
+  qualificationSummary: PersonnelQualificationSummaryData;
 }
 
 /**
@@ -34,6 +39,7 @@ export function PersonnelRecordDetailContent({
   detail,
   actorNames,
   canEdit,
+  qualificationSummary,
 }: PersonnelRecordDetailContentProps) {
   const { record, conditions, schedules, events, hasPendingInvite } = detail;
 
@@ -43,6 +49,10 @@ export function PersonnelRecordDetailContent({
       'employment_conditions',
       'work_schedules',
       'organization_invites',
+      'teams',
+      'team_memberships',
+      'organization_capabilities',
+      'employee_capabilities',
     ],
   });
 
@@ -93,6 +103,7 @@ export function PersonnelRecordDetailContent({
             canEdit={canEdit}
           />
           <SicknessReportsSection recordId={record.id} />
+          <PersonnelQualificationSummary data={qualificationSummary} />
           <PersonnelHistorySection events={events} actorNames={actorNames} />
         </div>
       </div>

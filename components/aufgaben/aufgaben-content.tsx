@@ -156,6 +156,8 @@ export function AufgabenContent() {
   useRealtimeEvent('entry_change_requests', scheduleRefetch);
   useRealtimeEvent('vacation_requests', scheduleRefetch);
   useRealtimeEvent('sickness_reports', scheduleRefetch);
+  useRealtimeEvent('employee_capabilities', scheduleRefetch);
+  useRealtimeEvent('organization_capabilities', scheduleRefetch);
   useRealtimeEvent('client_requests', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
@@ -328,7 +330,10 @@ export function AufgabenContent() {
                       notification.startDate,
                       notification.endDate
                     )
-                  : formatRange(notification.startDate, notification.endDate);
+                  : notification.sourceType ===
+                      'employee_certification_expiry'
+                    ? formatDate(notification.validUntil)
+                    : formatRange(notification.startDate, notification.endDate);
               return (
                 <div
                   key={`${notification.sourceType}:${notification.sourceId}`}
@@ -349,11 +354,18 @@ export function AufgabenContent() {
                       >
                         {notification.sourceType === 'sickness_report'
                           ? sicknessNotificationText(notification)
-                          : `Urlaub vom ${range}${
-                              notification.dayPortion === 'half_day'
-                                ? ' (halbtags)'
-                                : ''
-                            } wurde ${VACATION_DECISION_STATUS_TEXT[notification.status]}.`}
+                          : notification.sourceType ===
+                              'employee_certification_expiry'
+                            ? `${notification.capabilityName} von ${notification.personName} ${
+                                notification.phase === 'expired'
+                                  ? 'ist abgelaufen'
+                                  : 'läuft bald ab'
+                              } (gültig bis ${range}).`
+                            : `Urlaub vom ${range}${
+                                notification.dayPortion === 'half_day'
+                                  ? ' (halbtags)'
+                                  : ''
+                              } wurde ${VACATION_DECISION_STATUS_TEXT[notification.status]}.`}
                       </p>
                       {notification.sourceType === 'vacation_decision' &&
                         notification.comment && (
@@ -361,6 +373,15 @@ export function AufgabenContent() {
                             Grund: {notification.comment}
                           </p>
                         )}
+                      {notification.sourceType ===
+                        'employee_certification_expiry' && (
+                        <Link
+                          href={`/mitarbeiter/${notification.employeeRecordId}`}
+                          className="mt-0.5 inline-block text-xs text-primary hover:underline"
+                        >
+                          Qualifikation ansehen
+                        </Link>
+                      )}
                     </div>
                   </div>
                   {notification.unread && (
