@@ -511,19 +511,20 @@ async function deriveCertificationExpiryNotifications(
     return { notifications: [], failed: false };
   }
   const admin = createSupabaseAdminClient();
-  const [noticesResult, readStatesResult] = await Promise.all([
-    loadCertificationExpiryNotifications({
-      admin,
-      orgId: context.orgId,
-    }),
-    admin
-      .from('attention_read_states')
-      .select('source_id, state_version')
-      .eq('organization_id', context.orgId)
-      .eq('user_id', context.userId)
-      .eq('source_type', 'employee_certification_expiry')
-      .limit(500),
-  ]);
+  const noticesResult = await loadCertificationExpiryNotifications({
+    admin,
+    orgId: context.orgId,
+  });
+  if (noticesResult.failed || noticesResult.notices.length === 0) {
+    return { notifications: [], failed: noticesResult.failed };
+  }
+  const readStatesResult = await admin
+    .from('attention_read_states')
+    .select('source_id, state_version')
+    .eq('organization_id', context.orgId)
+    .eq('user_id', context.userId)
+    .eq('source_type', 'employee_certification_expiry')
+    .in('source_id', noticesResult.notices.map((notice) => notice.sourceId));
   if (noticesResult.failed || readStatesResult.error) {
     console.error(
       'Failed to load certification attention read states:',

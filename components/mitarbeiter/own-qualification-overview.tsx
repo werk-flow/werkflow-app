@@ -27,6 +27,8 @@ export function OwnQualificationOverview({
   useRealtimeEvent('organization_capabilities', refresh);
   useRealtimeEvent('employee_capabilities', refresh);
   const today = getBusinessTodayIso();
+  const formatDate = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
   if (!profile) {
     return (
       <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
@@ -99,8 +101,8 @@ export function OwnQualificationOverview({
                     </Badge>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Gültig ab {record.validFrom}
-                    {record.validUntil ? ' bis ' + record.validUntil : ''}
+                    Gültig ab {formatDate(record.validFrom)}
+                    {record.validUntil ? ' bis ' + formatDate(record.validUntil) : ''}
                   </p>
                   {definition.kind === 'certification' && (
                     <div className="flex flex-wrap gap-2 text-xs">

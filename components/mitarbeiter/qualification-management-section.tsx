@@ -63,6 +63,7 @@ export function QualificationManagementSection({
     useState<EvidenceState>('not_required');
   const [supersedesId, setSupersedesId] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const definitionById = useMemo(
     () => new Map(capabilities.map((capability) => [capability.id, capability])),
@@ -149,24 +150,40 @@ export function QualificationManagementSection({
           </div>
           <Button
             className="self-end"
-            disabled={!definitionName.trim()}
+            disabled={!definitionName.trim() || pendingAction !== null}
             onClick={async () => {
-              const result = await createCapability({
-                kind,
-                name: definitionName,
-                expiryWarningDays:
-                  kind === 'certification' ? Number(warningDays) : 0,
-              });
-              if (!result.success) {
-                toast.error(
-                  result.error === 'duplicate_name'
-                    ? 'Dieser Begriff ist bereits vorhanden.'
-                    : 'Der Begriff konnte nicht angelegt werden.'
-                );
+              const expiryWarningDays =
+                kind === 'certification' ? Number(warningDays) : 0;
+              if (
+                !Number.isInteger(expiryWarningDays) ||
+                expiryWarningDays < 0 ||
+                expiryWarningDays > 365
+              ) {
+                toast.error('Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.');
                 return;
               }
-              setDefinitionName('');
-              refresh();
+              setPendingAction('create-definition');
+              try {
+                const result = await createCapability({
+                  kind,
+                  name: definitionName,
+                  expiryWarningDays,
+                });
+                if (!result.success) {
+                  toast.error(
+                    result.error === 'duplicate_name'
+                      ? 'Dieser Begriff ist bereits vorhanden.'
+                      : 'Der Begriff konnte nicht angelegt werden.'
+                  );
+                  return;
+                }
+                setDefinitionName('');
+                refresh();
+              } catch {
+                toast.error('Der Begriff konnte nicht angelegt werden.');
+              } finally {
+                setPendingAction(null);
+              }
             }}
           >
             <Plus className="size-4" />
@@ -368,7 +385,12 @@ export function QualificationManagementSection({
               </Button>
             )}
             <Button
-              disabled={!employeeRecordId || !capabilityId || !validFrom}
+              disabled={
+                !employeeRecordId ||
+                !capabilityId ||
+                !validFrom ||
+                pendingAction !== null
+              }
               onClick={async () => {
                 const sharedInput = {
                   validFrom,
@@ -381,27 +403,34 @@ export function QualificationManagementSection({
                   evidenceState,
                   operationalNote,
                 };
-                const result = editingRecordId
-                  ? await updateEmployeeCapability({
-                      recordId: editingRecordId,
-                      ...sharedInput,
-                    })
-                  : await addEmployeeCapability({
-                      employeeRecordId,
-                      capabilityId,
-                      ...sharedInput,
-                      supersedesId,
-                    });
-                if (!result.success) {
-                  toast.error(
-                    result.error === 'overlap'
-                      ? 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.'
-                      : 'Der Eintrag konnte nicht gespeichert werden.'
-                  );
-                  return;
+                setPendingAction('save-record');
+                try {
+                  const result = editingRecordId
+                    ? await updateEmployeeCapability({
+                        recordId: editingRecordId,
+                        ...sharedInput,
+                      })
+                    : await addEmployeeCapability({
+                        employeeRecordId,
+                        capabilityId,
+                        ...sharedInput,
+                        supersedesId,
+                      });
+                  if (!result.success) {
+                    toast.error(
+                      result.error === 'overlap'
+                        ? 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.'
+                        : 'Der Eintrag konnte nicht gespeichert werden.'
+                    );
+                    return;
+                  }
+                  resetGrantForm();
+                  refresh();
+                } catch {
+                  toast.error('Der Eintrag konnte nicht gespeichert werden.');
+                } finally {
+                  setPendingAction(null);
                 }
-                resetGrantForm();
-                refresh();
               }}
             >
               {editingRecordId

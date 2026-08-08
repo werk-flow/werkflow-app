@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   ApprenticeWarning,
   AssignmentCandidate,
@@ -162,12 +164,7 @@ export function resolveApprenticeWarning(
 }
 
 function hashFingerprint(value: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
+  return createHash('sha256').update(value).digest('hex');
 }
 
 export function buildAssignmentFingerprint(input: {
@@ -190,6 +187,7 @@ export function buildAssignmentFingerprint(input: {
           .map((record) => ({
             id: record.id,
             capabilityId: record.capabilityId,
+            capabilityKind: record.capabilityKind,
             validFrom: record.validFrom,
             validUntil: record.validUntil,
             confirmationStatus: record.confirmationStatus,
@@ -201,6 +199,7 @@ export function buildAssignmentFingerprint(input: {
       .map((requirement) => ({
         id: requirement.id,
         capabilityId: requirement.capabilityId,
+        capabilityKind: requirement.capabilityKind,
         requireConfirmation: requirement.requireConfirmation,
       })),
   });

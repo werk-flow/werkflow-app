@@ -41,6 +41,7 @@ export function EmployeeMultiSelect({
   disabled = false,
 }: EmployeeMultiSelectProps) {
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void getAssignmentTeamOptions().then((result) => {
@@ -74,24 +75,32 @@ export function EmployeeMultiSelect({
               variant="outline"
               size="sm"
               className="h-7"
-              disabled={disabled}
+              disabled={disabled || pendingTeamId !== null}
               onClick={async () => {
-                const result = await expandTeamForAssignment({
-                  teamId: team.id,
-                  assessedForDate,
-                });
-                if (!result.success) {
+                setPendingTeamId(team.id);
+                try {
+                  const result = await expandTeamForAssignment({
+                    teamId: team.id,
+                    assessedForDate,
+                  });
+                  if (!result.success) {
+                    toast.error('Das Team konnte nicht übernommen werden.');
+                    return;
+                  }
+                  onSelectionChange([
+                    ...new Set([...selectedIds, ...result.userIds]),
+                  ]);
+                  onTeamApplied?.(result.teamSourceId);
+                  if (result.skippedNames.length > 0) {
+                    const verb = result.skippedNames.length === 1 ? 'wurde' : 'wurden';
+                    toast.info(
+                      `${result.skippedNames.join(', ')} ${verb} nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`
+                    );
+                  }
+                } catch {
                   toast.error('Das Team konnte nicht übernommen werden.');
-                  return;
-                }
-                onSelectionChange([
-                  ...new Set([...selectedIds, ...result.userIds]),
-                ]);
-                onTeamApplied?.(result.teamSourceId);
-                if (result.skippedNames.length > 0) {
-                  toast.info(
-                    `${result.skippedNames.join(', ')} wurde nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`
-                  );
+                } finally {
+                  setPendingTeamId(null);
                 }
               }}
             >

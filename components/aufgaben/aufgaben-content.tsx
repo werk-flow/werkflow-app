@@ -33,6 +33,7 @@ import {
   REQUEST_STATUS_LABELS,
   REQUEST_URGENCY_LABELS,
 } from '@/lib/requests/types';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 
 const MARK_READ_ERROR =
   'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
@@ -163,6 +164,7 @@ export function AufgabenContent() {
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_delegations', scheduleRefetch);
+  useBusinessDayRefresh(scheduleRefetch);
 
   const handleMarkRead = async (notification: AttentionNotification) => {
     if (busyKey) return;

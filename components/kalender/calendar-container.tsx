@@ -135,6 +135,10 @@ export function CalendarContainer({
       ) {
         const approval = await requestApproval(result.evaluation);
         if (approval) {
+          // The confirmation dialog may stay open longer than the original
+          // mutation pause. Extend it before the approved retry so its own
+          // Realtime events cannot race the optimistic calendar state.
+          realtimePausedUntilRef.current = Date.now() + 8000;
           result = await updateJobAction(jobId, {
             ...input,
             assignmentApproval: approval,

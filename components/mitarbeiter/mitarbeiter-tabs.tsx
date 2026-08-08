@@ -5,7 +5,8 @@ import {
   useCallback,
   useEffect,
   useTransition,
-  useMemo
+  useMemo,
+  useRef
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
@@ -115,21 +116,35 @@ export function MitarbeiterTabs({
       router.refresh();
     });
   }, [router, members.length, invites.length, refetchStatus]);
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+    realtimeTimerRef.current = setTimeout(() => {
+      realtimeTimerRef.current = null;
+      handleRefresh();
+    }, 150);
+  }, [handleRefresh]);
+  useEffect(
+    () => () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+    },
+    []
+  );
 
   // Realtime: refetch server data when invitations or personnel records change
-  useRealtimeEvent('organization_invites', handleRefresh);
-  useRealtimeEvent('employee_records', handleRefresh);
-  useRealtimeEvent('employment_conditions', handleRefresh);
-  useRealtimeEvent('work_schedules', handleRefresh);
-  useRealtimeEvent('organization_closure_days', handleRefresh);
-  useRealtimeEvent('organization_responsibility_configurations', handleRefresh);
-  useRealtimeEvent('organization_responsibility_assignments', handleRefresh);
-  useRealtimeEvent('organization_responsibility_delegations', handleRefresh);
-  useRealtimeEvent('teams', handleRefresh);
-  useRealtimeEvent('team_memberships', handleRefresh);
-  useRealtimeEvent('organization_capabilities', handleRefresh);
-  useRealtimeEvent('employee_capabilities', handleRefresh);
-  useRealtimeEvent('organization_qualification_settings', handleRefresh);
+  useRealtimeEvent('organization_invites', scheduleRealtimeRefresh);
+  useRealtimeEvent('employee_records', scheduleRealtimeRefresh);
+  useRealtimeEvent('employment_conditions', scheduleRealtimeRefresh);
+  useRealtimeEvent('work_schedules', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_closure_days', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_responsibility_configurations', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_responsibility_assignments', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_responsibility_delegations', scheduleRealtimeRefresh);
+  useRealtimeEvent('teams', scheduleRealtimeRefresh);
+  useRealtimeEvent('team_memberships', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_capabilities', scheduleRealtimeRefresh);
+  useRealtimeEvent('employee_capabilities', scheduleRealtimeRefresh);
+  useRealtimeEvent('organization_qualification_settings', scheduleRealtimeRefresh);
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(

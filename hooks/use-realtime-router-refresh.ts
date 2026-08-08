@@ -103,6 +103,21 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('job_assignments', () => {
     if (tableSet.has('job_assignments')) scheduleRefresh();
   });
+  useRealtimeEvent('teams', () => {
+    if (tableSet.has('teams')) scheduleRefresh();
+  });
+  useRealtimeEvent('team_memberships', () => {
+    if (tableSet.has('team_memberships')) scheduleRefresh();
+  });
+  useRealtimeEvent('organization_capabilities', () => {
+    if (tableSet.has('organization_capabilities')) scheduleRefresh();
+  });
+  useRealtimeEvent('employee_capabilities', () => {
+    if (tableSet.has('employee_capabilities')) scheduleRefresh();
+  });
+  useRealtimeEvent('job_capability_requirements', () => {
+    if (tableSet.has('job_capability_requirements')) scheduleRefresh();
+  });
   useRealtimeEvent('job_instruction_items', () => {
     if (tableSet.has('job_instruction_items')) scheduleRefresh();
   });

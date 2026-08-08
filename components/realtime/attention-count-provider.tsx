@@ -20,6 +20,7 @@ import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { getAttentionCounts } from '@/lib/attention/actions';
 import type { AttentionCounts } from '@/lib/attention/types';
+import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 
 const ZERO_COUNTS: AttentionCounts = {
   actionableCount: 0,
@@ -175,6 +176,7 @@ export function AttentionCountProvider({
   useRealtimeEvent('organization_responsibility_delegations', () => {
     scheduleRefresh();
   });
+  useBusinessDayRefresh(scheduleRefresh);
 
   const value = useMemo<AttentionCountContextValue>(
     () => ({

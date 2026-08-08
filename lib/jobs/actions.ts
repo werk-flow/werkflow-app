@@ -123,7 +123,11 @@ async function assessAssignmentSelection(input: {
     };
   }
   if (approval.reason.trim().length < 3) {
-    return { success: false, error: 'override_reason_required' };
+    return {
+      success: false,
+      error: 'qualification_warning',
+      evaluation: result.evaluation,
+    };
   }
   return result;
 }
@@ -626,16 +630,21 @@ export async function createJob(
         teamSourceId: input.assignmentTeamSourceId,
       });
       if (!assignmentResult.success) {
-        await admin
+        const { error: rollbackError } = await admin
           .from('jobs')
           .delete()
           .eq('id', data.id)
           .eq('organization_id', orgId);
+        if (rollbackError) {
+          console.error('Failed to roll back job after assignment failure:', rollbackError);
+          return { success: false, error: 'rollback_failed' };
+        }
         return assignmentResult;
       }
     }
 
     updateTag(CACHE_TAGS.jobs(orgId));
+    updateTag(CACHE_TAGS.qualifications(orgId));
     if (input.projectId) {
       updateTag(CACHE_TAGS.projects(orgId));
     }
@@ -895,6 +904,7 @@ export async function updateJob(
     }
 
     updateTag(CACHE_TAGS.jobs(orgId));
+    updateTag(CACHE_TAGS.qualifications(orgId));
     revalidatePath('/auftraege', 'layout');
 
     const projectChanged =
@@ -1089,6 +1099,7 @@ export async function assignEmployee(
     if (!assignment) return { success: false, error: 'assign_failed' };
 
     updateTag(CACHE_TAGS.jobs(orgId));
+    updateTag(CACHE_TAGS.qualifications(orgId));
     revalidatePath('/auftraege', 'layout');
     revalidatePath('/mitarbeiter', 'layout');
 
@@ -1153,6 +1164,7 @@ export async function unassignEmployee(
     if (!result.success) return result;
 
     updateTag(CACHE_TAGS.jobs(orgId));
+    updateTag(CACHE_TAGS.qualifications(orgId));
     revalidatePath('/auftraege', 'layout');
     revalidatePath('/mitarbeiter', 'layout');
 

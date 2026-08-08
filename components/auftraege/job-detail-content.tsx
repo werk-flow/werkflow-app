@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import {
   Building2,
   FolderOpen,
@@ -58,7 +59,10 @@ import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
 import { EmployeeMultiSelect } from './employee-multi-select';
-import { QualificationWarningDialog } from './qualification-warning-dialog';
+import {
+  QualificationWarningDialog,
+  useQualificationWarningConfirmation,
+} from './qualification-warning-dialog';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditJobDialog } from './edit-job-dialog';
@@ -258,6 +262,8 @@ export function JobDetailContent({
     string | null
   >(null);
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
+  const [isQualificationOverrideSaving, setIsQualificationOverrideSaving] =
+    useState(false);
   const [isAssigning, startAssignTransition] = useTransition();
   const [isUpdatingClient, startClientUpdateTransition] = useTransition();
   const [isUpdatingProject, startProjectUpdateTransition] = useTransition();
@@ -266,6 +272,32 @@ export function JobDetailContent({
   const [dialogProjects, setDialogProjects] = useState(projects);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
   const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
+  const {
+    requestApproval: requestInlineEditApproval,
+    warningDialog: inlineEditWarningDialog,
+  } = useQualificationWarningConfirmation();
+
+  const updateJobWithQualificationApproval = useCallback(
+    async (input: Parameters<typeof updateJob>[1]) => {
+      let result = await updateJob(liveJob.id, input);
+      if (
+        !result.success &&
+        (result.error === 'qualification_warning' ||
+          result.error === 'stale_evaluation') &&
+        'evaluation' in result
+      ) {
+        const approval = await requestInlineEditApproval(result.evaluation);
+        if (approval) {
+          result = await updateJob(liveJob.id, {
+            ...input,
+            assignmentApproval: approval,
+          });
+        }
+      }
+      return result;
+    },
+    [liveJob.id, requestInlineEditApproval]
+  );
 
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [timeParticipants, setTimeParticipants] = useState<
@@ -634,6 +666,8 @@ export function JobDetailContent({
         ) {
           setPendingAssignmentIds(nextIds);
           setQualificationWarning(result.evaluation);
+        } else {
+          toast.error('Die Zuweisung konnte nicht gespeichert werden.');
         }
         return;
       }
@@ -697,6 +731,10 @@ export function JobDetailContent({
       setQualificationWarning(result.evaluation);
       return;
     }
+    if (!result.success) {
+      toast.error('Die Zuweisung konnte nicht gespeichert werden.');
+      return;
+    }
     if (result.success) {
       setLiveJob((current) => {
         const nextAssignments = current.assignments.filter(
@@ -718,28 +756,41 @@ export function JobDetailContent({
   const handleQualificationOverride = async (
     approval: AssignmentApproval
   ) => {
-    const result = await updateJobAssignments(
-      liveJob.id,
-      pendingAssignmentIds,
-      approval,
-      assignmentTeamSourceId
-    );
-    if (!result.success) {
-      if (
-        (result.error === 'qualification_warning' ||
-          result.error === 'stale_evaluation') &&
-        'evaluation' in result
-      ) {
-        setQualificationWarning(result.evaluation);
+    setIsQualificationOverrideSaving(true);
+    try {
+      const result = await updateJobAssignments(
+        liveJob.id,
+        pendingAssignmentIds,
+        approval,
+        assignmentTeamSourceId
+      );
+      if (!result.success) {
+        if (
+          (result.error === 'qualification_warning' ||
+            result.error === 'stale_evaluation') &&
+          'evaluation' in result
+        ) {
+          setQualificationWarning(result.evaluation);
+        } else {
+          toast.error(
+            'Die begründete Zuweisung konnte nicht gespeichert werden.'
+          );
+        }
+        return;
       }
-      return;
+      setQualificationWarning(null);
+      setPendingAssignmentIds([]);
+      setShowAssignDialog(false);
+      setAssignSelectedIds([]);
+      setAssignmentTeamSourceId(null);
+      router.refresh();
+    } catch {
+      toast.error(
+        'Die begründete Zuweisung konnte nicht gespeichert werden.'
+      );
+    } finally {
+      setIsQualificationOverrideSaving(false);
     }
-    setQualificationWarning(null);
-    setPendingAssignmentIds([]);
-    setShowAssignDialog(false);
-    setAssignSelectedIds([]);
-    setAssignmentTeamSourceId(null);
-    router.refresh();
   };
 
   const handleClientSave = async (clientId: string) => {
@@ -971,7 +1022,7 @@ export function JobDetailContent({
               loadingLabel: 'Wird gespeichert...',
             },
             onSave: async (v) => {
-              const result = await updateJob(liveJob.id, {
+              const result = await updateJobWithQualificationApproval({
                 plannedDate: v || null,
               });
               if (!result.success) {
@@ -1735,13 +1786,14 @@ export function JobDetailContent({
       />
       <QualificationWarningDialog
         evaluation={qualificationWarning}
-        isSubmitting={isAssigning}
+        isSubmitting={isAssigning || isQualificationOverrideSaving}
         onCancel={() => {
           setQualificationWarning(null);
           setPendingAssignmentIds([]);
         }}
         onConfirm={handleQualificationOverride}
       />
+      {inlineEditWarningDialog}
     </div>
   );
 }

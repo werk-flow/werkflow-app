@@ -53,6 +53,7 @@ export function TeamManagementSection({
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState('');
   const [teamToDissolve, setTeamToDissolve] = useState<Team | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [selectedEmployeeByTeam, setSelectedEmployeeByTeam] = useState<
     Record<string, string>
   >({});
@@ -75,18 +76,25 @@ export function TeamManagementSection({
   };
 
   const handleCreate = async () => {
-    const result = await createTeam({ name, description });
-    if (!result.success) {
-      toast.error(
-        result.error === 'duplicate_name'
-          ? 'Ein aktives Team mit diesem Namen besteht bereits.'
-          : 'Das Team konnte nicht angelegt werden.'
-      );
-      return;
+    setPendingAction('create');
+    try {
+      const result = await createTeam({ name, description });
+      if (!result.success) {
+        toast.error(
+          result.error === 'duplicate_name'
+            ? 'Ein aktives Team mit diesem Namen besteht bereits.'
+            : 'Das Team konnte nicht angelegt werden.'
+        );
+        return;
+      }
+      setName('');
+      setDescription('');
+      refresh();
+    } catch {
+      toast.error('Das Team konnte nicht angelegt werden.');
+    } finally {
+      setPendingAction(null);
     }
-    setName('');
-    setDescription('');
-    refresh();
   };
 
   const handleRename = async (team: Team, value: string) => {
@@ -96,18 +104,25 @@ export function TeamManagementSection({
       setEditingTeamId(null);
       return;
     }
-    const result = await updateTeam({
-      teamId: team.id,
-      name: nextName,
-      description: team.description,
-    });
-    if (!result.success) {
+    setPendingAction(`rename:${team.id}`);
+    try {
+      const result = await updateTeam({
+        teamId: team.id,
+        name: nextName,
+        description: team.description,
+      });
+      if (!result.success) {
+        toast.error('Der Teamname konnte nicht geändert werden.');
+        return;
+      }
+      setEditingTeamId(null);
+      setEditingTeamName('');
+      refresh();
+    } catch {
       toast.error('Der Teamname konnte nicht geändert werden.');
-      return;
+    } finally {
+      setPendingAction(null);
     }
-    setEditingTeamId(null);
-    setEditingTeamName('');
-    refresh();
   };
 
   return (
@@ -150,7 +165,7 @@ export function TeamManagementSection({
             type="button"
             className="self-end"
             onClick={() => void handleCreate()}
-            disabled={!name.trim() || isPending}
+            disabled={!name.trim() || pendingAction !== null || isPending}
           >
             <Plus className="size-4" />
             Team anlegen
@@ -218,7 +233,7 @@ export function TeamManagementSection({
                           <Button
                             variant="ghost"
                             size="sm"
-                            disabled={!editingTeamName.trim()}
+                            disabled={!editingTeamName.trim() || pendingAction !== null}
                             onClick={() =>
                               void handleRename(team, editingTeamName)
                             }
@@ -249,6 +264,7 @@ export function TeamManagementSection({
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
+                        disabled={pendingAction !== null}
                         onClick={() => setTeamToDissolve(team)}
                       >
                         Auflösen
@@ -279,8 +295,11 @@ export function TeamManagementSection({
                               employeeById.get(membership.employeeRecordId)
                                 ?.displayName ?? 'Teammitglied'
                             } zum Tagesende aus ${team.name} entfernen`}
+                            disabled={pendingAction !== null}
                             onClick={async () => {
-                              const result = await endTeamMembership({
+                              setPendingAction(`end:${membership.id}`);
+                              try {
+                                const result = await endTeamMembership({
                                 membershipId: membership.id,
                                 validUntil: today,
                               });
@@ -290,7 +309,12 @@ export function TeamManagementSection({
                                 );
                                 return;
                               }
-                              refresh();
+                                refresh();
+                              } catch {
+                                toast.error('Die Teamzugehörigkeit konnte nicht beendet werden.');
+                              } finally {
+                                setPendingAction(null);
+                              }
                             }}
                           >
                             <X className="size-3.5" />
@@ -327,7 +351,10 @@ export function TeamManagementSection({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Input
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`team-${team.id}-valid-from`}>Gültig ab</Label>
+                      <Input
+                      id={`team-${team.id}-valid-from`}
                       type="date"
                       value={
                         membershipWindowByTeam[team.id]?.validFrom ?? today
@@ -343,8 +370,14 @@ export function TeamManagementSection({
                         }))
                       }
                       aria-label={`Teamzugehörigkeit zu ${team.name} gültig ab`}
-                    />
-                    <Input
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`team-${team.id}-valid-until`}>
+                        Gültig bis (optional)
+                      </Label>
+                      <Input
+                      id={`team-${team.id}-valid-until`}
                       type="date"
                       value={
                         membershipWindowByTeam[team.id]?.validUntil ?? ''
@@ -360,15 +393,18 @@ export function TeamManagementSection({
                         }))
                       }
                       aria-label={`Teamzugehörigkeit zu ${team.name} gültig bis`}
-                    />
+                      />
+                    </div>
                     <Button
                       variant="outline"
-                      disabled={!selectedEmployeeByTeam[team.id]}
+                      disabled={!selectedEmployeeByTeam[team.id] || pendingAction !== null}
                       onClick={async () => {
                         const employeeRecordId =
                           selectedEmployeeByTeam[team.id];
                         if (!employeeRecordId) return;
-                        const result = await addTeamMembership({
+                        setPendingAction(`add:${team.id}`);
+                        try {
+                          const result = await addTeamMembership({
                           teamId: team.id,
                           employeeRecordId,
                           validFrom:
@@ -384,11 +420,20 @@ export function TeamManagementSection({
                           );
                           return;
                         }
-                        setSelectedEmployeeByTeam((current) => ({
-                          ...current,
-                          [team.id]: '',
-                        }));
-                        refresh();
+                          setSelectedEmployeeByTeam((current) => ({
+                            ...current,
+                            [team.id]: '',
+                          }));
+                          setMembershipWindowByTeam((current) => ({
+                            ...current,
+                            [team.id]: { validFrom: today, validUntil: '' },
+                          }));
+                          refresh();
+                        } catch {
+                          toast.error('Das Teammitglied konnte nicht hinzugefügt werden.');
+                        } finally {
+                          setPendingAction(null);
+                        }
                       }}
                     >
                       Hinzufügen
@@ -439,9 +484,11 @@ export function TeamManagementSection({
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={pendingAction !== null}
               onClick={() => {
                 const team = teamToDissolve;
                 if (!team) return;
+                setPendingAction(`dissolve:${team.id}`);
                 void dissolveTeam({ teamId: team.id }).then((result) => {
                   if (!result.success) {
                     toast.error('Das Team konnte nicht aufgelöst werden.');
@@ -449,6 +496,10 @@ export function TeamManagementSection({
                   }
                   setTeamToDissolve(null);
                   refresh();
+                }).catch(() => {
+                  toast.error('Das Team konnte nicht aufgelöst werden.');
+                }).finally(() => {
+                  setPendingAction(null);
                 });
               }}
             >

@@ -27,7 +27,7 @@ interface PersonnelRecordDetailContentProps {
   detail: PersonnelDetail;
   actorNames: Record<string, string>;
   canEdit: boolean;
-  qualificationSummary: PersonnelQualificationSummaryData;
+  qualificationSummary: PersonnelQualificationSummaryData | null;
 }
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Award, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -36,37 +36,45 @@ export function JobQualificationSection({
   const [loadFailed, setLoadFailed] = useState(false);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
   const [requireConfirmation, setRequireConfirmation] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isSaving, setIsSaving] = useState(false);
+  const loadRequestRef = useRef(0);
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    const result = await getJobQualificationDetail(jobId);
-    if (!result.success) {
-      setLoadFailed(true);
-      return;
-    }
-    setDetail(result.data);
-    setLoadFailed(false);
-  }, [jobId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getJobQualificationDetail(jobId).then((result) => {
-      if (cancelled) return;
+    const requestId = ++loadRequestRef.current;
+    try {
+      const result = await getJobQualificationDetail(jobId);
+      if (requestId !== loadRequestRef.current) return;
       if (!result.success) {
         setLoadFailed(true);
         return;
       }
       setDetail(result.data);
       setLoadFailed(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    } catch {
+      if (requestId !== loadRequestRef.current) return;
+      setLoadFailed(true);
+    }
   }, [jobId]);
-  useRealtimeEvent('job_capability_requirements', () => void load());
-  useRealtimeEvent('job_assignments', () => void load());
-  useRealtimeEvent('employee_capabilities', () => void load());
-  useRealtimeEvent('organization_capabilities', () => void load());
+
+  useEffect(() => {
+    void load();
+    return () => {
+      loadRequestRef.current += 1;
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+    };
+  }, [load]);
+  const scheduleLoad = useCallback(() => {
+    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+    realtimeTimerRef.current = setTimeout(() => {
+      realtimeTimerRef.current = null;
+      void load();
+    }, 250);
+  }, [load]);
+  useRealtimeEvent('job_capability_requirements', scheduleLoad);
+  useRealtimeEvent('job_assignments', scheduleLoad);
+  useRealtimeEvent('employee_capabilities', scheduleLoad);
+  useRealtimeEvent('organization_capabilities', scheduleLoad);
 
   if (loadFailed) {
     return (
@@ -74,6 +82,14 @@ export function JobQualificationSection({
         <p role="alert" className="text-sm text-destructive">
           Qualifikationsabdeckung konnte nicht geladen werden.
         </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={() => void load()}
+        >
+          Erneut versuchen
+        </Button>
       </Card>
     );
   }
@@ -96,12 +112,24 @@ export function JobQualificationSection({
       requireConfirmation: boolean;
     }>
   ) => {
-    const result = await setJobCapabilityRequirements({ jobId, requirements });
-    if (!result.success) {
+    setIsSaving(true);
+    try {
+      const result = await setJobCapabilityRequirements({
+        jobId,
+        requirements,
+      });
+      if (!result.success) {
+        toast.error('Die Anforderungen konnten nicht gespeichert werden.');
+        return false;
+      }
+      await load();
+      return true;
+    } catch {
       toast.error('Die Anforderungen konnten nicht gespeichert werden.');
-      return;
+      return false;
+    } finally {
+      setIsSaving(false);
     }
-    startTransition(() => void load());
   };
 
   return (
@@ -169,9 +197,9 @@ export function JobQualificationSection({
           )}
           <Button
             variant="outline"
-            disabled={!selectedCapabilityId || isPending}
+            disabled={!selectedCapabilityId || isSaving}
             onClick={async () => {
-              await saveRequirements([
+              const saved = await saveRequirements([
                 ...detail.requirements.map((requirement) => ({
                   capabilityId: requirement.capabilityId,
                   requireConfirmation: requirement.requireConfirmation,
@@ -181,8 +209,10 @@ export function JobQualificationSection({
                   requireConfirmation,
                 },
               ]);
-              setSelectedCapabilityId('');
-              setRequireConfirmation(false);
+              if (saved) {
+                setSelectedCapabilityId('');
+                setRequireConfirmation(false);
+              }
             }}
           >
             Hinzufügen
@@ -190,7 +220,7 @@ export function JobQualificationSection({
         </div>
       )}
 
-      {detail.requirements.length === 0 ? (
+      {detail.evaluation.requirementCoverage.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Für diesen Auftrag sind keine Qualifikationsanforderungen hinterlegt.
         </p>
@@ -227,6 +257,7 @@ export function JobQualificationSection({
                     variant="ghost"
                     size="icon"
                     className="size-7"
+                    disabled={isSaving}
                     aria-label={
                       coverage.requirement.capabilityName +
                       ' als Anforderung entfernen'

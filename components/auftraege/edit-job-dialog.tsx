@@ -118,6 +118,8 @@ export function EditJobDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [qualificationWarning, setQualificationWarning] =
     useState<AssignmentEvaluation | null>(null);
+  const [confirmedDateRemovalForWarning, setConfirmedDateRemovalForWarning] =
+    useState(false);
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
     string | null
   >(null);
@@ -151,6 +153,7 @@ export function EditJobDialog({
     setSuccess(false);
     setHasAttemptedSubmit(false);
     setAssignmentTeamSourceId(null);
+    setConfirmedDateRemovalForWarning(false);
 
     if (job.projectId) {
       const linkedProject = projects.find((p) => p.id === job.projectId);
@@ -251,6 +254,7 @@ export function EditJobDialog({
             result.error === 'stale_evaluation') &&
           'evaluation' in result
         ) {
+          setConfirmedDateRemovalForWarning(confirmedDateRemoval);
           setQualificationWarning(result.evaluation);
           return;
         }
@@ -258,13 +262,14 @@ export function EditJobDialog({
           setContentError(ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            ERROR_MESSAGES[result.error] || 'Der Auftrag konnte nicht gespeichert werden.'
           );
         }
         return;
       }
 
       setQualificationWarning(null);
+      setConfirmedDateRemovalForWarning(false);
       setSuccess(true);
       onOpenChange(false);
       if (onSuccess) {
@@ -642,8 +647,13 @@ export function EditJobDialog({
     <QualificationWarningDialog
       evaluation={qualificationWarning}
       isSubmitting={isLoading}
-      onCancel={() => setQualificationWarning(null)}
-      onConfirm={(approval) => submitChanges(false, approval)}
+      onCancel={() => {
+        setQualificationWarning(null);
+        setConfirmedDateRemovalForWarning(false);
+      }}
+      onConfirm={(approval) =>
+        submitChanges(confirmedDateRemovalForWarning, approval)
+      }
     />
     </>
   );

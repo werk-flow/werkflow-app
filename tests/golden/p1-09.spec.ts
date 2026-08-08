@@ -306,6 +306,9 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
 
     await employeePage.goto('/qualifikationen');
     await expect(
+      visibleText(employeePage, certificationName(world.runId))
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
       employeePage.getByText(officeSkillName(world.runId))
     ).toHaveCount(0);
   });

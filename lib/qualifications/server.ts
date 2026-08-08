@@ -1,5 +1,5 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso, type EmploymentType } from '@/lib/personnel/types';
 import {
   resolveAssignmentEvaluation,
   resolveCertificationExpiryPhase,
@@ -92,6 +92,9 @@ export async function loadAssignmentEvaluation(input: {
   | { success: false; error: string }
 > {
   const selectedUserIds = [...new Set(input.selectedUserIds)].sort();
+  if (selectedUserIds.length > 200) {
+    return { success: false, error: 'invalid_input' };
+  }
   let assessedForDate = input.assessedForDate || null;
 
   if (input.jobId) {
@@ -114,7 +117,7 @@ export async function loadAssignmentEvaluation(input: {
           .eq('organization_id', input.orgId)
           .eq('job_id', input.jobId)
           .order('created_at', { ascending: true })
-          .limit(100)
+          .limit(101)
       : Promise.resolve({ data: [], error: null }),
     input.admin
       .from('organization_qualification_settings')
@@ -139,12 +142,21 @@ export async function loadAssignmentEvaluation(input: {
     return { success: false, error: 'load_failed' };
   }
 
-  const employeeRows = recordsResult.data ?? [];
-  if (employeeRows.length !== selectedUserIds.length) {
+  const employeeRows = (recordsResult.data ?? []).filter(
+    (row): row is typeof row & { user_id: string } => row.user_id !== null
+  );
+  const returnedUserIds = new Set(employeeRows.map((row) => row.user_id));
+  if (
+    returnedUserIds.size !== selectedUserIds.length ||
+    selectedUserIds.some((userId) => !returnedUserIds.has(userId))
+  ) {
     return { success: false, error: 'member_not_found' };
   }
 
   const requirementRows = requirementsResult.data ?? [];
+  if (requirementRows.length > 100) {
+    return { success: false, error: 'load_failed' };
+  }
   const capabilityIds = [
     ...new Set(requirementRows.map((row) => row.capability_id)),
   ];
@@ -160,8 +172,9 @@ export async function loadAssignmentEvaluation(input: {
             )
             .eq('organization_id', input.orgId)
             .in('id', capabilityIds)
+            .is('retired_at', null)
             .order('id', { ascending: true })
-            .limit(100)
+            .limit(101)
         : Promise.resolve({ data: [], error: null }),
       employeeRecordIds.length > 0 && capabilityIds.length > 0
         ? input.admin
@@ -173,7 +186,7 @@ export async function loadAssignmentEvaluation(input: {
             .in('employee_record_id', employeeRecordIds)
             .in('capability_id', capabilityIds)
             .order('valid_from', { ascending: false })
-            .limit(500)
+            .limit(501)
         : Promise.resolve({ data: [], error: null }),
       employeeRecordIds.length > 0
         ? input.admin
@@ -183,7 +196,7 @@ export async function loadAssignmentEvaluation(input: {
             .in('employee_record_id', employeeRecordIds)
             .lte('valid_from', assessedForDate)
             .order('valid_from', { ascending: false })
-            .limit(500)
+            .limit(501)
         : Promise.resolve({ data: [], error: null }),
       selectedUserIds.length > 0
         ? input.admin
@@ -210,6 +223,13 @@ export async function loadAssignmentEvaluation(input: {
     );
     return { success: false, error: 'load_failed' };
   }
+  if (
+    (definitionsResult.data?.length ?? 0) > 100 ||
+    (capabilityRecordsResult.data?.length ?? 0) > 500 ||
+    (conditionsResult.data?.length ?? 0) > 500
+  ) {
+    return { success: false, error: 'load_failed' };
+  }
 
   const definitions = new Map(
     (definitionsResult.data ?? []).map((row) => [
@@ -233,10 +253,13 @@ export async function loadAssignmentEvaluation(input: {
     }
   );
 
-  const currentConditionByRecord = new Map<string, string>();
+  const currentConditionByRecord = new Map<string, EmploymentType>();
   for (const row of conditionsResult.data ?? []) {
     if (!currentConditionByRecord.has(row.employee_record_id)) {
-      currentConditionByRecord.set(row.employee_record_id, row.employment_type);
+      currentConditionByRecord.set(
+        row.employee_record_id,
+        row.employment_type as EmploymentType
+      );
     }
   }
   const profileNames = new Map(
@@ -256,7 +279,7 @@ export async function loadAssignmentEvaluation(input: {
   }
 
   const candidates: AssignmentCandidate[] = employeeRows.map((row) => ({
-    userId: row.user_id!,
+    userId: row.user_id,
     employeeRecordId: row.id,
     displayName: displayNameForEmployee(
       row,
@@ -308,9 +331,13 @@ export async function loadCertificationExpiryNotifications(input: {
     .not('valid_until', 'is', null)
     .order('valid_until', { ascending: true })
     .order('id', { ascending: true })
-    .limit(500);
+    .limit(501);
   if (error) {
     console.error('Failed to load certification expiry rows:', error);
+    return { notices: [], failed: true };
+  }
+  if ((rows?.length ?? 0) > 500) {
+    console.error('Certification expiry notification limit exceeded.');
     return { notices: [], failed: true };
   }
   if (!rows || rows.length === 0) {

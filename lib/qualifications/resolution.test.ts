@@ -127,6 +127,30 @@ describe('qualification coverage resolution', () => {
     expect(result.status).toBe('unconfirmed');
   });
 
+  test('reports future records separately from missing coverage', () => {
+    const result = resolveRequirementCoverage(
+      requirement,
+      [candidate({ capabilityRecords: [record({ validFrom: '2027-01-01' })] })],
+      '2026-06-01'
+    );
+
+    expect(result.status).toBe('not_yet_valid');
+  });
+
+  test('ignores superseded records', () => {
+    const result = resolveRequirementCoverage(
+      requirement,
+      [
+        candidate({
+          capabilityRecords: [record({ supersededAt: '2026-05-01T10:00:00Z' })],
+        }),
+      ],
+      '2026-06-01'
+    );
+
+    expect(result.status).toBe('missing');
+  });
+
   test('shows missing coverage without requiring an override for an unassigned job', () => {
     const result = resolveAssignmentEvaluation({
       jobId: 'job-1',

@@ -191,7 +191,7 @@ interface MitarbeiterDetailContentProps {
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
   responsibilitySettings: ResponsibilitySettingsData | null;
-  qualificationSummary: PersonnelQualificationSummaryData;
+  qualificationSummary: PersonnelQualificationSummaryData | null;
 }
 
 export function MitarbeiterDetailContent({
@@ -225,7 +225,15 @@ export function MitarbeiterDetailContent({
   const [actionError, setActionError] = useState<string | null>(null);
 
   useRealtimeRouterRefresh({
-    tables: ['employee_records', 'employment_conditions', 'work_schedules'],
+    tables: [
+      'employee_records',
+      'employment_conditions',
+      'work_schedules',
+      'teams',
+      'team_memberships',
+      'organization_capabilities',
+      'employee_capabilities',
+    ],
   });
 
   const memberIds = useMemo(() => [member.userId], [member.userId]);

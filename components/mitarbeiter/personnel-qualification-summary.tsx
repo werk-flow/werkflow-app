@@ -19,8 +19,19 @@ export type PersonnelQualificationSummaryData = {
 export function PersonnelQualificationSummary({
   data,
 }: {
-  data: PersonnelQualificationSummaryData;
+  data: PersonnelQualificationSummaryData | null;
 }) {
+  if (!data) {
+    return (
+      <Card className="p-4">
+        <p role="alert" className="text-sm text-destructive">
+          Teams und Qualifikationen konnten nicht geladen werden.
+        </p>
+      </Card>
+    );
+  }
+  const formatDate = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
   return (
     <Card className="gap-4 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -64,8 +75,8 @@ export function PersonnelQualificationSummary({
               <div key={record.id} className="rounded-md bg-muted/40 px-3 py-2">
                 <p className="text-sm font-medium">{definition.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {record.validFrom}
-                  {record.validUntil ? ' – ' + record.validUntil : ''}
+                  {formatDate(record.validFrom)}
+                  {record.validUntil ? ' – ' + formatDate(record.validUntil) : ''}
                   {definition.kind === 'certification'
                     ? ' · ' +
                       (record.confirmationStatus === 'confirmed'

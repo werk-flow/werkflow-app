@@ -115,32 +115,34 @@ export async function getQualificationWorkspace(): Promise<
         .select('*')
         .eq('organization_id', orgId)
         .order('dissolved_at', { ascending: true, nullsFirst: true })
-        .order('name', { ascending: true }),
+        .order('name', { ascending: true })
+        .limit(501),
       admin
         .from('team_memberships')
         .select('*')
         .eq('organization_id', orgId)
         .order('valid_from', { ascending: false })
-        .limit(1000),
+        .limit(1001),
       admin
         .from('organization_capabilities')
         .select('*')
         .eq('organization_id', orgId)
         .order('retired_at', { ascending: true, nullsFirst: true })
         .order('kind', { ascending: true })
-        .order('name', { ascending: true }),
+        .order('name', { ascending: true })
+        .limit(501),
       admin
         .from('employee_capabilities')
         .select('*')
         .eq('organization_id', orgId)
         .order('valid_from', { ascending: false })
-        .limit(2000),
+        .limit(2001),
       admin
         .from('employee_records')
         .select('id, user_id, first_name, last_name')
         .eq('organization_id', orgId)
         .order('last_name', { ascending: true, nullsFirst: false })
-        .limit(500),
+        .limit(501),
       admin
         .from('organization_qualification_settings')
         .select('apprentice_warning_enabled')
@@ -158,6 +160,16 @@ export async function getQualificationWorkspace(): Promise<
       console.error('Failed to load qualification workspace:', firstError);
       return { success: false, error: 'load_failed' };
     }
+    if (
+      (teamsResult.data?.length ?? 0) > 500 ||
+      (membershipsResult.data?.length ?? 0) > 1000 ||
+      (definitionsResult.data?.length ?? 0) > 500 ||
+      (employeeCapabilitiesResult.data?.length ?? 0) > 2000 ||
+      (employeesResult.data?.length ?? 0) > 500
+    ) {
+      console.error('Qualification workspace size limit exceeded.');
+      return { success: false, error: 'load_failed' };
+    }
 
     const userIds = (employeesResult.data ?? [])
       .map((row) => row.user_id)
@@ -169,10 +181,14 @@ export async function getQualificationWorkspace(): Promise<
             .select('id, first_name, last_name')
             .in('id', userIds)
             .order('id', { ascending: true })
-            .limit(500)
+            .limit(501)
         : { data: [], error: null };
     if (profilesError) {
       console.error('Failed to load qualification profile names:', profilesError);
+      return { success: false, error: 'load_failed' };
+    }
+    if ((profiles?.length ?? 0) > 500) {
+      console.error('Qualification profile name limit exceeded.');
       return { success: false, error: 'load_failed' };
     }
     const profileNames = new Map(
@@ -275,6 +291,10 @@ export async function getOwnQualificationProfile(): Promise<
       capabilityRowsResult.error ||
       profileResult.error
     ) {
+      console.error(
+        'Failed to load own qualification profile:',
+        membershipsResult.error ?? capabilityRowsResult.error ?? profileResult.error
+      );
       return { success: false, error: 'load_failed' };
     }
 
@@ -517,7 +537,25 @@ export async function addTeamMembership(input: {
   ) {
     return { success: false, error: 'invalid_input' };
   }
-  const { data, error } = await createSupabaseAdminClient()
+  const admin = createSupabaseAdminClient();
+  const [teamResult, employeeResult] = await Promise.all([
+    admin
+      .from('teams')
+      .select('id')
+      .eq('id', input.teamId)
+      .eq('organization_id', auth.context.orgId)
+      .is('dissolved_at', null)
+      .maybeSingle(),
+    admin
+      .from('employee_records')
+      .select('id')
+      .eq('id', input.employeeRecordId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  ]);
+  if (!teamResult.data) return { success: false, error: 'team_not_found' };
+  if (!employeeResult.data) return { success: false, error: 'employee_not_found' };
+  const { data, error } = await admin
     .from('team_memberships')
     .insert({
       organization_id: auth.context.orgId,
@@ -762,14 +800,24 @@ export async function addEmployeeCapability(input: {
     return { success: false, error: 'invalid_input' };
   }
   const admin = createSupabaseAdminClient();
-  const { data: definition } = await admin
-    .from('organization_capabilities')
-    .select('kind')
-    .eq('id', input.capabilityId)
-    .eq('organization_id', auth.context.orgId)
-    .is('retired_at', null)
-    .maybeSingle();
+  const [definitionResult, employeeResult] = await Promise.all([
+    admin
+      .from('organization_capabilities')
+      .select('kind')
+      .eq('id', input.capabilityId)
+      .eq('organization_id', auth.context.orgId)
+      .is('retired_at', null)
+      .maybeSingle(),
+    admin
+      .from('employee_records')
+      .select('id')
+      .eq('id', input.employeeRecordId)
+      .eq('organization_id', auth.context.orgId)
+      .maybeSingle(),
+  ]);
+  const definition = definitionResult.data;
   if (!definition) return { success: false, error: 'definition_not_found' };
+  if (!employeeResult.data) return { success: false, error: 'employee_not_found' };
   const confirmationStatus =
     definition.kind === 'certification'
       ? input.confirmationStatus ?? 'unconfirmed'
@@ -1041,6 +1089,13 @@ export async function getJobQualificationDetail(
     return { success: false, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
+  const { data: job, error: jobError } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('id', jobId)
+    .eq('organization_id', auth.context.orgId)
+    .maybeSingle();
+  if (jobError || !job) return { success: false, error: 'job_not_found' };
   const [definitionsResult, requirementsResult, assignmentsResult, latestResult] =
     await Promise.all([
       admin
@@ -1156,8 +1211,11 @@ export async function expandTeamForAssignment(input: {
     .eq('team_id', input.teamId)
     .lte('valid_from', date)
     .or(`valid_until.gte.${date},valid_until.is.null`)
-    .limit(500);
+    .limit(501);
   if (error) return { success: false, error: 'load_failed' };
+  if ((memberships?.length ?? 0) > 500) {
+    return { success: false, error: 'load_failed' };
+  }
   const recordIds = (memberships ?? []).map((row) => row.employee_record_id);
   const { data: records, error: recordsError } =
     recordIds.length > 0
@@ -1167,9 +1225,12 @@ export async function expandTeamForAssignment(input: {
           .eq('organization_id', auth.context.orgId)
           .in('id', recordIds)
           .order('id', { ascending: true })
-          .limit(500)
+          .limit(501)
       : { data: [], error: null };
   if (recordsError) return { success: false, error: 'load_failed' };
+  if ((records?.length ?? 0) > 500) {
+    return { success: false, error: 'load_failed' };
+  }
   const linkedUserIds = (records ?? [])
     .map((row) => row.user_id)
     .filter((id): id is string => Boolean(id));
@@ -1181,9 +1242,12 @@ export async function expandTeamForAssignment(input: {
           .eq('organization_id', auth.context.orgId)
           .in('user_id', linkedUserIds)
           .order('user_id', { ascending: true })
-          .limit(500)
+          .limit(501)
       : { data: [], error: null };
   if (membersError) return { success: false, error: 'load_failed' };
+  if ((memberRows?.length ?? 0) > 500) {
+    return { success: false, error: 'load_failed' };
+  }
   const activeMemberIds = new Set((memberRows ?? []).map((row) => row.user_id));
   return {
     success: true,

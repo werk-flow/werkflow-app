@@ -59,9 +59,9 @@ interface MitarbeiterDetailPageProps {
 function buildQualificationSummary(
   workspace: QualificationWorkspace | null,
   employeeRecordId: string | null
-): PersonnelQualificationSummaryData {
+): PersonnelQualificationSummaryData | null {
   if (!workspace || !employeeRecordId) {
-    return { teamNames: [], entries: [] };
+    return null;
   }
   const today = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Berlin',
@@ -168,6 +168,12 @@ async function MitarbeiterDetailData({
   const qualificationWorkspace = qualificationWorkspaceResult.success
     ? qualificationWorkspaceResult.data
     : null;
+  if (!qualificationWorkspaceResult.success) {
+    console.error(
+      'Failed to load personnel qualification summary:',
+      qualificationWorkspaceResult.error
+    );
+  }
 
   if (!memberResult.success) {
     // No active membership: personnel records without a login and exited
