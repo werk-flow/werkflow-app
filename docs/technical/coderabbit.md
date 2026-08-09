@@ -106,6 +106,8 @@ Invoke it from Windows shells as:
 wsl.exe bash -lc "cd '/mnt/c/Users/z0052ceu/Tamay Can - Siemens AG/WerkFlow/Code/werkflow-app' && ~/.local/bin/coderabbit review --agent --type uncommitted"
 ```
 
+When capturing agent output to a file, write it INSIDE the repository (gitignored) — paths like `/tmp` do not survive between separate `wsl.exe` invocations, and a review's output was lost that way in the P1-09 cycle. If output is lost anyway, `coderabbit review findings` replays the last completed review without rerunning the multi-minute analysis.
+
 Claude Code note: there is no CodeRabbit plugin for Claude Code. The Codex review skill is mirrored at `.claude/skills/coderabbit-review/SKILL.md`; agents without that skill loaded should follow this document directly — the CLI workflow is identical.
 
 Authenticate interactively:
