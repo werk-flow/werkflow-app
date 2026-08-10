@@ -29,7 +29,8 @@ export type AttentionSourceType =
   | 'client_request_open'
   | 'vacation_decision'
   | 'sickness_report'
-  | 'employee_certification_expiry';
+  | 'employee_certification_expiry'
+  | 'client_follow_up';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -82,6 +83,16 @@ export type AttentionTask =
       openSinceDays: number;
       assigneeName: string | null;
       assignedToMe: boolean;
+    }
+  | {
+      sourceType: 'client_follow_up';
+      sourceId: string;
+      clientId: string;
+      clientName: string;
+      title: string;
+      dueAt: string;
+      ownerName: string;
+      ownerUnavailable: boolean;
     };
 
 // Informational notices, deduplicated per source record: a domain state

@@ -11,6 +11,7 @@ import {
 import { getClientDetail, getClientRelations } from '@/lib/clients/actions';
 import { getClientDocuments } from '@/lib/documents/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
+import { getCustomerRelationshipBundle } from '@/lib/customer-relationships/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
@@ -52,6 +53,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     clientDocumentsResult,
     clientsResult,
     membersResult,
+    relationshipResult,
   ] = await Promise.all([
     getClientDetail(clientId),
     getClientRelations(clientId, { includeInactive: true }),
@@ -63,6 +65,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       .eq('organization_id', activeOrgId)
       .order('name', { ascending: true }),
     getOrgMembersForUser(activeOrgId, user.id),
+    getCustomerRelationshipBundle(clientId),
   ]);
 
   if (!clientResult.success) {
@@ -112,6 +115,10 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       members={members}
       isAdminOrManager={isAdminOrManager}
       visibleColumns={visibleColumns}
+      currentUserId={user.id}
+      relationshipBundle={
+        relationshipResult.success ? relationshipResult.data : null
+      }
     />
   );
 }

@@ -34,12 +34,14 @@ import { loadCertificationExpiryNotifications } from '@/lib/qualifications/serve
 import {
   computeOpenSinceDays,
   dedupeAttentionItems,
+  FOLLOW_UP_ATTENTION_CAPACITY,
   isNotificationUnread,
   isWithinNotificationWindow,
   notificationWindowStartIso,
   resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
+  selectFollowUpAttentionRows,
 } from './resolution';
 import type {
   AttentionCounts,
@@ -215,6 +217,115 @@ async function deriveOpenRequestTasks(
       assignedToMe: row.assigned_to === context.userId,
     };
   });
+
+  return { tasks, failed: false };
+}
+
+async function deriveFollowUpTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  if (context.role !== 'admin' && context.role !== 'buero') {
+    return { tasks: [], failed: false };
+  }
+
+  const admin = createSupabaseAdminClient();
+  const dueWindowEnd = new Date();
+  dueWindowEnd.setUTCDate(dueWindowEnd.getUTCDate() + 90);
+
+  const membershipsResult = await admin
+    .from('organization_members')
+    .select('user_id,role')
+    .eq('organization_id', context.orgId)
+    .in('role', ['admin', 'buero']);
+  if (membershipsResult.error) {
+    console.error('Failed to load follow-up attention tasks:', {
+      membershipsError: membershipsResult.error,
+    });
+    return { tasks: [], failed: true };
+  }
+  const activeManagerIds = new Set(
+    (membershipsResult.data ?? []).map((membership) => membership.user_id)
+  );
+  const activeManagerList = [...activeManagerIds].join(',');
+  const visibilityFilter = activeManagerList
+    ? `owner_user_id.eq.${context.userId},owner_user_id.not.in.(${activeManagerList})`
+    : `owner_user_id.eq.${context.userId}`;
+  const followUpsResult = await admin
+    .from('client_follow_ups')
+    .select('id,client_id,title,due_at,owner_user_id')
+    .eq('organization_id', context.orgId)
+    .eq('status', 'open')
+    .lte('due_at', dueWindowEnd.toISOString())
+    .or(visibilityFilter)
+    .order('due_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(FOLLOW_UP_ATTENTION_CAPACITY + 1);
+  if (followUpsResult.error) {
+    console.error('Failed to load follow-up attention tasks:', {
+      followUpsError: followUpsResult.error,
+    });
+    return { tasks: [], failed: true };
+  }
+  const selection = selectFollowUpAttentionRows(
+    context.role,
+    context.userId,
+    followUpsResult.data ?? [],
+    activeManagerIds,
+    FOLLOW_UP_ATTENTION_CAPACITY
+  );
+  if (selection.capacityExceeded) {
+    console.error('Follow-up attention window exceeded its bounded capacity.');
+    return { tasks: [], failed: true };
+  }
+  const visibleRows = selection.rows;
+  if (visibleRows.length === 0) return { tasks: [], failed: false };
+
+  const clientIds = [...new Set(visibleRows.map((row) => row.client_id))];
+  const ownerIds = [...new Set(visibleRows.map((row) => row.owner_user_id))];
+  const [clientsResult, profilesResult] = await Promise.all([
+    admin
+      .from('clients')
+      .select('id,name')
+      .eq('organization_id', context.orgId)
+      .in('id', clientIds),
+    admin
+      .from('profiles')
+      .select('id,first_name,last_name,email')
+      .in('id', ownerIds),
+  ]);
+  if (clientsResult.error || profilesResult.error) {
+    console.error('Failed to resolve follow-up attention references:', {
+      clientsError: clientsResult.error,
+      profilesError: profilesResult.error,
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const clientNameById = new Map(
+    (clientsResult.data ?? []).map((client) => [client.id, client.name])
+  );
+  const profileById = new Map(
+    (profilesResult.data ?? []).map((profile) => [profile.id, profile])
+  );
+  const tasks: AttentionTask[] = [];
+  for (const row of visibleRows) {
+    const clientName = clientNameById.get(row.client_id);
+    if (!clientName) {
+      console.error('Follow-up attention task has no accessible customer.', row.id);
+      return { tasks: [], failed: true };
+    }
+    const owner = profileById.get(row.owner_user_id) ?? null;
+    tasks.push({
+      sourceType: 'client_follow_up',
+      sourceId: row.id,
+      clientId: row.client_id,
+      clientName,
+      title: row.title,
+      dueAt: row.due_at,
+      ownerName: owner ? formatProfileName(owner) : 'Nicht verfügbar',
+      ownerUnavailable: row.ownerUnavailable,
+    });
+  }
 
   return { tasks, failed: false };
 }
@@ -575,6 +686,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     const [
       approvals,
       openRequests,
+      followUps,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -582,6 +694,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     ] = await Promise.all([
       deriveApprovalTasks(context),
       deriveOpenRequestTasks(context),
+      deriveFollowUpTasks(context),
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
       deriveCertificationExpiryNotifications(context),
@@ -593,6 +706,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
     if (
       approvals.failed ||
       openRequests.failed ||
+      followUps.failed ||
       notifications.failed ||
       sicknessNotifications.failed ||
       certificationNotifications.failed ||
@@ -618,6 +732,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
         tasks: dedupeAttentionItems([
           ...approvals.tasks,
           ...openRequests.tasks,
+          ...followUps.tasks,
         ]),
         notifications: sortNotificationsNewestFirst(
           dedupeAttentionItems([
@@ -653,6 +768,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     const [
       approvals,
       openRequests,
+      followUps,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -660,6 +776,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       await Promise.all([
         deriveApprovalTasks(context),
         deriveOpenRequestTasks(context),
+        deriveFollowUpTasks(context),
         deriveOwnNotifications(context),
         deriveSicknessNotifications(context),
         deriveCertificationExpiryNotifications(context),
@@ -667,6 +784,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     if (
       approvals.failed ||
       openRequests.failed ||
+      followUps.failed ||
       notifications.failed ||
       sicknessNotifications.failed
       || certificationNotifications.failed
@@ -676,6 +794,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
 
     const approvalTasks = dedupeAttentionItems(approvals.tasks);
     const requestTasks = dedupeAttentionItems(openRequests.tasks);
+    const followUpTasks = dedupeAttentionItems(followUps.tasks);
     const allNotifications = dedupeAttentionItems([
       ...notifications.notifications,
       ...sicknessNotifications.notifications,
@@ -685,7 +804,8 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       success: true,
       counts: {
         approvalsCount: approvalTasks.length,
-        actionableCount: approvalTasks.length + requestTasks.length,
+        actionableCount:
+          approvalTasks.length + requestTasks.length + followUpTasks.length,
         unreadNotificationCount: allNotifications.filter(
           (notification) => notification.unread
         ).length,

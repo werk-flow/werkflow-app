@@ -328,7 +328,7 @@ export async function openCustomerDetail(page: Page, customerName: string): Prom
 
 export async function addContactOnCustomerDetail(
   page: Page,
-  contact: { name: string; role?: string; phone?: string }
+  contact: { name: string; role?: string; phone?: string; email?: string }
 ): Promise<void> {
   await page.getByRole('button', { name: 'Ansprechpartner hinzufügen' }).click();
   await expect(
@@ -337,9 +337,125 @@ export async function addContactOnCustomerDetail(
   await page.locator('#contact-name').fill(contact.name);
   if (contact.role) await page.locator('#contact-role').fill(contact.role);
   if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
+  if (contact.email) await page.locator('#contact-email').fill(contact.email);
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, contact.name);
+}
+
+// P1-10: customer relationship timeline, manual follow-ups, and communication
+// guidance. These helpers keep Radix interaction details out of the spec.
+export async function createFollowUpOnCustomerDetail(
+  page: Page,
+  input: {
+    title: string;
+    dueAtLocal: string;
+    ownerName?: string;
+    note?: string;
+  }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Nachfassaktion', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Nachfassaktion anlegen' })).toBeVisible();
+  await dialog.locator('#follow-up-title').fill(input.title);
+  await dialog.locator('#follow-up-due').fill(input.dueAtLocal);
+  if (input.note) await dialog.locator('#follow-up-note').fill(input.note);
+  if (input.ownerName) {
+    await dialog.locator('#follow-up-owner').click();
+    await page.getByRole('option', { name: input.ownerName, exact: true }).click();
+  }
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expectVisibleAfterSave(page, input.title);
+}
+
+export async function completeFollowUpOnCustomerDetail(
+  page: Page,
+  title: string
+): Promise<void> {
+  await page
+    .getByRole('button', { name: `Nachfassaktion ${title} erledigen`, exact: true })
+    .click();
+  await expect(page.getByText('Nachfassaktion erledigt.')).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function configureCustomerCommunicationSettings(
+  page: Page,
+  input: {
+    preferredContactName: string;
+    doNotContactInstruction?: string;
+    sourceNote?: string;
+  }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Allgemein bearbeiten' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#preferred-contact').click();
+  await page
+    .getByRole('option', { name: input.preferredContactName, exact: true })
+    .click();
+  if (input.doNotContactInstruction) {
+    await dialog.locator('#dnc-note').fill(input.doNotContactInstruction);
+  }
+  if (input.sourceNote) {
+    await dialog.locator('#settings-source').fill(input.sourceNote);
+  }
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  const communicationSection = page.locator(
+    'section[aria-labelledby="communication-heading"]'
+  );
+  const preferredContactEntry = communicationSection
+    .locator('dl > div')
+    .filter({ hasText: 'Bevorzugter Kontakt' });
+  await expect(preferredContactEntry).toContainText(input.preferredContactName);
+}
+
+export async function setCustomerCommunicationPreference(
+  page: Page,
+  input: {
+    contactName: string;
+    channel: 'Telefon' | 'E-Mail';
+    state: 'Erlaubt' | 'Nicht erlaubt' | 'Unbekannt';
+    purpose?:
+      | 'Termin und Service'
+      | 'Marketing'
+      | 'Erforderliche kaufmännische Kommunikation';
+    sourceNote?: string;
+  }
+): Promise<void> {
+  await page.getByRole('button', { name: 'Präferenz', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#preference-contact').click();
+  await page.getByRole('option', { name: input.contactName, exact: true }).click();
+  await dialog.locator('#preference-channel').click();
+  await page.getByRole('option', { name: input.channel, exact: true }).click();
+  await dialog.locator('#preference-state').click();
+  await page.getByRole('option', { name: input.state, exact: true }).click();
+  if (input.purpose) {
+    await dialog.locator('#preference-purpose').click();
+    await page.getByRole('option', { name: input.purpose, exact: true }).click();
+  }
+  if (input.sourceNote) {
+    await dialog.locator('#preference-source').fill(input.sourceNote);
+  }
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function proceedThroughContactWarning(
+  page: Page,
+  contactHrefText: string,
+  reason: string
+): Promise<void> {
+  await page.getByRole('link', { name: contactHrefText, exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Kontaktvorgabe prüfen' })).toBeVisible();
+  await dialog.locator('#contact-exception-reason').fill(reason);
+  // Chromium keeps the page open when no external tel:/mailto: handler is
+  // registered; the database assertion proves the exception write.
+  await dialog.getByRole('button', { name: 'Begründet fortfahren' }).click();
 }
 
 export async function addSiteOnCustomerDetail(
@@ -521,17 +637,52 @@ export async function closeRequestViaDialog(
   page: Page,
   reasonLabel: string
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Schließen', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Anfrage ohne Auftrag schließen' })
-  ).toBeVisible();
-  await page.locator('#close-reason').click();
-  await page.getByRole('option', { name: reasonLabel, exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Anfrage schließen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, 'Ohne Auftrag geschlossen:')).toBeVisible({
-    timeout: 15_000,
-  });
+  const detailUrl = page.url();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (page.url() !== detailUrl) await page.goto(detailUrl);
+    // The request-created event can reach the newly mounted detail page after
+    // navigation. Drain the shared 200 ms router-refresh debounce first.
+    await page.waitForTimeout(300);
+    if (page.url() !== detailUrl) {
+      if (attempt === 0) continue;
+      throw new Error('closeRequestViaDialog: detail route refreshed away');
+    }
+
+    await page.getByRole('button', { name: 'Schließen', exact: true }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Anfrage ohne Auftrag schließen' })
+    ).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    try {
+      await dialog.locator('#close-reason').click({ timeout: 5_000 });
+      await page
+        .getByRole('option', { name: reasonLabel, exact: true })
+        .click({ timeout: 5_000 });
+      await dialog
+        .getByRole('button', { name: 'Anfrage schließen' })
+        .click({ timeout: 5_000 });
+      await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+    } catch (error) {
+      const dialogWasInterrupted =
+        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+      if (attempt === 0 && dialogWasInterrupted) continue;
+      throw error;
+    }
+
+    // Reload from the server so success cannot be confused with a client-side
+    // modal close that raced the Realtime refresh.
+    await page.goto(detailUrl);
+    const persistedClosedReason = await expect(
+      visibleText(page, 'Ohne Auftrag geschlossen:')
+    )
+      .toBeVisible({ timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (persistedClosedReason) return;
+    if (attempt === 1) {
+      throw new Error('closeRequestViaDialog: request remained open after retry');
+    }
+  }
 }
 
 // P1-03: personnel identity and date-effective employment conditions.
@@ -568,7 +719,8 @@ export async function editPersonnelTextField(
 export async function typeIntoDatePicker(
   scope: Locator,
   groupName: string,
-  digits: string
+  digits: string,
+  delayMs = 50
 ): Promise<void> {
   const group = scope.getByRole('group', { name: groupName });
   await group.click();
@@ -576,7 +728,7 @@ export async function typeIntoDatePicker(
   // segment because the control has exactly day, month, and year segments.
   await group.press('ArrowLeft');
   await group.press('ArrowLeft');
-  await group.pressSequentially(digits, { delay: 50 });
+  await group.pressSequentially(digits, { delay: delayMs });
 }
 
 // P1-05: scoped responsibilities, effective previews, and substitutions.
@@ -836,33 +988,61 @@ export async function addConditionViaDialog(
     note?: string;
   }
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Kondition hinzufügen' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Kondition hinzufügen' })
-  ).toBeVisible();
+  const detailUrl = page.url();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (page.url() !== detailUrl) await page.goto(detailUrl);
+    // Drain a pending refresh from the preceding serial scenario before the
+    // modal owns user input. The hook itself debounces for 200 ms.
+    await page.waitForTimeout(300);
+    if (page.url() !== detailUrl) {
+      if (attempt === 0) continue;
+      throw new Error('addConditionViaDialog: detail route refreshed away');
+    }
+    await page.getByRole('button', { name: 'Kondition hinzufügen' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Kondition hinzufügen' })
+    ).toBeVisible();
 
-  const dialog = page.getByRole('dialog');
-  if (options.validFromDigits) {
-    await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
-  }
+    const dialog = page.getByRole('dialog');
+    try {
+      if (options.validFromDigits) {
+        // Keep controlled date entry below the shared 200 ms Realtime debounce.
+        await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits, 10);
+      }
 
-  await page.locator('#condition-type').click();
-  await page
-    .getByRole('option', { name: options.employmentTypeLabel, exact: true })
-    .click();
+      await dialog.locator('#condition-type').click({ timeout: 5_000 });
+      await page
+        .getByRole('option', { name: options.employmentTypeLabel, exact: true })
+        .click({ timeout: 5_000 });
 
-  if (options.weeklyHours !== undefined) {
-    await page.locator('#condition-weekly-hours').fill(options.weeklyHours);
-  }
-  if (options.vacationDays !== undefined) {
-    await page.locator('#condition-vacation-days').fill(options.vacationDays);
-  }
-  if (options.note !== undefined) {
-    await page.locator('#condition-note').fill(options.note);
-  }
+      if (options.weeklyHours !== undefined) {
+        await dialog
+          .locator('#condition-weekly-hours')
+          .fill(options.weeklyHours, { timeout: 5_000 });
+      }
+      if (options.vacationDays !== undefined) {
+        await dialog
+          .locator('#condition-vacation-days')
+          .fill(options.vacationDays, { timeout: 5_000 });
+      }
+      if (options.note !== undefined) {
+        await dialog
+          .locator('#condition-note')
+          .fill(options.note, { timeout: 5_000 });
+      }
 
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+      await dialog
+        .getByRole('button', { name: 'Speichern', exact: true })
+        .click({ timeout: 5_000 });
+      await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+      return;
+    } catch (error) {
+      const dialogWasInterrupted =
+        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+      if (attempt === 0 && dialogWasInterrupted) continue;
+      throw error;
+    }
+  }
 }
 
 export async function editConditionWeeklyHours(
@@ -967,26 +1147,56 @@ export async function addWorkScheduleViaDialog(
     note?: string;
   }
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Wochenplan hinzufügen' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Wochenplan hinzufügen' })
-  ).toBeVisible();
+  const detailUrl = page.url();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (page.url() !== detailUrl) await page.goto(detailUrl);
+    // A schedule event from the preceding serial action can arrive after
+    // navigation. Let the 200 ms router-refresh debounce settle first.
+    await page.waitForTimeout(300);
+    if (page.url() !== detailUrl) {
+      if (attempt === 0) continue;
+      throw new Error('addWorkScheduleViaDialog: detail route refreshed away');
+    }
+    await page.getByRole('button', { name: 'Wochenplan hinzufügen' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Wochenplan hinzufügen' })
+    ).toBeVisible();
 
-  const dialog = page.getByRole('dialog');
-  if (options.validFromDigits) {
-    await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
-  }
-  if (options.dayHours) {
-    for (let index = 0; index < options.dayHours.length; index++) {
-      await page.locator(`#schedule-day-${index}`).fill(options.dayHours[index]);
+    const dialog = page.getByRole('dialog');
+    try {
+      if (options.validFromDigits) {
+        // Keep this controlled input below the shared 200 ms Realtime debounce.
+        await typeIntoDatePicker(
+          dialog,
+          'Gültig ab',
+          options.validFromDigits,
+          10
+        );
+      }
+      if (options.dayHours) {
+        for (let index = 0; index < options.dayHours.length; index++) {
+          await dialog
+            .locator(`#schedule-day-${index}`)
+            .fill(options.dayHours[index], { timeout: 5_000 });
+        }
+      }
+      if (options.note !== undefined) {
+        await dialog
+          .locator('#schedule-note')
+          .fill(options.note, { timeout: 5_000 });
+      }
+      await dialog
+        .getByRole('button', { name: 'Speichern', exact: true })
+        .click({ timeout: 5_000 });
+      await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+      return;
+    } catch (error) {
+      const dialogWasInterrupted =
+        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+      if (attempt === 0 && dialogWasInterrupted) continue;
+      throw error;
     }
   }
-  if (options.note !== undefined) {
-    await page.locator('#schedule-note').fill(options.note);
-  }
-
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function setHolidayRegionViaSettings(

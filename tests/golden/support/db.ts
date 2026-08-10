@@ -877,6 +877,120 @@ export async function getVisibleQualificationStateAs(
   };
 }
 
+// P1-10: authoritative relationship records and their append-only histories.
+// The browser proves visible behavior; these observations prove actor/history
+// facts and the manager-only RLS boundary with real credentials.
+export async function getCustomerRelationshipState(
+  orgId: string,
+  customerName: string
+): Promise<{
+  clientId: string;
+  followUps: Array<{
+    id: string;
+    title: string;
+    status: string;
+    ownerUserId: string;
+    completedBy: string | null;
+  }>;
+  followUpEventTypes: string[];
+  preferenceEventTypes: string[];
+}> {
+  const admin = createAdminClient();
+  const { data: client, error: clientError } = await admin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('name', customerName)
+    .single();
+  if (clientError || !client) {
+    throw new Error(`Customer ${customerName} not found: ${clientError?.message}`);
+  }
+  const [followUps, followUpEvents, preferenceEvents] = await Promise.all([
+    admin
+      .from('client_follow_ups')
+      .select('id,title,status,owner_user_id,completed_by')
+      .eq('organization_id', orgId)
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: true }),
+    admin
+      .from('client_follow_up_events')
+      .select('event_type')
+      .eq('organization_id', orgId)
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: true }),
+    admin
+      .from('client_communication_preference_events')
+      .select('event_type')
+      .eq('organization_id', orgId)
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: true }),
+  ]);
+  const firstError = followUps.error ?? followUpEvents.error ?? preferenceEvents.error;
+  if (firstError) {
+    throw new Error(`Customer relationship observation failed: ${firstError.message}`);
+  }
+  return {
+    clientId: client.id as string,
+    followUps: (followUps.data ?? []).map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      status: row.status as string,
+      ownerUserId: row.owner_user_id as string,
+      completedBy: (row.completed_by as string | null) ?? null,
+    })),
+    followUpEventTypes: (followUpEvents.data ?? []).map(
+      (row) => row.event_type as string
+    ),
+    preferenceEventTypes: (preferenceEvents.data ?? []).map(
+      (row) => row.event_type as string
+    ),
+  };
+}
+
+export async function getVisibleCustomerRelationshipStateAs(
+  user: { email: string; password: string },
+  orgId: string
+): Promise<Record<string, number>> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (signInError) {
+    throw new Error(`Sign-in failed for ${user.email}: ${signInError.message}`);
+  }
+
+  const tableNames = [
+    'clients',
+    'client_contacts',
+    'client_sites',
+    'client_follow_ups',
+    'client_follow_up_events',
+    'client_communication_settings',
+    'client_communication_preferences',
+    'client_communication_preference_events',
+  ] as const;
+  const results = await Promise.all(
+    tableNames.map(async (tableName) => {
+      const { count, error } = await client
+        .from(tableName)
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId);
+      if (error) {
+        throw new Error(
+          `Customer relationship RLS query ${tableName} failed for ${user.email}: ${error.message}`
+        );
+      }
+      return [tableName, count ?? 0] as const;
+    })
+  );
+  return Object.fromEntries(results);
+}
+
 export async function getCapabilityHistoryState(
   orgId: string,
   employeeRecordId: string,

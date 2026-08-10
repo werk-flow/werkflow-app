@@ -3167,18 +3167,26 @@ export async function getDocumentDetails(
       .limit(50),
   ]);
 
+  const [document] = await hydrateDocuments(auth.context.admin, [
+    existing.document,
+  ]);
+  if (!document) {
+    return { success: false, error: 'document_not_found' };
+  }
+
   if (versionsResult.error) {
     console.error('Failed to load document versions:', versionsResult.error);
-    return { success: false, error: 'versions_failed' };
+    return { success: false, error: 'versions_failed', document };
   }
 
   if (auditResult.error) {
     console.error('Failed to load document audit events:', auditResult.error);
-    return { success: false, error: 'audit_failed' };
+    return { success: false, error: 'audit_failed', document };
   }
 
   return {
     success: true,
+    document,
     versions: await hydrateDocumentVersions(
       auth.context.admin,
       (versionsResult.data ?? []) as DocumentVersionRow[]

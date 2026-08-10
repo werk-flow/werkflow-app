@@ -164,6 +164,9 @@ export function AttentionCountProvider({
   useRealtimeEvent('client_requests', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('client_follow_ups', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('attention_read_states', () => {
     scheduleRefresh();
   });

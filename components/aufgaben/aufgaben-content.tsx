@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  CalendarClock,
   Check,
   CheckCheck,
   Clock,
@@ -57,6 +58,14 @@ function formatOpenSince(days: number): string {
   if (days <= 0) return 'heute eingegangen';
   if (days === 1) return 'offen seit 1 Tag';
   return `offen seit ${days} Tagen`;
+}
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Europe/Berlin',
+  }).format(new Date(value));
 }
 
 const VACATION_DECISION_STATUS_TEXT: Record<
@@ -171,6 +180,7 @@ export function AufgabenContent() {
   useRealtimeEvent('employee_capabilities', scheduleRefetch);
   useRealtimeEvent('organization_capabilities', scheduleRefetch);
   useRealtimeEvent('client_requests', scheduleRefetch);
+  useRealtimeEvent('client_follow_ups', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
@@ -247,6 +257,9 @@ export function AufgabenContent() {
   const requestTasks = overview.tasks.filter(
     (task) => task.sourceType === 'client_request_open'
   );
+  const followUpTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'client_follow_up'
+  );
   const unreadCount = overview.notifications.filter(
     (notification) => notification.unread
   ).length;
@@ -264,7 +277,8 @@ export function AufgabenContent() {
 
         {timeTasks.length === 0 &&
           vacationTasks.length === 0 &&
-          requestTasks.length === 0 && (
+          requestTasks.length === 0 &&
+          followUpTasks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Keine offenen Aufgaben.
             </p>
@@ -301,6 +315,18 @@ export function AufgabenContent() {
             testId="attention-request-tasks"
           >
             {requestTasks.map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {followUpTasks.length > 0 && (
+          <TaskGroup
+            icon={<CalendarClock className="size-4" />}
+            title="Nachfassaktionen"
+            testId="attention-follow-up-tasks"
+          >
+            {followUpTasks.map((task) => (
               <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
             ))}
           </TaskGroup>
@@ -529,6 +555,24 @@ function TaskRow({ task }: { task: AttentionTask }) {
           {formatRange(task.startDate, task.endDate)}
           {task.dayPortion === 'half_day' ? ' (halbtags)' : ''}
           {` · ${formatVacationDays(task.totalDays)}`}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'client_follow_up') {
+    return (
+      <TaskLink
+        href={`/kunden/${task.clientId}?followUp=${task.sourceId}#nachfassaktionen`}
+        ariaLabel={`Nachfassaktion ${task.title} für ${task.clientName} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {task.clientName} · fällig {formatDateTime(task.dueAt)}
+          {task.ownerUnavailable
+            ? ` · Zuständig: ${task.ownerName} (nicht mehr verfügbar)`
+            : ''}
         </p>
       </TaskLink>
     );

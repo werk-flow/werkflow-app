@@ -312,6 +312,7 @@ Categories (`photo`, `contract`, `invoice`, `offer`, `report`, `other`) are stor
 - Default inference on upload from filename/MIME (`inferDocumentCategory`).
 - Managers can reclassify in details dialog.
 - Library/category filters are available in the central manager library; contextual sections intentionally show the linked documents directly without category tabs.
+- Authorized links to `/dokumente?document=<document-id>` load that exact document and open the existing viewer, so source-linked customer timeline entries resolve to the authoritative library record instead of a copied document event.
 
 Categories are **organizational labels**, not separate database entities. There is no structured invoice/contract schema yet.
 

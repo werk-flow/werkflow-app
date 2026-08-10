@@ -7,6 +7,7 @@ import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-pag
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import {
   getDocumentFolderOptions,
+  getDocumentDetails,
   getDocumentLinkCatalog,
   getDocumentLibrary,
 } from '@/lib/documents/actions';
@@ -27,6 +28,7 @@ type DokumentePageProps = {
     sort?: string;
     category?: string;
     link?: string;
+    document?: string;
   }>;
 };
 
@@ -105,6 +107,7 @@ async function DokumenteData({
   sort,
   category,
   linkFilter,
+  initialDocumentId,
 }: {
   folderId: string | null;
   view: DocumentLibraryView;
@@ -112,11 +115,13 @@ async function DokumenteData({
   sort: DocumentLibrarySort;
   category: DocumentLibraryCategoryFilter;
   linkFilter: DocumentLibraryLinkFilter;
+  initialDocumentId: string | null;
 }) {
   const [
     libraryResult,
     folderOptionsResult,
     linkCatalogResult,
+    initialDocumentResult,
   ] = await Promise.all([
     getDocumentLibrary({
       folderId,
@@ -136,6 +141,9 @@ async function DokumenteData({
           clients: [],
           employees: [],
         }),
+    initialDocumentId
+      ? getDocumentDetails(initialDocumentId)
+      : Promise.resolve(null),
   ]);
 
   if (!libraryResult.success) {
@@ -151,6 +159,7 @@ async function DokumenteData({
   const projects = linkCatalogResult.success ? linkCatalogResult.projects : [];
   const clients = linkCatalogResult.success ? linkCatalogResult.clients : [];
   const employees = linkCatalogResult.success ? linkCatalogResult.employees : [];
+  const initialDocument = initialDocumentResult?.document ?? null;
 
   return (
     <DocumentLibraryContent
@@ -167,6 +176,11 @@ async function DokumenteData({
       projects={projects}
       clients={clients}
       employees={employees}
+      initialDocumentId={initialDocumentId}
+      initialDocument={initialDocument}
+      initialDocumentUnavailable={
+        Boolean(initialDocumentId) && !initialDocument
+      }
     />
   );
 }
@@ -213,6 +227,7 @@ export default async function DokumentePage({
   const sort = getDocumentSort(resolvedSearchParams.sort);
   const category = getDocumentCategoryFilter(resolvedSearchParams.category);
   const linkFilter = getDocumentLinkFilter(resolvedSearchParams.link);
+  const initialDocumentId = resolvedSearchParams.document?.trim() || null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -225,6 +240,7 @@ export default async function DokumentePage({
             sort={sort}
             category={category}
             linkFilter={linkFilter}
+            initialDocumentId={initialDocumentId}
           />
         </Suspense>
       </div>

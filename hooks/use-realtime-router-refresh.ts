@@ -4,26 +4,32 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   useRealtimeEvent,
+  type RealtimeChangeEvent,
   type RealtimeTable,
 } from '@/components/realtime/realtime-provider';
+import { shouldScheduleRealtimeRefresh } from '@/lib/realtime/events';
 
 type UseRealtimeRouterRefreshOptions = {
   tables: RealtimeTable[];
   enabled?: boolean;
   debounceMs?: number;
+  eventFilter?: (event: RealtimeChangeEvent) => boolean;
 };
 
 export function useRealtimeRouterRefresh({
   tables,
   enabled = true,
   debounceMs = 200,
-}: UseRealtimeRouterRefreshOptions) {
+  eventFilter,
+}: UseRealtimeRouterRefreshOptions): void {
   const router = useRouter();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tableSet = useMemo(() => new Set(tables), [tables]);
 
-  const scheduleRefresh = useCallback(() => {
-    if (!enabled) return;
+  const scheduleRefresh = useCallback((event?: RealtimeChangeEvent) => {
+    if (!enabled || (event && !shouldScheduleRealtimeRefresh(event, eventFilter))) {
+      return;
+    }
 
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -33,7 +39,7 @@ export function useRealtimeRouterRefresh({
       timerRef.current = null;
       router.refresh();
     }, debounceMs);
-  }, [debounceMs, enabled, router]);
+  }, [debounceMs, enabled, eventFilter, router]);
 
   useEffect(() => {
     return () => {
@@ -43,130 +49,148 @@ export function useRealtimeRouterRefresh({
     };
   }, []);
 
-  useRealtimeEvent('time_entries', () => {
-    if (tableSet.has('time_entries')) scheduleRefresh();
+  useRealtimeEvent('time_entries', (event) => {
+    if (tableSet.has('time_entries')) scheduleRefresh(event);
   });
-  useRealtimeEvent('entry_change_requests', () => {
-    if (tableSet.has('entry_change_requests')) scheduleRefresh();
+  useRealtimeEvent('entry_change_requests', (event) => {
+    if (tableSet.has('entry_change_requests')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_invites', () => {
-    if (tableSet.has('organization_invites')) scheduleRefresh();
+  useRealtimeEvent('organization_invites', (event) => {
+    if (tableSet.has('organization_invites')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_members', () => {
-    if (tableSet.has('organization_members')) scheduleRefresh();
+  useRealtimeEvent('organization_members', (event) => {
+    if (tableSet.has('organization_members')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_settings', () => {
-    if (tableSet.has('organization_settings')) scheduleRefresh();
+  useRealtimeEvent('organization_settings', (event) => {
+    if (tableSet.has('organization_settings')) scheduleRefresh(event);
   });
-  useRealtimeEvent('profiles', () => {
-    if (tableSet.has('profiles')) scheduleRefresh();
+  useRealtimeEvent('profiles', (event) => {
+    if (tableSet.has('profiles')) scheduleRefresh(event);
   });
-  useRealtimeEvent('employee_records', () => {
-    if (tableSet.has('employee_records')) scheduleRefresh();
+  useRealtimeEvent('employee_records', (event) => {
+    if (tableSet.has('employee_records')) scheduleRefresh(event);
   });
-  useRealtimeEvent('employment_conditions', () => {
-    if (tableSet.has('employment_conditions')) scheduleRefresh();
+  useRealtimeEvent('employment_conditions', (event) => {
+    if (tableSet.has('employment_conditions')) scheduleRefresh(event);
   });
-  useRealtimeEvent('work_schedules', () => {
-    if (tableSet.has('work_schedules')) scheduleRefresh();
+  useRealtimeEvent('work_schedules', (event) => {
+    if (tableSet.has('work_schedules')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_closure_days', () => {
-    if (tableSet.has('organization_closure_days')) scheduleRefresh();
+  useRealtimeEvent('organization_closure_days', (event) => {
+    if (tableSet.has('organization_closure_days')) scheduleRefresh(event);
   });
-  useRealtimeEvent('vacation_requests', () => {
-    if (tableSet.has('vacation_requests')) scheduleRefresh();
+  useRealtimeEvent('vacation_requests', (event) => {
+    if (tableSet.has('vacation_requests')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_responsibility_configurations', () => {
+  useRealtimeEvent('organization_responsibility_configurations', (event) => {
     if (tableSet.has('organization_responsibility_configurations')) {
-      scheduleRefresh();
+      scheduleRefresh(event);
     }
   });
-  useRealtimeEvent('organization_responsibility_assignments', () => {
+  useRealtimeEvent('organization_responsibility_assignments', (event) => {
     if (tableSet.has('organization_responsibility_assignments')) {
-      scheduleRefresh();
+      scheduleRefresh(event);
     }
   });
-  useRealtimeEvent('organization_responsibility_delegations', () => {
+  useRealtimeEvent('organization_responsibility_delegations', (event) => {
     if (tableSet.has('organization_responsibility_delegations')) {
-      scheduleRefresh();
+      scheduleRefresh(event);
     }
   });
-  useRealtimeEvent('clients', () => {
-    if (tableSet.has('clients')) scheduleRefresh();
+  useRealtimeEvent('clients', (event) => {
+    if (tableSet.has('clients')) scheduleRefresh(event);
   });
-  useRealtimeEvent('jobs', () => {
-    if (tableSet.has('jobs')) scheduleRefresh();
+  useRealtimeEvent('client_contacts', (event) => {
+    if (tableSet.has('client_contacts')) scheduleRefresh(event);
   });
-  useRealtimeEvent('projects', () => {
-    if (tableSet.has('projects')) scheduleRefresh();
+  useRealtimeEvent('client_sites', (event) => {
+    if (tableSet.has('client_sites')) scheduleRefresh(event);
   });
-  useRealtimeEvent('job_assignments', () => {
-    if (tableSet.has('job_assignments')) scheduleRefresh();
+  useRealtimeEvent('client_requests', (event) => {
+    if (tableSet.has('client_requests')) scheduleRefresh(event);
   });
-  useRealtimeEvent('teams', () => {
-    if (tableSet.has('teams')) scheduleRefresh();
+  useRealtimeEvent('client_follow_ups', (event) => {
+    if (tableSet.has('client_follow_ups')) scheduleRefresh(event);
   });
-  useRealtimeEvent('team_memberships', () => {
-    if (tableSet.has('team_memberships')) scheduleRefresh();
+  useRealtimeEvent('client_communication_settings', (event) => {
+    if (tableSet.has('client_communication_settings')) scheduleRefresh(event);
   });
-  useRealtimeEvent('organization_capabilities', () => {
-    if (tableSet.has('organization_capabilities')) scheduleRefresh();
+  useRealtimeEvent('client_communication_preferences', (event) => {
+    if (tableSet.has('client_communication_preferences')) scheduleRefresh(event);
   });
-  useRealtimeEvent('employee_capabilities', () => {
-    if (tableSet.has('employee_capabilities')) scheduleRefresh();
+  useRealtimeEvent('jobs', (event) => {
+    if (tableSet.has('jobs')) scheduleRefresh(event);
   });
-  useRealtimeEvent('job_capability_requirements', () => {
-    if (tableSet.has('job_capability_requirements')) scheduleRefresh();
+  useRealtimeEvent('projects', (event) => {
+    if (tableSet.has('projects')) scheduleRefresh(event);
   });
-  useRealtimeEvent('job_instruction_items', () => {
-    if (tableSet.has('job_instruction_items')) scheduleRefresh();
+  useRealtimeEvent('job_assignments', (event) => {
+    if (tableSet.has('job_assignments')) scheduleRefresh(event);
   });
-  useRealtimeEvent('document_folders', () => {
-    if (tableSet.has('document_folders')) scheduleRefresh();
+  useRealtimeEvent('teams', (event) => {
+    if (tableSet.has('teams')) scheduleRefresh(event);
   });
-  useRealtimeEvent('documents', () => {
-    if (tableSet.has('documents')) scheduleRefresh();
+  useRealtimeEvent('team_memberships', (event) => {
+    if (tableSet.has('team_memberships')) scheduleRefresh(event);
   });
-  useRealtimeEvent('document_links', () => {
-    if (tableSet.has('document_links')) scheduleRefresh();
+  useRealtimeEvent('organization_capabilities', (event) => {
+    if (tableSet.has('organization_capabilities')) scheduleRefresh(event);
   });
-  useRealtimeEvent('document_audit_events', () => {
-    if (tableSet.has('document_audit_events')) scheduleRefresh();
+  useRealtimeEvent('employee_capabilities', (event) => {
+    if (tableSet.has('employee_capabilities')) scheduleRefresh(event);
   });
-  useRealtimeEvent('document_versions', () => {
-    if (tableSet.has('document_versions')) scheduleRefresh();
+  useRealtimeEvent('job_capability_requirements', (event) => {
+    if (tableSet.has('job_capability_requirements')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_categories', () => {
-    if (tableSet.has('inventory_categories')) scheduleRefresh();
+  useRealtimeEvent('job_instruction_items', (event) => {
+    if (tableSet.has('job_instruction_items')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_locations', () => {
-    if (tableSet.has('inventory_locations')) scheduleRefresh();
+  useRealtimeEvent('document_folders', (event) => {
+    if (tableSet.has('document_folders')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_suppliers', () => {
-    if (tableSet.has('inventory_suppliers')) scheduleRefresh();
+  useRealtimeEvent('documents', (event) => {
+    if (tableSet.has('documents')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_items', () => {
-    if (tableSet.has('inventory_items')) scheduleRefresh();
+  useRealtimeEvent('document_links', (event) => {
+    if (tableSet.has('document_links')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_item_barcodes', () => {
-    if (tableSet.has('inventory_item_barcodes')) scheduleRefresh();
+  useRealtimeEvent('document_audit_events', (event) => {
+    if (tableSet.has('document_audit_events')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_stock_levels', () => {
-    if (tableSet.has('inventory_stock_levels')) scheduleRefresh();
+  useRealtimeEvent('document_versions', (event) => {
+    if (tableSet.has('document_versions')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_import_batches', () => {
-    if (tableSet.has('inventory_import_batches')) scheduleRefresh();
+  useRealtimeEvent('inventory_categories', (event) => {
+    if (tableSet.has('inventory_categories')) scheduleRefresh(event);
   });
-  useRealtimeEvent('job_material_lines', () => {
-    if (tableSet.has('job_material_lines')) scheduleRefresh();
+  useRealtimeEvent('inventory_locations', (event) => {
+    if (tableSet.has('inventory_locations')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_movements', () => {
-    if (tableSet.has('inventory_movements')) scheduleRefresh();
+  useRealtimeEvent('inventory_suppliers', (event) => {
+    if (tableSet.has('inventory_suppliers')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_asset_instances', () => {
-    if (tableSet.has('inventory_asset_instances')) scheduleRefresh();
+  useRealtimeEvent('inventory_items', (event) => {
+    if (tableSet.has('inventory_items')) scheduleRefresh(event);
   });
-  useRealtimeEvent('inventory_audit_events', () => {
-    if (tableSet.has('inventory_audit_events')) scheduleRefresh();
+  useRealtimeEvent('inventory_item_barcodes', (event) => {
+    if (tableSet.has('inventory_item_barcodes')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('inventory_stock_levels', (event) => {
+    if (tableSet.has('inventory_stock_levels')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('inventory_import_batches', (event) => {
+    if (tableSet.has('inventory_import_batches')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('job_material_lines', (event) => {
+    if (tableSet.has('job_material_lines')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('inventory_movements', (event) => {
+    if (tableSet.has('inventory_movements')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('inventory_asset_instances', (event) => {
+    if (tableSet.has('inventory_asset_instances')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('inventory_audit_events', (event) => {
+    if (tableSet.has('inventory_audit_events')) scheduleRefresh(event);
   });
 }

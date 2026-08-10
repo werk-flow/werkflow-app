@@ -37,6 +37,8 @@ import {
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
+import { CustomerRelationshipWorkspace } from '@/components/kunden/customer-relationship-workspace';
+import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 
 import { updateClient, deleteClient } from '@/lib/clients/actions';
@@ -51,6 +53,7 @@ import {
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
+import type { CustomerRelationshipBundle } from '@/lib/customer-relationships/types';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('de-DE', {
@@ -73,6 +76,8 @@ interface KundenDetailContentProps {
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
   visibleColumns: AuftraegeColumnId[];
+  currentUserId: string;
+  relationshipBundle: CustomerRelationshipBundle | null;
 }
 
 export function KundenDetailContent({
@@ -88,15 +93,38 @@ export function KundenDetailContent({
   members,
   isAdminOrManager,
   visibleColumns,
+  currentUserId,
+  relationshipBundle,
 }: KundenDetailContentProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const contactGuard = useCommunicationContactGuard({
+    clientId: client.id,
+  });
 
   // Colleagues' contact/site/master-data changes appear without a reload.
   useRealtimeRouterRefresh({
-    tables: ['clients', 'client_contacts', 'client_sites'],
+    tables: [
+      'clients',
+      'client_contacts',
+      'client_sites',
+      'client_requests',
+      'client_follow_ups',
+      'client_communication_settings',
+      'client_communication_preferences',
+      'jobs',
+      'projects',
+      'document_links',
+    ],
+    eventFilter: (event) => {
+      const row = event.new ?? event.old;
+      if (!row) return false;
+      if (event.table === 'clients') return row.id === client.id;
+      if (row.client_id === undefined) return event.eventType === 'DELETE';
+      return row.client_id === client.id;
+    },
   });
 
   const handleDelete = async () => {
@@ -272,6 +300,7 @@ export function KundenDetailContent({
               contacts={contacts}
               sites={sites}
               isAdminOrManager={isAdminOrManager}
+              onRequestContact={contactGuard.requestContact}
             />
 
             {/* Financial Summary Placeholder */}
@@ -333,33 +362,54 @@ export function KundenDetailContent({
             </div>
           </div>
 
-          {/* Right Column: Associated Jobs & Projects */}
-          <div className="space-y-4 md:col-span-2 2xl:col-span-1">
-            <div className="flex items-center gap-2">
-              <Briefcase className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Zugeordnete Aufträge & Projekte
-              </h3>
+          {/* Right Column: relationship priorities, history, and linked work */}
+          <div className="space-y-8 md:col-span-2 2xl:col-span-1">
+            {relationshipBundle ? (
+              <CustomerRelationshipWorkspace
+                clientId={client.id}
+                currentUserId={currentUserId}
+                contacts={contacts}
+                initialBundle={relationshipBundle}
+              />
+            ) : (
+              <p
+                role="alert"
+                className="rounded-md border border-destructive/30 px-4 py-3 text-sm text-destructive"
+              >
+                Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten
+                nicht geladen werden.
+              </p>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="size-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Zugeordnete Aufträge & Projekte
+                </h3>
+              </div>
+              <EmbeddedAuftraegeSection
+                jobs={jobs}
+                projects={projects}
+                clientMap={clientMap}
+                jobAssignmentMap={jobAssignmentMap}
+                clients={clients}
+                members={members}
+                lockedClientLabel={client.name}
+                hideClientColumn
+                defaultClientId={client.id}
+                readOnlyClient
+                isAdminOrManager={isAdminOrManager}
+                visibleColumns={visibleColumns}
+                emptyTitle="Keine Aufträge"
+                emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."
+              />
             </div>
-            <EmbeddedAuftraegeSection
-              jobs={jobs}
-              projects={projects}
-              clientMap={clientMap}
-              jobAssignmentMap={jobAssignmentMap}
-              clients={clients}
-              members={members}
-              lockedClientLabel={client.name}
-              hideClientColumn
-              defaultClientId={client.id}
-              readOnlyClient
-              isAdminOrManager={isAdminOrManager}
-              visibleColumns={visibleColumns}
-              emptyTitle="Keine Aufträge"
-              emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."
-            />
           </div>
         </div>
       </div>
+
+      {contactGuard.dialog}
 
       {/* Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

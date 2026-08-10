@@ -15,6 +15,7 @@ import type {
 } from '@supabase/supabase-js';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/components/organization/organization-context';
+import { coalesceRealtimeEvents } from '@/lib/realtime/events';
 
 export type RealtimeTable =
   | 'time_entries'
@@ -44,6 +45,9 @@ export type RealtimeTable =
   | 'client_contacts'
   | 'client_sites'
   | 'client_requests'
+  | 'client_follow_ups'
+  | 'client_communication_settings'
+  | 'client_communication_preferences'
   | 'jobs'
   | 'projects'
   | 'job_assignments'
@@ -106,6 +110,9 @@ const TABLES: RealtimeTable[] = [
   'client_contacts',
   'client_sites',
   'client_requests',
+  'client_follow_ups',
+  'client_communication_settings',
+  'client_communication_preferences',
   'jobs',
   'projects',
   'job_assignments',
@@ -139,6 +146,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   );
 
   const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(new Map());
+  const pendingEventsRef = useRef<Map<RealtimeTable, RealtimeChangeEvent>>(new Map());
 
   const dispatchAll = useCallback(() => {
     for (const table of TABLES) {
@@ -188,12 +196,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       // in quick succession, which would otherwise trigger 10+ parallel refetches twice.
       const existing = debounceTimersRef.current.get(table);
       if (existing) clearTimeout(existing);
+      pendingEventsRef.current.set(
+        table,
+        coalesceRealtimeEvents(pendingEventsRef.current.get(table), event)
+      );
 
       debounceTimersRef.current.set(
         table,
         setTimeout(() => {
           debounceTimersRef.current.delete(table);
-          listeners!.forEach((cb) => cb(event));
+          const pendingEvent = pendingEventsRef.current.get(table);
+          pendingEventsRef.current.delete(table);
+          if (pendingEvent) listeners!.forEach((cb) => cb(pendingEvent));
         }, 150)
       );
     }
@@ -487,6 +501,39 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           {
             event: '*',
             schema: 'public',
+            table: 'client_follow_ups',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('client_follow_ups', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'client_communication_settings',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('client_communication_settings', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'client_communication_preferences',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('client_communication_preferences', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
             table: 'jobs',
             filter: `organization_id=eq.${activeOrgId}`
           },
@@ -745,6 +792,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
     document.addEventListener('visibilitychange', handleVisibilityChange);
     const debounceTimers = debounceTimersRef.current;
+    const pendingEvents = pendingEventsRef.current;
 
     return () => {
       cancelled = true;
@@ -758,6 +806,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         clearTimeout(timer);
       }
       debounceTimers.clear();
+      pendingEvents.clear();
     };
   }, [activeOrgId, dispatchAll]);
 

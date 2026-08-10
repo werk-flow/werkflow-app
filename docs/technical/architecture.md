@@ -63,6 +63,8 @@ Server code that uses the admin client must validate the authenticated user firs
 
 Live Supabase state is the practical source of truth for database-aware tasks. The repo intentionally does not use local migration files as the default workflow.
 
+Supabase Auth's leaked-password-protection advisory is an acknowledged Free Plan limitation: the feature is available only on Pro and above, so this specific advisory may remain open until the planned Supabase upgrade and should then be enabled and re-evaluated. Continue to inspect and disposition every other Supabase Security and Performance Advisor finding normally.
+
 ## Authentication And Organization Context
 
 Users authenticate through Supabase Auth. After authentication, users are routed either into the app or into onboarding depending on whether they belong to an organization.

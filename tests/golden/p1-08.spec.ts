@@ -1,6 +1,7 @@
 import { expect, test } from './support/fixtures';
 import { resolveDailyTargets } from '../../lib/personnel/targets';
 import { getBusinessWeekDates } from '../../lib/personnel/schedule';
+import { formatDuration } from '../../lib/time-tracking/helpers';
 import {
   getAbsenceSpansForRecord,
   getAttentionPatternStateForUser,
@@ -161,11 +162,9 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       0
     );
     await employeePage.goto('/zeiterfassung');
-    if (expectedSollMinutes % 60 === 0) {
-      await expect(
-        visibleText(employeePage, `Soll: ${expectedSollMinutes / 60} Std.`)
-      ).toBeVisible({ timeout: 15_000 });
-    }
+    await expect(
+      visibleText(employeePage, `Soll: ${formatDuration(expectedSollMinutes)}`)
+    ).toBeVisible({ timeout: 15_000 });
     // Today's Tagesziel explains itself — unless a holiday/closure already
     // zeroes the day with its own label (runtime-checked, never assumed).
     const todayTarget = targets.find(

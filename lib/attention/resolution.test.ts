@@ -8,6 +8,7 @@ import {
   notificationWindowStartIso,
   resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
+  selectFollowUpAttentionRows,
   sortNotificationsNewestFirst,
 } from './resolution';
 import { attentionItemKey } from './types';
@@ -24,6 +25,95 @@ function makeDecisionRequest(overrides: {
     cancelledAt: overrides.cancelledAt ?? null,
   };
 }
+
+function followUpCandidate(id: string, ownerUserId: string) {
+  return {
+    id,
+    client_id: 'client-1',
+    title: `Follow-up ${id}`,
+    due_at: '2026-08-10T10:00:00.000Z',
+    owner_user_id: ownerUserId,
+  };
+}
+
+describe('selectFollowUpAttentionRows (P1-10)', () => {
+  const activeManagers = new Set(['admin-1', 'buero-1']);
+  const candidates = [
+    followUpCandidate('own', 'admin-1'),
+    followUpCandidate('other-active', 'buero-1'),
+    followUpCandidate('unavailable', 'former-manager'),
+  ];
+
+  test('keeps the manager role gate explicit', () => {
+    expect(
+      selectFollowUpAttentionRows(
+        'employee',
+        'admin-1',
+        candidates,
+        activeManagers
+      ).rows
+    ).toEqual([]);
+    expect(
+      selectFollowUpAttentionRows(
+        'buero',
+        'buero-1',
+        candidates,
+        activeManagers
+      ).rows.map((row) => row.id)
+    ).toEqual(['other-active', 'unavailable']);
+  });
+
+  test('shows own and unavailable-owner work but excludes other active owners', () => {
+    const result = selectFollowUpAttentionRows(
+      'admin',
+      'admin-1',
+      candidates,
+      activeManagers
+    );
+    expect(result.capacityExceeded).toBe(false);
+    expect(result.rows.map((row) => row.id)).toEqual(['own', 'unavailable']);
+    expect(result.rows.map((row) => row.ownerUnavailable)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
+  test('accepts exactly 100 rows and rejects 101 without partial results', () => {
+    const oneHundred = Array.from({ length: 100 }, (_, index) =>
+      followUpCandidate(`follow-up-${index}`, 'admin-1')
+    );
+    expect(
+      selectFollowUpAttentionRows(
+        'admin',
+        'admin-1',
+        oneHundred,
+        activeManagers
+      )
+    ).toMatchObject({ capacityExceeded: false });
+    expect(
+      selectFollowUpAttentionRows(
+        'admin',
+        'admin-1',
+        [...oneHundred, followUpCandidate('overflow', 'admin-1')],
+        activeManagers
+      )
+    ).toEqual({ rows: [], capacityExceeded: true });
+  });
+
+  test('applies capacity only after excluding other active owners', () => {
+    const otherOwnerRows = Array.from({ length: 101 }, (_, index) =>
+      followUpCandidate(`other-${index}`, 'buero-1')
+    );
+    const result = selectFollowUpAttentionRows(
+      'admin',
+      'admin-1',
+      [...otherOwnerRows, followUpCandidate('own', 'admin-1')],
+      activeManagers
+    );
+    expect(result.capacityExceeded).toBe(false);
+    expect(result.rows.map((row) => row.id)).toEqual(['own']);
+  });
+});
 
 describe('attentionItemKey', () => {
   test('is stable and unique per source_type + source_id', () => {

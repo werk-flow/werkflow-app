@@ -99,6 +99,201 @@ export type Database = {
           },
         ]
       }
+      client_communication_preference_events: {
+        Row: {
+          actor_id: string
+          client_id: string
+          created_at: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          preference_id: string | null
+        }
+        Insert: {
+          actor_id: string
+          client_id: string
+          created_at?: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          preference_id?: string | null
+        }
+        Update: {
+          actor_id?: string
+          client_id?: string
+          created_at?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          preference_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communication_preference_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_preference_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_preference_events_preference_id_fkey"
+            columns: ["preference_id"]
+            isOneToOne: false
+            referencedRelation: "client_communication_preferences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_communication_preferences: {
+        Row: {
+          channel: string
+          client_id: string
+          contact_id: string | null
+          created_at: string
+          created_by: string
+          id: string
+          organization_id: string
+          purpose: string
+          source_note: string | null
+          state: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          channel: string
+          client_id: string
+          contact_id?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          organization_id: string
+          purpose: string
+          source_note?: string | null
+          state: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          channel?: string
+          client_id?: string
+          contact_id?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          organization_id?: string
+          purpose?: string
+          source_note?: string | null
+          state?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communication_preferences_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_preferences_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_communication_settings: {
+        Row: {
+          accessibility_note: string | null
+          client_id: string
+          contact_time_note: string | null
+          created_at: string
+          created_by: string
+          do_not_contact_instruction: string | null
+          id: string
+          language_note: string | null
+          organization_id: string
+          preferred_channel: string | null
+          preferred_contact_id: string | null
+          source_note: string | null
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          accessibility_note?: string | null
+          client_id: string
+          contact_time_note?: string | null
+          created_at?: string
+          created_by: string
+          do_not_contact_instruction?: string | null
+          id?: string
+          language_note?: string | null
+          organization_id: string
+          preferred_channel?: string | null
+          preferred_contact_id?: string | null
+          source_note?: string | null
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          accessibility_note?: string | null
+          client_id?: string
+          contact_time_note?: string | null
+          created_at?: string
+          created_by?: string
+          do_not_contact_instruction?: string | null
+          id?: string
+          language_note?: string | null
+          organization_id?: string
+          preferred_channel?: string | null
+          preferred_contact_id?: string | null
+          source_note?: string | null
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_communication_settings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_communication_settings_preferred_contact_id_fkey"
+            columns: ["preferred_contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           client_id: string
@@ -162,6 +357,142 @@ export type Database = {
           },
           {
             foreignKeyName: "client_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_follow_up_events: {
+        Row: {
+          actor_id: string
+          client_id: string
+          created_at: string
+          event_payload: Json
+          event_type: string
+          follow_up_id: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          actor_id: string
+          client_id: string
+          created_at?: string
+          event_payload?: Json
+          event_type: string
+          follow_up_id: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          actor_id?: string
+          client_id?: string
+          created_at?: string
+          event_payload?: Json
+          event_type?: string
+          follow_up_id?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_follow_up_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_follow_up_events_follow_up_id_fkey"
+            columns: ["follow_up_id"]
+            isOneToOne: false
+            referencedRelation: "client_follow_ups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_follow_up_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_follow_ups: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          client_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string
+          due_at: string
+          id: string
+          note: string | null
+          organization_id: string
+          owner_user_id: string
+          resolution_note: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          client_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by: string
+          due_at: string
+          id?: string
+          note?: string | null
+          organization_id: string
+          owner_user_id: string
+          resolution_note?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          client_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string
+          due_at?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          owner_user_id?: string
+          resolution_note?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_follow_ups_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_follow_ups_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3738,6 +4069,46 @@ export type Database = {
           user_id: string
         }[]
       }
+      create_client_follow_up: {
+        Args: {
+          p_actor_id: string
+          p_client_id: string
+          p_due_at: string
+          p_note: string
+          p_organization_id: string
+          p_owner_user_id: string
+          p_source_id: string
+          p_source_type: string
+          p_title: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          client_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string
+          due_at: string
+          id: string
+          note: string | null
+          organization_id: string
+          owner_user_id: string
+          resolution_note: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_follow_ups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_responsibility_delegation: {
         Args: {
           p_actor_id: string
@@ -3833,6 +4204,19 @@ export type Database = {
         Args: { p_org_id: string; p_user_id: string }
         Returns: boolean
       }
+      record_client_communication_exception: {
+        Args: {
+          p_actor_id: string
+          p_channel: string
+          p_client_id: string
+          p_contact_id: string
+          p_organization_id: string
+          p_purpose: string
+          p_reason: string
+          p_warnings: Json
+        }
+        Returns: string
+      }
       record_inventory_movement: {
         Args: {
           p_actor_id: string
@@ -3912,6 +4296,152 @@ export type Database = {
           p_require_confirmations: boolean[]
         }
         Returns: undefined
+      }
+      save_client_communication_settings: {
+        Args: {
+          p_accessibility_note: string
+          p_actor_id: string
+          p_client_id: string
+          p_contact_time_note: string
+          p_do_not_contact_instruction: string
+          p_language_note: string
+          p_organization_id: string
+          p_preferred_channel: string
+          p_preferred_contact_id: string
+          p_source_note: string
+        }
+        Returns: {
+          accessibility_note: string | null
+          client_id: string
+          contact_time_note: string | null
+          created_at: string
+          created_by: string
+          do_not_contact_instruction: string | null
+          id: string
+          language_note: string | null
+          organization_id: string
+          preferred_channel: string | null
+          preferred_contact_id: string | null
+          source_note: string | null
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_communication_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_client_communication_preference: {
+        Args: {
+          p_actor_id: string
+          p_channel: string
+          p_client_id: string
+          p_contact_id: string
+          p_organization_id: string
+          p_purpose: string
+          p_source_note: string
+          p_state: string
+        }
+        Returns: {
+          channel: string
+          client_id: string
+          contact_id: string | null
+          created_at: string
+          created_by: string
+          id: string
+          organization_id: string
+          purpose: string
+          source_note: string | null
+          state: string
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_communication_preferences"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      transition_client_follow_up: {
+        Args: {
+          p_actor_id: string
+          p_follow_up_id: string
+          p_organization_id: string
+          p_reason?: string
+          p_resolution_note: string
+          p_target_status: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          client_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string
+          due_at: string
+          id: string
+          note: string | null
+          organization_id: string
+          owner_user_id: string
+          resolution_note: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_follow_ups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_client_follow_up: {
+        Args: {
+          p_actor_id: string
+          p_due_at: string
+          p_follow_up_id: string
+          p_note: string
+          p_organization_id: string
+          p_owner_user_id: string
+          p_reason?: string
+          p_source_id: string
+          p_source_type: string
+          p_title: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          client_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string
+          due_at: string
+          id: string
+          note: string | null
+          organization_id: string
+          owner_user_id: string
+          resolution_note: string | null
+          source_id: string | null
+          source_type: string | null
+          status: string
+          title: string
+          updated_at: string
+          updated_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_follow_ups"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {

@@ -142,6 +142,9 @@ type DocumentLibraryContentProps = {
   projects: ProjectWithDetails[];
   clients: Client[];
   employees: DocumentEmployee[];
+  initialDocumentId: string | null;
+  initialDocument: OrganizationDocument | null;
+  initialDocumentUnavailable: boolean;
 };
 
 type MoveCopyDialogState = {
@@ -863,6 +866,9 @@ export function DocumentLibraryContent({
   projects,
   clients,
   employees,
+  initialDocumentId,
+  initialDocument,
+  initialDocumentUnavailable,
 }: DocumentLibraryContentProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -896,7 +902,9 @@ export function DocumentLibraryContent({
     Extract<DocumentDetailsResult, { success: true }> | null
   >(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
-  const [viewerDocument, setViewerDocument] = useState<OrganizationDocument | null>(null);
+  const [viewerDocument, setViewerDocument] =
+    useState<OrganizationDocument | null>(initialDocument);
+  const initialDocumentIdRef = useRef(initialDocumentId);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -943,6 +951,17 @@ export function DocumentLibraryContent({
     setSearchQuery(initialSearchQuery);
     setPendingNavigation(null);
   }, [category, currentFolderId, initialSearchQuery, linkFilter, view]);
+
+  useEffect(() => {
+    const viewingInitialDocument =
+      viewerDocument?.id === initialDocumentIdRef.current;
+    const initialDocumentChanged =
+      initialDocumentIdRef.current !== initialDocumentId;
+    initialDocumentIdRef.current = initialDocumentId;
+    if (initialDocumentChanged || viewingInitialDocument) {
+      setViewerDocument(initialDocument);
+    }
+  }, [initialDocument, initialDocumentId, viewerDocument?.id]);
 
   useEffect(() => {
     if (!pendingNavigation) return;
@@ -2095,6 +2114,16 @@ export function DocumentLibraryContent({
           onChange={(event) => handleUpload(event.target.files)}
         />
       </header>
+
+      {initialDocumentUnavailable && (
+        <p
+          role="status"
+          className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+        >
+          Das verknüpfte Dokument wurde nicht gefunden oder ist nicht mehr
+          verfügbar.
+        </p>
+      )}
 
       <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
       <DocumentOperationBanner operation={operationBanner} />

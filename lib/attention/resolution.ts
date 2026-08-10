@@ -10,6 +10,45 @@ import {
   type AttentionNotification,
 } from './types';
 
+export type FollowUpAttentionCandidate = {
+  id: string;
+  client_id: string;
+  title: string;
+  due_at: string;
+  owner_user_id: string;
+};
+
+export const FOLLOW_UP_ATTENTION_CAPACITY = 100;
+
+export function selectFollowUpAttentionRows(
+  role: 'admin' | 'buero' | 'employee',
+  userId: string,
+  rows: FollowUpAttentionCandidate[],
+  activeManagerIds: ReadonlySet<string>,
+  capacity = FOLLOW_UP_ATTENTION_CAPACITY
+): {
+  rows: Array<FollowUpAttentionCandidate & { ownerUnavailable: boolean }>;
+  capacityExceeded: boolean;
+} {
+  if (role !== 'admin' && role !== 'buero') {
+    return { rows: [], capacityExceeded: false };
+  }
+  const visibleRows = rows.filter(
+    (row) =>
+      row.owner_user_id === userId || !activeManagerIds.has(row.owner_user_id)
+  );
+  if (visibleRows.length > capacity) {
+    return { rows: [], capacityExceeded: true };
+  }
+  return {
+    rows: visibleRows.map((row) => ({
+        ...row,
+        ownerUnavailable: !activeManagerIds.has(row.owner_user_id),
+      })),
+    capacityExceeded: false,
+  };
+}
+
 /**
  * One attention item per source record, regardless of how many derivation or
  * authorization paths produced it (e.g. a substitute who is also role-eligible

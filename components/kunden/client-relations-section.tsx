@@ -103,6 +103,12 @@ interface ClientRelationsSectionProps {
   contacts: ClientContact[];
   sites: ClientSite[];
   isAdminOrManager: boolean;
+  onRequestContact?: (input: {
+    contactId: string;
+    contactName: string;
+    channel: 'phone' | 'email';
+    href: string;
+  }) => void;
 }
 
 export function ClientRelationsSection({
@@ -111,6 +117,7 @@ export function ClientRelationsSection({
   contacts,
   sites,
   isAdminOrManager,
+  onRequestContact,
 }: ClientRelationsSectionProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -215,7 +222,7 @@ export function ClientRelationsSection({
   return (
     <div className="space-y-4">
       {/* Ansprechpartner */}
-      <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div id="ansprechpartner" className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <Users className="size-4" />
@@ -269,6 +276,16 @@ export function ClientRelationsSection({
                         <a
                           href={`tel:${normalizePhoneHref(contact.phone)}`}
                           className="inline-flex items-center gap-1 hover:text-foreground"
+                          onClick={(event) => {
+                            if (!onRequestContact) return;
+                            event.preventDefault();
+                            onRequestContact({
+                              contactId: contact.id,
+                              contactName: contact.name,
+                              channel: 'phone',
+                              href: `tel:${normalizePhoneHref(contact.phone ?? '')}`,
+                            });
+                          }}
                         >
                           <Phone className="size-3.5" />
                           {contact.phone}
@@ -278,6 +295,16 @@ export function ClientRelationsSection({
                         <a
                           href={`mailto:${contact.email}`}
                           className="hover:text-foreground"
+                          onClick={(event) => {
+                            if (!onRequestContact) return;
+                            event.preventDefault();
+                            onRequestContact({
+                              contactId: contact.id,
+                              contactName: contact.name,
+                              channel: 'email',
+                              href: `mailto:${contact.email ?? ''}`,
+                            });
+                          }}
                         >
                           {contact.email}
                         </a>
@@ -367,7 +394,7 @@ export function ClientRelationsSection({
       </div>
 
       {/* Einsatzorte */}
-      <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div id="einsatzorte" className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <MapPin className="size-4" />

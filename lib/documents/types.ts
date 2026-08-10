@@ -276,10 +276,15 @@ export type DocumentVersion = {
 export type DocumentDetailsResult =
   | {
       success: true;
+      document: OrganizationDocument;
       auditEvents: DocumentAuditEvent[];
       versions: DocumentVersion[];
     }
-  | { success: false; error: string };
+  | {
+      success: false;
+      error: string;
+      document?: OrganizationDocument;
+    };
 
 export type VersionResult =
   | { success: true; version: DocumentVersion }
