@@ -51,6 +51,14 @@ The app uses the Next.js App Router. The main route groups are:
 
 Authenticated product areas currently include dashboard, calendar, time tracking, jobs/projects, employees, customers, document management, inventory, and settings. Inventory V1 is implemented; use `docs/features/inventory.md` for the current product boundary.
 
+## Implementation Simplicity
+
+Write the smallest amount of quality code that clearly and maintainably solves the confirmed current requirement. This is not a target to minimize line count mechanically: readable, maintainable, correct code is better than a shorter but cryptic implementation. However, every extra branch, helper, state variable, effect, wrapper, abstraction, dependency, or alternate code path should solve a concrete present need.
+
+Before and during implementation, check whether the desired outcome can be reached more directly by reusing an existing domain owner or repository pattern, deleting duplication, flattening control flow, or representing the state once instead of synchronizing copies. Avoid speculative frameworks, parallel models, unnecessary layers, and code written only for possible future scope.
+
+Fewer lines must not hide or discard essential complexity: authorization, organization isolation, validation, data integrity, historical meaning, audit, failure handling, recovery, and accessibility remain mandatory. When a business rule is inherently complex, contain it in a focused domain module with precise types, explicit invariants, and focused tests; keep UI components and callers small and concerned with orchestration rather than reimplementing the rule. Implement only the depth owned by the current accepted slice and leave later-slice behavior explicit rather than building a generic system early.
+
 ## Supabase Access Model
 
 The app uses multiple Supabase clients for different trust boundaries:
