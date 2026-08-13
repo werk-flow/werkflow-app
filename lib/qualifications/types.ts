@@ -45,7 +45,7 @@ export type EmployeeCapabilityRecord = {
 };
 
 export type AssignmentCandidate = {
-  userId: string;
+  userId: string | null;
   employeeRecordId: string;
   displayName: string;
   employmentType: EmploymentType | null;
@@ -61,7 +61,7 @@ export type JobCapabilityRequirement = {
 };
 
 export type CoverageContributor = {
-  userId: string;
+  userId: string | null;
   employeeRecordId: string;
   displayName: string;
   employeeCapabilityId: string;

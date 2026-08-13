@@ -953,6 +953,21 @@ export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
       return { success: false, error: 'job_not_found' };
     }
 
+    const { count: planningOccurrenceCount, error: planningCheckError } =
+      await admin
+        .from('planning_occurrences')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('job_id', jobId);
+
+    if (planningCheckError) {
+      console.error('Error checking job planning history:', planningCheckError);
+      return { success: false, error: 'delete_failed' };
+    }
+    if ((planningOccurrenceCount ?? 0) > 0) {
+      return { success: false, error: 'planning_history_exists' };
+    }
+
     const { error } = await admin
       .from('jobs')
       .delete()

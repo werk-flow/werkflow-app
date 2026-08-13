@@ -97,7 +97,9 @@ export function resolveRequirementCoverage(
     | null = null;
 
   for (const candidate of [...candidates].sort((left, right) =>
-    left.userId.localeCompare(right.userId)
+    (left.userId ?? left.employeeRecordId).localeCompare(
+      right.userId ?? right.employeeRecordId
+    )
   )) {
     const result = strongestCandidateRecord(
       candidate,
@@ -177,7 +179,11 @@ export function buildAssignmentFingerprint(input: {
     assessedForDate: input.assessedForDate,
     apprenticeWarningEnabled: input.apprenticeWarningEnabled,
     candidates: [...input.candidates]
-      .sort((left, right) => left.userId.localeCompare(right.userId))
+      .sort((left, right) =>
+        (left.userId ?? left.employeeRecordId).localeCompare(
+          right.userId ?? right.employeeRecordId
+        )
+      )
       .map((candidate) => ({
         userId: candidate.userId,
         employeeRecordId: candidate.employeeRecordId,
@@ -228,7 +234,9 @@ export function resolveAssignmentEvaluation(input: {
   return {
     jobId: input.jobId,
     assessedForDate: input.assessedForDate,
-    selectedUserIds: input.candidates.map((candidate) => candidate.userId),
+    selectedUserIds: input.candidates.flatMap((candidate) =>
+      candidate.userId ? [candidate.userId] : []
+    ),
     selectedEmployeeRecordIds: input.candidates.map(
       (candidate) => candidate.employeeRecordId
     ),

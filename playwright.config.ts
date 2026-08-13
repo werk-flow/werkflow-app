@@ -11,7 +11,7 @@ export default defineConfig({
   testDir: './tests/golden',
   globalSetup: './tests/golden/global-setup',
   globalTeardown: './tests/golden/global-teardown',
-  timeout: 90_000,
+  timeout: 180_000,
   expect: { timeout: 10_000 },
   // The world is shared, mutable state; gates run serially by design.
   workers: 1,

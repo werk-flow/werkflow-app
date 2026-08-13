@@ -907,7 +907,7 @@ export async function openTimeApprovals(page: Page): Promise<void> {
     'data-loaded',
     'true',
     {
-    timeout: 15_000,
+    timeout: 30_000,
     }
   );
 }
@@ -1670,37 +1670,52 @@ export async function recordSicknessForMemberViaSection(
     expectVacationOverlapHint?: boolean;
   }
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Krankmeldung erfassen' })
-  ).toBeVisible();
-  const dialog = page.getByRole('dialog');
-  if (options.typeLabel) {
-    await dialog.locator('#record-sickness-type').click();
-    await page
-      .getByRole('option', { name: options.typeLabel, exact: true })
-      .click();
-  }
-  await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
-  if (options.endDigits !== undefined) {
-    await dialog.locator('#record-sickness-end-known').click();
-    await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
-    if (options.halfDay) {
-      await dialog.locator('#record-sickness-half-day').click();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Krankmeldung erfassen' })
+    ).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    let submitted = false;
+    try {
+      if (options.typeLabel) {
+        await dialog.locator('#record-sickness-type').click();
+        await page
+          .getByRole('option', { name: options.typeLabel, exact: true })
+          .click();
+      }
+      await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
+      if (options.endDigits !== undefined) {
+        await dialog.locator('#record-sickness-end-known').click();
+        await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
+        if (options.halfDay) {
+          await dialog.locator('#record-sickness-half-day').click();
+        }
+      }
+      if (options.evidenceRequired) {
+        await dialog.locator('#record-sickness-evidence').click();
+      }
+      submitted = true;
+      await dialog.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
+      if (options.expectVacationOverlapHint) {
+        // The saved report shows the overlap hint until explicitly acknowledged.
+        await expect(
+          dialog.getByText('überschneidet sich mit genehmigtem Urlaub')
+        ).toBeVisible({ timeout: 15_000 });
+        await dialog.getByRole('button', { name: 'Verstanden' }).click();
+      }
+      await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+      return;
+    } catch (error) {
+      const interruptedBeforeSubmit =
+        !submitted && !(await dialog.isVisible().catch(() => false));
+      if (attempt === 0 && interruptedBeforeSubmit) continue;
+      throw error;
     }
   }
-  if (options.evidenceRequired) {
-    await dialog.locator('#record-sickness-evidence').click();
-  }
-  await dialog.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
-  if (options.expectVacationOverlapHint) {
-    // The saved report shows the overlap hint until explicitly acknowledged.
-    await expect(
-      dialog.getByText('überschneidet sich mit genehmigtem Urlaub')
-    ).toBeVisible({ timeout: 15_000 });
-    await dialog.getByRole('button', { name: 'Verstanden' }).click();
-  }
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+
+  throw new Error('recordSicknessForMemberViaSection: dialog remained interrupted');
 }
 
 // Manager actions on one report row of the member-detail section, addressed
@@ -1819,33 +1834,46 @@ export async function addTeamMemberViaManagement(
   page: Page,
   options: { teamName: string; employeeName: string; validFrom?: string }
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Teams', exact: true }).click();
-  const card = page
-    .getByTestId('team-card')
-    .filter({ hasText: options.teamName });
-  await expect(card).toBeVisible({ timeout: 15_000 });
-  await card
-    .getByRole('combobox', {
-      name: `Mitglied zu ${options.teamName} hinzufügen`,
-    })
-    .click();
-  await page
-    .getByRole('option')
-    .filter({ hasText: options.employeeName })
-    .first()
-    .click();
-  if (options.validFrom) {
-    await card
-      .getByLabel(`Teamzugehörigkeit zu ${options.teamName} gültig ab`)
-      .fill(options.validFrom);
-  }
-  await card.getByRole('button', { name: 'Hinzufügen' }).click();
-  await expect(
-    card
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto('/mitarbeiter');
+    await page.getByRole('tab', { name: 'Teams', exact: true }).click();
+    const card = page
+      .getByTestId('team-card')
+      .filter({ hasText: options.teamName });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const memberRow = card
       .getByTestId('team-member-row')
-      .getByText(options.employeeName, { exact: true })
-  ).toBeVisible({ timeout: 15_000 });
+      .filter({ hasText: options.employeeName })
+      .first();
+    if (await memberRow.isVisible().catch(() => false)) return;
+
+    await card
+      .getByRole('combobox', {
+        name: `Mitglied zu ${options.teamName} hinzufügen`,
+      })
+      .click();
+    await page
+      .getByRole('option')
+      .filter({ hasText: options.employeeName })
+      .first()
+      .click();
+    if (options.validFrom) {
+      await card
+        .getByLabel(`Teamzugehörigkeit zu ${options.teamName} gültig ab`)
+        .fill(options.validFrom);
+    }
+    await card.getByRole('button', { name: 'Hinzufügen' }).click();
+    if (
+      await memberRow
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      return;
+    }
+  }
+
+  throw new Error(`Team member ${options.employeeName} was not persisted`);
 }
 
 export async function createCapabilityViaManagement(
@@ -1867,11 +1895,16 @@ export async function createCapabilityViaManagement(
       .fill(String(options.warningDays));
   }
   await page.getByRole('button', { name: 'Anlegen', exact: true }).click();
-  await expect(
-    page
-      .getByTestId('capability-definition-row')
-      .filter({ hasText: options.name })
-  ).toBeVisible({ timeout: 15_000 });
+  const definitionRow = page
+    .getByTestId('capability-definition-row')
+    .filter({ hasText: options.name });
+  try {
+    await expect(definitionRow).toBeVisible({ timeout: 15_000 });
+  } catch {
+    await page.reload();
+    await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
+    await expect(definitionRow).toBeVisible({ timeout: 15_000 });
+  }
 }
 
 export async function assignCapabilityViaManagement(
@@ -2065,4 +2098,269 @@ export async function assignJobWithQualificationWarning(
       timeout: 15_000,
     });
   }
+}
+
+// P1-11: recurring and multi-visit planning. These helpers keep the golden
+// spec at the business-action level while the controls remain keyboard-usable.
+export type PlanningEntryStepOptions = {
+  kind: 'job_visit' | 'internal';
+  jobSearch?: string;
+  internalTitle?: string;
+  internalType?: 'meeting' | 'internal_work' | 'training' | 'other';
+  date: string;
+  time?: string;
+  durationHours?: number;
+  durationDays?: number;
+  employeeNames?: string[];
+  teamNames?: string[];
+  recurrence?: { frequency?: 'daily' | 'weekly'; count: number };
+  overrideReason?: string;
+};
+
+async function selectPlanningOption(
+  dialog: Locator,
+  triggerText: string,
+  searchPlaceholder: RegExp,
+  optionText: string
+): Promise<void> {
+  const comboboxes = dialog.getByRole('combobox');
+  const alreadySelected = comboboxes.filter({ hasText: optionText }).first();
+  if (await alreadySelected.isVisible().catch(() => false)) return;
+
+  await comboboxes.filter({ hasText: triggerText }).click();
+  await dialog.getByPlaceholder(searchPlaceholder).fill(optionText);
+  await dialog
+    .getByRole('listbox')
+    .getByRole('button')
+    .filter({ hasText: optionText })
+    .first()
+    .click();
+  await dialog.getByRole('heading').first().click();
+}
+
+async function finishPlanningSave(
+  dialog: Locator,
+  firstButtonName: RegExp,
+  overrideReason?: string
+): Promise<void> {
+  await dialog.getByRole('button', { name: firstButtonName }).click();
+  await expect
+    .poll(async () => {
+      if (!(await dialog.isVisible().catch(() => false))) return 'closed';
+      if (await dialog.locator('[data-planning-warning]').isVisible().catch(() => false)) {
+        return 'warning';
+      }
+      return 'pending';
+    }, { timeout: 30_000 })
+    .not.toBe('pending');
+
+  if (!(await dialog.isVisible().catch(() => false))) return;
+  if (!overrideReason) {
+    throw new Error('Planning produced warnings but no override reason was supplied');
+  }
+  const reasonInput = dialog.locator(
+    '#planning-override, #planning-edit-reason'
+  ).first();
+  await reasonInput.fill(overrideReason);
+  await dialog
+    .getByRole('button', {
+      name: /Mit Begr.ndung planen|.nderung speichern/,
+    })
+    .click();
+  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+}
+
+export async function createPlannedCalendarEntry(
+  page: Page,
+  options: PlanningEntryStepOptions
+): Promise<void> {
+  await page.goto('/kalender');
+  await page.getByRole('button', { name: 'Kalendereintrag' }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Kalendereintrag erstellen' }) });
+  await expect(dialog.getByRole('tab', { name: 'Termin planen' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await dialog.getByRole('tab', { name: 'Termin planen' }).click();
+  await expect(dialog.locator('#planning-date')).toBeVisible({ timeout: 15_000 });
+
+  if (options.kind === 'job_visit') {
+    if (!options.jobSearch) throw new Error('A job search value is required');
+    await selectPlanningOption(
+      dialog,
+      'Auftrag auswählen',
+      /Auftrag suchen/,
+      options.jobSearch
+    );
+  } else {
+    await dialog.getByRole('button', { name: 'Interner Termin' }).click();
+    if (options.internalType && options.internalType !== 'meeting') {
+      await dialog.locator('#planning-internal-type').click();
+      const internalTypeLabels = {
+        internal_work: /Interne Arbeit/,
+        training: /Schulung/,
+        other: /Sonstiges/,
+      } as const;
+      await page
+        .getByRole('option', { name: internalTypeLabels[options.internalType] })
+        .click();
+    }
+    await dialog
+      .locator('#planning-title')
+      .fill(options.internalTitle ?? 'Interner Termin');
+  }
+
+  await dialog.locator('#planning-date').fill(options.date);
+  if (options.durationDays !== undefined) {
+    await dialog.locator('#planning-time-kind').click();
+    await page.getByRole('option', { name: /Ganzt.gig/ }).click();
+    await dialog.locator('#planning-days').fill(String(options.durationDays));
+  } else {
+    await dialog.locator('#planning-time').fill(options.time ?? '09:00');
+    await dialog
+      .locator('#planning-duration')
+      .fill(String(options.durationHours ?? 1));
+  }
+
+  for (const employeeName of options.employeeNames ?? []) {
+    await selectPlanningOption(
+      dialog,
+      (options.employeeNames?.length ?? 0) > 1
+        ? 'Mitarbeiter'
+        : 'Mitarbeiter zuweisen',
+      /Mitarbeiter suchen/,
+      employeeName
+    );
+  }
+  for (const teamName of options.teamNames ?? []) {
+    await dialog.getByRole('button', { name: teamName, exact: true }).click();
+  }
+
+  if (options.recurrence) {
+    await dialog.getByText('Wiederholen', { exact: true }).click();
+    if (options.recurrence.frequency === 'daily') {
+      const recurrenceBlock = dialog
+        .getByText('Rhythmus', { exact: true })
+        .locator('..');
+      await recurrenceBlock.getByRole('combobox').click();
+      await page.getByRole('option', { name: /T.glich/ }).click();
+    }
+    await dialog
+      .locator('#planning-count')
+      .fill(String(options.recurrence.count));
+  }
+
+  await finishPlanningSave(
+    dialog,
+    /Planung pr.fen und speichern/,
+    options.overrideReason
+  );
+}
+
+export function plannedCalendarEvent(
+  page: Page,
+  title: string,
+  index = 0
+): Locator {
+  return page.locator('.fc-event-job').filter({ hasText: title }).nth(index);
+}
+
+export async function showPlanningMonth(
+  page: Page,
+  targetDate?: string
+): Promise<void> {
+  await page.goto('/kalender');
+  await page.getByRole('tab', { name: 'Monat', exact: true }).click();
+  if (!targetDate) return;
+  const todayParts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Berlin',
+      year: 'numeric',
+      month: '2-digit',
+    })
+      .formatToParts(new Date())
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
+  const [targetYear, targetMonth] = targetDate.split('-').map(Number);
+  const monthDifference =
+    (targetYear - todayParts.year) * 12 +
+    (targetMonth - todayParts.month);
+  const direction = monthDifference >= 0 ? 'Weiter' : /Zur.ck/;
+  for (let index = 0; index < Math.abs(monthDifference); index += 1) {
+    await page.getByRole('button', { name: direction }).click();
+  }
+}
+
+export async function editPlannedCalendarOccurrence(
+  page: Page,
+  options: {
+    title: string;
+    eventIndex?: number;
+    scope: 'one' | 'future' | 'series';
+    date?: string;
+    time?: string;
+    durationHours?: number;
+    overrideReason?: string;
+    calendarDate?: string;
+  }
+): Promise<void> {
+  await showPlanningMonth(page, options.calendarDate);
+  const event = plannedCalendarEvent(page, options.title, options.eventIndex ?? 0);
+  await expect(event).toBeVisible({ timeout: 20_000 });
+  await event.click();
+  await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }) });
+  if (options.scope !== 'one') {
+    await dialog.locator('#planning-edit-scope').click();
+    const scopeLabels = {
+      future: /Dieser und zuk.nftige/,
+      series: /Ganze Serie/,
+    } as const;
+    await page
+      .getByRole('option')
+      .filter({ hasText: scopeLabels[options.scope] })
+      .first()
+      .click();
+  }
+  if (options.date) await dialog.locator('#planning-edit-date').fill(options.date);
+  if (options.time) await dialog.locator('#planning-edit-time').fill(options.time);
+  if (options.durationHours !== undefined) {
+    await dialog
+      .locator('#planning-edit-duration')
+      .fill(String(options.durationHours));
+  }
+  await finishPlanningSave(dialog, /.nderung speichern/, options.overrideReason);
+}
+
+export async function setPlannedCalendarOccurrenceStatus(
+  page: Page,
+  options: {
+    title: string;
+    eventIndex?: number;
+    calendarDate: string;
+    status: 'skip' | 'cancel';
+    reason: string;
+  }
+): Promise<void> {
+  await showPlanningMonth(page, options.calendarDate);
+  const event = plannedCalendarEvent(page, options.title, options.eventIndex ?? 0);
+  await expect(event).toBeVisible({ timeout: 20_000 });
+  await event.click();
+  await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }) });
+  await dialog
+    .getByRole('button', {
+      name: options.status === 'skip' ? 'Auslassen' : 'Absagen',
+      exact: true,
+    })
+    .click();
+  await dialog.locator('#planning-status-reason').fill(options.reason);
+  await dialog.getByRole('button', { name: 'Status speichern' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }

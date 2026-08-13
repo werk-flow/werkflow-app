@@ -208,6 +208,8 @@ If CodeRabbit reports a quota limit:
 
 After each Phase 1 vertical slice, run a CodeRabbit review before the slice is marked complete. The standing prompt for this lives here so it stays current; the product owner may paste it verbatim into a session.
 
+An explicit CodeRabbit workflow supplied by the user for the current task takes precedence over the regular workflow in this document, including its review scope, branch, commit, and publication instructions. Use the regular workflow only for details the custom workflow does not specify, and do not carry custom mechanics from an earlier task into a later one.
+
 Key rules the prompt encodes:
 
 1. **Do not rewrite `.coderabbit.yaml` per review.** The yaml holds durable, repo-wide review behavior only. Touch it only when the slice changed a durable boundary it describes (a new `lib/` domain, a changed role model, a new storage/tenant invariant) — then add or adjust the matching `path_instructions` entry and keep the wording timeless.

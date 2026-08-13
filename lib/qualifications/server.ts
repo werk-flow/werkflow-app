@@ -85,14 +85,18 @@ export async function loadAssignmentEvaluation(input: {
   admin: AdminClient;
   orgId: string;
   jobId?: string | null;
-  selectedUserIds: string[];
+  selectedUserIds?: string[];
+  selectedEmployeeRecordIds?: string[];
   assessedForDate?: string | null;
 }): Promise<
   | { success: true; evaluation: AssignmentEvaluation }
   | { success: false; error: string }
 > {
-  const selectedUserIds = [...new Set(input.selectedUserIds)].sort();
-  if (selectedUserIds.length > 200) {
+  const selectedUserIds = [...new Set(input.selectedUserIds ?? [])].sort();
+  const selectedEmployeeRecordIds = [
+    ...new Set(input.selectedEmployeeRecordIds ?? []),
+  ].sort();
+  if (selectedUserIds.length + selectedEmployeeRecordIds.length > 200) {
     return { success: false, error: 'invalid_input' };
   }
   let assessedForDate = input.assessedForDate || null;
@@ -109,7 +113,12 @@ export async function loadAssignmentEvaluation(input: {
   }
   assessedForDate = assessedForDate || getBusinessTodayIso();
 
-  const [requirementsResult, settingsResult, recordsResult] = await Promise.all([
+  const [
+    requirementsResult,
+    settingsResult,
+    selectedRecordsResult,
+    selectedUsersResult,
+  ] = await Promise.all([
     input.jobId
       ? input.admin
           .from('job_capability_requirements')
@@ -124,6 +133,14 @@ export async function loadAssignmentEvaluation(input: {
       .select('apprentice_warning_enabled')
       .eq('organization_id', input.orgId)
       .maybeSingle(),
+    selectedEmployeeRecordIds.length > 0
+      ? input.admin
+          .from('employee_records')
+          .select('id, user_id, first_name, last_name')
+          .eq('organization_id', input.orgId)
+          .in('id', selectedEmployeeRecordIds)
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
     selectedUserIds.length > 0
       ? input.admin
           .from('employee_records')
@@ -134,20 +151,36 @@ export async function loadAssignmentEvaluation(input: {
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  if (requirementsResult.error || settingsResult.error || recordsResult.error) {
+  if (
+    requirementsResult.error ||
+    settingsResult.error ||
+    selectedRecordsResult.error ||
+    selectedUsersResult.error
+  ) {
     console.error(
       'Failed to load assignment qualification context:',
-      requirementsResult.error ?? settingsResult.error ?? recordsResult.error
+      requirementsResult.error ??
+        settingsResult.error ??
+        selectedRecordsResult.error ??
+        selectedUsersResult.error
     );
     return { success: false, error: 'load_failed' };
   }
 
-  const employeeRows = (recordsResult.data ?? []).filter(
-    (row): row is typeof row & { user_id: string } => row.user_id !== null
-  );
+  const employeeRows = [
+    ...new Map(
+      [
+        ...(selectedRecordsResult.data ?? []),
+        ...(selectedUsersResult.data ?? []),
+      ].map((row) => [row.id, row])
+    ).values(),
+  ];
+  const returnedRecordIds = new Set(employeeRows.map((row) => row.id));
   const returnedUserIds = new Set(employeeRows.map((row) => row.user_id));
   if (
-    returnedUserIds.size !== selectedUserIds.length ||
+    selectedEmployeeRecordIds.some(
+      (recordId) => !returnedRecordIds.has(recordId)
+    ) ||
     selectedUserIds.some((userId) => !returnedUserIds.has(userId))
   ) {
     return { success: false, error: 'member_not_found' };
@@ -198,11 +231,14 @@ export async function loadAssignmentEvaluation(input: {
             .order('valid_from', { ascending: false })
             .limit(501)
         : Promise.resolve({ data: [], error: null }),
-      selectedUserIds.length > 0
+      employeeRows.some((row) => row.user_id !== null)
         ? input.admin
             .from('profiles')
             .select('id, first_name, last_name')
-            .in('id', selectedUserIds)
+            .in(
+              'id',
+              employeeRows.flatMap((row) => (row.user_id ? [row.user_id] : []))
+            )
             .order('id', { ascending: true })
             .limit(200)
         : Promise.resolve({ data: [], error: null }),

@@ -178,7 +178,21 @@ export type DerivedProjectStatus = {
 // ============================================
 
 export type CalendarJob = {
+  /** Unique calendar-row key; planning-backed rows use the occurrence ID. */
   id: string;
+  occurrenceId?: string;
+  jobId?: string | null;
+  seriesId?: string | null;
+  seriesLineageId?: string | null;
+  entryKind?: 'job_visit' | 'internal';
+  internalType?: 'internal_work' | 'meeting' | 'training' | 'other' | null;
+  timeKind?: 'timed' | 'all_day';
+  startAt?: string | null;
+  endAt?: string | null;
+  endDateExclusive?: string | null;
+  isException?: boolean;
+  version?: number;
+  assignedEmployeeRecordIds?: string[];
   jobNumber: string | null;
   title: string;
   status: JobStatus;

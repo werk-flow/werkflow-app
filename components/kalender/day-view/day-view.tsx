@@ -118,10 +118,7 @@ interface DayViewProps {
   onUpdateJob?: (
     jobId: string,
     input: Parameters<typeof updateJob>[1]
-  ) => Promise<
-    | Awaited<ReturnType<typeof updateJob>>
-    | { success: false; error: 'qualification_declined' }
-  >;
+  ) => Promise<{ success: true } | { success: false; error: string }>;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   onJobSuccess?: () => void | Promise<void>;
   changeRequestMap?: EntryChangeRequestMap;
@@ -1835,6 +1832,7 @@ export function DayView({
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}
+          canEditPlanning={isAdminOrManager}
         />
       )}
 

@@ -109,6 +109,20 @@ Ownership rule: sites, contacts, manual follow-ups, and communication guidance b
 
 Projects can have derived state based on child jobs unless manually overridden. Jobs can be scheduled, assigned, parked, completed, and connected to customers and time entries.
 
+## Planning Domain (P1-11)
+
+Planning coordinates work without becoming a second job, employee, absence, or time system.
+
+- `planning_series` stores a bounded recurrence definition and durable segment lineage. Splitting `diese und zukünftige` closes the prior segment and creates a successor with the same lineage; past and already-started occurrences are never rewritten.
+- `planning_occurrences` stores materialized one-off and recurring visits. Recurring identity is the organization, lineage, and original Europe/Berlin local start, so horizon extension is idempotent even across DST. The row carries planned instants/status; job visits reference one authoritative job, while internal entries alone own a bounded title/description/type.
+- `creation_request_id` on `planning_series` and `planning_occurrences` binds a client-generated creation key to one organization-scoped result. The atomic create RPC takes an advisory lock on organization plus key and returns the existing series/occurrence ids on a retry, so a lost response cannot duplicate work.
+- `planning_occurrence_assignments` links occurrences to stable `employee_records`, not only login-bearing memberships. This controls planning visibility. `job_assignments` remain the authority for ongoing job responsibility and field access.
+- `planning_occurrence_assessments` records attributable, fingerprinted capacity/qualification snapshots and any explicit manager override reason. `planning_events` is the append-only lifecycle ledger for creation, edits, series splits/reschedules, materialization, skip, and cancellation.
+- Capacity is derived at action time from date-effective schedules/fallbacks, holidays, closure days, approved and provisional absence, and interval overlap. It is not a stored employee-capacity balance. Qualification and team expansion likewise resolve for each occurrence date.
+- The legacy job planning columns remain a compatibility projection during this phase. Planning RPCs update the occurrence source and projection atomically; a bridge keeps older job mutations additive. Actual `time_entries` are never changed by planning operations.
+
+Operational planning tables are organization-scoped. Manager roles can read organization planning; employees can read only assigned occurrences and their own assignment rows. Assessment/event ledgers are manager-only. All writes use narrowly granted service-role RPCs with database-side organization, membership, source-ownership, and state validation.
+
 ## Time Domain
 
 Time tracking is event-based.

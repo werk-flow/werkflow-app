@@ -32,8 +32,11 @@ Relevant foundations already exist:
 - contextual documents and photos;
 - inventory planning and physical take/return flows;
 - basic tool/asset infrastructure inside inventory.
+- recurring, multi-day, and multi-visit calendar occurrences with explainable employee capacity and series exceptions (`P1-11`).
 
 These foundations should be reused. A future service feature should not create parallel customer, job, time, document, or inventory systems.
+
+`P1-11` does not introduce maintenance plans, contracts, installed-equipment recurrence, or automatic job generation. It supplies the generic occurrence/series planning primitive that those future service-owned records can feed once their lifecycle and source-of-truth contract is decided.
 
 ## Phase 1 — Complete Operational Core
 

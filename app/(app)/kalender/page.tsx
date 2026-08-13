@@ -10,7 +10,8 @@ import {
   getCachedUser,
 } from '@/lib/data/cached';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
-import { getJobsForCalendar } from '@/lib/jobs/actions';
+import { getPlanningEntries } from '@/lib/planning/actions';
+import { toCalendarJob } from '@/lib/planning/view-model';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
@@ -61,7 +62,7 @@ async function KalenderData({
         to: dayEnd.toISOString()
       }),
       fetchMembers(),
-      getJobsForCalendar(fromIso, toIso),
+      getPlanningEntries(fromIso, toIso),
       getCachedOrganizationSettings(activeOrgId),
       getCachedOrganizationCalendar(activeOrgId),
     ]);
@@ -76,7 +77,11 @@ async function KalenderData({
       organizationSettings={organizationSettings}
       holidayCalendar={holidayCalendar}
       initialEntries={entriesResult.success ? entriesResult.entries : undefined}
-      initialJobs={jobsResult.success ? jobsResult.jobs : undefined}
+      initialJobs={
+        jobsResult.success
+          ? jobsResult.entries.map(toCalendarJob)
+          : undefined
+      }
     />
   );
 }

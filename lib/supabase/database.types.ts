@@ -3318,6 +3318,438 @@ export type Database = {
         }
         Relationships: []
       }
+      planning_events: {
+        Row: {
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          mutation_scope: string
+          occurrence_id: string | null
+          organization_id: string
+          reason: string | null
+          series_id: string | null
+        }
+        Insert: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          mutation_scope: string
+          occurrence_id?: string | null
+          organization_id: string
+          reason?: string | null
+          series_id?: string | null
+        }
+        Update: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          mutation_scope?: string
+          occurrence_id?: string | null
+          organization_id?: string
+          reason?: string | null
+          series_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_events_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_events_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "planning_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_occurrence_assessments: {
+        Row: {
+          capacity_fingerprint: string
+          capacity_snapshot: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          occurrence_id: string
+          organization_id: string
+          override_reason: string | null
+          qualification_fingerprint: string
+          qualification_snapshot: Json
+          selected_employee_record_ids: string[]
+          team_source_ids: string[]
+        }
+        Insert: {
+          capacity_fingerprint: string
+          capacity_snapshot?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          occurrence_id: string
+          organization_id: string
+          override_reason?: string | null
+          qualification_fingerprint: string
+          qualification_snapshot?: Json
+          selected_employee_record_ids?: string[]
+          team_source_ids?: string[]
+        }
+        Update: {
+          capacity_fingerprint?: string
+          capacity_snapshot?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          occurrence_id?: string
+          organization_id?: string
+          override_reason?: string | null
+          qualification_fingerprint?: string
+          qualification_snapshot?: Json
+          selected_employee_record_ids?: string[]
+          team_source_ids?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_occurrence_assessments_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrence_assessments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_occurrence_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          employee_record_id: string
+          id: string
+          occurrence_id: string
+          organization_id: string
+          team_source_id: string | null
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          employee_record_id: string
+          id?: string
+          occurrence_id: string
+          organization_id: string
+          team_source_id?: string | null
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          employee_record_id?: string
+          id?: string
+          occurrence_id?: string
+          organization_id?: string
+          team_source_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_occurrence_assignments_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrence_assignments_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrence_assignments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrence_assignments_team_source_id_fkey"
+            columns: ["team_source_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_occurrences: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          creation_request_id: string | null
+          description: string | null
+          dst_resolution: string
+          end_at: string | null
+          end_date_exclusive: string | null
+          entry_kind: Database["public"]["Enums"]["planning_entry_kind"]
+          id: string
+          internal_type:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          is_exception: boolean
+          job_id: string | null
+          legacy_source_job_id: string | null
+          location: string | null
+          organization_id: string
+          original_start_local: string | null
+          series_id: string | null
+          series_lineage_id: string | null
+          start_at: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["planning_occurrence_status"]
+          time_kind: Database["public"]["Enums"]["planning_time_kind"]
+          timezone: string
+          title: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          description?: string | null
+          dst_resolution?: string
+          end_at?: string | null
+          end_date_exclusive?: string | null
+          entry_kind: Database["public"]["Enums"]["planning_entry_kind"]
+          id?: string
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          is_exception?: boolean
+          job_id?: string | null
+          legacy_source_job_id?: string | null
+          location?: string | null
+          organization_id: string
+          original_start_local?: string | null
+          series_id?: string | null
+          series_lineage_id?: string | null
+          start_at?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["planning_occurrence_status"]
+          time_kind: Database["public"]["Enums"]["planning_time_kind"]
+          timezone?: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          description?: string | null
+          dst_resolution?: string
+          end_at?: string | null
+          end_date_exclusive?: string | null
+          entry_kind?: Database["public"]["Enums"]["planning_entry_kind"]
+          id?: string
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          is_exception?: boolean
+          job_id?: string | null
+          legacy_source_job_id?: string | null
+          location?: string | null
+          organization_id?: string
+          original_start_local?: string | null
+          series_id?: string | null
+          series_lineage_id?: string | null
+          start_at?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["planning_occurrence_status"]
+          time_kind?: Database["public"]["Enums"]["planning_time_kind"]
+          timezone?: string
+          title?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_occurrences_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrences_legacy_source_job_id_fkey"
+            columns: ["legacy_source_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_occurrences_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "planning_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_series: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          creation_request_id: string | null
+          description: string | null
+          duration_days: number | null
+          duration_minutes: number | null
+          entry_kind: Database["public"]["Enums"]["planning_entry_kind"]
+          generated_through_local: string | null
+          id: string
+          internal_type:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          job_id: string | null
+          lineage_id: string
+          location: string | null
+          month_day: number | null
+          occurrence_count: number | null
+          organization_id: string
+          previous_series_id: string | null
+          recurrence_frequency: string
+          recurrence_interval: number
+          segment_end_before_local: string | null
+          segment_start_local: string
+          starts_at_local: string
+          time_kind: Database["public"]["Enums"]["planning_time_kind"]
+          timezone: string
+          title: string | null
+          until_local_date: string | null
+          updated_at: string
+          updated_by: string | null
+          weekdays: number[] | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          description?: string | null
+          duration_days?: number | null
+          duration_minutes?: number | null
+          entry_kind: Database["public"]["Enums"]["planning_entry_kind"]
+          generated_through_local?: string | null
+          id?: string
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          job_id?: string | null
+          lineage_id?: string
+          location?: string | null
+          month_day?: number | null
+          occurrence_count?: number | null
+          organization_id: string
+          previous_series_id?: string | null
+          recurrence_frequency: string
+          recurrence_interval?: number
+          segment_end_before_local?: string | null
+          segment_start_local: string
+          starts_at_local: string
+          time_kind: Database["public"]["Enums"]["planning_time_kind"]
+          timezone?: string
+          title?: string | null
+          until_local_date?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          weekdays?: number[] | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          description?: string | null
+          duration_days?: number | null
+          duration_minutes?: number | null
+          entry_kind?: Database["public"]["Enums"]["planning_entry_kind"]
+          generated_through_local?: string | null
+          id?: string
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null
+          job_id?: string | null
+          lineage_id?: string
+          location?: string | null
+          month_day?: number | null
+          occurrence_count?: number | null
+          organization_id?: string
+          previous_series_id?: string | null
+          recurrence_frequency?: string
+          recurrence_interval?: number
+          segment_end_before_local?: string | null
+          segment_start_local?: string
+          starts_at_local?: string
+          time_kind?: Database["public"]["Enums"]["planning_time_kind"]
+          timezone?: string
+          title?: string | null
+          until_local_date?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          weekdays?: number[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_series_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_series_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_series_previous_series_id_fkey"
+            columns: ["previous_series_id"]
+            isOneToOne: false
+            referencedRelation: "planning_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -4109,6 +4541,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_planning_entry_materialized: {
+        Args: {
+          p_actor_id: string
+          p_assignments: Json
+          p_capacity_fingerprint?: string
+          p_capacity_snapshot?: Json
+          p_idempotency_key: string
+          p_occurrences: Json
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint?: string
+          p_qualification_snapshot?: Json
+          p_series: Json
+        }
+        Returns: string[]
+      }
       create_responsibility_delegation: {
         Args: {
           p_actor_id: string
@@ -4121,6 +4569,22 @@ export type Database = {
           p_valid_until: string
         }
         Returns: string
+      }
+      extend_planning_series_materialization: {
+        Args: {
+          p_actor_id: string
+          p_assignments: Json
+          p_capacity_fingerprint?: string
+          p_capacity_snapshot?: Json
+          p_expected_generated_through_local: string
+          p_occurrences: Json
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint?: string
+          p_qualification_snapshot?: Json
+          p_series_id: string
+        }
+        Returns: string[]
       }
       end_responsibility_delegation: {
         Args: {
@@ -4297,6 +4761,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      reschedule_planning_series: {
+        Args: {
+          p_actor_id: string
+          p_assignments: Json
+          p_capacity_fingerprint: string
+          p_capacity_snapshot: Json
+          p_expected_version: number
+          p_occurrence_id: string
+          p_occurrences: Json
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint: string
+          p_qualification_snapshot: Json
+          p_scope: string
+          p_series: Json
+        }
+        Returns: string[]
+      }
       save_client_communication_settings: {
         Args: {
           p_accessibility_note: string
@@ -4365,6 +4847,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_planning_occurrence_status: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_occurrence_id: string
+          p_organization_id: string
+          p_reason: string
+          p_status: Database["public"]["Enums"]["planning_occurrence_status"]
+        }
+        Returns: number
+      }
       transition_client_follow_up: {
         Args: {
           p_actor_id: string
@@ -4401,6 +4894,22 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_planning_occurrence: {
+        Args: {
+          p_actor_id: string
+          p_assignments: Json
+          p_capacity_fingerprint: string
+          p_capacity_snapshot: Json
+          p_expected_version: number
+          p_occurrence: Json
+          p_occurrence_id: string
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint: string
+          p_qualification_snapshot: Json
+        }
+        Returns: number
       }
       update_client_follow_up: {
         Args: {
@@ -4453,6 +4962,10 @@ export type Database = {
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt"
       org_role: "admin" | "buero" | "employee"
       organization_responsibility: "time_approval" | "leave_approval"
+      planning_entry_kind: "job_visit" | "internal"
+      planning_internal_type: "internal_work" | "meeting" | "training" | "other"
+      planning_occurrence_status: "scheduled" | "skipped" | "cancelled"
+      planning_time_kind: "timed" | "all_day"
       project_status:
         | "nicht_begonnen"
         | "in_bearbeitung"
@@ -4616,6 +5129,10 @@ export const Constants = {
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
       org_role: ["admin", "buero", "employee"],
       organization_responsibility: ["time_approval", "leave_approval"],
+      planning_entry_kind: ["job_visit", "internal"],
+      planning_internal_type: ["internal_work", "meeting", "training", "other"],
+      planning_occurrence_status: ["scheduled", "skipped", "cancelled"],
+      planning_time_kind: ["timed", "all_day"],
       project_status: [
         "nicht_begonnen",
         "in_bearbeitung",

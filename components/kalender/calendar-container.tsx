@@ -18,12 +18,17 @@ import {
   reassignEntryBatch
 } from '@/lib/time-tracking/actions';
 import {
-  getJobsForCalendar,
   getParkedJobs,
   updateJob as updateJobAction,
   updateJobStatus,
   type UpdateJobInput,
 } from '@/lib/jobs/actions';
+import {
+  getPlanningEntries,
+  updatePlanningCalendarEntry,
+  type UpdatePlanningCalendarInput,
+} from '@/lib/planning/actions';
+import { toCalendarJob } from '@/lib/planning/view-model';
 import { useQualificationWarningConfirmation } from '@/components/auftraege/qualification-warning-dialog';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -31,6 +36,7 @@ import { ParkplatzPanel } from './parkplatz-panel';
 import { clearCalendarDragState } from './drag-state';
 import { ActionBanner, type ActionBannerState } from './day-view/undo-banner';
 import { cn } from '@/lib/utils';
+import { usePlanningWarningConfirmation } from './planning-warning-dialog';
 
 const EntryDetailsDialog = dynamic(
   () => import('./entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
@@ -124,8 +130,55 @@ export function CalendarContainer({
   const router = useRouter();
   const { requestApproval, warningDialog } =
     useQualificationWarningConfirmation();
+  const {
+    requestApproval: requestPlanningApproval,
+    warningDialog: planningWarningDialog,
+  } = usePlanningWarningConfirmation();
   const updateJob = useCallback(
     async (jobId: string, input: UpdateJobInput) => {
+      const planningEntry = calendarJobsRef.current.find(
+        (entry) => entry.id === jobId && entry.occurrenceId
+      );
+      if (planningEntry) {
+        const planningInput: UpdatePlanningCalendarInput = {
+          plannedDate: input.plannedDate || undefined,
+          plannedTime: input.plannedTime || undefined,
+          estimatedDurationMinutes: input.estimatedDurationMinutes,
+          selectedUserIds: input.selectedUserIds,
+        };
+        let result = await updatePlanningCalendarEntry(
+          planningEntry.occurrenceId!,
+          planningInput
+        );
+        if (
+          !result.success &&
+          (result.error === 'planning_warning' ||
+            result.error === 'stale_assessment') &&
+          'conflicts' in result &&
+          result.conflicts &&
+          result.fingerprint
+        ) {
+          realtimePausedUntilRef.current = Date.now() + 120_000;
+          const approval = await requestPlanningApproval(
+            result.conflicts,
+            result.fingerprint
+          );
+          if (!approval) {
+            realtimePausedUntilRef.current = Date.now() + 1000;
+            return { success: false as const, error: 'qualification_declined' };
+          }
+          realtimePausedUntilRef.current = Date.now() + 8000;
+          result = await updatePlanningCalendarEntry(
+            planningEntry.occurrenceId!,
+            {
+              ...planningInput,
+              overrideReason: approval.reason,
+              assessmentFingerprint: approval.fingerprint,
+            }
+          );
+        }
+        return result;
+      }
       let result = await updateJobAction(jobId, input);
       if (
         !result.success &&
@@ -156,7 +209,7 @@ export function CalendarContainer({
       }
       return result;
     },
-    [requestApproval]
+    [requestApproval, requestPlanningApproval]
   );
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>('day');
@@ -497,7 +550,7 @@ export function CalendarContainer({
       const fromIso = toLocalDateString(start);
       const toIso = toLocalDateString(end);
 
-      const result = await getJobsForCalendar(fromIso, toIso);
+      const result = await getPlanningEntries(fromIso, toIso);
       if (result.success) {
         if (
           jobsRequestIdRef.current !== requestId ||
@@ -505,7 +558,7 @@ export function CalendarContainer({
         ) {
           return;
         }
-        setCalendarJobs(result.jobs);
+        setCalendarJobs(result.entries.map(toCalendarJob));
       }
     } catch (error) {
       console.error('Error fetching calendar jobs:', error);
@@ -696,6 +749,18 @@ export function CalendarContainer({
     scheduleJobsRefresh();
   });
   useRealtimeEvent('job_assignments', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
+  });
+  useRealtimeEvent('planning_series', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
+  });
+  useRealtimeEvent('planning_occurrences', () => {
+    if (Date.now() < realtimePausedUntilRef.current) return;
+    scheduleJobsRefresh();
+  });
+  useRealtimeEvent('planning_occurrence_assignments', () => {
     if (Date.now() < realtimePausedUntilRef.current) return;
     scheduleJobsRefresh();
   });
@@ -983,6 +1048,21 @@ export function CalendarContainer({
     clearCalendarDragState();
     const job = calendarJobsRef.current.find((j) => j.id === jobId);
     if (!job) return;
+    const authoritativeJobId = job.jobId ?? (job.occurrenceId ? null : job.id);
+    if (!authoritativeJobId) {
+      setParkplatzBanner({
+        id: ++parkplatzBannerSeqRef.current,
+        variant: 'error',
+        message: 'Interne Termine werden abgesagt oder verschoben, nicht geparkt.',
+      });
+      return;
+    }
+    const parkedJob: CalendarJob = {
+      ...job,
+      id: authoritativeJobId,
+      occurrenceId: undefined,
+      jobId: authoritativeJobId,
+    };
 
     const origDate = job.plannedDate;
     const origTime = job.plannedTime;
@@ -990,7 +1070,7 @@ export function CalendarContainer({
 
     handleOperationStart();
     setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-    setParkedJobs((prev) => [...prev, { ...job, plannedDate: null, plannedTime: null, status: 'geparkt' }]);
+    setParkedJobs((prev) => [...prev, { ...parkedJob, plannedDate: null, plannedTime: null, status: 'geparkt' }]);
 
     const undone = { current: false };
 
@@ -1001,19 +1081,27 @@ export function CalendarContainer({
       onUndo: async () => {
         undone.current = true;
         handleOperationStart();
-        setParkedJobs((prev) => prev.filter((j) => j.id !== jobId));
+        setParkedJobs((prev) => prev.filter((j) => j.id !== authoritativeJobId));
         setCalendarJobs((prev) => [...prev, { ...job, plannedDate: origDate, plannedTime: origTime, status: origStatus }]);
-        await updateJobStatus(jobId, origStatus);
-        await updateJob(jobId, { plannedDate: origDate ?? '', plannedTime: origTime ?? '' });
+        await updateJobStatus(authoritativeJobId, origStatus);
+        await (job.occurrenceId
+          ? updatePlanningCalendarEntry(job.occurrenceId, {
+              plannedDate: origDate ?? undefined,
+              plannedTime: origTime ?? undefined,
+            })
+          : updateJobAction(authoritativeJobId, {
+              plannedDate: origDate ?? '',
+              plannedTime: origTime ?? '',
+            }));
         handleSilentRefresh();
       },
     });
 
-    const result = await updateJobStatus(jobId, 'geparkt');
+    const result = await updateJobStatus(authoritativeJobId, 'geparkt');
     if (undone.current) { handleSilentRefresh(); return; }
 
     if (!result.success) {
-      setParkedJobs((prev) => prev.filter((j) => j.id !== jobId));
+      setParkedJobs((prev) => prev.filter((j) => j.id !== authoritativeJobId));
       setCalendarJobs((prev) => [...prev, job]);
       setParkplatzBanner({
         id: ++parkplatzBannerSeqRef.current,
@@ -1023,7 +1111,7 @@ export function CalendarContainer({
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh]);
 
   const handleUnparkJob = useCallback(async (
     jobId: string,
@@ -1776,6 +1864,7 @@ export function CalendarContainer({
         />
       )}
       {warningDialog}
+      {planningWarningDialog}
     </div>
   );
 }

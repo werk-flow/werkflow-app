@@ -854,6 +854,7 @@ export function WeekView({
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}
+          canEditPlanning={isAdminOrManager}
         />
       )}
     </div>

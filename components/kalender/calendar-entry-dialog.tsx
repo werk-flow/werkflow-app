@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Briefcase, Clock } from 'lucide-react';
+import { Briefcase, CalendarPlus, Clock } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,7 @@ import type {
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarEntryDraft } from './calendar-entry-draft';
+import { PlanningEntryForm } from './planning-entry-form';
 
 type CalendarEntryDialogData = {
   clients: Client[];
@@ -147,7 +148,11 @@ export function CalendarEntryDialog({
       activeTabRef.current = nextTab;
       setActiveTab(nextTab);
       onDraftChange?.(
-        nextTab === 'job' ? jobDraftRef.current : manualDraftRef.current
+        nextTab === 'job'
+          ? jobDraftRef.current
+          : nextTab === 'entry'
+            ? manualDraftRef.current
+            : null
       );
     },
     [onDraftChange]
@@ -256,10 +261,13 @@ export function CalendarEntryDialog({
   }, [activeOrgId, hydrateDialogData, isAdminOrManager]);
 
   useEffect(() => {
-    if (!open || !activeOrgId || !isAdminOrManager) return;
-    activeTabRef.current = 'job';
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the creation tab
-    setActiveTab('job');
+    if (!open || !activeOrgId) return;
+    const initialTab = lockEntryMode || !isAdminOrManager ? 'entry' : 'planning';
+    activeTabRef.current = initialTab;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the dialog should always start on the role-appropriate creation tab
+    setActiveTab(initialTab);
+
+    if (!isAdminOrManager) return;
 
     if (dialogDataCache.has(activeOrgId)) {
       return;
@@ -270,7 +278,7 @@ export function CalendarEntryDialog({
     }, 0);
 
     return () => window.clearTimeout(hydrateTimer);
-  }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
+  }, [activeOrgId, hydrateDialogData, isAdminOrManager, lockEntryMode, open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -281,12 +289,19 @@ export function CalendarEntryDialog({
         <DialogHeader>
           <DialogTitle>Kalendereintrag erstellen</DialogTitle>
           <DialogDescription>
-            Erstelle einen neuen Auftrag oder eine manuelle Zeiterfassung.
+            Plane einen Termin, erstelle einen Auftrag oder erfasse tatsächliche
+            Arbeitszeit.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={handleActiveTabChange}>
           <TabsList className="w-full">
+            {isAdminOrManager && (
+              <TabsTrigger value="planning" className="flex-1 gap-1.5">
+                <CalendarPlus className="h-3.5 w-3.5" />
+                Termin planen
+              </TabsTrigger>
+            )}
             <TabsTrigger value="job" className="flex-1 gap-1.5">
               <Briefcase className="h-3.5 w-3.5" />
               Auftrag erstellen
@@ -296,6 +311,20 @@ export function CalendarEntryDialog({
               Manuelle Eintragung
             </TabsTrigger>
           </TabsList>
+
+          {isAdminOrManager && (
+            <TabsContent value="planning">
+              <PlanningEntryForm
+                defaultDate={preselectedDate}
+                defaultTime={preselectedClockInTime}
+                defaultUserId={preselectedUserId}
+                onSuccess={async () => {
+                  onOpenChange(false);
+                  await onJobSuccess?.();
+                }}
+              />
+            </TabsContent>
+          )}
 
           {isLoadingData && !dialogData && (
             <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

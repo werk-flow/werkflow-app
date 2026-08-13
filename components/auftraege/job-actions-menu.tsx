@@ -36,6 +36,10 @@ import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
 import {
+  JOB_DELETE_FAILED_MESSAGE,
+  JOB_DELETE_HISTORY_MESSAGE,
+} from '@/lib/jobs/messages';
+import {
   getJobDisplayTitle,
   JOB_STATUS_LABELS,
   JOB_STATUS_ORDER,
@@ -134,7 +138,11 @@ export function JobActionsMenu({
         router.push(`/auftraege?deleted_job=${encodeURIComponent(displayTitle)}`);
       }
     } else {
-      setError(result.error || 'Fehler beim Löschen des Auftrags');
+      setError(
+        result.error === 'planning_history_exists'
+          ? JOB_DELETE_HISTORY_MESSAGE
+          : JOB_DELETE_FAILED_MESSAGE
+      );
       setIsDeleting(false);
     }
   };
@@ -196,7 +204,13 @@ export function JobActionsMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) setError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Auftrag löschen?</AlertDialogTitle>
@@ -210,7 +224,7 @@ export function JobActionsMenu({
               werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

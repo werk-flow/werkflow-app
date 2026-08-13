@@ -51,6 +51,9 @@ export type RealtimeTable =
   | 'jobs'
   | 'projects'
   | 'job_assignments'
+  | 'planning_series'
+  | 'planning_occurrences'
+  | 'planning_occurrence_assignments'
   | 'job_instruction_items'
   | 'document_folders'
   | 'documents'
@@ -116,6 +119,9 @@ const TABLES: RealtimeTable[] = [
   'jobs',
   'projects',
   'job_assignments',
+  'planning_series',
+  'planning_occurrences',
+  'planning_occurrence_assignments',
   'job_instruction_items',
   'document_folders',
   'documents',
@@ -574,6 +580,39 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('job_instruction_items', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_series',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_series', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_occurrences',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_occurrences', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_occurrence_assignments',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_occurrence_assignments', p)
         )
         .on(
           'postgres_changes',

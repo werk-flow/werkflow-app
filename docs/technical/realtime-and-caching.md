@@ -75,6 +75,9 @@ The provider subscribes to tables that affect active operational views, includin
 - `projects`
 - `job_assignments`
 - `job_instruction_items`
+- `planning_series`
+- `planning_occurrences`
+- `planning_occurrence_assignments`
 
 Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
 
@@ -85,6 +88,8 @@ The three P1-05 responsibility tables, the P1-06 `vacation_requests` table, and 
 P1-07's unified attention counts replace the former time-only pending-approval pipeline: `components/realtime/attention-count-provider.tsx` is the ONE counting pipeline behind the sidebar badges (Aufgaben = actionable + unread, Zeiterfassung = approvals), the Anträge tab badge, and the member quick stats. It refreshes on `time_entries`, `entry_change_requests`, `vacation_requests`, `sickness_reports` (P1-08), `client_requests`, `client_follow_ups` (P1-10), `attention_read_states`, and the responsibility tables, debounced with a generation guard and keep-last-known behavior. The `/aufgaben` surface itself refetches on the same events. Attention data is deliberately NOT `unstable_cache`d and has no cache tag: every read is a live action query derived from the owning domains, because a stale "nothing to do" claim is worse than the query cost, and the expensive loaders early-return when their pending sets are empty (the steady state).
 
 P1-10 adds `client_follow_ups`, `client_communication_settings`, and `client_communication_preferences` to the operational publication/provider contract with replica identity full. Their append-only event tables stay unpublished. Customer detail route refreshes also listen to the previously published `client_contacts`, `client_sites`, and `client_requests` callbacks; P1-10 fixed the pre-existing gap where those tables existed in the central provider but the generic router-refresh hook never registered them. Follow-up events refresh the unified attention-count provider and `/aufgaben`; preference/settings changes refresh the customer relationship view. The resolver remains a live bounded action query and invalidates the existing organization client tag after writes; no generic timeline cache or copied timeline table exists.
+
+P1-11 publishes `planning_series`, `planning_occurrences`, and `planning_occurrence_assignments`, all with replica identity full, because schedule and assignment coordination must update active calendars across users. The router-refresh hook batches those callbacks with the existing job/assignment refresh path. Append-only `planning_occurrence_assessments` and `planning_events` remain unpublished: their manager-only history is loaded deliberately rather than producing duplicate refreshes for every atomic planning mutation. A single mutation can touch a series, several occurrences, assignments, assessments, the legacy job projection, and its job assignments; provider debouncing is therefore part of the correctness/performance contract rather than optional polish.
 
 ## Refresh Patterns
 

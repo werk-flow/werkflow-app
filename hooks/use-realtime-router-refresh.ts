@@ -127,6 +127,15 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('job_assignments', (event) => {
     if (tableSet.has('job_assignments')) scheduleRefresh(event);
   });
+  useRealtimeEvent('planning_series', (event) => {
+    if (tableSet.has('planning_series')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('planning_occurrences', (event) => {
+    if (tableSet.has('planning_occurrences')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('planning_occurrence_assignments', (event) => {
+    if (tableSet.has('planning_occurrence_assignments')) scheduleRefresh(event);
+  });
   useRealtimeEvent('teams', (event) => {
     if (tableSet.has('teams')) scheduleRefresh(event);
   });

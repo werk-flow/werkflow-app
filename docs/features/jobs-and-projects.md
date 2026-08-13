@@ -50,6 +50,8 @@ The following behavior exists today and is the baseline future work must preserv
 - Managers retain control over work creation, editing, assignment, status changes, and deletion.
 - Since `P1-09`, managers can attach organization-curated skill/certification requirements to a job. The job detail explains whether the selected people cover each requirement (`covered`, internally unconfirmed, expired, not yet valid, or missing) and attributes the strongest matching person. Assignment changes across create, edit, detail, and calendar paths are assessed atomically on the planned date; uncovered selections remain possible only through a reasoned, fingerprinted assessment record. Requirements guide planning and do not claim legal authorization.
 - Calendar views consume job dates, times, duration, customer/location context, project context, priority, status, and employee assignments. Parked jobs are excluded from scheduled calendar work.
+- **Occurrence planning (P1-11):** one job can have several planned visits without duplicating the job. Job visits reference the job as the source of work identity and customer/location context; recurring planning materializes occurrences, not synthetic jobs. The compatibility projection keeps the job's legacy planned date/time/duration and `job_assignments` aligned with its current visit plan so existing list/detail/field-access flows continue to work. Planned occurrences and actual job-linked time remain separate.
+- Once a job has durable planning occurrences or event history, hard deletion is refused with a clear manager-facing explanation. The append-only planning ledger is not silently erased through a cascade; archival/retention and any eventual deletion workflow require an explicit downstream product decision.
 
 ### Instructions, Time, Documents, And Materials
 
@@ -66,7 +68,7 @@ The following behavior exists today and is the baseline future work must preserv
 - The status model does not yet express blocked reasons, dependencies, readiness gates, customer waiting states, or separate completion and handover.
 - Instruction items are useful checklists, not a complete task/dependency system or reusable template library.
 - Site diaries, structured measurements, defects, change-work records, formal approvals, handover packages, and customer signatures are not implemented as dedicated operational artifacts.
-- Planned-versus-actual comparison is spread across job planning, time entries, and material records; there is no complete operational variance or profitability view.
+- Planned-versus-actual comparison now has a reliable visit-level planning source (`P1-11`) and separate actual time records, but there is still no complete operational variance or profitability view.
 - Structured offers, contracts, invoices, payments, and accounting remain outside the current implementation.
 - The web app does not yet provide a defined offline job pack or the planned unified React Native employee experience.
 

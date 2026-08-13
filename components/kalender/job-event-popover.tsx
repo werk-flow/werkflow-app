@@ -1,18 +1,22 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
   Building2,
+  CalendarDays,
+  Clock,
   MapPin,
   Users,
+  Repeat2,
   ExternalLink,
   X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   nicht_bearbeitet: {
@@ -52,16 +56,19 @@ interface JobEventPopoverProps {
   position: { x: number; y: number };
   onClose: () => void;
   memberNames?: Record<string, string>;
+  canEditPlanning?: boolean;
 }
 
 export function JobEventPopover({
   job,
   position,
   onClose,
-  memberNames = {}
+  memberNames = {},
+  canEditPlanning = false,
 }: JobEventPopoverProps) {
   const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -83,11 +90,13 @@ export function JobEventPopover({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      if (editOpen) return;
       if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose();
       }
     };
     const handleEscape = (e: KeyboardEvent) => {
+      if (editOpen) return;
       if (e.key === 'Escape') onClose();
     };
 
@@ -97,14 +106,16 @@ export function JobEventPopover({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [onClose]);
+  }, [editOpen, onClose]);
 
   const statusInfo = STATUS_LABELS[job.status] ?? STATUS_LABELS.nicht_bearbeitet;
   const priorityInfo = PRIORITY_LABELS[job.priority] ?? PRIORITY_LABELS.mittel;
 
-  const jobUrl = job.projectNumber
-    ? `/auftraege/projekt/${job.projectNumber}/${job.jobNumber}`
-    : `/auftraege/${job.jobNumber}`;
+  const jobUrl = job.jobNumber
+    ? job.projectNumber
+      ? `/auftraege/projekt/${job.projectNumber}/${job.jobNumber}`
+      : `/auftraege/${job.jobNumber}`
+    : null;
 
   return (
     <div
@@ -122,6 +133,8 @@ export function JobEventPopover({
           )}
         </div>
         <button
+          type="button"
+          aria-label="Terminübersicht schließen"
           onClick={onClose}
           className="shrink-0 rounded-md p-0.5 hover:bg-accent transition-colors"
         >
@@ -130,6 +143,16 @@ export function JobEventPopover({
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
+        <span className="inline-flex items-center rounded-full bg-brand-purple-soft px-2 py-0.5 text-xs font-medium text-brand-purple-foreground">
+          Geplant
+        </span>
+        {job.seriesId && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            <Repeat2 className="size-3" /> Serie
+          </span>
+        )}
+        {job.entryKind !== 'internal' && (
+          <>
         <span
           className={cn(
             'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
@@ -146,9 +169,22 @@ export function JobEventPopover({
         >
           {priorityInfo.label}
         </span>
+          </>
+        )}
       </div>
 
       <div className="space-y-2 text-sm">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {job.entryKind === 'internal' ? (
+            <CalendarDays className="size-3.5 shrink-0" />
+          ) : (
+            <Clock className="size-3.5 shrink-0" />
+          )}
+          <span>
+            {job.entryKind === 'internal' ? 'Interner Termin' : 'Geplanter Auftragsbesuch'}
+            {job.isException ? ' · angepasster Einzeltermin' : ''}
+          </span>
+        </div>
         {job.clientName && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Building2 className="size-3.5 shrink-0" />
@@ -185,10 +221,17 @@ export function JobEventPopover({
         )}
       </div>
 
-      <Button
+      <div className="mt-3 grid gap-2">
+      {canEditPlanning && job.occurrenceId && (
+        <Button variant="default" size="sm" onClick={() => setEditOpen(true)}>
+          Termin bearbeiten
+        </Button>
+      )}
+      {jobUrl && (
+        <Button
         variant="outline"
         size="sm"
-        className="mt-3 w-full"
+        className="w-full"
         onClick={() => {
           onClose();
           router.push(jobUrl);
@@ -196,7 +239,17 @@ export function JobEventPopover({
       >
         <ExternalLink className="mr-2 size-3.5" />
         Details anzeigen
-      </Button>
+        </Button>
+      )}
+      </div>
+      {job.occurrenceId && (
+        <PlanningOccurrenceEditDialog
+          job={job}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          onSuccess={onClose}
+        />
+      )}
     </div>
   );
 }

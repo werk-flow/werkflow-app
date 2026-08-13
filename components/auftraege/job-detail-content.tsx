@@ -78,6 +78,10 @@ import {
   updateJobAssignments,
   getAuftraegeDialogOptions,
 } from '@/lib/jobs/actions';
+import {
+  JOB_DELETE_FAILED_MESSAGE,
+  JOB_DELETE_HISTORY_MESSAGE,
+} from '@/lib/jobs/messages';
 import type {
   AssignmentApproval,
   AssignmentEvaluation,
@@ -246,6 +250,7 @@ export function JobDetailContent({
   const displayTitle = getJobDisplayTitle(liveJob);
   const isJobActive = activeJobIds.has(liveJob.id);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [showAssignDialog, setShowAssignDialog] = useState(false);
@@ -612,6 +617,7 @@ export function JobDetailContent({
   }, [currentUserId, liveJob.assignments, members]);
 
   const handleDelete = () => {
+    setDeleteError(null);
     startDeleteTransition(async () => {
       const result = await deleteJob(liveJob.id);
       if (result.success) {
@@ -623,6 +629,12 @@ export function JobDetailContent({
         } else {
           router.push(`/auftraege${deletedParam}`);
         }
+      } else {
+        setDeleteError(
+          result.error === 'planning_history_exists'
+            ? JOB_DELETE_HISTORY_MESSAGE
+            : JOB_DELETE_FAILED_MESSAGE
+        );
       }
     });
   };
@@ -1671,7 +1683,13 @@ export function JobDetailContent({
       </div>
 
       {/* Delete Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) setDeleteError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Auftrag löschen?</AlertDialogTitle>
@@ -1680,6 +1698,11 @@ export function JobDetailContent({
               löschen? Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError && (
+            <p role="alert" className="text-sm text-destructive">
+              {deleteError}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

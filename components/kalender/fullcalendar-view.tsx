@@ -6,7 +6,7 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { EventClickArg, EventContentArg, EventDropArg } from '@fullcalendar/core';
-import { Clock, ArrowUp, ArrowDown, Briefcase, Coffee } from 'lucide-react';
+import { Clock, ArrowUp, ArrowDown, Briefcase, CalendarDays, Coffee, Repeat2 } from 'lucide-react';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import {
   calculateCalendarWorkBlocks,
@@ -415,11 +415,20 @@ export function FullCalendarView({
       let end: Date | undefined;
 
       if (job.plannedDate && job.plannedTime) {
-        start = new Date(`${job.plannedDate}T${job.plannedTime}:00`);
-        const durationMs = (job.estimatedDurationMinutes || 60) * 60 * 1000;
-        end = new Date(start.getTime() + durationMs);
+        start = job.startAt
+          ? new Date(job.startAt)
+          : new Date(`${job.plannedDate}T${job.plannedTime}:00`);
+        end = job.endAt
+          ? new Date(job.endAt)
+          : new Date(
+              start.getTime() +
+                (job.estimatedDurationMinutes || 60) * 60 * 1000
+            );
       } else if (job.plannedDate) {
         start = new Date(`${job.plannedDate}T00:00:00`);
+        end = job.endDateExclusive
+          ? new Date(`${job.endDateExclusive}T00:00:00`)
+          : undefined;
       } else {
         return null;
       }
@@ -428,7 +437,7 @@ export function FullCalendarView({
         id: `job-${job.id}`,
         title: '',
         start,
-        end: isAllDay ? undefined : end,
+        end,
         allDay: isAllDay,
         backgroundColor: 'rgb(123 44 191 / 0.15)',
         borderColor: 'rgb(123 44 191 / 0.4)',
@@ -860,7 +869,11 @@ export function FullCalendarView({
       const job = eventInfo.event.extendedProps.job as CalendarJob;
       return (
         <div className="flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full text-foreground">
-          <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+          {job.entryKind === 'internal' ? (
+            <CalendarDays className="h-3 w-3 shrink-0 text-brand-purple" />
+          ) : (
+            <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
+          )}
           <span className="font-medium truncate text-xs" title={job.title}>
             {job.title}
           </span>
@@ -868,6 +881,9 @@ export function FullCalendarView({
             <span className="text-[10px] text-muted-foreground truncate">
               {job.jobNumber}
             </span>
+          )}
+          {job.seriesId && (
+            <Repeat2 className="h-3 w-3 shrink-0 text-muted-foreground" role="img" aria-label="Serientermin" />
           )}
         </div>
       );
@@ -1761,6 +1777,7 @@ export function FullCalendarView({
           position={selectedJob.position}
           onClose={() => setSelectedJob(null)}
           memberNames={memberNameMap}
+          canEditPlanning={isAdminOrManager}
         />
       )}
     </div>

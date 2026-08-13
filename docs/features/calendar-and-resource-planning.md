@@ -36,8 +36,12 @@ The current `/kalender` implementation already includes:
 - since `P1-06`: vacation absence as a differentiated, non-interactive all-day entry type in the month view („Urlaub – <Name>", calm purple planning state). Approved and requested absence stay visually distinct — pending requests render provisionally („angefragt", dashed) and never count as approved availability. Managers see all members' vacation; employees see their own. Capacity/conflict behavior remains `P1-11` scope;
 - since `P1-08`: sickness/privacy-sensitive absence as deliberately NEUTRAL all-day entries: „Abwesend – <Name>" (open-ended reports „bis auf Weiteres", half days „halber Tag"), same calm purple planning state as approved vacation, never dashed (a report is a fact, not a request). The calendar shows WHO is unavailable WHEN and never why — the absence type exists only on the self/manager management surfaces (privacy matrix, employee management). Managers see all members' entries; employees see exactly their own; colleagues see nothing.
 - since `P1-09`: team shortcuts in employee assignment controls expand the team's date-effective members into individual assignments without granting authority; every calendar move, resize, schedule, unpark, and cross-row reassignment that changes people or the assessed date runs the same job qualification evaluation as the job detail. Missing, future, expired, or unconfirmed coverage and the optional apprentice signal are explained in a confirmation dialog; an authorized planner may continue only with a recorded reason. Cancelling the warning restores the optimistic calendar state quietly. Capacity and multi-resource conflict planning remain `P1-11`.
+- since `P1-11`: managers can create timed or all-day job visits and bounded internal entries (`Interne Arbeit`, `Besprechung`, `Schulung`, `Sonstiges`) as one-off, multi-day/cross-midnight, or daily/weekly/monthly series. A series materializes an initial 18-month horizon and can be extended in six-month, idempotent batches. Occurrences keep a stable lineage/original-local identity; invalid monthly dates are skipped rather than shifted. Editing one occurrence creates an exception, while `diese und zukünftige` and whole-series edits preserve past or already-started history. Skipped and cancelled occurrences remain auditable rows rather than disappearing;
+- `P1-11` capacity checks calculate employee minutes per Berlin calendar date from date-effective schedules, the visibly labeled schedule fallback, public holidays, closure days, approved vacation/sickness, provisional pending vacation, and overlapping planned occurrences. Qualification and date-effective team membership are evaluated for the occurrence date. Warnings explain every affected person/date and remain overridable by managers only with a reason tied to the exact assessment fingerprint; changed facts force a fresh decision;
+- planning assignments use stable employee-record identities, including employees without a login. They control occurrence visibility, while `job_assignments` continue to own durable job access/responsibility. A job visit references the job's own title/details/customer/location instead of copying them into calendar-owned internal fields;
+- planned occurrences and actual time entries remain visibly and structurally separate. Moving, splitting, skipping, or cancelling planned work never rewrites actual time. Employees see only occurrences assigned to their employee record; managers see organization planning.
 
-This is an operational scheduling foundation. It is not yet the complete resource-planning, recurring-event, route, external-calendar, or maintenance scheduling product described below.
+This is an operational scheduling foundation with recurring people-capacity planning. It is not yet the complete dispatch, route, tool/vehicle/material, customer-commitment, external-calendar, or maintenance-contract product described below.
 
 Before changing current behavior, verify role rules, current action validation, and live data structures in code and Supabase.
 
@@ -225,9 +229,9 @@ The system should start with proposals and previews. Automatic rescheduling, cus
 
 ## Open Product Decisions
 
-- Which non-job entry types belong in the first complete calendar?
-- Should recurring series create future jobs immediately or generate them closer to the due date?
-- How should multi-day and multi-visit work appear in jobs and project progress?
+- Whether additional non-job entry types beyond the bounded `P1-11` internal vocabulary are operationally necessary.
+- Whether a future maintenance plan should generate jobs, propose them closer to the due date, or reference planning occurrences directly; generic `P1-11` recurrence deliberately does not synthesize jobs.
+- How later job/project progress should summarize multi-visit completion; `P1-11` owns visit planning and preserves one underlying job.
 - Which employee skills, qualifications, and supervision rules should affect scheduling?
 - Should tools and vehicles be reserved from the calendar or only surfaced as readiness signals?
 - Which map, travel-time, and navigation providers fit the German market and privacy requirements?
