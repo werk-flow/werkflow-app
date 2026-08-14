@@ -10,7 +10,8 @@
     "test:unit": "bun test lib",
     "test:golden": "playwright test",
     "test:golden:gg00": "playwright test --grep @GG-00",
-    "test:golden:p101": "playwright test --grep @P1-01"
+    "test:golden:p101": "playwright test --grep @P1-01",
+    "test:audit:w1": "playwright test --config playwright.audit.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",

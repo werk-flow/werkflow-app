@@ -40,11 +40,14 @@ docs/
     avatar.md
     competitive-landscape.md
     product-capability-map.md
+    user-flow-catalog.md
   plans/
     phase-1-build-roadmap.md
     p1-00-baseline-verification.md
     golden-gate-log.md
+    wave-1-audit.md
     inventory-v1-implementation-plan.md
+    p1-12-dispatch-implementation-plan.md
   decisions/
     0001-infrastructure-stack.md
 ```
@@ -80,6 +83,8 @@ Use `docs/product/` for business context that should not always be loaded into e
 `docs/product/competitive-landscape.md` is the dated, source-linked research reference for major German Handwerkersoftware competitors. Treat vendor features, public pricing, review signals, and WerkFlow analysis as separate evidence types, and refresh volatile figures before using them in a current decision.
 
 `docs/product/product-capability-map.md` is the product-wide map for the complete operational core and later intelligent-automation phase. Use it to keep feature specs coherent, resolve cross-feature ownership, and distinguish a product capability from a release or implementation plan.
+
+`docs/product/user-flow-catalog.md` is the tactical per-slice list of every new user-visible flow in plain German (what a user can now do and what the app does in response). It is updated as part of every slice's acceptance, feeds the eventual handover explanation, and is the test inventory for wave-end harness audits.
 
 ### Implementation Plans
 

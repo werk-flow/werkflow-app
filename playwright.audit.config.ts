@@ -1,0 +1,40 @@
+import { defineConfig } from '@playwright/test';
+
+import { loadEnvLocal } from './tests/golden/support/env';
+
+loadEnvLocal();
+
+// Wave-audit battery (docs/plans/wave-1-audit.md). Runs the exhaustive
+// user-flow audit specs against a locally running app and the live Supabase
+// project, reusing the golden harness (world seeder, steps, db helpers).
+//
+// IMPORTANT: never run this battery and the golden suite at the same time.
+// Both configs share tests/golden/.artifacts (world.json, auth states) and
+// the global setup destroys leftover worlds from "earlier" runs — a
+// concurrent run would clobber the other's world.
+export default defineConfig({
+  testDir: './tests/audit/wave-1',
+  globalSetup: './tests/golden/global-setup',
+  globalTeardown: './tests/golden/global-teardown',
+  timeout: 180_000,
+  expect: { timeout: 10_000 },
+  // Audit specs share one world per run; sessions run serially by design.
+  workers: 1,
+  retries: 0,
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'tests/audit/.report' }]],
+  outputDir: 'tests/audit/.results',
+  use: {
+    baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    viewport: { width: 1440, height: 900 },
+    locale: 'de-DE',
+    timezoneId: 'Europe/Berlin',
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
+  },
+  webServer: {
+    command: 'bun run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: true,
+    timeout: 180_000,
+  },
+});

@@ -44,3 +44,7 @@ next-env.d.ts
 tests/golden/.artifacts/
 tests/golden/.results/
 tests/golden/.report/
+
+# Wave-audit test artifacts (world/auth artifacts are shared under tests/golden/.artifacts)
+tests/audit/.results/
+tests/audit/.report/
