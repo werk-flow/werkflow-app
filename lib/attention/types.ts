@@ -30,7 +30,10 @@ export type AttentionSourceType =
   | 'vacation_decision'
   | 'sickness_report'
   | 'employee_certification_expiry'
-  | 'client_follow_up';
+  | 'client_follow_up'
+  | 'dispatch_acknowledgement'
+  | 'dispatch_challenge_open'
+  | 'job_parking_review';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -93,6 +96,40 @@ export type AttentionTask =
       dueAt: string;
       ownerName: string;
       ownerUnavailable: boolean;
+    }
+  // P1-12: the recipient's pending confirmation of the CURRENT dispatch
+  // revision. The state version is the revision id — a superseding revision
+  // re-surfaces the SAME item instead of creating a second one.
+  | {
+      sourceType: 'dispatch_acknowledgement';
+      sourceId: string;
+      jobId: string;
+      jobNumber: string | null;
+      jobTitle: string;
+      revisionNumber: number;
+      startAt: string | null;
+      startDate: string | null;
+      stateVersion: string;
+    }
+  // P1-12: an open employee challenge awaiting a manager decision.
+  | {
+      sourceType: 'dispatch_challenge_open';
+      sourceId: string;
+      personName: string;
+      reason: string;
+      jobTitle: string;
+      acknowledgementId: string;
+      stateVersion: string;
+    }
+  // P1-12: a parked job whose next-review date is due.
+  | {
+      sourceType: 'job_parking_review';
+      sourceId: string;
+      jobNumber: string | null;
+      jobTitle: string;
+      nextReviewDate: string;
+      responsibleName: string | null;
+      stateVersion: string;
     };
 
 // Informational notices, deduplicated per source record: a domain state

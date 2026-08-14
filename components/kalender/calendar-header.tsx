@@ -5,7 +5,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
-  CalendarPlus
+  CalendarPlus,
+  Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ManualEntryDialog } from '@/components/manual-entry-dialog';
@@ -31,6 +32,8 @@ interface CalendarHeaderProps {
   onParkJob?: (jobId: string) => void;
   parkplatzButtonRef?: React.RefObject<HTMLButtonElement | null>;
   isPointerOverParkplatz?: boolean;
+  dispatchPanelOpen?: boolean;
+  onDispatchPanelToggle?: () => void;
 }
 
 const MONTH_NAMES = [
@@ -120,7 +123,9 @@ export function CalendarHeader({
   onParkplatzToggle,
   onParkJob,
   parkplatzButtonRef,
-  isPointerOverParkplatz
+  isPointerOverParkplatz,
+  dispatchPanelOpen = false,
+  onDispatchPanelToggle
 }: CalendarHeaderProps) {
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const now = new Date();
@@ -186,6 +191,23 @@ export function CalendarHeader({
       </div>
 
       <div className="flex items-center gap-3">
+        {isAdminOrManager && onDispatchPanelToggle && (
+          <Button
+            variant={dispatchPanelOpen ? 'secondary' : 'outline'}
+            size="default"
+            className="gap-2"
+            onClick={onDispatchPanelToggle}
+            data-testid="dispatch-panel-toggle"
+            aria-label={
+              dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'
+            }
+            title={dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'}
+            aria-pressed={dispatchPanelOpen}
+          >
+            <Send className="size-4" aria-hidden="true" />
+            <span className="hidden sm:inline">Einsätze</span>
+          </Button>
+        )}
         {isAdminOrManager && onParkplatzToggle && onParkJob && (
           <ParkplatzButton
             ref={parkplatzButtonRef}

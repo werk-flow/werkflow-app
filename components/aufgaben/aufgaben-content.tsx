@@ -9,7 +9,10 @@ import {
   Clock,
   Inbox,
   Loader2,
+  MessageSquare,
   Palmtree,
+  ParkingSquare,
+  Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -181,6 +184,10 @@ export function AufgabenContent() {
   useRealtimeEvent('organization_capabilities', scheduleRefetch);
   useRealtimeEvent('client_requests', scheduleRefetch);
   useRealtimeEvent('client_follow_ups', scheduleRefetch);
+  useRealtimeEvent('planning_dispatches', scheduleRefetch);
+  useRealtimeEvent('planning_dispatch_recipients', scheduleRefetch);
+  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefetch);
+  useRealtimeEvent('job_parking_contexts', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
@@ -260,6 +267,15 @@ export function AufgabenContent() {
   const followUpTasks = overview.tasks.filter(
     (task) => task.sourceType === 'client_follow_up'
   );
+  const dispatchAcknowledgementTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'dispatch_acknowledgement'
+  );
+  const dispatchChallengeTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'dispatch_challenge_open'
+  );
+  const parkingReviewTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'job_parking_review'
+  );
   const unreadCount = overview.notifications.filter(
     (notification) => notification.unread
   ).length;
@@ -278,11 +294,50 @@ export function AufgabenContent() {
         {timeTasks.length === 0 &&
           vacationTasks.length === 0 &&
           requestTasks.length === 0 &&
-          followUpTasks.length === 0 && (
+          followUpTasks.length === 0 &&
+          dispatchAcknowledgementTasks.length === 0 &&
+          dispatchChallengeTasks.length === 0 &&
+          parkingReviewTasks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Keine offenen Aufgaben.
             </p>
           )}
+
+        {dispatchAcknowledgementTasks.length > 0 && (
+          <TaskGroup
+            icon={<Send className="size-4" />}
+            title="Einsätze bestätigen"
+            testId="attention-dispatch-tasks"
+          >
+            {dispatchAcknowledgementTasks.map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {dispatchChallengeTasks.length > 0 && (
+          <TaskGroup
+            icon={<MessageSquare className="size-4" />}
+            title="Offene Rückfragen"
+            testId="attention-dispatch-challenge-tasks"
+          >
+            {dispatchChallengeTasks.map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {parkingReviewTasks.length > 0 && (
+          <TaskGroup
+            icon={<ParkingSquare className="size-4" />}
+            title="Parkplatz-Wiedervorlagen"
+            testId="attention-parking-review-tasks"
+          >
+            {parkingReviewTasks.map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
 
         {timeTasks.length > 0 && (
           <TaskGroup
@@ -555,6 +610,57 @@ function TaskRow({ task }: { task: AttentionTask }) {
           {formatRange(task.startDate, task.endDate)}
           {task.dayPortion === 'half_day' ? ' (halbtags)' : ''}
           {` · ${formatVacationDays(task.totalDays)}`}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'dispatch_acknowledgement') {
+    return (
+      <TaskLink
+        href={task.jobNumber ? `/auftraege/${task.jobNumber}` : '/kalender'}
+        ariaLabel={`Einsatz für ${task.jobTitle} bestätigen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.jobTitle}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {task.startAt
+            ? formatDateTime(task.startAt)
+            : task.startDate
+              ? formatDate(task.startDate)
+              : 'Ohne festen Termin'}
+          {' · Bestätigung ausstehend'}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'dispatch_challenge_open') {
+    return (
+      <TaskLink
+        href="/kalender"
+        ariaLabel={`Rückfrage von ${task.personName} zu ${task.jobTitle} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">
+          {task.personName} · {task.jobTitle}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">{task.reason}</p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'job_parking_review') {
+    return (
+      <TaskLink
+        href={task.jobNumber ? `/auftraege/${task.jobNumber}` : '/kalender'}
+        ariaLabel={`Wiedervorlage für geparkten Auftrag ${task.jobTitle} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.jobTitle}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          Wiedervorlage {formatDate(task.nextReviewDate)}
+          {task.responsibleName ? ` · Zuständig: ${task.responsibleName}` : ''}
         </p>
       </TaskLink>
     );

@@ -54,6 +54,11 @@ export type RealtimeTable =
   | 'planning_series'
   | 'planning_occurrences'
   | 'planning_occurrence_assignments'
+  | 'planning_dispatches'
+  | 'planning_dispatch_recipients'
+  | 'planning_dispatch_acknowledgements'
+  | 'planning_customer_commitments'
+  | 'job_parking_contexts'
   | 'job_instruction_items'
   | 'document_folders'
   | 'documents'
@@ -122,6 +127,11 @@ const TABLES: RealtimeTable[] = [
   'planning_series',
   'planning_occurrences',
   'planning_occurrence_assignments',
+  'planning_dispatches',
+  'planning_dispatch_recipients',
+  'planning_dispatch_acknowledgements',
+  'planning_customer_commitments',
+  'job_parking_contexts',
   'job_instruction_items',
   'document_folders',
   'documents',
@@ -613,6 +623,61 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('planning_occurrence_assignments', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_dispatches',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_dispatches', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_dispatch_recipients',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_dispatch_recipients', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_dispatch_acknowledgements',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_dispatch_acknowledgements', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'planning_customer_commitments',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('planning_customer_commitments', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'job_parking_contexts',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_parking_contexts', p)
         )
         .on(
           'postgres_changes',

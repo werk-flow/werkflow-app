@@ -2602,6 +2602,115 @@ export type Database = {
           },
         ]
       }
+      job_parking_contexts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          job_id: string
+          next_review_date: string | null
+          note: string | null
+          organization_id: string
+          reason: Database["public"]["Enums"]["job_parking_reason"]
+          responsible_employee_record_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          job_id: string
+          next_review_date?: string | null
+          note?: string | null
+          organization_id: string
+          reason: Database["public"]["Enums"]["job_parking_reason"]
+          responsible_employee_record_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          job_id?: string
+          next_review_date?: string | null
+          note?: string | null
+          organization_id?: string
+          reason?: Database["public"]["Enums"]["job_parking_reason"]
+          responsible_employee_record_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_parking_contexts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_parking_contexts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_parking_contexts_responsible_employee_record_id_fkey"
+            columns: ["responsible_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_parking_events: {
+        Row: {
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          job_id: string
+          organization_id: string
+        }
+        Insert: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          job_id: string
+          organization_id: string
+        }
+        Update: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          job_id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_parking_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_parking_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_qualification_assessments: {
         Row: {
           assessed_for_date: string
@@ -3317,6 +3426,508 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      planning_customer_commitment_events: {
+        Row: {
+          commitment_id: string
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          organization_id: string
+          payload: Json | null
+          reason: string | null
+        }
+        Insert: {
+          commitment_id: string
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          organization_id: string
+          payload?: Json | null
+          reason?: string | null
+        }
+        Update: {
+          commitment_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          organization_id?: string
+          payload?: Json | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_customer_commitment_events_commitment_id_fkey"
+            columns: ["commitment_id"]
+            isOneToOne: false
+            referencedRelation: "planning_customer_commitments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_customer_commitment_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_customer_commitments: {
+        Row: {
+          committed_date: string
+          contact_id: string | null
+          id: string
+          occurrence_id: string
+          organization_id: string
+          recorded_at: string
+          recorded_by: string | null
+          source: Database["public"]["Enums"]["customer_commitment_source"]
+          status: Database["public"]["Enums"]["customer_commitment_status"]
+          status_changed_at: string | null
+          status_changed_by: string | null
+          supersedes_id: string | null
+          window_end_time: string | null
+          window_start_time: string | null
+          withdrawal_reason: string | null
+        }
+        Insert: {
+          committed_date: string
+          contact_id?: string | null
+          id?: string
+          occurrence_id: string
+          organization_id: string
+          recorded_at?: string
+          recorded_by?: string | null
+          source: Database["public"]["Enums"]["customer_commitment_source"]
+          status?: Database["public"]["Enums"]["customer_commitment_status"]
+          status_changed_at?: string | null
+          status_changed_by?: string | null
+          supersedes_id?: string | null
+          window_end_time?: string | null
+          window_start_time?: string | null
+          withdrawal_reason?: string | null
+        }
+        Update: {
+          committed_date?: string
+          contact_id?: string | null
+          id?: string
+          occurrence_id?: string
+          organization_id?: string
+          recorded_at?: string
+          recorded_by?: string | null
+          source?: Database["public"]["Enums"]["customer_commitment_source"]
+          status?: Database["public"]["Enums"]["customer_commitment_status"]
+          status_changed_at?: string | null
+          status_changed_by?: string | null
+          supersedes_id?: string | null
+          window_end_time?: string | null
+          window_start_time?: string | null
+          withdrawal_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_customer_commitments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "client_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_customer_commitments_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_customer_commitments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_customer_commitments_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "planning_customer_commitments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_dispatch_acknowledgements: {
+        Row: {
+          acted_by: string | null
+          carried_from_acknowledgement_id: string | null
+          challenge_resolution: string | null
+          challenge_resolution_reason: string | null
+          challenge_resolved_at: string | null
+          challenge_resolved_by: string | null
+          created_at: string
+          dispatch_id: string
+          employee_record_id: string
+          id: string
+          organization_id: string
+          reason: string | null
+          revision_id: string
+          state: Database["public"]["Enums"]["dispatch_acknowledgement_state"]
+        }
+        Insert: {
+          acted_by?: string | null
+          carried_from_acknowledgement_id?: string | null
+          challenge_resolution?: string | null
+          challenge_resolution_reason?: string | null
+          challenge_resolved_at?: string | null
+          challenge_resolved_by?: string | null
+          created_at?: string
+          dispatch_id: string
+          employee_record_id: string
+          id?: string
+          organization_id: string
+          reason?: string | null
+          revision_id: string
+          state: Database["public"]["Enums"]["dispatch_acknowledgement_state"]
+        }
+        Update: {
+          acted_by?: string | null
+          carried_from_acknowledgement_id?: string | null
+          challenge_resolution?: string | null
+          challenge_resolution_reason?: string | null
+          challenge_resolved_at?: string | null
+          challenge_resolved_by?: string | null
+          created_at?: string
+          dispatch_id?: string
+          employee_record_id?: string
+          id?: string
+          organization_id?: string
+          reason?: string | null
+          revision_id?: string
+          state?: Database["public"]["Enums"]["dispatch_acknowledgement_state"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_dispatch_acknowledge_carried_from_acknowledgement_fkey"
+            columns: ["carried_from_acknowledgement_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatch_acknowledgements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_acknowledgements_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_acknowledgements_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_acknowledgements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_acknowledgements_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatch_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_dispatch_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          dispatch_id: string
+          event_type: string
+          id: string
+          organization_id: string
+          payload: Json | null
+          reason: string | null
+          revision_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          dispatch_id: string
+          event_type: string
+          id?: string
+          organization_id: string
+          payload?: Json | null
+          reason?: string | null
+          revision_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          dispatch_id?: string
+          event_type?: string
+          id?: string
+          organization_id?: string
+          payload?: Json | null
+          reason?: string | null
+          revision_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_dispatch_events_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_events_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatch_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_dispatch_recipients: {
+        Row: {
+          created_at: string
+          dispatch_id: string
+          employee_record_id: string
+          id: string
+          organization_id: string
+          revision_id: string
+        }
+        Insert: {
+          created_at?: string
+          dispatch_id: string
+          employee_record_id: string
+          id?: string
+          organization_id: string
+          revision_id: string
+        }
+        Update: {
+          created_at?: string
+          dispatch_id?: string
+          employee_record_id?: string
+          id?: string
+          organization_id?: string
+          revision_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_dispatch_recipients_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_recipients_employee_record_id_fkey"
+            columns: ["employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_recipients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_recipients_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatch_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_dispatch_revisions: {
+        Row: {
+          change_kind: Database["public"]["Enums"]["dispatch_change_kind"]
+          created_at: string
+          created_by: string | null
+          dispatch_id: string
+          dispatch_note: string | null
+          id: string
+          job_id: string | null
+          location_text: string | null
+          material_fingerprint: string
+          occurrence_id: string | null
+          organization_id: string
+          planned_end_at: string | null
+          planned_end_date_exclusive: string | null
+          planned_start_at: string | null
+          planned_start_date: string | null
+          readiness_fingerprint: string | null
+          readiness_snapshot: Json | null
+          revision_number: number
+          site_id: string | null
+        }
+        Insert: {
+          change_kind: Database["public"]["Enums"]["dispatch_change_kind"]
+          created_at?: string
+          created_by?: string | null
+          dispatch_id: string
+          dispatch_note?: string | null
+          id?: string
+          job_id?: string | null
+          location_text?: string | null
+          material_fingerprint: string
+          occurrence_id?: string | null
+          organization_id: string
+          planned_end_at?: string | null
+          planned_end_date_exclusive?: string | null
+          planned_start_at?: string | null
+          planned_start_date?: string | null
+          readiness_fingerprint?: string | null
+          readiness_snapshot?: Json | null
+          revision_number: number
+          site_id?: string | null
+        }
+        Update: {
+          change_kind?: Database["public"]["Enums"]["dispatch_change_kind"]
+          created_at?: string
+          created_by?: string | null
+          dispatch_id?: string
+          dispatch_note?: string | null
+          id?: string
+          job_id?: string | null
+          location_text?: string | null
+          material_fingerprint?: string
+          occurrence_id?: string | null
+          organization_id?: string
+          planned_end_at?: string | null
+          planned_end_date_exclusive?: string | null
+          planned_start_at?: string | null
+          planned_start_date?: string | null
+          readiness_fingerprint?: string | null
+          readiness_snapshot?: Json | null
+          revision_number?: number
+          site_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_dispatch_revisions_dispatch_id_fkey"
+            columns: ["dispatch_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_revisions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_revisions_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_revisions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatch_revisions_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "client_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      planning_dispatches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          creation_request_id: string | null
+          current_revision_id: string | null
+          id: string
+          job_id: string | null
+          occurrence_id: string | null
+          organization_id: string
+          status: Database["public"]["Enums"]["dispatch_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          current_revision_id?: string | null
+          id?: string
+          job_id?: string | null
+          occurrence_id?: string | null
+          organization_id: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          creation_request_id?: string | null
+          current_revision_id?: string | null
+          id?: string
+          job_id?: string | null
+          occurrence_id?: string | null
+          organization_id?: string
+          status?: Database["public"]["Enums"]["dispatch_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planning_dispatches_current_revision_fkey"
+            columns: ["current_revision_id"]
+            isOneToOne: false
+            referencedRelation: "planning_dispatch_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatches_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatches_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "planning_occurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planning_dispatches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       planning_events: {
         Row: {
@@ -4483,6 +5094,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acknowledge_planning_dispatch: {
+        Args: {
+          p_actor_id: string
+          p_dispatch_id: string
+          p_expected_revision_number: number
+          p_organization_id: string
+        }
+        Returns: string
+      }
       apply_responsibility_configuration: {
         Args: {
           p_actor_id: string
@@ -4491,6 +5111,40 @@ export type Database = {
           p_mode: Database["public"]["Enums"]["responsibility_configuration_mode"]
           p_organization_id: string
           p_responsibility: Database["public"]["Enums"]["organization_responsibility"]
+        }
+        Returns: string
+      }
+      batch_reschedule_planning_occurrences: {
+        Args: {
+          p_actor_id: string
+          p_capacity_fingerprint: string
+          p_capacity_snapshot: Json
+          p_items: Json
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint: string
+          p_qualification_snapshot: Json
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: string[]
+      }
+      cancel_planning_dispatch: {
+        Args: {
+          p_actor_id: string
+          p_dispatch_id: string
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
+      challenge_planning_dispatch: {
+        Args: {
+          p_actor_id: string
+          p_dispatch_id: string
+          p_expected_revision_number: number
+          p_organization_id: string
+          p_reason: string
         }
         Returns: string
       }
@@ -4570,6 +5224,18 @@ export type Database = {
         }
         Returns: string
       }
+      end_responsibility_delegation: {
+        Args: {
+          p_actor_id: string
+          p_delegation_id: string
+          p_revoked_from: string
+        }
+        Returns: undefined
+      }
+      ensure_inventory_defaults: {
+        Args: { p_actor_id: string; p_org_id: string }
+        Returns: undefined
+      }
       extend_planning_series_materialization: {
         Args: {
           p_actor_id: string
@@ -4585,18 +5251,6 @@ export type Database = {
           p_series_id: string
         }
         Returns: string[]
-      }
-      end_responsibility_delegation: {
-        Args: {
-          p_actor_id: string
-          p_delegation_id: string
-          p_revoked_from: string
-        }
-        Returns: undefined
-      }
-      ensure_inventory_defaults: {
-        Args: { p_actor_id: string; p_org_id: string }
-        Returns: undefined
       }
       generate_job_number: { Args: { p_org_id: string }; Returns: string }
       generate_personnel_number: { Args: { p_org_id: string }; Returns: string }
@@ -4668,6 +5322,20 @@ export type Database = {
         Args: { p_org_id: string; p_user_id: string }
         Returns: boolean
       }
+      issue_planning_dispatch: {
+        Args: {
+          p_actor_id: string
+          p_job_id?: string
+          p_note?: string
+          p_occurrence_id?: string
+          p_organization_id: string
+          p_readiness_fingerprint?: string
+          p_readiness_snapshot?: Json
+          p_recipient_employee_record_ids?: string[]
+          p_request_id?: string
+        }
+        Returns: string
+      }
       record_client_communication_exception: {
         Args: {
           p_actor_id: string
@@ -4678,6 +5346,19 @@ export type Database = {
           p_purpose: string
           p_reason: string
           p_warnings: Json
+        }
+        Returns: string
+      }
+      record_customer_commitment: {
+        Args: {
+          p_actor_id: string
+          p_committed_date: string
+          p_contact_id?: string
+          p_occurrence_id: string
+          p_organization_id: string
+          p_source?: Database["public"]["Enums"]["customer_commitment_source"]
+          p_window_end_time?: string
+          p_window_start_time?: string
         }
         Returns: string
       }
@@ -4779,6 +5460,15 @@ export type Database = {
         }
         Returns: string[]
       }
+      resolve_planning_dispatch_challenge: {
+        Args: {
+          p_acknowledgement_id: string
+          p_actor_id: string
+          p_organization_id: string
+          p_resolution_reason: string
+        }
+        Returns: undefined
+      }
       save_client_communication_settings: {
         Args: {
           p_accessibility_note: string
@@ -4847,6 +5537,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_job_parking_context: {
+        Args: {
+          p_actor_id: string
+          p_job_id: string
+          p_next_review_date?: string
+          p_note?: string
+          p_organization_id: string
+          p_reason: Database["public"]["Enums"]["job_parking_reason"]
+          p_responsible_employee_record_id?: string
+        }
+        Returns: undefined
+      }
       set_planning_occurrence_status: {
         Args: {
           p_actor_id: string
@@ -4895,22 +5597,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      update_planning_occurrence: {
-        Args: {
-          p_actor_id: string
-          p_assignments: Json
-          p_capacity_fingerprint: string
-          p_capacity_snapshot: Json
-          p_expected_version: number
-          p_occurrence: Json
-          p_occurrence_id: string
-          p_organization_id: string
-          p_override_reason?: string
-          p_qualification_fingerprint: string
-          p_qualification_snapshot: Json
-        }
-        Returns: number
-      }
       update_client_follow_up: {
         Args: {
           p_actor_id: string
@@ -4952,12 +5638,72 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_planning_dispatch_instruction: {
+        Args: {
+          p_actor_id: string
+          p_dispatch_id: string
+          p_expected_revision_number: number
+          p_note?: string
+          p_organization_id: string
+          p_recipient_employee_record_ids?: string[]
+        }
+        Returns: number
+      }
+      update_planning_occurrence: {
+        Args: {
+          p_actor_id: string
+          p_assignments: Json
+          p_capacity_fingerprint: string
+          p_capacity_snapshot: Json
+          p_expected_version: number
+          p_occurrence: Json
+          p_occurrence_id: string
+          p_organization_id: string
+          p_override_reason?: string
+          p_qualification_fingerprint: string
+          p_qualification_snapshot: Json
+        }
+        Returns: number
+      }
+      withdraw_customer_commitment: {
+        Args: {
+          p_actor_id: string
+          p_commitment_id: string
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       change_request_status: "pending" | "approved" | "rejected"
       client_type: "privat" | "gewerblich"
+      customer_commitment_source:
+        | "telefonisch"
+        | "vor_ort"
+        | "schriftlich_manuell"
+        | "sonstige"
+      customer_commitment_status: "active" | "superseded" | "withdrawn"
+      dispatch_acknowledgement_state:
+        | "acknowledged"
+        | "challenged"
+        | "carried_forward"
+      dispatch_change_kind:
+        | "issued"
+        | "schedule_changed"
+        | "reassigned"
+        | "target_scheduled"
+        | "instruction_changed"
+        | "batch_reschedule"
+      dispatch_status: "active" | "cancelled"
       entry_change_type: "edit" | "delete"
       invite_status: "pending" | "accepted" | "expired" | "cancelled"
+      job_parking_reason:
+        | "warten_auf_kunde"
+        | "warten_auf_material"
+        | "warten_auf_freigabe"
+        | "kapazitaet"
+        | "sonstiges"
       job_priority: "niedrig" | "mittel" | "hoch"
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt"
       org_role: "admin" | "buero" | "employee"
@@ -5123,8 +5869,36 @@ export const Constants = {
     Enums: {
       change_request_status: ["pending", "approved", "rejected"],
       client_type: ["privat", "gewerblich"],
+      customer_commitment_source: [
+        "telefonisch",
+        "vor_ort",
+        "schriftlich_manuell",
+        "sonstige",
+      ],
+      customer_commitment_status: ["active", "superseded", "withdrawn"],
+      dispatch_acknowledgement_state: [
+        "acknowledged",
+        "challenged",
+        "carried_forward",
+      ],
+      dispatch_change_kind: [
+        "issued",
+        "schedule_changed",
+        "reassigned",
+        "target_scheduled",
+        "instruction_changed",
+        "batch_reschedule",
+      ],
+      dispatch_status: ["active", "cancelled"],
       entry_change_type: ["edit", "delete"],
       invite_status: ["pending", "accepted", "expired", "cancelled"],
+      job_parking_reason: [
+        "warten_auf_kunde",
+        "warten_auf_material",
+        "warten_auf_freigabe",
+        "kapazitaet",
+        "sonstiges",
+      ],
       job_priority: ["niedrig", "mittel", "hoch"],
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
       org_role: ["admin", "buero", "employee"],

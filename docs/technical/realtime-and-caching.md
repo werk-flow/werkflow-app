@@ -78,6 +78,11 @@ The provider subscribes to tables that affect active operational views, includin
 - `planning_series`
 - `planning_occurrences`
 - `planning_occurrence_assignments`
+- `planning_dispatches`
+- `planning_dispatch_recipients`
+- `planning_dispatch_acknowledgements`
+- `planning_customer_commitments`
+- `job_parking_contexts`
 
 Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
 
@@ -90,6 +95,8 @@ P1-07's unified attention counts replace the former time-only pending-approval p
 P1-10 adds `client_follow_ups`, `client_communication_settings`, and `client_communication_preferences` to the operational publication/provider contract with replica identity full. Their append-only event tables stay unpublished. Customer detail route refreshes also listen to the previously published `client_contacts`, `client_sites`, and `client_requests` callbacks; P1-10 fixed the pre-existing gap where those tables existed in the central provider but the generic router-refresh hook never registered them. Follow-up events refresh the unified attention-count provider and `/aufgaben`; preference/settings changes refresh the customer relationship view. The resolver remains a live bounded action query and invalidates the existing organization client tag after writes; no generic timeline cache or copied timeline table exists.
 
 P1-11 publishes `planning_series`, `planning_occurrences`, and `planning_occurrence_assignments`, all with replica identity full, because schedule and assignment coordination must update active calendars across users. The router-refresh hook batches those callbacks with the existing job/assignment refresh path. Append-only `planning_occurrence_assessments` and `planning_events` remain unpublished: their manager-only history is loaded deliberately rather than producing duplicate refreshes for every atomic planning mutation. A single mutation can touch a series, several occurrences, assignments, assessments, the legacy job projection, and its job assignments; provider debouncing is therefore part of the correctness/performance contract rather than optional polish.
+
+P1-12 publishes `planning_dispatches`, `planning_dispatch_recipients`, `planning_dispatch_acknowledgements`, `planning_customer_commitments`, and `job_parking_contexts`, all with replica identity full: an employee's device must learn of a new or superseded work instruction, the manager Einsätze panel must see acknowledgements/challenges live, and the Parkplatz/commitment context must stay fresh across office users. The append-only `planning_dispatch_revisions`, `planning_dispatch_events`, `job_parking_events`, and `planning_customer_commitment_events` stay unpublished like other per-domain ledgers. The Einsätze panel and the employee „Mein Einsatz" card refetch through one shared 150 ms debounce per surface; the unified attention-count provider and `/aufgaben` additionally refresh on `planning_dispatches`, `planning_dispatch_acknowledgements`, and `job_parking_contexts`. Dispatch reads follow the attention posture (live action queries, no `unstable_cache`); mutations revalidate `/kalender`, `/aufgaben`, and the jobs tag.
 
 ## Refresh Patterns
 

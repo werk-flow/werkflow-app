@@ -323,26 +323,60 @@ export async function loadPlanningOptions(
       )
     ),
   ];
-  const projectResult = projectIds.length
-    ? await admin
-        .from('projects')
-        .select('id, name')
-        .eq('organization_id', orgId)
-        .in('id', projectIds)
-    : { data: [], error: null };
-  if (projectResult.error) return null;
+  // Linked records keep the profile as the authoritative name (P1-03); the
+  // record's own name fields are only set for non-login personnel.
+  const employeeUserIds = (employeeResult.data ?? []).flatMap((employee) =>
+    employee.user_id ? [employee.user_id] : []
+  );
+  const [projectResult, profileResult] = await Promise.all([
+    projectIds.length
+      ? admin
+          .from('projects')
+          .select('id, name')
+          .eq('organization_id', orgId)
+          .in('id', projectIds)
+      : { data: [], error: null },
+    employeeUserIds.length
+      ? admin
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', employeeUserIds)
+      : { data: [], error: null },
+  ]);
+  if (projectResult.error || profileResult.error) {
+    console.error('Failed to load planning option references:', {
+      code: (projectResult.error ?? profileResult.error)?.code ?? 'unknown',
+    });
+    return null;
+  }
   const projectNames = new Map(
     (projectResult.data ?? []).map((project) => [project.id, project.name])
   );
+  const profileById = new Map(
+    (profileResult.data ?? []).map((profile) => [profile.id, profile])
+  );
 
   return {
-    employees: (employeeResult.data ?? []).map((employee) => ({
-      employeeRecordId: employee.id,
-      userId: employee.user_id,
-      firstName: employee.first_name ?? '',
-      lastName: employee.last_name ?? '',
-      employeeNumber: employee.employee_number,
-    })),
+    employees: (employeeResult.data ?? []).map((employee) => {
+      const profile = employee.user_id
+        ? profileById.get(employee.user_id)
+        : undefined;
+      // Linked records: the profile is authoritative (P1-03); the record's own
+      // fields only fill genuine gaps. Blank strings count as missing.
+      const firstName = employee.user_id
+        ? profile?.first_name?.trim() || employee.first_name?.trim() || ''
+        : (employee.first_name?.trim() ?? '');
+      const lastName = employee.user_id
+        ? profile?.last_name?.trim() || employee.last_name?.trim() || ''
+        : (employee.last_name?.trim() ?? '');
+      return {
+        employeeRecordId: employee.id,
+        userId: employee.user_id,
+        firstName,
+        lastName,
+        employeeNumber: employee.employee_number,
+      };
+    }),
     jobs: (jobResult.data ?? []).map((job) => ({
       id: job.id,
       title: job.title.trim() || job.description?.trim() || '—',

@@ -33,6 +33,11 @@ import { useQualificationWarningConfirmation } from '@/components/auftraege/qual
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { ParkplatzPanel } from './parkplatz-panel';
+import { DispatchPanel } from './dispatch-panel';
+import { DispatchIssueDialog } from './dispatch-issue-dialog';
+import { ParkingContextDialog } from './parking-context-dialog';
+import { getJobParkingContexts } from '@/lib/parking/actions';
+import type { JobParkingContext } from '@/lib/parking/types';
 import { clearCalendarDragState } from './drag-state';
 import { ActionBanner, type ActionBannerState } from './day-view/undo-banner';
 import { cn } from '@/lib/utils';
@@ -284,6 +289,18 @@ export function CalendarContainer({
   }, [organizationId, refetchSicknessEntries]);
   const [parkedJobs, setParkedJobs] = useState<CalendarJob[]>([]);
   const [parkplatzOpen, setParkplatzOpen] = useState(false);
+  // P1-12: dispatch panel, Parkplatz context, and parked-job dispatch state.
+  const [dispatchPanelOpen, setDispatchPanelOpen] = useState(false);
+  // null until the first successful load so the panel can distinguish
+  // "still loading" from "loaded, no context recorded".
+  const [parkingContexts, setParkingContexts] = useState<Map<
+    string,
+    JobParkingContext
+  > | null>(null);
+  const [parkingContextJob, setParkingContextJob] =
+    useState<CalendarJob | null>(null);
+  const [parkedDispatchJob, setParkedDispatchJob] =
+    useState<CalendarJob | null>(null);
   const [filters, setFilters] = useState<CalendarFilters>({
     showWorkingHours: false,
     showJobs: true
@@ -599,6 +616,11 @@ export function CalendarContainer({
     setParkedJobs([]);
     parkedJobsLoadedRef.current = false;
     setParkplatzOpen(false);
+    // P1-12 state is organization-scoped as well.
+    setDispatchPanelOpen(false);
+    setParkingContexts(null);
+    setParkingContextJob(null);
+    setParkedDispatchJob(null);
     setSelectedMembers(members.map((member) => member.user_id));
     setSelectedSession(null);
     setPendingHighlightMemberId(null);
@@ -683,6 +705,34 @@ export function CalendarContainer({
       fetchParkedJobs();
     }
   }, [isAdminOrManager, fetchParkedJobs]);
+
+  // P1-12: Parkplatz context (reason/responsible/next review) for managers.
+  const parkingContextsRequestIdRef = useRef(0);
+  const fetchParkingContexts = useCallback(async () => {
+    if (!isAdminOrManager) return;
+    const requestId = ++parkingContextsRequestIdRef.current;
+    try {
+      const result = await getJobParkingContexts();
+      // Generation guard: an older response (or one from a previous
+      // organization) must never overwrite newer state.
+      if (parkingContextsRequestIdRef.current !== requestId) return;
+      if (result.success) {
+        setParkingContexts(
+          new Map(result.contexts.map((context) => [context.jobId, context]))
+        );
+      }
+    } catch (error) {
+      // Keep last-known contexts on a transient failure; the panel keeps its
+      // labeled missing-context state otherwise.
+      console.error('Failed to refresh parking contexts:', error);
+    }
+  }, [isAdminOrManager]);
+  useEffect(() => {
+    void fetchParkingContexts();
+  }, [fetchParkingContexts, organizationId]);
+  useRealtimeEvent('job_parking_contexts', () => {
+    void fetchParkingContexts();
+  });
 
   const scheduleJobsRefresh = useCallback(() => {
     if (jobsRefreshTimerRef.current) {
@@ -1108,6 +1158,10 @@ export function CalendarContainer({
         variant: 'error',
         message: 'Auftrag konnte nicht geparkt werden.',
       });
+    } else {
+      // P1-12: deliberate parking should record its context. Dismissing keeps
+      // the honest "Kontext fehlt" state — nothing is fabricated.
+      setParkingContextJob(parkedJob);
     }
 
     handleSilentRefresh();
@@ -1683,6 +1737,11 @@ export function CalendarContainer({
           onParkJob={handleParkJob}
           parkplatzButtonRef={parkplatzButtonRef}
           isPointerOverParkplatz={fcDragOverParkplatz}
+          dispatchPanelOpen={dispatchPanelOpen}
+          onDispatchPanelToggle={() => {
+            setDispatchPanelOpen((open) => !open);
+            setParkplatzOpen(false);
+          }}
         />
       </div>
 
@@ -1798,6 +1857,46 @@ export function CalendarContainer({
           onDragJobEnd={() => setParkplatzDragJob(null)}
           isExternalDragOver={fcDragOverParkplatz}
           primaryHeaderHeight={calendarHeaderHeight}
+          parkingContexts={parkingContexts ?? undefined}
+          onEditContext={(job) => setParkingContextJob(job)}
+          onDispatchJob={(job) => setParkedDispatchJob(job)}
+        />
+      )}
+
+      {isAdminOrManager && dispatchPanelOpen && (
+        <DispatchPanel
+          onClose={() => setDispatchPanelOpen(false)}
+          onChanged={handleSilentRefresh}
+          primaryHeaderHeight={calendarHeaderHeight}
+        />
+      )}
+
+      {isAdminOrManager && parkingContextJob && (
+        <ParkingContextDialog
+          jobId={parkingContextJob.jobId ?? parkingContextJob.id}
+          jobTitle={parkingContextJob.title}
+          existingContext={
+            parkingContexts?.get(
+              parkingContextJob.jobId ?? parkingContextJob.id
+            ) ?? null
+          }
+          onClose={() => setParkingContextJob(null)}
+          onSaved={() => {
+            setParkingContextJob(null);
+            void fetchParkingContexts();
+          }}
+        />
+      )}
+
+      {isAdminOrManager && parkedDispatchJob && (
+        <DispatchIssueDialog
+          target={{ jobId: parkedDispatchJob.jobId ?? parkedDispatchJob.id }}
+          defaultRecipientUserIds={parkedDispatchJob.assignedUserIds}
+          onClose={() => setParkedDispatchJob(null)}
+          onIssued={() => {
+            setParkedDispatchJob(null);
+            handleSilentRefresh();
+          }}
         />
       )}
 

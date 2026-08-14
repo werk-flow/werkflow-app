@@ -101,6 +101,10 @@ Teams, skills, certifications, and operational eligibility (`P1-09`, 2026-08-08)
 - Job requirements in `job_capability_requirements` evaluate the selected people on the job's planned date (or the current Berlin business date when unscheduled). The resolver explains `covered`, `unconfirmed`, `expired`, `not_yet_valid`, and `missing` per requirement with the strongest attributable contributor. Every assignment entry point re-resolves at write time; incomplete selections remain possible only through a short reasoned override whose fingerprint and optional team source are appended to `job_qualification_assessments`.
 - The optional apprentice signal warns when the selection contains only apprentices or incomplete employment-condition data; it never imposes a quota or hard block. Certification expiry extends the shared `/aufgaben` notification taxonomy as one deduplicated, versioned item per record and expiry phase, visible to managers without exposing it to colleagues.
 
+Dispatch acknowledgement (`P1-12`, 2026-08-14):
+
+- The distinction the assignment contract demands — planned assignment, accepted/acknowledged assignment, actual attendance, recorded time — now has its acknowledged leg: employees confirm or challenge the CURRENT revision of a dispatched work instruction through one simple action on the job detail and `/aufgaben`. Acknowledgement binds to (dispatch revision, employee record) with the acting user recorded separately; material schedule/reassignment changes invalidate it transactionally; personnel records without an active login show the labeled „nicht möglich" state instead of a fabricated confirmation. None of these facts stands in for attendance or recorded time. The dispatch model itself is calendar-owned (decision record 0002).
+
 Important current limitations:
 
 - Teams and operational qualification coverage are implemented through `P1-09`. Capacity conflicts, minimum staffing, team availability, shift rotations, seasonal patterns, and date-specific schedule overrides remain `P1-11`.

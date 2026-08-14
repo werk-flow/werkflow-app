@@ -1,12 +1,13 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
-import { X, Briefcase, ParkingSquare, GripVertical, ExternalLink } from 'lucide-react';
+import { X, Briefcase, ParkingSquare, GripVertical, ExternalLink, NotebookPen, Send } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { clearCalendarDragState, startCalendarDragState } from './drag-state';
 import { cn } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PARKING_REASON_LABELS, type JobParkingContext } from '@/lib/parking/types';
 
 export const PARKPLATZ_MIME = 'application/x-werkflow-job';
 const DEFAULT_DAY_SCHEDULE_DURATION_MINUTES = 240;
@@ -51,6 +52,10 @@ interface ParkplatzPanelProps {
   onDragJobEnd?: () => void;
   isExternalDragOver?: boolean;
   primaryHeaderHeight?: number;
+  /** P1-12: current parking context per job id (managers only). */
+  parkingContexts?: Map<string, JobParkingContext>;
+  onEditContext?: (job: CalendarJob) => void;
+  onDispatchJob?: (job: CalendarJob) => void;
 }
 
 export function ParkplatzPanel({
@@ -62,6 +67,9 @@ export function ParkplatzPanel({
   onDragJobEnd,
   isExternalDragOver,
   primaryHeaderHeight = 76,
+  parkingContexts,
+  onEditContext,
+  onDispatchJob,
 }: ParkplatzPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [draggingJobId, setDraggingJobId] = useState<string | null>(null);
@@ -149,6 +157,7 @@ export function ParkplatzPanel({
         ) : (
           jobs.map((job) => {
             const isDragging = draggingJobId === job.id;
+            const context = parkingContexts?.get(job.jobId ?? job.id) ?? null;
             return (
               <div
                 key={job.id}
@@ -239,6 +248,88 @@ export function ParkplatzPanel({
                           <span className="text-[10px] text-muted-foreground">
                             +{job.assignedUserIds.length - 3}
                           </span>
+                        )}
+                      </div>
+                    )}
+                    {/* P1-12: parked context — or the honest missing state.
+                        Legacy parked jobs never get fabricated reasons. */}
+                    {parkingContexts && (
+                      <div
+                        className="mt-1.5 space-y-0.5"
+                        data-parking-context={context ? 'set' : 'missing'}
+                      >
+                        {context ? (
+                          <>
+                            <p className="text-[11px] text-muted-foreground">
+                              {PARKING_REASON_LABELS[context.reason]}
+                              {context.note ? ` · ${context.note}` : ''}
+                            </p>
+                            {(context.responsibleName ||
+                              context.nextReviewDate) && (
+                              <p className="text-[11px] text-muted-foreground tabular-nums">
+                                {context.responsibleName
+                                  ? `Zuständig: ${context.responsibleName}`
+                                  : ''}
+                                {context.responsibleName &&
+                                context.nextReviewDate
+                                  ? ' · '
+                                  : ''}
+                                {context.nextReviewDate
+                                  ? `Wiedervorlage: ${context.nextReviewDate
+                                      .split('-')
+                                      .reverse()
+                                      .join('.')}`
+                                  : ''}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-[11px] italic text-muted-foreground">
+                            Kontext fehlt (Altbestand)
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Action row: independent of the context display, and
+                        never a drag handle. */}
+                    {!isDragging && (onEditContext || onDispatchJob) && (
+                      <div
+                        className="mt-1 flex flex-wrap gap-1"
+                        draggable={false}
+                        onDragStart={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                      >
+                        {onEditContext && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-[11px]"
+                            aria-label={`Parkplatz-Kontext für ${job.title} ${context ? 'bearbeiten' : 'ergänzen'}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onEditContext(job);
+                            }}
+                          >
+                            <NotebookPen className="size-3" />
+                            {context ? 'Kontext bearbeiten' : 'Kontext ergänzen'}
+                          </Button>
+                        )}
+                        {onDispatchJob && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-[11px]"
+                            aria-label={`Einsatz für ${job.title} senden`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onDispatchJob(job);
+                            }}
+                          >
+                            <Send className="size-3" />
+                            Einsatz senden
+                          </Button>
                         )}
                       </div>
                     )}

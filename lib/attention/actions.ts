@@ -32,6 +32,12 @@ import type {
 import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
 import { loadCertificationExpiryNotifications } from '@/lib/qualifications/server';
 import {
+  deriveRecipientState,
+  isAcknowledgementPending,
+  latestAcknowledgementByRecipient,
+  type AcknowledgementFact as DispatchAcknowledgementFact,
+} from '@/lib/dispatch/derivation';
+import {
   computeOpenSinceDays,
   dedupeAttentionItems,
   FOLLOW_UP_ATTENTION_CAPACITY,
@@ -327,6 +333,469 @@ async function deriveFollowUpTasks(
     });
   }
 
+  return { tasks, failed: false };
+}
+
+// P1-12: dispatch attention. Items are projections over the owning dispatch
+// rows; deciding happens through the dispatch actions, never here.
+
+async function deriveDispatchAcknowledgementTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  const admin = createSupabaseAdminClient();
+  const { data: record, error: recordError } = await admin
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', context.orgId)
+    .eq('user_id', context.userId)
+    .maybeSingle();
+  if (recordError) {
+    console.error('Failed to load own record for dispatch tasks:', {
+      code: recordError.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  if (!record) return { tasks: [], failed: false };
+
+  // Scope to the viewer from the start: their recipient rows, then only the
+  // referenced revisions/dispatches. An unrelated large dispatch volume can
+  // never turn this viewer's attention into a failure.
+  const { data: myRecipients, error: recipientError } = await admin
+    .from('planning_dispatch_recipients')
+    .select('revision_id, dispatch_id')
+    .eq('organization_id', context.orgId)
+    .eq('employee_record_id', record.id)
+    .limit(1001);
+  if (recipientError || (myRecipients?.length ?? 0) > 1000) {
+    console.error('Failed to load dispatch recipients for tasks:', {
+      code: recipientError?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  if (!myRecipients?.length) return { tasks: [], failed: false };
+  const myDispatchIds = [
+    ...new Set(myRecipients.map((row) => row.dispatch_id)),
+  ];
+  const myRevisionIds = new Set(myRecipients.map((row) => row.revision_id));
+
+  const { data: dispatches, error: dispatchError } = await admin
+    .from('planning_dispatches')
+    .select('id, occurrence_id, job_id, current_revision_id')
+    .eq('organization_id', context.orgId)
+    .eq('status', 'active')
+    .in('id', myDispatchIds);
+  if (dispatchError) {
+    console.error('Failed to load dispatches for tasks:', {
+      code: dispatchError.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const currentRevisionIds = (dispatches ?? []).flatMap((dispatch) =>
+    dispatch.current_revision_id && myRevisionIds.has(dispatch.current_revision_id)
+      ? [dispatch.current_revision_id]
+      : []
+  );
+  if (!currentRevisionIds.length) return { tasks: [], failed: false };
+
+  const [acksResult, revisionsResult] = await Promise.all([
+    admin
+      .from('planning_dispatch_acknowledgements')
+      .select('id, revision_id, employee_record_id, state, reason, challenge_resolved_at, created_at')
+      .eq('organization_id', context.orgId)
+      .eq('employee_record_id', record.id)
+      .in('revision_id', currentRevisionIds),
+    admin
+      .from('planning_dispatch_revisions')
+      .select(
+        'id, dispatch_id, revision_number, occurrence_id, job_id, planned_start_at, planned_start_date'
+      )
+      .eq('organization_id', context.orgId)
+      .in('id', currentRevisionIds),
+  ]);
+  if (acksResult.error || revisionsResult.error) {
+    console.error('Failed to load dispatch task facts:', {
+      code: (acksResult.error ?? revisionsResult.error)?.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const revisionById = new Map(
+    (revisionsResult.data ?? []).map((row) => [row.id, row])
+  );
+
+  const occurrenceIds = [...revisionById.values()].flatMap((row) =>
+    row.occurrence_id ? [row.occurrence_id] : []
+  );
+  const occurrencesResult = occurrenceIds.length
+    ? await admin
+        .from('planning_occurrences')
+        .select('id, job_id')
+        .eq('organization_id', context.orgId)
+        .in('id', occurrenceIds)
+    : { data: [], error: null };
+  if (occurrencesResult.error) {
+    console.error('Failed to load dispatch occurrences:', {
+      code: occurrencesResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const occurrenceJobIds = new Map(
+    (occurrencesResult.data ?? []).map((row) => [row.id, row.job_id])
+  );
+  const jobIds = [
+    ...new Set([
+      ...[...revisionById.values()].flatMap((row) =>
+        row.job_id ? [row.job_id] : []
+      ),
+      ...[...occurrenceJobIds.values()].filter((id): id is string => Boolean(id)),
+    ]),
+  ];
+  const jobsResult = jobIds.length
+    ? await admin
+        .from('jobs')
+        .select('id, title, description, job_number')
+        .eq('organization_id', context.orgId)
+        .in('id', jobIds)
+    : { data: [], error: null };
+  if (jobsResult.error) {
+    console.error('Failed to load dispatch jobs:', {
+      code: jobsResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
+
+  // Shared derivation rules (identical to every dispatch surface).
+  const ackFactsByRevision = new Map<string, DispatchAcknowledgementFact[]>();
+  for (const row of acksResult.data ?? []) {
+    const list = ackFactsByRevision.get(row.revision_id) ?? [];
+    list.push({
+      id: row.id,
+      employeeRecordId: row.employee_record_id,
+      state: row.state,
+      reason: row.reason,
+      challengeResolvedAt: row.challenge_resolved_at,
+      createdAt: row.created_at,
+    });
+    ackFactsByRevision.set(row.revision_id, list);
+  }
+
+  const tasks: AttentionTask[] = [];
+  for (const dispatch of dispatches ?? []) {
+    const revision = dispatch.current_revision_id
+      ? revisionById.get(dispatch.current_revision_id)
+      : undefined;
+    if (!revision) continue;
+    const latest =
+      latestAcknowledgementByRecipient(
+        ackFactsByRevision.get(revision.id) ?? []
+      ).get(record.id) ?? null;
+    const state = deriveRecipientState({ hasLogin: true, latest });
+    if (!isAcknowledgementPending(state)) continue;
+    const jobId =
+      revision.job_id ??
+      (revision.occurrence_id
+        ? (occurrenceJobIds.get(revision.occurrence_id) ?? null)
+        : null);
+    if (!jobId) continue;
+    const job = jobs.get(jobId);
+    tasks.push({
+      sourceType: 'dispatch_acknowledgement',
+      sourceId: dispatch.id,
+      jobId,
+      jobNumber: job?.job_number ?? null,
+      jobTitle:
+        job?.title.trim() || job?.description?.trim() || 'Auftrag',
+      revisionNumber: revision.revision_number,
+      startAt: revision.planned_start_at,
+      startDate: revision.planned_start_date,
+      stateVersion: revision.id,
+    });
+  }
+  return { tasks, failed: false };
+}
+
+async function deriveDispatchChallengeTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  if (context.role !== 'admin' && context.role !== 'buero') {
+    return { tasks: [], failed: false };
+  }
+  const admin = createSupabaseAdminClient();
+  // Open challenges are the scarce signal — load them first, then only their
+  // dispatches; the organization's total dispatch volume never matters here.
+  const { data: openChallenges, error: challengeError } = await admin
+    .from('planning_dispatch_acknowledgements')
+    .select('id, dispatch_id, revision_id, employee_record_id, reason, created_at')
+    .eq('organization_id', context.orgId)
+    .eq('state', 'challenged')
+    .is('challenge_resolved_at', null)
+    .order('created_at', { ascending: true })
+    .limit(501);
+  if (challengeError || (openChallenges?.length ?? 0) > 500) {
+    console.error('Failed to load open dispatch challenges:', {
+      code: challengeError?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  if (!openChallenges?.length) return { tasks: [], failed: false };
+
+  const challengeDispatchIds = [
+    ...new Set(openChallenges.map((challenge) => challenge.dispatch_id)),
+  ];
+  const { data: dispatches, error: dispatchError } = await admin
+    .from('planning_dispatches')
+    .select('id, occurrence_id, job_id, current_revision_id')
+    .eq('organization_id', context.orgId)
+    .eq('status', 'active')
+    .in('id', challengeDispatchIds);
+  if (dispatchError) {
+    console.error('Failed to load dispatches for challenges:', {
+      code: dispatchError.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const currentRevisionByDispatch = new Map(
+    (dispatches ?? []).map((dispatch) => [
+      dispatch.id,
+      dispatch.current_revision_id,
+    ])
+  );
+  // Only challenges on the CURRENT revision of an active dispatch are open
+  // manager work; superseded ones were already resolved transactionally.
+  const challenges = openChallenges.filter(
+    (challenge) =>
+      currentRevisionByDispatch.get(challenge.dispatch_id) ===
+      challenge.revision_id
+  );
+  if (!challenges.length) return { tasks: [], failed: false };
+
+  const recordIds = [
+    ...new Set(challenges.map((challenge) => challenge.employee_record_id)),
+  ];
+  const recordsResult = await admin
+    .from('employee_records')
+    .select('id, user_id, first_name, last_name')
+    .eq('organization_id', context.orgId)
+    .in('id', recordIds);
+  if (recordsResult.error) {
+    console.error('Failed to load challenge records:', {
+      code: recordsResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const userIds = (recordsResult.data ?? []).flatMap((row) =>
+    row.user_id ? [row.user_id] : []
+  );
+  const profilesResult = userIds.length
+    ? await admin
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', userIds)
+    : { data: [], error: null };
+  if (profilesResult.error) {
+    console.error('Failed to load challenge profiles:', {
+      code: profilesResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const profileById = new Map(
+    (profilesResult.data ?? []).map((profile) => [profile.id, profile])
+  );
+  const nameByRecordId = new Map(
+    (recordsResult.data ?? []).map((row) => [
+      row.id,
+      (row.user_id && profileById.get(row.user_id)
+        ? formatProfileName(profileById.get(row.user_id)!)
+        : null) ||
+        [row.first_name, row.last_name].filter(Boolean).join(' ') ||
+        'Unbenannt',
+    ])
+  );
+
+  // Resolve the challenged dispatch's job title for context.
+  const dispatchById = new Map(
+    (dispatches ?? []).map((dispatch) => [dispatch.id, dispatch])
+  );
+  const occurrenceIds = [
+    ...new Set(
+      challenges.flatMap((challenge) => {
+        const dispatch = dispatchById.get(challenge.dispatch_id);
+        return dispatch?.occurrence_id ? [dispatch.occurrence_id] : [];
+      })
+    ),
+  ];
+  const occurrencesResult = occurrenceIds.length
+    ? await admin
+        .from('planning_occurrences')
+        .select('id, job_id')
+        .eq('organization_id', context.orgId)
+        .in('id', occurrenceIds)
+    : { data: [], error: null };
+  if (occurrencesResult.error) {
+    console.error('Failed to load challenge occurrences:', {
+      code: occurrencesResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const occurrenceJobIds = new Map(
+    (occurrencesResult.data ?? []).map((row) => [row.id, row.job_id])
+  );
+  const jobIds = [
+    ...new Set(
+      challenges.flatMap((challenge) => {
+        const dispatch = dispatchById.get(challenge.dispatch_id);
+        const jobId =
+          dispatch?.job_id ??
+          (dispatch?.occurrence_id
+            ? (occurrenceJobIds.get(dispatch.occurrence_id) ?? null)
+            : null);
+        return jobId ? [jobId] : [];
+      })
+    ),
+  ];
+  const jobsResult = jobIds.length
+    ? await admin
+        .from('jobs')
+        .select('id, title, description')
+        .eq('organization_id', context.orgId)
+        .in('id', jobIds)
+    : { data: [], error: null };
+  if (jobsResult.error) {
+    console.error('Failed to load challenge jobs:', {
+      code: jobsResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
+
+  const tasks: AttentionTask[] = challenges.map((challenge) => {
+    const dispatch = dispatchById.get(challenge.dispatch_id);
+    const jobId =
+      dispatch?.job_id ??
+      (dispatch?.occurrence_id
+        ? (occurrenceJobIds.get(dispatch.occurrence_id) ?? null)
+        : null);
+    const job = jobId ? jobs.get(jobId) : null;
+    return {
+      sourceType: 'dispatch_challenge_open',
+      // The challenge row is the item identity: two concurrent challenges on
+      // one dispatch must stay two distinct manager tasks after deduplication.
+      sourceId: challenge.id,
+      personName: nameByRecordId.get(challenge.employee_record_id) ?? 'Unbenannt',
+      reason: challenge.reason ?? '',
+      jobTitle: job?.title.trim() || job?.description?.trim() || 'Auftrag',
+      acknowledgementId: challenge.id,
+      stateVersion: challenge.id,
+    };
+  });
+  return { tasks, failed: false };
+}
+
+async function deriveParkingReviewTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  if (context.role !== 'admin' && context.role !== 'buero') {
+    return { tasks: [], failed: false };
+  }
+  const admin = createSupabaseAdminClient();
+  const businessToday = getBusinessTodayIso();
+  // Bounded, deterministically ordered: the 200 most overdue reviews surface;
+  // an unusually large backlog truncates instead of failing the whole
+  // attention overview (failed stays reserved for real query errors).
+  const { data: contexts, error: contextError } = await admin
+    .from('job_parking_contexts')
+    .select('job_id, next_review_date, responsible_employee_record_id')
+    .eq('organization_id', context.orgId)
+    .lte('next_review_date', businessToday)
+    .order('next_review_date', { ascending: true })
+    .order('job_id', { ascending: true })
+    .limit(200);
+  if (contextError) {
+    console.error('Failed to load parking review contexts:', {
+      code: contextError.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  if (!contexts?.length) return { tasks: [], failed: false };
+
+  const jobIds = contexts.map((row) => row.job_id);
+  const responsibleIds = [
+    ...new Set(
+      contexts.flatMap((row) =>
+        row.responsible_employee_record_id
+          ? [row.responsible_employee_record_id]
+          : []
+      )
+    ),
+  ];
+  const [jobsResult, recordsResult] = await Promise.all([
+    admin
+      .from('jobs')
+      .select('id, title, description, job_number, status')
+      .eq('organization_id', context.orgId)
+      .in('id', jobIds),
+    responsibleIds.length
+      ? admin
+          .from('employee_records')
+          .select('id, user_id, first_name, last_name')
+          .eq('organization_id', context.orgId)
+          .in('id', responsibleIds)
+      : { data: [], error: null },
+  ]);
+  if (jobsResult.error || recordsResult.error) {
+    console.error('Failed to load parking review references:', {
+      code: (jobsResult.error ?? recordsResult.error)?.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const userIds = (recordsResult.data ?? []).flatMap((row) =>
+    row.user_id ? [row.user_id] : []
+  );
+  const profilesResult = userIds.length
+    ? await admin
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .in('id', userIds)
+    : { data: [], error: null };
+  if (profilesResult.error) {
+    console.error('Failed to load parking responsible profiles:', {
+      code: profilesResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const profileById = new Map(
+    (profilesResult.data ?? []).map((profile) => [profile.id, profile])
+  );
+  const nameByRecordId = new Map(
+    (recordsResult.data ?? []).map((row) => [
+      row.id,
+      (row.user_id && profileById.get(row.user_id)
+        ? formatProfileName(profileById.get(row.user_id)!)
+        : null) ||
+        [row.first_name, row.last_name].filter(Boolean).join(' ') ||
+        'Unbenannt',
+    ])
+  );
+  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
+
+  const tasks: AttentionTask[] = contexts.flatMap((row) => {
+    const job = jobs.get(row.job_id);
+    // The unpark trigger clears contexts, but guard against a race anyway.
+    if (!job || job.status !== 'geparkt' || !row.next_review_date) return [];
+    return [
+      {
+        sourceType: 'job_parking_review',
+        sourceId: row.job_id,
+        jobNumber: job.job_number,
+        jobTitle: job.title.trim() || job.description?.trim() || 'Auftrag',
+        nextReviewDate: row.next_review_date,
+        responsibleName: row.responsible_employee_record_id
+          ? (nameByRecordId.get(row.responsible_employee_record_id) ?? null)
+          : null,
+        stateVersion: `review:${row.next_review_date}`,
+      },
+    ];
+  });
   return { tasks, failed: false };
 }
 
@@ -687,6 +1156,9 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       approvals,
       openRequests,
       followUps,
+      dispatchAcknowledgements,
+      dispatchChallenges,
+      parkingReviews,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -695,6 +1167,9 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       deriveApprovalTasks(context),
       deriveOpenRequestTasks(context),
       deriveFollowUpTasks(context),
+      deriveDispatchAcknowledgementTasks(context),
+      deriveDispatchChallengeTasks(context),
+      deriveParkingReviewTasks(context),
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
       deriveCertificationExpiryNotifications(context),
@@ -707,6 +1182,9 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       approvals.failed ||
       openRequests.failed ||
       followUps.failed ||
+      dispatchAcknowledgements.failed ||
+      dispatchChallenges.failed ||
+      parkingReviews.failed ||
       notifications.failed ||
       sicknessNotifications.failed ||
       certificationNotifications.failed ||
@@ -733,6 +1211,9 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
           ...approvals.tasks,
           ...openRequests.tasks,
           ...followUps.tasks,
+          ...dispatchAcknowledgements.tasks,
+          ...dispatchChallenges.tasks,
+          ...parkingReviews.tasks,
         ]),
         notifications: sortNotificationsNewestFirst(
           dedupeAttentionItems([
@@ -769,6 +1250,9 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       approvals,
       openRequests,
       followUps,
+      dispatchAcknowledgements,
+      dispatchChallenges,
+      parkingReviews,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -777,6 +1261,9 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
         deriveApprovalTasks(context),
         deriveOpenRequestTasks(context),
         deriveFollowUpTasks(context),
+        deriveDispatchAcknowledgementTasks(context),
+        deriveDispatchChallengeTasks(context),
+        deriveParkingReviewTasks(context),
         deriveOwnNotifications(context),
         deriveSicknessNotifications(context),
         deriveCertificationExpiryNotifications(context),
@@ -785,6 +1272,9 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       approvals.failed ||
       openRequests.failed ||
       followUps.failed ||
+      dispatchAcknowledgements.failed ||
+      dispatchChallenges.failed ||
+      parkingReviews.failed ||
       notifications.failed ||
       sicknessNotifications.failed
       || certificationNotifications.failed
@@ -795,6 +1285,11 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
     const approvalTasks = dedupeAttentionItems(approvals.tasks);
     const requestTasks = dedupeAttentionItems(openRequests.tasks);
     const followUpTasks = dedupeAttentionItems(followUps.tasks);
+    const dispatchTasks = dedupeAttentionItems([
+      ...dispatchAcknowledgements.tasks,
+      ...dispatchChallenges.tasks,
+      ...parkingReviews.tasks,
+    ]);
     const allNotifications = dedupeAttentionItems([
       ...notifications.notifications,
       ...sicknessNotifications.notifications,
@@ -805,7 +1300,10 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       counts: {
         approvalsCount: approvalTasks.length,
         actionableCount:
-          approvalTasks.length + requestTasks.length + followUpTasks.length,
+          approvalTasks.length +
+          requestTasks.length +
+          followUpTasks.length +
+          dispatchTasks.length,
         unreadNotificationCount: allNotifications.filter(
           (notification) => notification.unread
         ).length,

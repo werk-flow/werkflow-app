@@ -167,6 +167,15 @@ export function AttentionCountProvider({
   useRealtimeEvent('client_follow_ups', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('planning_dispatches', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('planning_dispatch_acknowledgements', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('job_parking_contexts', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('attention_read_states', () => {
     scheduleRefresh();
   });

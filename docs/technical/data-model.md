@@ -123,6 +123,19 @@ Planning coordinates work without becoming a second job, employee, absence, or t
 
 Operational planning tables are organization-scoped. Manager roles can read organization planning; employees can read only assigned occurrences and their own assignment rows. Assessment/event ledgers are manager-only. All writes use narrowly granted service-role RPCs with database-side organization, membership, source-ownership, and state validation.
 
+## Dispatch Domain (P1-12)
+
+Dispatch turns a plan into an issued, confirmable work instruction without becoming a second schedule, inbox, or messaging system.
+
+- `planning_dispatches` is the stable dispatch identity with an enforced exclusive target: exactly one `job_visit` planning occurrence XOR one genuinely unscheduled job (partial unique indexes allow at most one ACTIVE dispatch per target). `creation_request_id` makes issuing idempotent per organization.
+- `planning_dispatch_revisions` is the append-only record of the work instruction actually issued: target snapshot, planned instants/dates, location source, dispatch note, and a SQL-computed `material_fingerprint`; the dispatch's `current_revision_id` points at the newest. Readiness snapshots/fingerprints are stored at issue time for audit and stay null on system supersessions.
+- `planning_dispatch_recipients` keys recipients to stable employee records per revision. `planning_dispatch_acknowledgements` is append-only per (revision, employee record): `acknowledged`, `challenged` (bounded reason, resolution fields), or `carried_forward` (traceable lineage when only the recipient set changed); the acting user is recorded separately, and derivation is latest-row-wins. A record without an active login derives the labeled „nicht möglich" state.
+- Deferred, fingerprint-idempotent triggers on occurrence material columns/status and on occurrence assignments supersede the current revision in the same transaction as any schedule mutation (single edits, series operations, the batch RPC, the legacy bridge); parking a job cancels its dispatches; inserting the first scheduled occurrence for a job-targeted dispatch retargets it as a traceable `target_scheduled` transition. `planning_dispatch_events` is the append-only ledger.
+- `job_parking_contexts` (one current row per parked job: bounded reason, note, responsible employee record, next-review date) plus append-only `job_parking_events` add manager-owned Parkplatz context; `jobs.status = geparkt` remains the authoritative parked signal, and unparking clears the context via trigger. No context is fabricated for pre-existing parked jobs.
+- `planning_customer_commitments` stores explicitly recorded customer agreements per occurrence (day, optional arrival window, source channel, actor; one active per occurrence with a supersede/withdraw chain and events). Schedule moves never rewrite a commitment — mismatch is a derived, visible state. Nothing in this domain represents message delivery or consent (`P1-46`).
+- Batch rescheduling is one all-or-nothing, version-checked, idempotent RPC over explicitly selected future occurrences; it maintains the P1-11 legacy job projection and writes per-occurrence assessments/events plus one `batch_rescheduled` summary event.
+- Access: manager-or-recipient SELECT on dispatch operational tables; manager-only on events, parking context, and commitments; all writes via service-role RPCs with organization validation. Attention extends the P1-07 taxonomy (`dispatch_acknowledgement` versioned by current revision, `dispatch_challenge_open` identified by the challenge row, `job_parking_review`) — derived, never stored.
+
 ## Time Domain
 
 Time tracking is event-based.

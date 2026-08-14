@@ -136,6 +136,21 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('planning_occurrence_assignments', (event) => {
     if (tableSet.has('planning_occurrence_assignments')) scheduleRefresh(event);
   });
+  useRealtimeEvent('planning_dispatches', (event) => {
+    if (tableSet.has('planning_dispatches')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('planning_dispatch_recipients', (event) => {
+    if (tableSet.has('planning_dispatch_recipients')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('planning_dispatch_acknowledgements', (event) => {
+    if (tableSet.has('planning_dispatch_acknowledgements')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('planning_customer_commitments', (event) => {
+    if (tableSet.has('planning_customer_commitments')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('job_parking_contexts', (event) => {
+    if (tableSet.has('job_parking_contexts')) scheduleRefresh(event);
+  });
   useRealtimeEvent('teams', (event) => {
     if (tableSet.has('teams')) scheduleRefresh(event);
   });
