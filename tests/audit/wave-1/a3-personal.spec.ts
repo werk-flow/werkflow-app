@@ -98,6 +98,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const employeeNumber = `MA-A3-${world.runId}`;
     const privateEmail = `a3-personal-${world.runId}@werkflow-golden.test`;
     const note = `A3 Personalakte ${world.runId}`;
+    const conditionNote = `A3 Kondition ${world.runId}`;
     let releaseSuggestion!: () => void;
     let markIntercepted!: () => void;
     const suggestionGate = new Promise<void>((resolve) => {
@@ -211,7 +212,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       employmentTypeLabel: 'Ausbildung',
       weeklyHours: '35',
       vacationDays: '28',
-      note: `A3 Kondition ${world.runId}`,
+      note: conditionNote,
     });
     await expect(
       adminPage.getByText('Geplant', { exact: true }).filter({ visible: true }).first()
@@ -233,6 +234,16 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       visibleText(adminPage, `Private E-Mail: — → ${privateEmail}`)
     ).toBeVisible();
     await expect(visibleText(adminPage, 'Wochenstunden: 35 → 34')).toBeVisible();
+    await expect(
+      visibleText(adminPage, `Notiz: — → ${conditionNote}`)
+    ).toBeVisible();
+    for (const createdValue of [
+      `Personalnummer: — → ${employeeNumber}`,
+      'Vorname: — → Alina',
+      `Notizen: — → ${note}`,
+    ]) {
+      await expect(visibleText(adminPage, createdValue)).toBeVisible();
+    }
 
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('button', { name: 'Personalakte anlegen' }).click();
@@ -240,7 +251,10 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await duplicateDialog
       .locator('#personnel-last-name')
       .fill(`Dora Doppel-A3-${world.runId}`);
-    await duplicateDialog.locator('#personnel-number').fill(employeeNumber);
+    const duplicateNumberInput = duplicateDialog.locator('#personnel-number');
+    await expect(duplicateNumberInput).toHaveValue(/^MA-\d+$/, { timeout: 15_000 });
+    await duplicateNumberInput.fill(employeeNumber);
+    await expect(duplicateNumberInput).toHaveValue(employeeNumber);
     await typeIntoDatePicker(
       duplicateDialog,
       'Eintrittsdatum',
@@ -317,18 +331,22 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     expect(
       resolveHolidayRegionOnDate(context.calendar, beforeFirstSelection)
     ).toBeNull();
-    expect(resolveHolidayRegionOnDate(context.calendar, '2026-09-20')).toBe('TH');
+    const currentYear = Number(today.slice(0, 4));
+    const holidayYear = today <= `${currentYear}-09-20` ? currentYear : currentYear + 1;
+    const holidayDate = `${holidayYear}-09-20`;
+    expect(resolveHolidayRegionOnDate(context.calendar, holidayDate)).toBe('TH');
     expect(
-      getHolidayContextDays(context.calendar, 2026, 2026).some(
+      getHolidayContextDays(context.calendar, holidayYear, holidayYear).some(
         (holiday) =>
-          holiday.date === '2026-09-20' && holiday.name === 'Weltkindertag'
+          holiday.date === holidayDate && holiday.name === 'Weltkindertag'
       )
     ).toBe(true);
 
     await adminPage.goto('/kalender');
     await adminPage.getByRole('tab', { name: 'Monat' }).click();
-    const [currentYear, currentMonth] = today.slice(0, 7).split('-').map(Number);
-    const monthDifference = 2026 * 12 + 8 - (currentYear * 12 + currentMonth - 1);
+    const currentMonth = Number(today.slice(5, 7));
+    const monthDifference =
+      holidayYear * 12 + 8 - (currentYear * 12 + currentMonth - 1);
     const navigationButton = monthDifference >= 0 ? 'Weiter' : 'Zurück';
     for (let index = 0; index < Math.abs(monthDifference); index += 1) {
       await adminPage.getByRole('button', { name: navigationButton }).click();

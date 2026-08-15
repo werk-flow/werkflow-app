@@ -390,7 +390,13 @@ export async function createPersonnelRecord(
       orgId,
       employeeRecordId: data.id,
       eventType: 'created',
-      eventPayload: { last_name: lastName, entry_date: entryDate },
+      eventPayload: {
+        employee_number: normalizeOptionalText(input.employeeNumber),
+        first_name: normalizeOptionalText(input.firstName),
+        last_name: lastName,
+        entry_date: entryDate,
+        notes: normalizeOptionalText(input.notes),
+      },
       actorId: userId,
     });
 
@@ -610,6 +616,7 @@ export async function addEmploymentCondition(
         employment_type: input.employmentType,
         weekly_hours: input.weeklyHours ?? null,
         vacation_days_per_year: input.vacationDaysPerYear ?? null,
+        note: normalizeOptionalText(input.note),
       },
       actorId: userId,
     });
