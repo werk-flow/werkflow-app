@@ -12,7 +12,7 @@ export function visibleText(page: Page, text: string): Locator {
 export async function createCustomer(
   page: Page,
   name: string,
-  options?: { type?: 'Privat' | 'Gewerblich' }
+  options?: { type?: 'Privat' | 'Gewerblich'; address?: string }
 ): Promise<void> {
   await page.goto('/kunden');
   await page.getByRole('button', { name: 'Kunde hinzufügen' }).click();
@@ -22,6 +22,7 @@ export async function createCustomer(
     await page.locator('#client-type').click();
     await page.getByRole('option', { name: options.type, exact: true }).click();
   }
+  if (options?.address) await page.locator('#client-address').fill(options.address);
   await page.getByRole('button', { name: 'Kunde erstellen' }).click();
   await expect(page.getByText('Kunde erfolgreich erstellt!')).toBeVisible();
   // Dialog closes itself after the success flash.
@@ -41,6 +42,8 @@ export async function createJob(
     projectNumber?: string;
     siteName?: string;
     contactName?: string;
+    expectedInheritedSiteName?: string;
+    expectedInheritedContactName?: string;
     qualificationOverrideReason?: string;
     plannedDateDigits?: string;
   }
@@ -88,27 +91,41 @@ export async function createJob(
       .filter({ hasText: `${options.projectNumber} –` });
     await expect(projectOption).toHaveCount(1, { timeout: 15_000 });
     await projectOption.click();
+    if (options.expectedInheritedSiteName) {
+      await expect(page.locator('#job-site')).toContainText(
+        options.expectedInheritedSiteName,
+        { timeout: 15_000 }
+      );
+    }
+    if (options.expectedInheritedContactName) {
+      await expect(page.locator('#job-contact')).toContainText(
+        options.expectedInheritedContactName,
+        { timeout: 15_000 }
+      );
+    }
   }
 
   if (options.siteName) {
     // The site select appears once the customer's sites finished loading.
-    await expect(page.locator('#job-site')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#job-site')).toBeEnabled({ timeout: 15_000 });
     await page.locator('#job-site').click();
-    await page
+    const siteOption = page
       .getByRole('option')
       .filter({ hasText: options.siteName })
-      .first()
-      .click();
+      .first();
+    await expect(siteOption).toBeVisible({ timeout: 15_000 });
+    await siteOption.click();
   }
 
   if (options.contactName) {
-    await expect(page.locator('#job-contact')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('#job-contact')).toBeEnabled({ timeout: 15_000 });
     await page.locator('#job-contact').click();
-    await page
+    const contactOption = page
       .getByRole('option')
       .filter({ hasText: options.contactName })
-      .first()
-      .click();
+      .first();
+    await expect(contactOption).toBeVisible({ timeout: 15_000 });
+    await contactOption.click();
   }
 
   if (options.assignEmployeeName) {
@@ -156,8 +173,13 @@ export async function createProject(
     projectNumber: string;
     title: string;
     clientName?: string;
+    siteName?: string;
+    contactName?: string;
   }
 ): Promise<void> {
+  if ((options.siteName || options.contactName) && !options.clientName) {
+    throw new Error('createProject: siteName/contactName require clientName');
+  }
   await page.goto('/auftraege');
   await page.getByRole('button', { name: 'Erstellen', exact: true }).click();
   const dialog = page
@@ -177,6 +199,20 @@ export async function createProject(
       .filter({ hasText: options.clientName })
       .first()
       .click();
+  }
+  if (options.siteName) {
+    await expect(dialog.locator('#create-project-site')).toBeVisible({ timeout: 15_000 });
+    await dialog.locator('#create-project-site').click();
+    const siteOption = page.getByRole('option').filter({ hasText: options.siteName }).first();
+    await expect(siteOption).toBeVisible({ timeout: 15_000 });
+    await siteOption.click();
+  }
+  if (options.contactName) {
+    await expect(dialog.locator('#create-project-contact')).toBeVisible({ timeout: 15_000 });
+    await dialog.locator('#create-project-contact').click();
+    const contactOption = page.getByRole('option').filter({ hasText: options.contactName }).first();
+    await expect(contactOption).toBeVisible({ timeout: 15_000 });
+    await contactOption.click();
   }
   await dialog.getByRole('button', { name: 'Projekt erstellen', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -468,13 +504,23 @@ export async function expectVisibleAfterSave(page: Page, text: string): Promise<
 
 export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
   await page.goto('/kunden');
-  await visibleText(page, customerName).click();
+  const customerRow = page.locator('tbody tr:visible').filter({ hasText: customerName }).first();
+  await expect(customerRow).toBeVisible({ timeout: 15_000 });
+  await customerRow.click();
+  await page.waitForURL(/\/kunden\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   await expect(visibleText(page, 'Kundendetails')).toBeVisible({ timeout: 15_000 });
 }
 
 export async function addContactOnCustomerDetail(
   page: Page,
-  contact: { name: string; role?: string; phone?: string; email?: string }
+  contact: {
+    name: string;
+    role?: string;
+    phone?: string;
+    email?: string;
+    notes?: string;
+    isPrimary?: boolean;
+  }
 ): Promise<void> {
   await page.getByRole('button', { name: 'Ansprechpartner hinzufügen' }).click();
   await expect(
@@ -484,6 +530,11 @@ export async function addContactOnCustomerDetail(
   if (contact.role) await page.locator('#contact-role').fill(contact.role);
   if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
   if (contact.email) await page.locator('#contact-email').fill(contact.email);
+  if (contact.notes) await page.locator('#contact-notes').fill(contact.notes);
+  if (contact.isPrimary) {
+    const checkbox = page.getByRole('checkbox', { name: 'Als Hauptkontakt festlegen' });
+    if (!(await checkbox.isChecked())) await checkbox.click();
+  }
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, contact.name);
@@ -606,7 +657,15 @@ export async function proceedThroughContactWarning(
 
 export async function addSiteOnCustomerDetail(
   page: Page,
-  site: { name: string; street?: string; postalCode?: string; city?: string }
+  site: {
+    name: string;
+    street?: string;
+    postalCode?: string;
+    city?: string;
+    accessNotes?: string;
+    primaryContactName?: string;
+    isPrimary?: boolean;
+  }
 ): Promise<void> {
   await page.getByRole('button', { name: 'Einsatzort hinzufügen' }).click();
   await expect(
@@ -616,9 +675,69 @@ export async function addSiteOnCustomerDetail(
   if (site.street) await page.locator('#site-street').fill(site.street);
   if (site.postalCode) await page.locator('#site-postal-code').fill(site.postalCode);
   if (site.city) await page.locator('#site-city').fill(site.city);
+  if (site.accessNotes) await page.locator('#site-access-notes').fill(site.accessNotes);
+  if (site.primaryContactName) {
+    await page.locator('#site-primary-contact').click();
+    await page.getByRole('option', { name: site.primaryContactName, exact: true }).click();
+  }
+  if (site.isPrimary) {
+    const checkbox = page.getByRole('checkbox', { name: 'Als Hauptstandort festlegen' });
+    if (!(await checkbox.isChecked())) await checkbox.click();
+  }
   await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, site.name);
+}
+
+export async function archiveCustomerRelation(
+  page: Page,
+  kind: 'Ansprechpartner' | 'Einsatzort',
+  name: string
+): Promise<void> {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const row = page.locator('li')
+    .filter({ has: page.getByRole('button', { name: `${kind} archivieren` }) })
+    .filter({
+      has: page.locator('p').filter({ hasText: new RegExp(`^${escapedName}$`) }),
+    })
+    .filter({ visible: true })
+    .first();
+  await row.getByRole('button', { name: `${kind} archivieren` }).click();
+  await expect(page.locator('li').filter({
+    has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
+  }).filter({ hasText: name }).filter({ visible: true })).toHaveCount(1, {
+    timeout: 15_000,
+  });
+}
+
+export async function restoreCustomerRelation(
+  page: Page,
+  kind: 'Ansprechpartner' | 'Einsatzort',
+  name: string
+): Promise<void> {
+  const row = page.locator('li').filter({
+    has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
+  }).filter({ hasText: name }).filter({ visible: true }).first();
+  await row.getByRole('button', { name: `${kind} wiederherstellen` }).click();
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const activeRow = () => page.locator('li')
+    .filter({ has: page.getByRole('button', { name: `${kind} archivieren` }) })
+    .filter({
+      has: page.locator('p').filter({ hasText: new RegExp(`^${escapedName}$`) }),
+    })
+    .filter({ visible: true })
+    .first();
+  await expect(activeRow().getByRole('button', { name: `${kind} archivieren` }))
+    .toBeVisible({ timeout: 15_000 });
+}
+
+export async function adoptCustomerAddressAsSite(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Adresse als Einsatzort übernehmen' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Einsatzort hinzufügen' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expectVisibleAfterSave(page, 'Hauptstandort');
 }
 
 export async function editSiteStreetOnCustomerDetail(
@@ -777,6 +896,50 @@ export async function convertRequestToJobViaDialog(
   await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({
     timeout: 15_000,
   });
+}
+
+export async function matchRequestToExistingCustomer(
+  page: Page,
+  clientName: string
+): Promise<void> {
+  await page.getByRole('button', { name: 'Vorhandenem Kunden zuordnen' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Kunden zuordnen' })).toBeVisible();
+  await dialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
+  await page.getByPlaceholder('Kunde suchen...').fill(clientName);
+  await page.getByRole('listbox').getByRole('button').filter({ hasText: clientName }).first().click();
+  await dialog.getByRole('button', { name: 'Zuordnen', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expectVisibleAfterSave(page, clientName);
+}
+
+export async function convertRequestToProjectViaDialog(
+  page: Page,
+  projectNumber: string
+): Promise<void> {
+  await page.getByRole('button', { name: 'Umwandeln' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Anfrage umwandeln' })).toBeVisible();
+  await dialog.getByRole('tab', { name: 'Projekt' }).click();
+  await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, { timeout: 15_000 });
+  await dialog.locator('#convert-number').fill(projectNumber);
+  await dialog.getByRole('button', { name: 'In Projekt umwandeln' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({ timeout: 15_000 });
+}
+
+export async function setRequestStatusFromDetail(
+  page: Page,
+  action: 'In Klärung setzen' | 'Wieder öffnen'
+): Promise<void> {
+  await page.getByRole('button', { name: action, exact: true }).click();
+  const expectedAction = page.getByRole('button', {
+    name: action === 'In Klärung setzen' ? 'Zurück auf Offen' : 'In Klärung setzen',
+    exact: true,
+  });
+  await expect(expectedAction).toBeVisible({ timeout: 15_000 });
+  await page.reload();
+  await expect(expectedAction).toBeVisible({ timeout: 15_000 });
 }
 
 export async function closeRequestViaDialog(

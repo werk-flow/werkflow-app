@@ -573,6 +573,120 @@ export async function getClientRequestByNumber(
   };
 }
 
+export async function getRequestAuditState(
+  orgId: string,
+  requestNumber: string
+): Promise<{
+  id: string;
+  status: string;
+  clientId: string | null;
+  callerName: string | null;
+  callerPhone: string | null;
+  convertedProjectId: string | null;
+}> {
+  const { data, error } = await createAdminClient()
+    .from('client_requests')
+    .select('id,status,client_id,caller_name,caller_phone,converted_project_id')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
+    .single();
+  if (error || !data) {
+    throw new Error(`No request found with number ${requestNumber}: ${error?.message}`);
+  }
+  return {
+    id: data.id as string,
+    status: data.status as string,
+    clientId: (data.client_id as string | null) ?? null,
+    callerName: (data.caller_name as string | null) ?? null,
+    callerPhone: (data.caller_phone as string | null) ?? null,
+    convertedProjectId: (data.converted_project_id as string | null) ?? null,
+  };
+}
+
+export async function getCustomerNumber(
+  orgId: string,
+  customerName: string
+): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from('clients')
+    .select('customer_number')
+    .eq('organization_id', orgId)
+    .eq('name', customerName)
+    .single();
+  if (error || !data) {
+    throw new Error(`Customer ${customerName} not found: ${error?.message}`);
+  }
+  return (data.customer_number as string | null) ?? null;
+}
+
+export async function getProjectJobRelationState(
+  orgId: string,
+  projectNumber: string,
+  jobNumbers: string[]
+): Promise<{
+  projectId: string;
+  clientId: string | null;
+  siteId: string | null;
+  contactId: string | null;
+  jobs: Array<{
+    jobNumber: string;
+    projectId: string | null;
+    clientId: string | null;
+    siteId: string | null;
+    contactId: string | null;
+  }>;
+}> {
+  const admin = createAdminClient();
+  const { data: project, error: projectError } = await admin
+    .from('projects')
+    .select('id,client_id,site_id,contact_id')
+    .eq('organization_id', orgId)
+    .eq('project_number', projectNumber)
+    .single();
+  if (projectError || !project) {
+    throw new Error(`Project ${projectNumber} not found: ${projectError?.message}`);
+  }
+  const { data: jobs, error: jobsError } = await admin
+    .from('jobs')
+    .select('job_number,project_id,client_id,site_id,contact_id')
+    .eq('organization_id', orgId)
+    .in('job_number', jobNumbers)
+    .order('job_number');
+  if (jobsError) throw new Error(`Project jobs could not be read: ${jobsError.message}`);
+  return {
+    projectId: project.id as string,
+    clientId: (project.client_id as string | null) ?? null,
+    siteId: (project.site_id as string | null) ?? null,
+    contactId: (project.contact_id as string | null) ?? null,
+    jobs: (jobs ?? []).map((job) => ({
+      jobNumber: job.job_number as string,
+      projectId: (job.project_id as string | null) ?? null,
+      clientId: (job.client_id as string | null) ?? null,
+      siteId: (job.site_id as string | null) ?? null,
+      contactId: (job.contact_id as string | null) ?? null,
+    })),
+  };
+}
+
+export async function getJobSiteContactState(
+  orgId: string,
+  jobNumber: string
+): Promise<{ siteId: string | null; contactId: string | null }> {
+  const { data, error } = await createAdminClient()
+    .from('jobs')
+    .select('site_id,contact_id')
+    .eq('organization_id', orgId)
+    .eq('job_number', jobNumber)
+    .single();
+  if (error || !data) {
+    throw new Error(`Job ${jobNumber} not found: ${error?.message}`);
+  }
+  return {
+    siteId: (data.site_id as string | null) ?? null,
+    contactId: (data.contact_id as string | null) ?? null,
+  };
+}
+
 // P1-07: how many client requests are currently open (offen/in_klaerung) —
 // the mode-independent input for unified-badge expectations.
 export async function countOpenClientRequests(orgId: string): Promise<number> {

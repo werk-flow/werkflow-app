@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
@@ -79,6 +79,8 @@ export function EditProjectDialog({
   const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
+  const initializedProjectIdRef = useRef<string | null>(null);
+  const projectDetailsGenerationRef = useRef(0);
   const router = useRouter();
 
   const availableJobs = useMemo(() => {
@@ -86,7 +88,9 @@ export function EditProjectDialog({
       (j) => !j.projectId || j.projectId === project.id
     );
     if (!clientId) return base;
-    return base.filter((j) => j.clientId === clientId || !j.clientId);
+    return base.filter(
+      (j) => j.projectId === project.id || j.clientId === clientId || !j.clientId
+    );
   }, [jobs, project.id, clientId]);
 
   const handleClientChange = (newClientId: string) => {
@@ -99,7 +103,10 @@ export function EditProjectDialog({
     if (selectedJobIds.length > 0) {
       const validJobIds = new Set(
         jobs
-          .filter((j) => (!j.projectId || j.projectId === project.id) && (!newClientId || j.clientId === newClientId || !j.clientId))
+          .filter((j) =>
+            (!j.projectId || j.projectId === project.id) &&
+            (j.projectId === project.id || !newClientId || j.clientId === newClientId || !j.clientId)
+          )
           .map((j) => j.id)
       );
       setSelectedJobIds((prev) => prev.filter((id) => validJobIds.has(id)));
@@ -107,7 +114,14 @@ export function EditProjectDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedProjectIdRef.current = null;
+      projectDetailsGenerationRef.current += 1;
+      setIsLoadingJobs(false);
+      return;
+    }
+    if (initializedProjectIdRef.current === project.id) return;
+    initializedProjectIdRef.current = project.id;
 
     setName(project.name);
     setDescription(project.description ?? '');
@@ -130,15 +144,35 @@ export function EditProjectDialog({
     setSuccess(false);
     setHasAttemptedSubmit(false);
 
+    const generation = ++projectDetailsGenerationRef.current;
     setIsLoadingJobs(true);
-    getProjectDetails(project.id).then((result) => {
-      if (result.success) {
-        const ids = result.details.jobs.map((j) => j.id);
+    void getProjectDetails(project.id)
+      .then((result) => {
+        if (projectDetailsGenerationRef.current !== generation) return;
+        if (!result.success) {
+          setSelectedJobIds([]);
+          setOriginalJobIds([]);
+          setError(
+            ERROR_MESSAGES[result.error] ||
+              'Die Projektaufträge konnten nicht geladen werden.'
+          );
+          return;
+        }
+        const ids = result.details.jobs.map((job) => job.id);
         setSelectedJobIds(ids);
         setOriginalJobIds(ids);
-      }
-      setIsLoadingJobs(false);
-    });
+      })
+      .catch(() => {
+        if (projectDetailsGenerationRef.current !== generation) return;
+        setSelectedJobIds([]);
+        setOriginalJobIds([]);
+        setError('Die Projektaufträge konnten nicht geladen werden.');
+      })
+      .finally(() => {
+        if (projectDetailsGenerationRef.current === generation) {
+          setIsLoadingJobs(false);
+        }
+      });
   }, [open, project]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -223,7 +257,7 @@ export function EditProjectDialog({
   };
 
   const showContentError = hasAttemptedSubmit && contentError;
-  const formDisabled = isLoading || success;
+  const formDisabled = isLoading || success || isLoadingJobs;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

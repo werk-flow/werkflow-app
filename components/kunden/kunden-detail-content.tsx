@@ -32,6 +32,7 @@ import {
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import {
   MetadataSection,
+  MetadataSaveError,
   type MetadataField,
 } from '@/components/shared/metadata-section';
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
@@ -194,7 +195,7 @@ export function KundenDetailContent({
         onSave: async (v) => {
           const result = await updateClient(client.id, { customerNumber: v });
           if (!result.success) {
-            throw new Error(
+            throw new MetadataSaveError(
               result.error === 'customer_number_taken'
                 ? 'Diese Kundennummer ist bereits vergeben.'
                 : 'Kundennummer konnte nicht gespeichert werden.'

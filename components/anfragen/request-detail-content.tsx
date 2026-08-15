@@ -341,6 +341,28 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                   )}
                 </p>
               )}
+              {(request.callerName ||
+                request.callerPhone ||
+                request.callerEmail ||
+                request.callerAddress) && (
+                <div className="mt-3 border-t pt-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Erfasste Anruferdaten
+                  </p>
+                  <div className="mt-1 space-y-1">
+                    {request.callerName && <p>{request.callerName}</p>}
+                    {request.callerPhone && (
+                      <p className="text-muted-foreground">{request.callerPhone}</p>
+                    )}
+                    {request.callerEmail && (
+                      <p className="text-muted-foreground">{request.callerEmail}</p>
+                    )}
+                    {request.callerAddress && (
+                      <p className="text-muted-foreground">{request.callerAddress}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-3 space-y-3">

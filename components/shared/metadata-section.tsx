@@ -27,6 +27,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toLocalDateString } from '@/lib/utils';
 
+export class MetadataSaveError extends Error {
+  override name = 'MetadataSaveError';
+}
+
 export interface MetadataField {
   label: string;
   value: React.ReactNode;
@@ -73,6 +77,7 @@ export function MetadataSection({
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [pendingSaveConfirmation, setPendingSaveConfirmation] =
     useState<PendingSaveConfirmation | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const currentEditingField = useMemo(
@@ -90,6 +95,7 @@ export function MetadataSection({
 
     setEditingFieldLabel(fieldLabel);
     setEditValue(nextField.editableConfig.currentValue);
+    setSaveError(null);
   };
 
   const requestStartEditing = (fieldLabel: string) => {
@@ -122,15 +128,22 @@ export function MetadataSection({
   const handleCancelEditing = () => {
     setEditingFieldLabel(null);
     setEditValue('');
+    setSaveError(null);
   };
 
   const persistFieldValue = (value: string, onSave: (newValue: string) => Promise<void>) => {
+    setSaveError(null);
     startTransition(async () => {
       try {
         await onSave(value);
         setEditingFieldLabel(null);
         setEditValue('');
       } catch (error) {
+        setSaveError(
+          error instanceof MetadataSaveError
+            ? error.message
+            : 'Die Änderung konnte nicht gespeichert werden.'
+        );
         console.error(
           `Failed to save metadata field "${currentEditingField?.label ?? 'unknown'}"`,
           error
@@ -181,9 +194,13 @@ export function MetadataSection({
               isEditable={isEditable}
               isEditing={editingFieldLabel === field.label}
               editValue={editingFieldLabel === field.label ? editValue : ''}
+              saveError={editingFieldLabel === field.label ? saveError : null}
               isPending={isPending}
               onStartEditing={() => requestStartEditing(field.label)}
-              onEditValueChange={setEditValue}
+              onEditValueChange={(value) => {
+                setEditValue(value);
+                setSaveError(null);
+              }}
               onSave={handleSave}
               onCancel={handleCancelEditing}
             />
@@ -237,6 +254,7 @@ function MetadataFieldRow({
   isEditable,
   isEditing,
   editValue,
+  saveError,
   isPending,
   onStartEditing,
   onEditValueChange,
@@ -247,6 +265,7 @@ function MetadataFieldRow({
   isEditable: boolean;
   isEditing: boolean;
   editValue: string;
+  saveError: string | null;
   isPending: boolean;
   onStartEditing: () => void;
   onEditValueChange: (value: string) => void;
@@ -397,6 +416,11 @@ function MetadataFieldRow({
             </Button>
           </div>
         </div>
+        {saveError && (
+          <p role="alert" className="text-sm text-destructive">
+            {saveError}
+          </p>
+        )}
       </div>
     );
   }

@@ -23,6 +23,7 @@ import { ClientSelectWithCreate } from './client-select-with-create';
 import { SiteContactFields } from './site-contact-fields';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { createJob, getNextJobNumber, type CreateJobInput } from '@/lib/jobs/actions';
+import { getProjectDetails } from '@/lib/projects/actions';
 import { QualificationWarningDialog } from './qualification-warning-dialog';
 import type {
   AssignmentApproval,
@@ -114,6 +115,9 @@ export function CreateJobFormContent({
   >(null);
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [projectId, setProjectId] = useState<string>(defaultProjectId ?? '');
+  const selectedProjectRef = useRef(defaultProjectId ?? '');
+  const [isLoadingProjectDefaults, setIsLoadingProjectDefaults] = useState(false);
+  const [projectDefaultsLoadFailed, setProjectDefaultsLoadFailed] = useState(false);
   // Prefill from the project's default site/contact when creating inside one.
   const defaultProject = projects.find(
     (project) => project.id === defaultProjectId
@@ -217,6 +221,7 @@ export function CreateJobFormContent({
   ]);
 
   const submitJob = async (approval?: AssignmentApproval) => {
+    if (isLoadingProjectDefaults || projectDefaultsLoadFailed) return;
     setHasAttemptedSubmit(true);
     setError(null);
     setContentError(null);
@@ -258,8 +263,8 @@ export function CreateJobFormContent({
         estimatedDurationMinutes: durationMinutes ?? undefined,
         plannedWorkingMinutes,
         location: location.trim() || undefined,
-        siteId: siteId || undefined,
-        contactId: contactId || undefined,
+        siteId,
+        contactId,
         selectedUserIds: selectedEmployees,
         assignmentApproval: approval ?? null,
         assignmentTeamSourceId,
@@ -312,6 +317,9 @@ export function CreateJobFormContent({
   const showContentError = hasAttemptedSubmit && contentError;
   const showJobNumberError = hasAttemptedSubmit && jobNumberError;
   const formDisabled = isLoading || success;
+  const projectSelectionDisabled = formDisabled || isLoadingProjectDefaults;
+  const siteContactDisabled = projectSelectionDisabled || projectDefaultsLoadFailed;
+  const submitDisabled = formDisabled || isLoadingProjectDefaults || projectDefaultsLoadFailed;
 
   const activeProjects = useMemo(
     () =>
@@ -361,6 +369,7 @@ export function CreateJobFormContent({
   }, [readOnlyClient, projectId, clientId, activeProjects, clients]);
 
   const handleClientChange = (newClientId: string) => {
+    setProjectDefaultsLoadFailed(false);
     setClientId(newClientId);
     // Sites and contacts belong to one customer; a change invalidates them.
     setSiteId('');
@@ -368,14 +377,19 @@ export function CreateJobFormContent({
     if (projectId) {
       const selectedProject = activeProjects.find((p) => p.id === projectId);
       if (selectedProject && newClientId && selectedProject.clientId !== newClientId && selectedProject.clientId !== null) {
+        selectedProjectRef.current = '';
         setProjectId('');
       }
     }
   };
 
   const handleProjectChange = (newProjectId: string) => {
+    setError(null);
+    setProjectDefaultsLoadFailed(false);
+    selectedProjectRef.current = newProjectId;
     setProjectId(newProjectId);
     if (newProjectId) {
+      setIsLoadingProjectDefaults(true);
       const selected = activeProjects.find((p) => p.id === newProjectId);
       if (selected) {
         if (!readOnlyClient) {
@@ -386,7 +400,36 @@ export function CreateJobFormContent({
         setSiteId(selected.siteId ?? '');
         setContactId(selected.contactId ?? '');
       }
+      void getProjectDetails(newProjectId)
+        .then((result) => {
+          if (selectedProjectRef.current !== newProjectId) return;
+          if (!result.success) {
+            setSiteId('');
+            setContactId('');
+            setProjectDefaultsLoadFailed(true);
+            setError('Die Projektvorgaben konnten nicht geladen werden.');
+            return;
+          }
+          const project = result.details.project;
+          if (!readOnlyClient) setClientId(project.clientId ?? '');
+          setSiteId(project.siteId ?? '');
+          setContactId(project.contactId ?? '');
+          setProjectDefaultsLoadFailed(false);
+        })
+        .catch(() => {
+          if (selectedProjectRef.current !== newProjectId) return;
+          setSiteId('');
+          setContactId('');
+          setProjectDefaultsLoadFailed(true);
+          setError('Die Projektvorgaben konnten nicht geladen werden.');
+        })
+        .finally(() => {
+          if (selectedProjectRef.current === newProjectId) {
+            setIsLoadingProjectDefaults(false);
+          }
+        });
     } else {
+      setIsLoadingProjectDefaults(false);
       setSiteId('');
       setContactId('');
     }
@@ -455,7 +498,7 @@ export function CreateJobFormContent({
             clients={clients}
             value={clientId}
             onValueChange={handleClientChange}
-            disabled={formDisabled}
+            disabled={projectSelectionDisabled}
             id="job-client"
             readOnly={isClientLocked}
             readOnlyLabel={lockedClientLabel}
@@ -547,7 +590,7 @@ export function CreateJobFormContent({
             }
           }}
           onContactChange={setContactId}
-          disabled={formDisabled}
+          disabled={siteContactDisabled}
           idPrefix="job"
         />
 
@@ -572,7 +615,7 @@ export function CreateJobFormContent({
               plannedDate ? toLocalDateString(plannedDate) : null
             }
             onTeamApplied={setAssignmentTeamSourceId}
-            disabled={formDisabled}
+            disabled={projectSelectionDisabled}
           />
         </div>
 
@@ -605,7 +648,7 @@ export function CreateJobFormContent({
         )}
       </div>
       <div className="flex justify-end">
-        <Button type="submit" disabled={formDisabled}>
+        <Button type="submit" disabled={submitDisabled}>
           {isLoading && <Loader2 className="size-4 animate-spin" />}
           {isLoading ? 'Wird erstellt...' : 'Auftrag erstellen'}
         </Button>

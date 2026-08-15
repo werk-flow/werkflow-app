@@ -51,7 +51,7 @@ After A7: fresh production build, then — sequentially, never concurrently — 
 | Session | Scope (catalog sections) | Status |
 | --- | --- | --- |
 | A1 | Grundstock (Organisation/Rollen, Kunden-Basis, Aufträge/Projekte-Basis, Kalender-Basis, Zeiterfassung-Basis, Dokumente, Lager) + `P1-00`/`P1-00a` | `complete` |
-| A2 | Kunden-Cluster: `P1-01`, `P1-02`, `P1-10` | `open` |
+| A2 | Kunden-Cluster: `P1-01`, `P1-02`, `P1-10` | `complete` |
 | A3 | Personal-Cluster: `P1-03`, `P1-04`, `P1-05` | `open` |
 | A4 | Abwesenheits-Cluster: `P1-06`, `P1-08` | `open` |
 | A5 | Aufgaben & Qualifikationen: `P1-07`, `P1-09` | `open` |
@@ -64,6 +64,7 @@ After A7: fresh production build, then — sequentially, never concurrently — 
 In the final gate, all audit specs share **one world in one run**, executing in filename order. Each completed session records here what its spec leaves behind in-world so later specs can tolerate it (post-run database cleanliness is a separate, always-required proof). Verify details against the spec itself when a specific fact is load-bearing.
 
 - **A1** (`a1-grundstock.spec.ts`, runs first): A1-prefixed customers/jobs/projects in various states (edited, deleted/unlinked, parked — including a parked project with children — and completed), a checklist job, manual time entries on the run's previous Berlin business day plus approved/edited/reassigned corrections, the organization break policy possibly left on the **automatic** rule (A1-32 does not guarantee reverting it), documents including a trashed→restored file, a versioned business document, and a 1×1 PNG viewer fixture, an inventory item/location with movements (including a rejected negative booking) and CSV-imported category/supplier/location, and — alive until teardown — **two extra organizations** (the UI-signup organization and the seeded admin's second organization), which appear in the affected users' organization switchers for the remainder of the battery run.
+- **A2** (`a2-kunden.spec.ts`, runs after A1): run-scoped A2 customers including an active restored contact and site plus distinct primary contact/site, one assigned field-service job with site access notes, two customer-number fixtures (only the first retains the unique number), one customer-changed project whose two child jobs remain linked while all old-customer site/contact references are null, a matched unknown-caller request whose captured caller facts remain, one reopened request, one exactly-once request-to-project conversion with reciprocal link, and a relationship customer with a completed follow-up reassigned to the seeded Büro manager. The temporary invited follow-up owner has no remaining organization membership or personnel record. No A2-created organization exists beyond the seeded world.
 
 ## Coverage ledger
 
@@ -154,25 +155,27 @@ Lager:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A2-01 | Ansprechpartner anlegen/primär/archivieren; Einsatzorte pflegen | covered:@P1-01 | `open` | |
-| A2-02 | Archivierten Kontakt wiederherstellen; archivierte fehlen in Pickern | new:A2-02 | `open` | |
-| A2-03 | Ein-Klick: Kundenadresse als ersten Einsatzort übernehmen | new:A2-03 | `open` | |
-| A2-04 | Kundennummer: manuelle Vergabe, Org-Eindeutigkeit wird abgelehnt | new:A2-04 | `open` | |
-| A2-05 | Ort-Snapshot: Adressänderung am Einsatzort ändert alte Aufträge nicht | covered:@P1-01 | `open` | |
-| A2-06 | Projekt-Standardort/-kontakt befüllt neue Projektaufträge vor; Auftrag kann abweichen; Kundenwechsel löscht Referenzen (inkl. Kinder) | new:A2-06 | `open` | |
-| A2-07 | Handwerker sieht Ort/Zugangshinweise/Kontakt mit Anruf-Link | covered:@P1-01 | `open` | |
-| A2-08 | Suche über Kontakte/Einsatzorte | covered:@P1-01 | `open` | |
-| A2-09 | Anfrage im Anruf erfassen (inkl. Anhang); unbekannte Anruferin zuordnen/anlegen | covered:@GG-01 | `open` | |
-| A2-10 | Vorgeschlagene Anfragenummer manuell überschreiben (Regressionsflow des P1-02-Defekts) | new:A2-10 | `open` | |
-| A2-11 | Lifecycle: „In Klärung" setzen; geschlossene Anfrage wieder öffnen | new:A2-11 | `open` | |
-| A2-12 | Umwandlung genau einmal in **Auftrag**; Schließen mit Grund; Direktauftrag ohne Anfrage | covered:@GG-01 | `open` | |
-| A2-13 | Umwandlung in **Projekt** (inkl. Rückverlinkung) | new:A2-13 | `open` | |
-| A2-14 | Zugriffsgrenzen `/anfragen` (Handwerker, Fremdorganisation) | covered:@GG-01 | `open` | |
-| A2-15 | Kundendetail-Chronik: Reihenfolge, Filter, Deep-Links ohne Kopien | covered:@P1-10 | `open` | |
-| A2-16 | Follow-up anlegen/erledigen; überfällig als Aufgabe | covered:@P1-10 | `open` | |
-| A2-17 | Follow-up ohne gültigen Verantwortlichen erscheint allen Managern zur Neuzuweisung | new:A2-17 | `open` | |
-| A2-18 | Kommunikationspräferenzen: Zweck×Kanal, Warnung, begründete Ausnahme | covered:@P1-10 | `open` | |
-| A2-19 | Allgemeine Präferenzen (Kontaktzeiten, Sprache, Kontaktsperre) pflegen und sehen | manual (data entry + display; warning logic covered by A2-18) | `open` | |
+| A2-01 | Ansprechpartner anlegen/primär/archivieren; Einsatzorte pflegen | covered:@P1-01 + new:A2-01 (Primär-/Archiv-Ergänzung) | `pass` | `@P1-01`-Body deckt Anlage/Sichtbarkeit; `A2-01/A2-02/A2-03` beweist zusätzlich Primärwechsel und beide Archivlisten. |
+| A2-02 | Archivierten Kontakt wiederherstellen; archivierte fehlen in Pickern | new:A2-02 | `pass` | Kontakt und Einsatzort archiviert, aus Auftrags-Pickern ausgeschlossen und über die sichtbare Archivliste wiederhergestellt. |
+| A2-03 | Ein-Klick: Kundenadresse als ersten Einsatzort übernehmen | new:A2-03 | `pass` | „Adresse als Einsatzort übernehmen“ legt `Hauptstandort` mit der vollständigen Kundenadresse an. |
+| A2-04 | Kundennummer: manuelle Vergabe, Org-Eindeutigkeit wird abgelehnt | new:A2-04 | `defect_fixed` | Eindeutigkeit dauerhaft per DB-Leseassertion; gemeinsamer Metadaten-Editor zeigt kuratierte deutsche Speicherfehler jetzt sichtbar statt nur in der Konsole. |
+| A2-05 | Ort-Snapshot: Adressänderung am Einsatzort ändert alte Aufträge nicht | covered:@P1-01 | `pass` | `@P1-01`-Body re-verifiziert; finale Golden-Suite 93/93. |
+| A2-06 | Projekt-Standardort/-kontakt befüllt neue Projektaufträge vor; Auftrag kann abweichen; Kundenwechsel löscht Referenzen (inkl. Kinder) | new:A2-06 | `defect_fixed` | Projektvorgaben werden UI- und serverseitig vererbt, explizite Abweichung bleibt möglich; Kundenwechsel behält beide Kinder und leert alte Orts-/Kontaktverweise. Dialog-Reset, fehlgeschlagene Defaults und veraltete Detailantworten sind abgesichert. |
+| A2-07 | Handwerker sieht Ort/Zugangshinweise/Kontakt mit Anruf-Link | covered:@P1-01 + new:A2-07 (Zugangshinweis-Ergänzung) | `pass` | `@P1-01`-Body deckt Ort/Kontakt/Telefon; `A2-07` ergänzt Adresse, Zugangshinweis und `tel:`-Link in der Handwerkeransicht. |
+| A2-08 | Suche über Kontakte/Einsatzorte | covered:@P1-01 | `pass` | `@P1-01`-Body re-verifiziert; finale Golden-Suite 93/93. |
+| A2-09 | Anfrage im Anruf erfassen (inkl. Anhang); unbekannte Anruferin zuordnen/anlegen | covered:@GG-01 + new:A2-09 (bestehendem Kunden zuordnen) | `defect_fixed` | `@GG-01` deckt Erfassung/Anhang/Neuanlage; `A2-09` ordnet einem bestehenden Kunden zu. Erfasster Name und Telefon bleiben nach Zuordnung sichtbar und in der Anfrage gespeichert. |
+| A2-10 | Vorgeschlagene Anfragenummer manuell überschreiben (Regressionsflow des P1-02-Defekts) | new:A2-10 | `pass` | Nur die Nummernvorschlags-Server-Action wird verzögert; der vorher eingegebene run-scoped Wert überlebt die späte Antwort und wird gespeichert. |
+| A2-11 | Lifecycle: „In Klärung" setzen; geschlossene Anfrage wieder öffnen | new:A2-11 | `pass` | `offen → in_klaerung → geschlossen → offen` jeweils nach Persistenz geprüft. |
+| A2-12 | Umwandlung genau einmal in **Auftrag**; Schließen mit Grund; Direktauftrag ohne Anfrage | covered:@GG-01 | `pass` | Vollständige `@GG-01`-Bodies re-verifiziert; finale Golden-Suite 93/93. |
+| A2-13 | Umwandlung in **Projekt** (inkl. Rückverlinkung) | new:A2-13 | `pass` | Einmalige UI-Umwandlung, Anfrage→Projekt und Projekt→Quellanfrage sichtbar und per DB-Leseassertion belegt; zweite Umwandlung nicht angeboten. |
+| A2-14 | Zugriffsgrenzen `/anfragen` (Handwerker, Fremdorganisation) | covered:@GG-01 | `pass` | Rollen- und Fremdorganisations-Bodies re-verifiziert; finale Golden-Suite 93/93. |
+| A2-15 | Kundendetail-Chronik: Reihenfolge, Filter, Deep-Links ohne Kopien | covered:@P1-10 | `pass` | `@P1-10` re-verifiziert; `A2-15/A2-17` ergänzt gültige absteigende `datetime`-Reihenfolge unter weiterem Follow-up-Verlauf. |
+| A2-16 | Follow-up anlegen/erledigen; überfällig als Aufgabe | covered:@P1-10 | `pass` | `@P1-10`-Body re-verifiziert; finale Golden-Suite 93/93. |
+| A2-17 | Follow-up ohne gültigen Verantwortlichen erscheint allen Managern zur Neuzuweisung | new:A2-17 | `pass` | Temporär eingeladener Owner per UI entfernt; Admin und Büro sehen „Neu zuweisen“, Büro übernimmt/erledigt. Danach weder Mitgliedschaft noch Personalakte des temporären Owners vorhanden. |
+| A2-18 | Kommunikationspräferenzen: Zweck×Kanal, Warnung, begründete Ausnahme | covered:@P1-10 | `pass` | Zweck-/Kanaltrennung, Warnung und begründete Ausnahme im vollständigen `@P1-10`-Body re-verifiziert; finale Golden-Suite 93/93. |
+| A2-19 | Allgemeine Präferenzen (Kontaktzeiten, Sprache, Kontaktsperre) pflegen und sehen | manual (data entry + display; warning logic covered by A2-18) | `manual_ok` | Laufende App geprüft: bevorzugter Kontakt, Telefon, Werktags 08:00–10:00, Sprache, Barrierefreiheit, Kontaktsperre und zweckspezifisches „Nicht erlaubt“ sichtbar; unkonfiguriert zeigt ausdrücklich „Noch nicht konfiguriert“/„Unbekannt“. Diagnosewelt anschließend zerstört. |
+
+**A2 closure note / final-gate item:** Zwei zusätzliche vollständige 29-Test-Batterieversuche ließen alle acht A2-Tests nach A1 in derselben Welt grün laufen, waren insgesamt aber nicht grün: zuerst A1-30 mit dokumentierter Laufzeitüberschreitung (fokussiert danach 18,7 s grün), danach reproduzierbar A1-10 beim Kundenlöschen. Read-only Live-Prüfung der gehaltenen Diagnosewelt bewies, dass der Kunde bereits gelöscht und die Projekt-/Auftragsreferenzen bereits auf `null` gesetzt waren, während die UI-Server-Action auf „Wird gelöscht…“ blieb. Das ist ein A1-Post-Delete-Antwort-/Cache-Invalidierungsdefekt außerhalb des A2-Eigentums und muss vor Session F geklärt werden; A2-App-/Testcode wurde dafür nicht erweitert.
 
 ### Session A3 — Personal-Cluster (`P1-03`, `P1-04`, `P1-05`)
 
@@ -258,5 +261,6 @@ Newest first. One entry per completed session: what was verified, tests added (c
 
 | Date | Session | Summary | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-15 | A2 | Completed all 19 customer-cluster rows: eight German serial audit tests added in `tests/audit/wave-1/a2-kunden.spec.ts` (29-test audit battery total), one manual display check, no catalog corrections and no deferred A2 rows. Corrected the provisional mappings for A2-01, A2-07 and A2-09 after body inspection. Fixed product defects in project-default inheritance, project-customer changes preserving child membership while clearing old references, dialog reset/stale-response handling, retained unknown-caller display, and visible safe metadata-save errors. CodeRabbit received the authorized scoped diff/context in three WSL CLI passes: 26 issues total, 18 applied and 8 rejected or verified false (including already-present German mapping, server normalization/validation already safe, duplicated caller-link scope, and intentionally conditional loading cleanup). A2 leaves only the state documented above inside a combined world; every completed/diagnostic world was destroyed and the final live marker query returned zero test organizations and zero test profiles. Publication: this A2 session commit targets `origin/partner-preview` only. | Statics clean (`git diff --check`, TypeScript, lint), unit 187/187, fresh production build green, final focused `@AUDIT-W1-A2` 8/8 in 2.4m (world `msuk6a6t`), final production golden suite 93/93 in 15.1m (world `msuk9ffk`). Manual A2-19 `manual_ok`. Additional combined runs proved A2 8/8 after inherited A1 state but exposed the separately recorded A1 final-gate item; they are not claimed as green full-battery evidence. |
 | 2026-08-15 | A1 | Completed all 44 Grundstock/Wave-0 rows: 21 automated audit tests added in `tests/audit/wave-1/a1-grundstock.spec.ts`, five physical/display flows checked manually, two catalog claims corrected, and one product decision deferred. Fixed nine product defects across customer/job/project Realtime mutations and route invalidation, project numbering/parking, Berlin completion dates, break-policy editing, document-version refresh, and inventory movement evidence; hardened action-menu accessibility, UI-created-world cleanup, ESLint exclusion of generated audit reports, and existing Golden assertions for persisted invitation state, holiday precedence, and calendar overflow on the run date. CodeRabbit: eleven findings, ten applied (Realtime resume refresh, inventory-helper validation, unique approval-card assertion, explicit cleanup-error handling, closed document-dialog guard, stable project picker identity, visible personnel row, run-scoped explicit teardown, profile-before-org cleanup order, customer-delete rejection recovery), one rejected because the mandatory post-run leftover sweep is intentional and concurrent golden/audit runs are prohibited; transient quota retries occurred before the final review. No world state is left behind. | Focused `@AUDIT-W1-A1`: 21/21; TypeScript/lint/unit: clean (187/187); production build: green; affected `@GG-00`: green; final production golden suite: 93/93; final production `@AUDIT-W1-A1`: 21/21. Published by the A1 session commit to `origin/partner-preview`. |
 | 2026-08-15 | — | Audit protocol established: this document, the triaged ledger (provisional buckets from spec-title/knowledge triage), `playwright.audit.config.ts`, `tests/audit/` scaffolding, `test:audit:w1` script, gitignore entries. No audit test exists yet. | This session |

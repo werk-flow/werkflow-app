@@ -80,6 +80,8 @@ export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plan
 type ProjectClientContext = {
   id: string;
   client_id: string | null;
+  site_id: string | null;
+  contact_id: string | null;
 };
 
 type AssignmentContext = {
@@ -466,7 +468,7 @@ async function getProjectClientContext(
 > {
   const { data: project, error: projectError } = await admin
     .from('projects')
-    .select('id, client_id')
+    .select('id, client_id, site_id, contact_id')
     .eq('id', projectId)
     .eq('organization_id', orgId)
     .single();
@@ -553,19 +555,19 @@ export async function createJob(
       return { success: false, error: 'job_number_taken' };
     }
 
-    let inheritedProjectClientId: string | null | undefined = undefined;
+    let projectContext: ProjectClientContext | undefined;
     if (input.projectId) {
-      const projectContext = await getProjectClientContext(
+      const result = await getProjectClientContext(
         admin,
         orgId,
         input.projectId
       );
 
-      if (!projectContext.success) {
+      if (!result.success) {
         return { success: false, error: 'project_not_found' };
       }
 
-      inheritedProjectClientId = projectContext.project.client_id;
+      projectContext = result.project;
     }
 
     if (!input.projectId && input.clientId) {
@@ -582,16 +584,26 @@ export async function createJob(
     }
 
     const effectiveClientId =
-      inheritedProjectClientId !== undefined
-        ? inheritedProjectClientId
+      projectContext
+        ? projectContext.client_id
         : input.clientId || null;
+    // Undefined inherits the project default; an empty string explicitly clears it.
+    // Keep that distinction intact across client/server serialization.
+    const effectiveSiteId =
+      input.siteId !== undefined
+        ? input.siteId || null
+        : projectContext?.site_id || null;
+    const effectiveContactId =
+      input.contactId !== undefined
+        ? input.contactId || null
+        : projectContext?.contact_id || null;
 
     const siteContactCheck = await validateSiteAndContactForClient(
       admin,
       orgId,
       effectiveClientId,
-      input.siteId || null,
-      input.contactId || null
+      effectiveSiteId,
+      effectiveContactId
     );
     if (!siteContactCheck.success) {
       return siteContactCheck;
@@ -603,8 +615,8 @@ export async function createJob(
         organization_id: orgId,
         project_id: input.projectId || null,
         client_id: effectiveClientId,
-        site_id: input.siteId || null,
-        contact_id: input.contactId || null,
+        site_id: effectiveSiteId,
+        contact_id: effectiveContactId,
         job_number: jobNumber,
         title,
         description: description || null,
