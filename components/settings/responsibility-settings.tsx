@@ -126,12 +126,41 @@ export function ResponsibilitySettings({
     ],
   });
 
+  const isCurrentUserAffected =
+    data.currentEmployeeRecordId !== null &&
+    (ORGANIZATION_RESPONSIBILITIES.some((responsibility) =>
+      data.effective[responsibility].holders.some(
+        (holder) => holder.employeeRecordId === data.currentEmployeeRecordId
+      )
+    ) ||
+      data.delegations.some(
+        (delegation) =>
+          delegation.delegatorEmployeeRecordId ===
+            data.currentEmployeeRecordId ||
+          delegation.substituteEmployeeRecordId === data.currentEmployeeRecordId
+      ));
+
   if (data.currentUserRole === 'employee') {
-    return <OwnResponsibilitySummary data={data} />;
+    return isCurrentUserAffected ? (
+      <OwnResponsibilitySummary data={data} />
+    ) : (
+      <Card>
+        <CardHeader>
+          <CardTitle>Meine Verantwortlichkeiten und Vertretungen</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Für dich sind derzeit keine Verantwortlichkeiten oder Vertretungen
+            eingetragen.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
     <div className="space-y-6">
+      {isCurrentUserAffected ? <OwnResponsibilitySummary data={data} /> : null}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
