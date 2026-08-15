@@ -74,7 +74,9 @@ export function CreateProjectFormContent({
   useEffect(() => {
     if (!isActive) return;
     getNextProjectNumber().then((result) => {
-      if (result.success) setProjectNumber(result.projectNumber);
+      if (result.success) {
+        setProjectNumber((current) => current || result.projectNumber);
+      }
     });
   }, [isActive]);
 

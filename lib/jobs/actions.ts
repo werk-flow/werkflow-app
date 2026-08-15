@@ -34,6 +34,7 @@ import type {
 import { loadAssignmentEvaluation } from '@/lib/qualifications/server';
 import type { Json } from '@/lib/supabase/database.types';
 import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
+import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
   toClientContact,
   toClientSite,
@@ -980,6 +981,7 @@ export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
     }
 
     updateTag(CACHE_TAGS.jobs(orgId));
+    revalidatePath('/auftraege', 'layout');
     if (existing.project_id) {
       updateTag(CACHE_TAGS.projects(orgId));
     }
@@ -1020,9 +1022,7 @@ export async function updateJobStatus(
     const updateData: Record<string, unknown> = { status: newStatus };
 
     if (newStatus === 'fertig') {
-      updateData.actual_completion_date = new Date()
-        .toISOString()
-        .split('T')[0];
+      updateData.actual_completion_date = getBusinessTodayIso();
     }
 
     if (newStatus === 'in_bearbeitung' || newStatus === 'nicht_bearbeitet') {

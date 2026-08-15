@@ -827,14 +827,16 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                     <TableHead>Von</TableHead>
                     <TableHead>Nach</TableHead>
                     <TableHead>Bewegung</TableHead>
+                    <TableHead className="text-right">Vorher</TableHead>
                     <TableHead className="text-right">Menge</TableHead>
                     <TableHead className="text-right">Danach</TableHead>
+                    <TableHead>Grund</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {overview.movements.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                         Noch keine Bewegungen erfasst.
                       </TableCell>
                     </TableRow>
@@ -853,6 +855,9 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                           <TableCell>
                             {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}
                           </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {movement.quantityBefore.toLocaleString('de-DE')}
+                          </TableCell>
                           <TableCell
                             className={cn(
                               'text-right tabular-nums',
@@ -867,6 +872,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
                           <TableCell className="text-right tabular-nums">
                             {movement.quantityAfter.toLocaleString('de-DE')}
                           </TableCell>
+                          <TableCell>{movement.reason ?? '—'}</TableCell>
                         </TableRow>
                       );
                     })

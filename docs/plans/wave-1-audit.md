@@ -49,7 +49,7 @@ After A7: fresh production build, then — sequentially, never concurrently — 
 
 | Session | Scope (catalog sections) | Status |
 | --- | --- | --- |
-| A1 | Grundstock (Organisation/Rollen, Kunden-Basis, Aufträge/Projekte-Basis, Kalender-Basis, Zeiterfassung-Basis, Dokumente, Lager) + `P1-00`/`P1-00a` | `open` |
+| A1 | Grundstock (Organisation/Rollen, Kunden-Basis, Aufträge/Projekte-Basis, Kalender-Basis, Zeiterfassung-Basis, Dokumente, Lager) + `P1-00`/`P1-00a` | `complete` |
 | A2 | Kunden-Cluster: `P1-01`, `P1-02`, `P1-10` | `open` |
 | A3 | Personal-Cluster: `P1-03`, `P1-04`, `P1-05` | `open` |
 | A4 | Abwesenheits-Cluster: `P1-06`, `P1-08` | `open` |
@@ -68,80 +68,80 @@ Organisation, Konten, Rollen:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-01 | Konto anlegen (Registrierung) und erste Organisation erstellen | new:A1-01 (must use the `@werkflow-golden.test` email pattern so world teardown removes the user) | `open` | |
-| A1-02 | Organisation per Code beitreten | new:A1-02 (also produces the dual-membership user for A1-03/A1-16) | `open` | |
-| A1-03 | Aktive Organisation wechseln; Daten strikt getrennt | new:A1-03 | `open` | |
-| A1-04 | Einladung per E-Mail (Büro), Einlösung, rollengerechte Oberflächen | covered:@GG-00 („Einladung: Eingeladene Person tritt bei…"); Handwerker-Variante via @P1-03 | `open` | |
-| A1-05 | Mitgliederliste mit Live-Stempelstatus („arbeitet") | new:A1-05 (piggyback on A1-15 clock-in) | `open` | |
-| A1-06 | Rollenänderungs-Schutz: eigene Rolle nicht änderbar, kein zweiter Admin, Büro verwaltet nur Handwerker | new:A1-06 | `open` | |
-| A1-07 | Abmelden (+ Auto-Ausstempeln beim Abmelden) | covered:@GG-00 (Abmelden); Auto-Ausstempeln new:A1-07 | `open` | |
+| A1-01 | Konto anlegen (Registrierung) und erste Organisation erstellen | new:A1-01 | `pass` | UI-Registrierung und Organisationserstellung; UI-erzeugte Organisation und Auth-Nutzer durch erweiterten World-Teardown entfernt. |
+| A1-02 | Organisation per Code beitreten | new:A1-02 (also produces the dual-membership user for A1-03/A1-28) | `catalog_corrected` | Beitritt als Handwerker und zweite Mitgliedschaft verifiziert; Katalog um Admin-/Inhabergrenzen präzisiert. |
+| A1-03 | Aktive Organisation wechseln; Daten strikt getrennt | new:A1-03 | `pass` | Umschalten und beidseitige Datenisolation in `A1-02/A1-03`. |
+| A1-04 | Einladung per E-Mail (Büro), Einlösung, rollengerechte Oberflächen | covered:@GG-00 („Einladung: Eingeladene Person tritt bei…") + new:A1-04 (role surfaces) | `pass` | Invite-Body in `@GG-00` re-verifiziert; Handwerker-Navigation in `A1-04/A1-06`. |
+| A1-05 | Mitgliederliste mit Live-Stempelstatus („arbeitet") | new:A1-05 (piggyback on A1-26 clock-in) | `pass` | Live-Status „Arbeitet" in `A1-05/A1-26/A1-27/A1-28`. |
+| A1-06 | Rollenänderungs-Schutz: eigene Rolle nicht änderbar, kein zweiter Admin, Büro verwaltet nur Handwerker | new:A1-06 | `catalog_corrected` | Schutzregeln verifiziert; Katalog präzisiert, dass Büro zwar Büro einladen, bestehende Büro/Admin aber nicht verwalten kann. |
+| A1-07 | Abmelden (+ Auto-Ausstempeln beim Abmelden) | covered:@GG-00 (Abmelden); Auto-Ausstempeln new:A1-07 | `deferred` | Abmelden und Auto-Ausstempeln grün; Entfernung eines Mitglieds löscht dessen Zeithistorie — Aufbewahrungsentscheidung durch Product Owner nötig. |
 
 Kunden-Basis:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-08 | Kunde anlegen; Liste live | covered:@GG-00 (anlegen + Realtime) | `open` | |
-| A1-09 | Kunde inline auf Detailseite bearbeiten | new:A1-09 | `open` | |
-| A1-10 | Kunde löschen — Aufträge/Projekte bleiben, verlieren nur die Zuordnung | new:A1-10 | `open` | |
-| A1-11 | Kunde direkt im Auftrags-/Projektdialog neu anlegen | new:A1-11 | `open` | |
+| A1-08 | Kunde anlegen; Liste live | covered:@GG-00 (anlegen + Realtime) | `pass` | `@GG-00`-Body re-verifiziert; finale Golden-Suite. |
+| A1-09 | Kunde inline auf Detailseite bearbeiten | new:A1-09 | `pass` | `A1-09/A1-11`. |
+| A1-10 | Kunde löschen — Aufträge/Projekte bleiben, verlieren nur die Zuordnung | new:A1-10 | `defect_fixed` | Realtime-Selbst-Rennen beim Löschen behoben; Auftrag/Projekt bleiben ohne Kunde erhalten (`A1-10/A1-14`). |
+| A1-11 | Kunde direkt im Auftrags-/Projektdialog neu anlegen | new:A1-11 | `pass` | `A1-09/A1-11`. |
 
 Aufträge & Projekte-Basis:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-12 | Auftrag anlegen/zuweisen; Handwerker sieht nur Zugewiesenes | covered:@GG-00 | `open` | |
-| A1-13 | Auftrag bearbeiten; Zuweisung entfernen; Auftrag löschen | new:A1-13 | `open` | |
-| A1-14 | Projekt anlegen; Auftrag im Projekt erbt Kunden; Projekt ohne Aufträge; Projekt löschen löst nur die Zuordnung | new:A1-14 | `open` | |
-| A1-15 | Datum entziehen parkt den Auftrag; Einplanen entparkt (semantisch, ohne Drag & Drop) | new:A1-15 | `open` | |
-| A1-16 | Projekt parken parkt unfertige Kinder; fertige bleiben fertig | new:A1-16 | `open` | |
-| A1-17 | Checkliste: Manager pflegt Punkte; Handwerker hakt ab / öffnet wieder; Attribution sichtbar | new:A1-17 | `open` | |
-| A1-18 | Fertigstellen setzt Abschlussdatum; Projektstatus/-fortschritt abgeleitet; manueller Override | new:A1-18 | `open` | |
-| A1-19 | `/auftraege`: Suche, Status-/Typ-Filter, Parkplatz-/Archiv-Trennung | new:A1-19 | `open` | |
-| A1-20 | `/auftraege`: nutzerspezifische Spaltenauswahl, Sortierung | manual (display preference, low risk) | `open` | |
+| A1-12 | Auftrag anlegen/zuweisen; Handwerker sieht nur Zugewiesenes | covered:@GG-00 + new:A1-12 (role visibility) | `defect_fixed` | Bearbeitungsdialog gegen Realtime-Resets stabilisiert; Zuweisungsgrenze in `A1-12/A1-13`. |
+| A1-13 | Auftrag bearbeiten; Zuweisung entfernen; Auftrag löschen | new:A1-13 | `defect_fixed` | Edit/Delete-Selbst-Rennen behoben; `A1-12/A1-13`. |
+| A1-14 | Projekt anlegen; Auftrag im Projekt erbt Kunden; Projekt ohne Aufträge; Projekt löschen löst nur die Zuordnung | new:A1-14 | `defect_fixed` | Asynchroner Nummernvorschlag überschreibt keine Eingabe mehr; Projektlöschung in `A1-10/A1-14`. |
+| A1-15 | Datum entziehen parkt den Auftrag; Einplanen entparkt (semantisch, ohne Drag & Drop) | new:A1-15 | `pass` | `A1-15/A1-16`. |
+| A1-16 | Projekt parken parkt unfertige Kinder; fertige bleiben fertig | new:A1-16 | `defect_fixed` | Projekt-Statusoverride nutzt jetzt die kaskadierende Park-Aktion; `A1-15/A1-16`. |
+| A1-17 | Checkliste: Manager pflegt Punkte; Handwerker hakt ab / öffnet wieder; Attribution sichtbar | new:A1-17 | `pass` | `A1-17/A1-18`. |
+| A1-18 | Fertigstellen setzt Abschlussdatum; Projektstatus/-fortschritt abgeleitet; manueller Override | new:A1-18 | `defect_fixed` | Abschlussdatum wird als Geschäftstag Europe/Berlin bestimmt; `A1-17/A1-18`. |
+| A1-19 | `/auftraege`: Suche, Status-/Typ-Filter, Parkplatz-/Archiv-Trennung | new:A1-19 | `pass` | `A1-19`. |
+| A1-20 | `/auftraege`: nutzerspezifische Spaltenauswahl, Sortierung | manual (display preference, low risk) | `manual_ok` | Kundenspalte nutzerspezifisch ausgeblendet und Nummernsortierung manuell geprüft. |
 
 Kalender-Basis:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-21 | Tages-/Wochen-/Monatsansicht; geplante Arbeit vs. Zeitblöcke getrennt | covered:@GG-00 + @P1-11 | `open` | |
-| A1-22 | Verschieben per Drag & Drop (inkl. Warnpfad) | covered:@P1-09 (Kalender-Reassignment) | `open` | |
-| A1-23 | Größe ziehen (Resize) und Drag in den/aus dem Parkplatz | manual (physical drag gestures are brittle in the harness; semantics covered by A1-15/@GG-03) | `open` | |
-| A1-24 | Kalender-Filter (Mitarbeiter/Arbeitszeiten/Aufträge) | new:A1-24 | `open` | |
-| A1-25 | Manueller Zeiteintrag aus dem Kalender heraus | manual (duplicate entry path; dashboard path covered by @P1-05) | `open` | |
+| A1-21 | Tages-/Wochen-/Monatsansicht; geplante Arbeit vs. Zeitblöcke getrennt | new:A1-21 + covered:@GG-00/@P1-11 | `pass` | Alle drei Ansichten und Blocktrennung in `A1-21/A1-24`. |
+| A1-22 | Verschieben per Drag & Drop (inkl. Warnpfad) | new:A1-22 + covered:@P1-09 | `pass` | Drag und bestätigter Warnpfad in `A1-22`. |
+| A1-23 | Größe ziehen (Resize) und Drag in den/aus dem Parkplatz | manual (physical drag gestures) | `manual_ok` | Echte Gesten: Breite 305,22→381,53 px; aus Parkplatz geplant und wieder geparkt. |
+| A1-24 | Kalender-Filter (Mitarbeiter/Arbeitszeiten/Aufträge) | new:A1-24 | `pass` | `A1-21/A1-24`. |
+| A1-25 | Manueller Zeiteintrag aus dem Kalender heraus | manual (duplicate entry path; dashboard path covered by @P1-05) | `manual_ok` | Kalenderdialog legte 09:00–17:00 an; Erfolgsmeldung, Verlauf und DB-Fakten geprüft. |
 
 Zeiterfassung-Basis:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-26 | Ein-/Ausstempeln, Pausen, Tagessummen; auftragsbezogene Zeit | covered:@GG-00 | `open` | |
-| A1-27 | Auftragswechsel während laufender Sitzung | new:A1-27 | `open` | |
-| A1-28 | Kein gleichzeitiges Einstempeln in zwei Organisationen | new:A1-28 (uses A1-02's dual membership) | `open` | |
-| A1-29 | Manuelle Einträge: Reihenfolge-/Überlappungs-Ablehnung | new:A1-29 | `open` | |
-| A1-30 | Bestehende Einträge korrigieren / löschen / umhängen (Manager) | new:A1-30 | `open` | |
-| A1-31 | Verlauf-Filter (Zeitraum/Mitarbeiter/Status) | manual (display filter) | `open` | |
-| A1-32 | Pausenregel: Admin stellt automatische Pause ein, Büro liest nur; Historie schreibt Vergangenes nicht um | new:A1-32 | `open` | |
+| A1-26 | Ein-/Ausstempeln, Pausen, Tagessummen; auftragsbezogene Zeit | covered:@GG-00 + new:A1-26 | `pass` | Pause, Auftragbezug, Zustände und Summen in `A1-05/A1-26/A1-27/A1-28`. |
+| A1-27 | Auftragswechsel während laufender Sitzung | new:A1-27 | `pass` | `A1-05/A1-26/A1-27/A1-28`. |
+| A1-28 | Kein gleichzeitiges Einstempeln in zwei Organisationen | new:A1-28 (uses A1-02's dual membership) | `pass` | Org-Sperre mit derselben Person in zwei Organisationen. |
+| A1-29 | Manuelle Einträge: Reihenfolge-/Überlappungs-Ablehnung | new:A1-29 | `pass` | `A1-29`. |
+| A1-30 | Bestehende Einträge korrigieren / löschen / umhängen (Manager) | new:A1-30 | `pass` | Korrigieren, Auftrag umhängen und löschen in `A1-30`. |
+| A1-31 | Verlauf-Filter (Zeitraum/Mitarbeiter/Status) | manual (display filter) | `manual_ok` | Mitarbeiter-/Statusfilter und Leerergebnis manuell geprüft. |
+| A1-32 | Pausenregel: Admin stellt automatische Pause ein, Büro liest nur; Historie schreibt Vergangenes nicht um | new:A1-32 | `defect_fixed` | Prop-Refresh setzte ungespeicherte Auswahl zurück; primitive Reset-Abhängigkeiten stabilisieren das Formular. |
 
 Dokumente:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-33 | Upload >4,5 MB am Auftrag; Bibliothek zeigt es; Handwerker-Upload/-Ansicht; Zugriffsgrenzen | covered:@GG-00 | `open` | |
-| A1-34 | Ordner anlegen, Datei verschieben/kopieren über den Ziel-Dialog | new:A1-34 | `open` | |
-| A1-35 | Bestehendes Bibliotheksdokument mit Ziel (Auftrag/Kunde) verknüpfen; Verknüpfungsfilter | new:A1-35 | `open` | |
-| A1-36 | Papierkorb: löschen, wiederherstellen, endgültig löschen; Audit-Historie | new:A1-36 | `open` | |
-| A1-37 | Neue Version eines Geschäftsdokuments hochladen; Versionshistorie | new:A1-37 | `open` | |
-| A1-38 | Viewer (PDF/Bild) öffnen; Download über signierten Link | manual (visual overlay; download asserted implicitly in A1-36) | `open` | |
+| A1-33 | Upload >4,5 MB am Auftrag; Bibliothek zeigt es; Handwerker-Upload/-Ansicht; Zugriffsgrenzen | covered:@GG-00 | `pass` | `@GG-00`-Body re-verifiziert; finale Golden-Suite. |
+| A1-34 | Ordner anlegen, Datei verschieben/kopieren über den Ziel-Dialog | new:A1-34 | `pass` | `A1-34/A1-35`. |
+| A1-35 | Bestehendes Bibliotheksdokument mit Ziel (Auftrag/Kunde) verknüpfen; Verknüpfungsfilter | new:A1-35 | `pass` | `A1-34/A1-35`. |
+| A1-36 | Papierkorb: löschen, wiederherstellen, endgültig löschen; Audit-Historie | new:A1-36 | `pass` | `A1-36/A1-37`. |
+| A1-37 | Neue Version eines Geschäftsdokuments hochladen; Versionshistorie | new:A1-37 | `defect_fixed` | Versionsupload aktualisiert Version und Audit-Historie sofort im lokalen UI-Zustand; `A1-36/A1-37`. |
+| A1-38 | Viewer (PDF/Bild) öffnen; Download über signierten Link | manual (visual overlay + signed download) | `manual_ok` | Bild im Overlay gerendert; signierter „Neuer Tab"-Link und Download-Schaltfläche geprüft. |
 
 Lager:
 
 | ID | Flow | Coverage | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| A1-39 | Handwerker: geplantes Material entnehmen, ungeplant entnehmen, zurückgeben; Bestandskonsistenz; Zugriffsgrenzen | covered:@GG-00 | `open` | |
-| A1-40 | Artikel + Lagerort über die UI anlegen/bearbeiten (statt Seeder) | new:A1-40 | `open` | |
-| A1-41 | Manuelle Zu-/Abgänge; Buchung unter null wird abgelehnt; Bewegungsliste mit Vorher/Nachher/Grund | new:A1-41 | `open` | |
-| A1-42 | Manager plant Material am Auftrag (ohne Bestandsänderung); Projekt zeigt direktes/vererbtes Material + Summe | new:A1-42 | `open` | |
-| A1-43 | CSV-Import mit Spaltenzuordnung (legt Kategorien/Lieferanten/Orte an; Anfangsmengen als Bewegungen) | new:A1-43 (downgrade to manual if the mapping UI proves harness-brittle — record the decision) | `open` | |
-| A1-44 | `/inventar`-Ansichten (Alle Artikel / Lager / Geplant / Bewegungen) mit Suche/Filtern | new:A1-44 (fold into A1-40/41 assertions) | `open` | |
+| A1-39 | Handwerker: geplantes Material entnehmen, ungeplant entnehmen, zurückgeben; Bestandskonsistenz; Zugriffsgrenzen | covered:@GG-00 + new:A1-39 | `pass` | Geplant/ungeplant/Retouren und Bestandsfakten in `A1-39/A1-42`; Rollen-Body in `@GG-00`. |
+| A1-40 | Artikel + Lagerort über die UI anlegen/bearbeiten (statt Seeder) | new:A1-40 | `pass` | `A1-40/A1-44`. |
+| A1-41 | Manuelle Zu-/Abgänge; Buchung unter null wird abgelehnt; Bewegungsliste mit Vorher/Nachher/Grund | new:A1-41 | `defect_fixed` | Bewegungsliste um sichtbare Vorher- und Grund-Spalten ergänzt; `A1-41`. |
+| A1-42 | Manager plant Material am Auftrag (ohne Bestandsänderung); Projekt zeigt direktes/vererbtes Material + Summe | new:A1-42 | `pass` | `A1-39/A1-42`. |
+| A1-43 | CSV-Import mit Spaltenzuordnung (legt Kategorien/Lieferanten/Orte an; Anfangsmengen als Bewegungen) | new:A1-43 | `pass` | Mapping-UI stabil automatisiert; Stammdaten und Anfangsbewegung per DB-Leseassertion. |
+| A1-44 | `/inventar`-Ansichten (Alle Artikel / Lager / Geplant / Bewegungen) mit Suche/Filtern | new:A1-44 (folded into A1-40/41 assertions) | `pass` | Vier Ansichten, Suche und Filter in `A1-40/A1-44` und `A1-41`. |
 
 ### Session A2 — Kunden-Cluster (`P1-01`, `P1-02`, `P1-10`)
 
@@ -251,4 +251,5 @@ Newest first. One entry per completed session: what was verified, tests added (c
 
 | Date | Session | Summary | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-15 | A1 | Completed all 44 Grundstock/Wave-0 rows: 21 automated audit tests added in `tests/audit/wave-1/a1-grundstock.spec.ts`, five physical/display flows checked manually, two catalog claims corrected, and one product decision deferred. Fixed nine product defects across customer/job/project Realtime mutations and route invalidation, project numbering/parking, Berlin completion dates, break-policy editing, document-version refresh, and inventory movement evidence; hardened action-menu accessibility, UI-created-world cleanup, ESLint exclusion of generated audit reports, and existing Golden assertions for persisted invitation state, holiday precedence, and calendar overflow on the run date. CodeRabbit: eleven findings, ten applied (Realtime resume refresh, inventory-helper validation, unique approval-card assertion, explicit cleanup-error handling, closed document-dialog guard, stable project picker identity, visible personnel row, run-scoped explicit teardown, profile-before-org cleanup order, customer-delete rejection recovery), one rejected because the mandatory post-run leftover sweep is intentional and concurrent golden/audit runs are prohibited; transient quota retries occurred before the final review. No world state is left behind. | Focused `@AUDIT-W1-A1`: 21/21; TypeScript/lint/unit: clean (187/187); production build: green; affected `@GG-00`: green; final production golden suite: 93/93; final production `@AUDIT-W1-A1`: 21/21. Published by the A1 session commit to `origin/partner-preview`. |
 | 2026-08-15 | — | Audit protocol established: this document, the triaged ledger (provisional buckets from spec-title/knowledge triage), `playwright.audit.config.ts`, `tests/audit/` scaffolding, `test:audit:w1` script, gitignore entries. No audit test exists yet. | This session |

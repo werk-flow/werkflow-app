@@ -15,6 +15,44 @@ function createAdminClient(): SupabaseClient {
   });
 }
 
+async function listTestUserIds(admin: SupabaseClient): Promise<string[]> {
+  const [goldenDomainResult, resendResult] = await Promise.all([
+    admin.from('profiles').select('id').like('email', '%@werkflow-golden.test'),
+    admin.from('profiles').select('id').like('email', 'delivered+gg-%@resend.dev'),
+  ]);
+  const error = goldenDomainResult.error ?? resendResult.error;
+  if (error) throw new Error(`Test user lookup failed: ${error.message}`);
+  return [
+    ...new Set(
+      [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])].map(
+        (profile) => profile.id as string
+      )
+    ),
+  ];
+}
+
+// Mailbox stand-in for UI signup tests. The production flow requires the user
+// to follow an email link; the disposable harness confirms only unmistakable
+// golden-test addresses and leaves organization creation to the real UI.
+export async function confirmTestUserEmail(email: string): Promise<void> {
+  if (!email.endsWith('@werkflow-golden.test')) {
+    throw new Error(`Refusing to confirm non-test address: ${email}`);
+  }
+  const admin = createAdminClient();
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', email)
+    .single();
+  if (profileError || !profile) {
+    throw new Error(`Signup profile not found for ${email}: ${profileError?.message}`);
+  }
+  const { error } = await admin.auth.admin.updateUserById(profile.id, {
+    email_confirm: true,
+  });
+  if (error) throw new Error(`Failed to confirm ${email}: ${error.message}`);
+}
+
 function randomOrgCode(): string {
   let code = '';
   for (let index = 0; index < 6; index++) {
@@ -260,9 +298,35 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const admin = createAdminClient();
   const failures: string[] = [];
 
+  const users = [
+    world.users.admin,
+    world.users.buero,
+    world.users.employee,
+    world.invitee,
+    world.removableEmployee,
+    world.personnelInvitee,
+    world.outsider.admin,
+  ];
+  const userIds = users.map((user) => user.id);
+  const { data: ownedTestOrganizations, error: ownedOrganizationsError } = await admin
+    .from('organizations')
+    .select('id')
+    .in('admin_id', userIds)
+    .or('name.like.Golden Test SHK %,name.like.Fremde Firma %');
+  if (ownedOrganizationsError) {
+    failures.push(`owned test organization lookup: ${ownedOrganizationsError.message}`);
+  }
+  const organizationIds = [
+    ...new Set([
+      world.orgId,
+      world.outsider.orgId,
+      ...(ownedTestOrganizations ?? []).map((organization) => organization.id as string),
+    ]),
+  ];
+
   // Remove uploaded file bytes for both test orgs (metadata cascades with the
   // organization rows, but R2 objects would otherwise linger).
-  for (const orgId of [world.orgId, world.outsider.orgId]) {
+  for (const orgId of organizationIds) {
     try {
       const paths = await listStorageObjectPaths(`${orgId}/`);
       await deleteStorageObjects(paths);
@@ -275,36 +339,23 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const { error: orgDeleteError } = await admin
     .from('organizations')
     .delete()
-    .in('id', [world.orgId, world.outsider.orgId]);
+    .in('id', organizationIds);
   if (orgDeleteError) {
     failures.push(`organization delete: ${orgDeleteError.message}`);
   }
 
-  const allUsers = [
-    world.users.admin,
-    world.users.buero,
-    world.users.employee,
-    world.invitee,
-    world.removableEmployee,
-    world.personnelInvitee,
-    world.outsider.admin,
-  ];
-
   const { error: subscriptionError } = await admin
     .from('subscriptions')
     .delete()
-    .in(
-      'user_id',
-      allUsers.map((user) => user.id)
-    );
+    .in('user_id', userIds);
   if (subscriptionError) {
     failures.push(`subscription delete: ${subscriptionError.message}`);
   }
 
-  for (const user of allUsers) {
-    const { error } = await admin.auth.admin.deleteUser(user.id);
+  for (const userId of userIds) {
+    const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) {
-      failures.push(`auth user delete ${user.email}: ${error.message}`);
+      failures.push(`auth user delete ${userId}: ${error.message}`);
     }
   }
 
@@ -317,6 +368,9 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
 // organizations whose name matches the unmistakable test prefix.
 export async function destroyLeftoverTestWorlds(): Promise<number> {
   const admin = createAdminClient();
+
+  // Resolve users before deleting auth-owned profile rows.
+  const testUserIds = await listTestUserIds(admin);
 
   const { data: leftoverOrgs } = await admin
     .from('organizations')
@@ -333,20 +387,34 @@ export async function destroyLeftoverTestWorlds(): Promise<number> {
     }
   }
   if (orgIds.length > 0) {
-    await admin.from('organizations').delete().in('id', orgIds);
+    const { error } = await admin.from('organizations').delete().in('id', orgIds);
+    if (error) {
+      throw new Error(`Leftover organization cleanup failed: ${error.message}`);
+    }
   }
 
-  const { data: userList } = await admin.auth.admin.listUsers({ perPage: 1000 });
   let removedUsers = 0;
-  for (const user of userList?.users ?? []) {
-    const isGoldenTestUser =
-      user.email?.endsWith('@werkflow-golden.test') ||
-      (user.email?.startsWith('delivered+gg-') && user.email?.endsWith('@resend.dev'));
-    if (isGoldenTestUser) {
-      await admin.from('subscriptions').delete().eq('user_id', user.id);
-      await admin.auth.admin.deleteUser(user.id);
-      removedUsers++;
+  const failures: string[] = [];
+  for (const userId of testUserIds) {
+    const { error: subscriptionError } = await admin
+      .from('subscriptions')
+      .delete()
+      .eq('user_id', userId);
+    const { error: authError } = await admin.auth.admin.deleteUser(userId);
+
+    if (subscriptionError) {
+      failures.push(
+        `subscription delete ${userId}: ${subscriptionError.message}`
+      );
     }
+    if (authError) {
+      failures.push(`auth user delete ${userId}: ${authError.message}`);
+    }
+    if (!subscriptionError && !authError) removedUsers++;
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Leftover test cleanup incomplete:\n${failures.join('\n')}`);
   }
 
   return orgIds.length + removedUsers;

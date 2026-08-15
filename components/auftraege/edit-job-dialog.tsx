@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
@@ -133,15 +133,24 @@ export function EditJobDialog({
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
   const [showAutoParkDialog, setShowAutoParkDialog] = useState(false);
+  const initializedJobIdRef = useRef<string | null>(null);
+  const wasOpenRef = useRef(false);
   const router = useRouter();
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current && initializedJobIdRef.current === job.id) return;
+    wasOpenRef.current = true;
+    initializedJobIdRef.current = job.id;
 
     setJobNumber(job.jobNumber ?? '');
     setTitle(job.title);
     setDescription(job.description ?? '');
     setProjectId(job.projectId ?? '');
+    setClientId(job.clientId ?? '');
     setPriority(job.priority);
     setPlannedDate(job.plannedDate ? new Date(job.plannedDate + 'T00:00:00') : undefined);
     setPlannedTime(job.plannedTime ?? '');
@@ -160,17 +169,6 @@ export function EditJobDialog({
     setConfirmedDateRemovalForWarning(false);
     setQualificationWarning(null);
 
-    if (job.projectId) {
-      const linkedProject = projects.find((p) => p.id === job.projectId);
-      if (linkedProject?.clientId) {
-        setClientId(linkedProject.clientId);
-      } else {
-        setClientId(job.clientId ?? '');
-      }
-    } else {
-      setClientId(job.clientId ?? '');
-    }
-
     setIsLoadingAssignments(true);
     getJobDetails(job.id).then((result) => {
       if (result.success) {
@@ -179,7 +177,7 @@ export function EditJobDialog({
       }
       setIsLoadingAssignments(false);
     });
-  }, [open, job, projects]);
+  }, [open, job]);
 
   const submitChanges = async (
     confirmedDateRemoval = false,

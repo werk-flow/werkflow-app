@@ -220,19 +220,33 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     });
   });
 
-  test('Betriebsruhe heute setzt das Tagesziel sichtbar auf null', async ({
+  test('Betriebsruhe heute wird gespeichert und setzt das Tagesziel auf null', async ({
     adminPage,
     employeePage,
     world,
   }) => {
     const todayIso = berlinTodayIso();
+    const employeeRecord = await getEmployeeRecordStateByUser(
+      world.orgId,
+      world.users.employee.id
+    );
+    const contextBeforeClosure = await getTargetContextForRecord(
+      world.orgId,
+      employeeRecord.id
+    );
+    const targetBeforeClosure = resolveDailyTarget({
+      dateIso: todayIso,
+      ...contextBeforeClosure,
+    });
     await addClosureDayViaSettings(adminPage, {
       dateDigits: toDatePickerDigits(todayIso),
       label: 'Inventur',
     });
 
     await employeePage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(employeePage, 'Betriebsruhe');
+    if (targetBeforeClosure.targetMinutes > 0) {
+      await expectVisibleAfterSave(employeePage, 'Betriebsruhe');
+    }
     await expect(
       visibleText(employeePage, 'heute keine Sollarbeitszeit.')
     ).toBeVisible();
@@ -242,10 +256,6 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     // target to return to), so the expected text is computed from the same
     // stored state and resolver the app uses — never assumed.
     await removeClosureDayViaSettings(adminPage, toGermanDate(todayIso));
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
     const context = await getTargetContextForRecord(
       world.orgId,
       employeeRecord.id
@@ -254,7 +264,9 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     await employeePage.goto('/zeiterfassung');
     await expectVisibleAfterSave(
       employeePage,
-      todayTarget.targetMinutes > 0
+      todayTarget.isHoliday
+        ? `Feiertag: ${todayTarget.holidayName}`
+        : todayTarget.targetMinutes > 0
         ? 'Tagesziel:'
         : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'
     );

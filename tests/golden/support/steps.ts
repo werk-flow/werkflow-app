@@ -38,6 +38,7 @@ export async function createJob(
     assignEmployeeName?: string;
     // P1-01: pick the customer and its site/contact through the dialog.
     clientName?: string;
+    projectNumber?: string;
     siteName?: string;
     contactName?: string;
     qualificationOverrideReason?: string;
@@ -76,6 +77,17 @@ export async function createJob(
 
   if ((options.siteName || options.contactName) && !options.clientName) {
     throw new Error('createJob: siteName/contactName require clientName');
+  }
+
+  if (options.projectNumber) {
+    await page.getByRole('combobox').filter({ hasText: 'Kein Projekt' }).click();
+    await page.getByPlaceholder('Projekt suchen...').fill(options.projectNumber);
+    const projectOption = page
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: `${options.projectNumber} –` });
+    await expect(projectOption).toHaveCount(1, { timeout: 15_000 });
+    await projectOption.click();
   }
 
   if (options.siteName) {
@@ -138,6 +150,38 @@ export async function createJob(
   ).toBeHidden({ timeout: 15_000 });
 }
 
+export async function createProject(
+  page: Page,
+  options: {
+    projectNumber: string;
+    title: string;
+    clientName?: string;
+  }
+): Promise<void> {
+  await page.goto('/auftraege');
+  await page.getByRole('button', { name: 'Erstellen', exact: true }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' }) });
+  await dialog.getByRole('tab', { name: 'Projekt erstellen' }).click();
+  const projectNumberInput = dialog.locator('#create-project-number');
+  await expect(projectNumberInput).not.toHaveValue('', { timeout: 15_000 });
+  await projectNumberInput.fill(options.projectNumber);
+  await dialog.locator('#create-project-name').fill(options.title);
+  if (options.clientName) {
+    await dialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
+    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: options.clientName })
+      .first()
+      .click();
+  }
+  await dialog.getByRole('button', { name: 'Projekt erstellen', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+}
+
 // Uploads into the "Dokumente & Bilder" section of the page currently open.
 // Shared by the job-page and request-page upload steps.
 async function uploadIntoDocumentsSection(
@@ -196,6 +240,108 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
 export async function clockOut(page: Page): Promise<void> {
   await page.locator('button[title="Ausstempeln"]').click();
   await expect(page.locator('button[title="Einstempeln"]')).toBeVisible({ timeout: 15_000 });
+}
+
+export async function startClockBreak(page: Page): Promise<void> {
+  await page.locator('button[title="Pause starten"]').click();
+  await expect(page.locator('button[title="Arbeit fortsetzen"]')).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function endClockBreak(page: Page, jobTitle?: string): Promise<void> {
+  await page.locator('button[title="Arbeit fortsetzen"]').click();
+  await expect(page.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeVisible();
+  if (jobTitle) {
+    await page
+      .getByRole('button')
+      .filter({ hasText: jobTitle, visible: true })
+      .first()
+      .click();
+  } else {
+    await page.getByRole('button', { name: 'Ohne Auftrag' }).click();
+  }
+  await page.getByRole('button', { name: 'Fortsetzen', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeHidden({
+    timeout: 15_000,
+  });
+  await expect(page.locator('button[title="Pause starten"]')).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+export async function switchClockJob(page: Page, jobTitle: string): Promise<void> {
+  await page.locator('button[title="Auftrag wechseln"]').click();
+  await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeVisible();
+  await page.getByRole('button').filter({ hasText: jobTitle }).first().click();
+  await page
+    .getByRole('button', { name: 'Wechseln', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeHidden({
+    timeout: 15_000,
+  });
+}
+
+export async function createInventoryLocation(
+  page: Page,
+  name: string
+): Promise<void> {
+  await page.goto('/inventar');
+  await page.getByRole('button', { name: 'Lager', exact: true }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Lager anlegen' }) });
+  await dialog.locator('#inventory-location-name').fill(name);
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function createInventoryItem(
+  page: Page,
+  options: {
+    name: string;
+    locationName?: string;
+    initialQuantity?: number;
+    supplierName?: string;
+  }
+): Promise<void> {
+  if (options.initialQuantity !== undefined) {
+    if (!options.locationName) {
+      throw new Error(
+        'createInventoryItem: initialQuantity requires a locationName'
+      );
+    }
+    if (!Number.isFinite(options.initialQuantity)) {
+      throw new Error('createInventoryItem: initialQuantity must be finite');
+    }
+  }
+
+  await page.goto('/inventar');
+  await page.getByRole('button', { name: 'Artikel', exact: true }).click();
+  const dialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Artikel anlegen' }) });
+  await dialog.locator('#inventory-item-name').fill(options.name);
+  if (options.locationName) {
+    await dialog.locator('#inventory-item-initial-location').click();
+    const locationPicker = page
+      .getByRole('dialog')
+      .filter({ has: page.getByPlaceholder('Lager suchen...') });
+    await locationPicker
+      .getByRole('button')
+      .filter({ hasText: options.locationName })
+      .click();
+    await dialog
+      .locator('#inventory-item-initial-quantity')
+      .fill(String(options.initialQuantity ?? 0));
+  }
+  if (options.supplierName) {
+    await dialog.locator('#inventory-item-supplier').click();
+    await page.getByRole('option', { name: 'Neuer Lieferant' }).click();
+    await dialog.locator('#inventory-item-supplier-name').fill(options.supplierName);
+  }
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function inviteMember(
@@ -689,7 +835,9 @@ export async function closeRequestViaDialog(
 
 export async function openMemberDetailFromList(page: Page, name: string): Promise<void> {
   await page.goto('/mitarbeiter');
-  await visibleText(page, name).click();
+  const desktopRow = page.locator('tbody tr:visible').filter({ hasText: name }).first();
+  await expect(desktopRow).toBeVisible({ timeout: 20_000 });
+  await desktopRow.click();
   await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
   await expect(visibleText(page, 'Personalien')).toBeVisible({ timeout: 15_000 });
 }
@@ -697,6 +845,14 @@ export async function openMemberDetailFromList(page: Page, name: string): Promis
 // Inline edit of one Personalien field through the shared MetadataSection
 // pencil-edit flow (text fields only; dates use the segmented DatePicker).
 export async function editPersonnelTextField(
+  page: Page,
+  fieldLabel: string,
+  value: string
+): Promise<void> {
+  await editMetadataTextField(page, fieldLabel, value);
+}
+
+export async function editMetadataTextField(
   page: Page,
   fieldLabel: string,
   value: string
@@ -857,7 +1013,7 @@ export async function endResponsibilityDelegationViaSettings(
   });
 }
 
-async function typeIntoTimeInput(
+export async function typeIntoTimeInput(
   dialog: Locator,
   id: string,
   digits: string
@@ -891,9 +1047,9 @@ export async function createOwnManualTimeEntry(
   await typeIntoTimeInput(dialog, 'clockInTime', options.clockInDigits);
   await typeIntoTimeInput(dialog, 'clockOutTime', options.clockOutDigits);
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(dialog.getByText('Antrag wurde zur Genehmigung eingereicht.')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    dialog.getByText(/Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/)
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 export async function openTimeApprovals(page: Page): Promise<void> {
@@ -938,9 +1094,12 @@ export async function expectPendingTimeApprovalHidden(
 
 export async function approvePendingTimeEntry(
   page: Page,
-  userId: string
+  userId: string,
+  visibleText?: string | RegExp
 ): Promise<void> {
-  const card = pendingTimeApprovalCard(page, userId);
+  const cards = pendingTimeApprovalCard(page, userId);
+  const card = visibleText ? cards.filter({ hasText: visibleText }) : cards;
+  await expect(card).toHaveCount(1, { timeout: 15_000 });
   await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
   await expect(card).toHaveCount(0, { timeout: 15_000 });
 }
@@ -1128,10 +1287,13 @@ export async function sendInviteFromPersonnelRecord(
   await page.locator('#personnel-invite-role').click();
   await page.getByRole('option', { name: roleLabel, exact: true }).click();
   await page.getByRole('button', { name: 'Einladung senden' }).click();
-  await expect(page.getByText('Einladung erfolgreich gesendet!')).toBeVisible({
+  // A Realtime refresh can replace the dialog before its short success flash
+  // is observed. Assert the persisted personnel state and audit entry instead.
+  await expect(page.getByRole('dialog')).toHaveCount(0, {
     timeout: 30_000,
   });
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
+  await expect(visibleText(page, 'Eingeladen')).toBeVisible();
+  await expect(visibleText(page, 'Einladung versendet')).toBeVisible();
 }
 
 // P1-04: date-effective work schedules and holiday/closure context.

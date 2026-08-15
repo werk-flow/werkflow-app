@@ -1,4 +1,5 @@
 import { expect, test } from './support/fixtures';
+import type { Page } from '@playwright/test';
 import {
   countVacationDaysByYear,
   doesDateConsumeVacation,
@@ -79,6 +80,31 @@ function toDatePickerDigits(dateIso: string): string {
 function nextMondayIso(): string {
   const todayIso = berlinTodayIso();
   return shiftIsoDate(todayIso, 7 - weekdayIndex(todayIso));
+}
+
+async function expectCalendarEventOnDate(
+  page: Page,
+  dateIso: string,
+  title: string,
+  status: 'pending' | 'approved'
+): Promise<void> {
+  const dayCell = page.locator(`.fc-daygrid-day[data-date="${dateIso}"]`);
+  const eventClass = `.fc-vacation-${status}`;
+  await expect(dayCell.locator(eventClass)).toHaveCount(1, { timeout: 15_000 });
+
+  const moreLink = dayCell.locator('.fc-daygrid-more-link');
+  if (await moreLink.isVisible()) {
+    await moreLink.click();
+    const popover = page.locator('.fc-popover');
+    await expect(popover).toBeVisible({ timeout: 15_000 });
+    await expect(popover.locator(eventClass)).toHaveCount(1);
+  }
+
+  // FullCalendar exposes the complete, non-truncated event name as `title`;
+  // the painted text itself can be ellipsized before the person's full name.
+  // The event wrapper has a zero-size box in month layout, so DOM identity is
+  // the stable assertion while the screenshot-visible child carries the title.
+  expect(await page.getByTitle(title).count()).toBeGreaterThan(0);
 }
 
 test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
@@ -189,12 +215,16 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
       endDigits: toDatePickerDigits(todayIso),
     });
 
-    // Pending requests appear provisionally in the calendar month view.
+    // Pending requests appear provisionally in the calendar. Open the month's
+    // overflow when a holiday plus a closure puts the third event behind "+ mehr".
     await employeePage.goto('/kalender');
     await employeePage.getByRole('tab', { name: 'Monat' }).click();
-    await expect(
-      visibleText(employeePage, `Urlaub – ${employeeName} (angefragt)`)
-    ).toBeVisible({ timeout: 15_000 });
+    await expectCalendarEventOnDate(
+      employeePage,
+      todayIso,
+      `Urlaub – ${employeeName} (angefragt)`,
+      'pending'
+    );
 
     // Büro is a role-default leave_approval holder and decides the request.
     await approveVacationRequestFor(bueroPage, employeeName);
@@ -258,12 +288,15 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     );
 
     // Approved vacation is a labeled calendar entry without the provisional
-    // suffix, visible to planners.
+    // suffix, visible to planners, including through month overflow.
     await bueroPage.goto('/kalender');
     await bueroPage.getByRole('tab', { name: 'Monat' }).click();
-    await expect(
-      visibleText(bueroPage, `Urlaub – ${employeeName}`)
-    ).toBeVisible({ timeout: 15_000 });
+    await expectCalendarEventOnDate(
+      bueroPage,
+      todayIso,
+      `Urlaub – ${employeeName}`,
+      'approved'
+    );
     await expect(bueroPage.getByText('(angefragt)')).toHaveCount(0);
 
     // Contradiction rule: an approved full-day vacation day denies clock-in at

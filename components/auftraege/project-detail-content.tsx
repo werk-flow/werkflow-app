@@ -57,7 +57,7 @@ import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
 
-import { updateProject, deleteProject } from '@/lib/projects/actions';
+import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
 import {
   getAuftraegeDialogOptions,
   updateJob,
@@ -473,9 +473,12 @@ export function ProjectDetailContent({
   };
 
   const handleOverrideStatus = async (status: ProjectStatus | 'auto') => {
-    const result = await updateProject(project.id, {
-      statusOverride: status === 'auto' ? null : status,
-    });
+    const result =
+      status === 'geparkt'
+        ? await parkProject(project.id)
+        : await updateProject(project.id, {
+            statusOverride: status === 'auto' ? null : status,
+          });
     if (result.success) setLiveProject(result.project);
   };
 
@@ -665,7 +668,12 @@ export function ProjectDetailContent({
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="size-8">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-8"
+                    aria-label="Aktionen öffnen"
+                  >
                     <MoreVertical className="size-4" />
                   </Button>
                 </DropdownMenuTrigger>

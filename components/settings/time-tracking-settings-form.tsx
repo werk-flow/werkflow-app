@@ -65,6 +65,11 @@ export function TimeTrackingSettingsForm({
   const { showBanner } = useSettingsBanner()
   const [isSaving, setIsSaving] = useState(false)
   const canEdit = role === 'admin'
+  const {
+    breakMode: initialBreakMode,
+    autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
+    autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
+  } = initialSettings
 
   const form = useForm<
     TimeTrackingSettingsFormInput,
@@ -76,10 +81,20 @@ export function TimeTrackingSettingsForm({
   })
 
   const selectedBreakMode = form.watch('breakMode')
+  const { reset } = form
 
   useEffect(() => {
-    form.reset(initialSettings)
-  }, [form, initialSettings])
+    reset({
+      breakMode: initialBreakMode,
+      autoBreakThresholdMinutes: initialAutoBreakThresholdMinutes,
+      autoBreakDurationMinutes: initialAutoBreakDurationMinutes,
+    })
+  }, [
+    initialAutoBreakDurationMinutes,
+    initialAutoBreakThresholdMinutes,
+    initialBreakMode,
+    reset,
+  ])
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (!canEdit) {

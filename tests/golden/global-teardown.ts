@@ -1,5 +1,5 @@
 import { loadEnvLocal } from './support/env';
-import { destroyTestWorld } from './support/seed';
+import { destroyLeftoverTestWorlds, destroyTestWorld } from './support/seed';
 import { loadWorld } from './support/world';
 
 export default async function globalTeardown(): Promise<void> {
@@ -16,9 +16,21 @@ export default async function globalTeardown(): Promise<void> {
   try {
     world = loadWorld();
   } catch {
+    const removed = await destroyLeftoverTestWorlds();
+    console.log(`[golden] destroyed ${removed} leftover test records`);
     return;
   }
 
-  await destroyTestWorld(world);
-  console.log(`[golden] destroyed world ${world.runId}`);
+  let teardownError: unknown;
+  try {
+    await destroyTestWorld(world);
+    console.log(`[golden] destroyed world ${world.runId}`);
+  } catch (error) {
+    teardownError = error;
+  }
+
+  const removed = await destroyLeftoverTestWorlds();
+  console.log(`[golden] destroyed ${removed} leftover test records`);
+
+  if (teardownError) throw teardownError;
 }

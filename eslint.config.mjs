@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     "tests/golden/.report/**",
     "tests/golden/.results/**",
     "tests/golden/.artifacts/**",
+    "tests/audit/.report/**",
+    "tests/audit/.results/**",
   ]),
 ]);
 

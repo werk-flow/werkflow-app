@@ -28,11 +28,11 @@ Diese Abschnitte beschreiben, was die App bereits konnte, bevor der Phase-1-Fahr
 ### Organisation, Konten und Rollen
 
 - Alle: Nutzer können ein Konto anlegen, sich anmelden und abmelden.
-- Admin: kann eine Organisation erstellen und wird deren Inhaber. Mitglieder können per Organisations-Code beitreten.
+- Admin: kann eine Organisation erstellen und wird deren Inhaber. Nutzer ohne Admin-Mitgliedschaft können per Organisations-Code als „Handwerker/in“ beitreten. Wer bereits Mitglied ist, kann per Code nur weiteren Organisationen desselben Inhabers beitreten.
 - Admin/Büro: können neue Mitglieder als „Büro" oder „Handwerker/in" per E-Mail einladen; offene Einladungen sind sichtbar und können verwaltet werden. Der Eingeladene erhält eine E-Mail, folgt dem Link und landet nach der Anmeldung direkt in der Organisation.
 - Alle: wer mehreren Organisationen angehört, kann die aktive Organisation wechseln; alle Daten und Ansichten sind strikt auf die aktive Organisation begrenzt.
 - Admin/Büro: sehen unter `/mitarbeiter` die Mitgliederliste mit Rolle, aktuellem Stempelstatus und Tagesfortschritt sowie eine Detailseite je Mitglied. Handwerker haben keinen Zugriff auf diese Seite.
-- Rollenänderungen sind bewusst konservativ: niemand kann die eigene Rolle ändern, einen zweiten Admin ernennen oder sich selbst entfernen; Büro verwaltet nur Handwerker.
+- Rollenänderungen sind bewusst konservativ: niemand kann die eigene Rolle ändern, einen zweiten Admin ernennen oder sich selbst entfernen. Büro kann neue Büro-Mitglieder einladen, bestehende Büro- oder Admin-Mitglieder aber nicht ändern oder entfernen; bestehende Handwerker können verwaltet werden.
 
 ### Kunden
 

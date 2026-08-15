@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect, useCallback, useMemo } from 'react';
+import { useState, useTransition, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -254,6 +254,7 @@ export function JobDetailContent({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
+  const isDeletingRef = useRef(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
@@ -280,6 +281,11 @@ export function JobDetailContent({
   const [dialogProjects, setDialogProjects] = useState(projects);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
   const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setShowEditDialog(open);
+    setSuspendRealtimeRefresh(open);
+    if (!open) router.refresh();
+  };
   const {
     requestApproval: requestInlineEditApproval,
     warningDialog: inlineEditWarningDialog,
@@ -428,6 +434,7 @@ export function JobDetailContent({
       'inventory_locations',
     ],
     enabled: !suspendRealtimeRefresh,
+    eventFilter: () => !isDeletingRef.current,
   });
   useRealtimeEvent('time_entries', () => fetchTimeEntries());
 
@@ -619,6 +626,8 @@ export function JobDetailContent({
 
   const handleDelete = () => {
     setDeleteError(null);
+    isDeletingRef.current = true;
+    setSuspendRealtimeRefresh(true);
     startDeleteTransition(async () => {
       const result = await deleteJob(liveJob.id);
       if (result.success) {
@@ -631,6 +640,8 @@ export function JobDetailContent({
           router.push(`/auftraege${deletedParam}`);
         }
       } else {
+        isDeletingRef.current = false;
+        setSuspendRealtimeRefresh(false);
         setDeleteError(
           result.error === 'planning_history_exists'
             ? JOB_DELETE_HISTORY_MESSAGE
@@ -1235,12 +1246,17 @@ export function JobDetailContent({
           isAdminOrManager ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="size-8">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Aktionen öffnen"
+                >
                   <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                <DropdownMenuItem onClick={() => handleEditDialogOpenChange(true)}>
                   <Pencil className="mr-2 size-4" />
                   Bearbeiten
                 </DropdownMenuItem>
@@ -1806,10 +1822,39 @@ export function JobDetailContent({
       <EditJobDialog
         job={liveJob}
         open={showEditDialog}
-        onOpenChange={setShowEditDialog}
+        onOpenChange={handleEditDialogOpenChange}
         clients={dialogClients}
         members={dialogMembers}
         projects={dialogProjects}
+        onSuccess={({ job: updatedJob, selectedEmployeeIds }) => {
+          const selectedIds = new Set(selectedEmployeeIds ?? []);
+          const memberLookup = new Map(
+            dialogMembers.map((member) => [member.userId, member])
+          );
+          setLiveJob((current) => {
+            const assignmentLookup = new Map(
+              current.assignments.map((assignment) => [assignment.userId, assignment])
+            );
+            const assignments = [...selectedIds].map((userId) => {
+              const existing = assignmentLookup.get(userId);
+              if (existing) return existing;
+              const member = memberLookup.get(userId);
+              return {
+                id: `temp-${current.id}-${userId}`,
+                jobId: current.id,
+                userId,
+                assignedBy: current.createdBy,
+                assignedAt: new Date().toISOString(),
+                firstName: member?.firstName ?? null,
+                lastName: member?.lastName ?? null,
+                email: null,
+                avatarPath: null,
+              };
+            });
+
+            return { ...current, ...updatedJob, assignments };
+          });
+        }}
       />
 
       <ParkConfirmationDialog

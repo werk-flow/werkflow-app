@@ -898,6 +898,7 @@ export function DocumentLibraryContent({
   const [moveCopyDialog, setMoveCopyDialog] = useState<MoveCopyDialogState>(null);
   const [linkDialog, setLinkDialog] = useState<LinkDialogState>(null);
   const [detailsDialog, setDetailsDialog] = useState<DetailsDialogState>(null);
+  const detailsDialogIdRef = useRef<string | null>(null);
   const [detailsData, setDetailsData] = useState<
     Extract<DocumentDetailsResult, { success: true }> | null
   >(null);
@@ -1268,6 +1269,7 @@ export function DocumentLibraryContent({
   }
 
   function openDetailsDialog(document: OrganizationDocument) {
+    detailsDialogIdRef.current = document.id;
     setDetailsDialog(document);
     setDetailsData(null);
     setIsDetailsLoading(true);
@@ -1608,10 +1610,12 @@ export function DocumentLibraryContent({
     if (!detailsDialog || !files?.[0]) return;
 
     const file = files[0];
+    const activeDocument = detailsDialog;
+    const documentId = activeDocument.id;
 
     startTransition(async () => {
       const result = await uploadDocumentVersionDirect({
-        documentId: detailsDialog.id,
+        documentId,
         file,
       });
 
@@ -1619,7 +1623,34 @@ export function DocumentLibraryContent({
         showFeedback('error', 'Die neue Version konnte nicht hochgeladen werden.');
       } else {
         showFeedback('success', 'Neue Version wurde hochgeladen.');
-        openDetailsDialog(detailsDialog);
+        if (detailsDialogIdRef.current === documentId) {
+          const refreshedDocument = {
+            ...activeDocument,
+            currentVersionNumber: result.version.versionNumber,
+            storagePath: result.version.storagePath,
+            originalFileName: result.version.originalFileName,
+            mimeType: result.version.mimeType,
+            sizeBytes: result.version.sizeBytes,
+            uploadedBy: result.version.uploadedBy,
+            updatedAt: result.version.createdAt,
+            uploader: result.version.uploader,
+          };
+          setDetailsDialog(refreshedDocument);
+          setDetailsData(null);
+          setIsDetailsLoading(true);
+          const detailsResult = await getDocumentDetails(documentId);
+          if (detailsDialogIdRef.current === documentId) {
+            if (detailsResult.success) {
+              setDetailsData({
+                ...detailsResult,
+                document: refreshedDocument,
+              });
+            } else {
+              showFeedback('error', 'Die Dateidetails konnten nicht geladen werden.');
+            }
+            setIsDetailsLoading(false);
+          }
+        }
       }
 
       if (versionInputRef.current) versionInputRef.current.value = '';
@@ -2832,7 +2863,13 @@ export function DocumentLibraryContent({
 
       <Dialog
         open={!!detailsDialog}
-        onOpenChange={(open) => !open && setDetailsDialog(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          detailsDialogIdRef.current = null;
+          setDetailsDialog(null);
+          setDetailsData(null);
+          setIsDetailsLoading(false);
+        }}
       >
         <DialogContent>
           <DialogHeader>

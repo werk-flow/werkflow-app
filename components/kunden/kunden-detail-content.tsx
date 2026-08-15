@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MoreVertical,
@@ -99,6 +99,7 @@ export function KundenDetailContent({
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isDeletingRef = useRef(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const contactGuard = useCommunicationContactGuard({
     clientId: client.id,
@@ -106,6 +107,7 @@ export function KundenDetailContent({
 
   // Colleagues' contact/site/master-data changes appear without a reload.
   useRealtimeRouterRefresh({
+    enabled: !isDeleting,
     tables: [
       'clients',
       'client_contacts',
@@ -119,6 +121,7 @@ export function KundenDetailContent({
       'document_links',
     ],
     eventFilter: (event) => {
+      if (isDeletingRef.current) return false;
       const row = event.new ?? event.old;
       if (!row) return false;
       if (event.table === 'clients') return row.id === client.id;
@@ -129,14 +132,23 @@ export function KundenDetailContent({
 
   const handleDelete = async () => {
     if (isDeleting) return;
+    isDeletingRef.current = true;
     setIsDeleting(true);
     setDeleteError(null);
-    const result = await deleteClient(client.id);
-    if (result.success) {
-      router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
-    } else {
+    try {
+      const result = await deleteClient(client.id);
+      if (result.success) {
+        router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
+        return;
+      }
+
+      isDeletingRef.current = false;
       setDeleteError(result.error || 'Fehler beim Löschen des Kunden');
       setIsDeleting(false);
+    } catch {
+      isDeletingRef.current = false;
+      setIsDeleting(false);
+      setDeleteError('Fehler beim Löschen des Kunden');
     }
   };
 
@@ -266,7 +278,12 @@ export function KundenDetailContent({
           isAdminOrManager ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="size-8">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Aktionen öffnen"
+                >
                   <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -431,7 +448,10 @@ export function KundenDetailContent({
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDelete();
+              }}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

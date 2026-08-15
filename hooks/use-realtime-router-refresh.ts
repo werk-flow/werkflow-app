@@ -49,6 +49,12 @@ export function useRealtimeRouterRefresh({
     };
   }, []);
 
+  useEffect(() => {
+    if (enabled || !timerRef.current) return;
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }, [enabled]);
+
   useRealtimeEvent('time_entries', (event) => {
     if (tableSet.has('time_entries')) scheduleRefresh(event);
   });
