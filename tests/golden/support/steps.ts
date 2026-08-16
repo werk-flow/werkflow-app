@@ -581,39 +581,62 @@ export async function completeFollowUpOnCustomerDetail(
 export async function configureCustomerCommunicationSettings(
   page: Page,
   input: {
-    preferredContactName: string;
+    preferredContactName?: string;
+    preferredChannel?: 'Telefon' | 'E-Mail' | 'SMS' | 'Brief' | 'Persönlich';
     doNotContactInstruction?: string;
+    contactTimeNote?: string;
+    languageNote?: string;
+    accessibilityNote?: string;
     sourceNote?: string;
   }
 ): Promise<void> {
   await page.getByRole('button', { name: 'Allgemein bearbeiten' }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.locator('#preferred-contact').click();
-  await page
-    .getByRole('option', { name: input.preferredContactName, exact: true })
-    .click();
+  if (input.preferredContactName) {
+    await dialog.locator('#preferred-contact').click();
+    await page
+      .getByRole('option', { name: input.preferredContactName, exact: true })
+      .click();
+  }
+  if (input.preferredChannel) {
+    await dialog.locator('#preferred-channel').click();
+    await page
+      .getByRole('option', { name: input.preferredChannel, exact: true })
+      .click();
+  }
   if (input.doNotContactInstruction) {
     await dialog.locator('#dnc-note').fill(input.doNotContactInstruction);
+  }
+  if (input.contactTimeNote) {
+    await dialog.locator('#contact-time').fill(input.contactTimeNote);
+  }
+  if (input.languageNote) {
+    await dialog.locator('#language-note').fill(input.languageNote);
+  }
+  if (input.accessibilityNote) {
+    await dialog.locator('#accessibility-note').fill(input.accessibilityNote);
   }
   if (input.sourceNote) {
     await dialog.locator('#settings-source').fill(input.sourceNote);
   }
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  const communicationSection = page.locator(
-    'section[aria-labelledby="communication-heading"]'
-  );
-  const preferredContactEntry = communicationSection
-    .locator('dl > div')
-    .filter({ hasText: 'Bevorzugter Kontakt' });
-  await expect(preferredContactEntry).toContainText(input.preferredContactName);
+  if (input.preferredContactName) {
+    const communicationSection = page.locator(
+      'section[aria-labelledby="communication-heading"]'
+    );
+    const preferredContactEntry = communicationSection
+      .locator('dl > div')
+      .filter({ hasText: 'Bevorzugter Kontakt' });
+    await expect(preferredContactEntry).toContainText(input.preferredContactName);
+  }
 }
 
 export async function setCustomerCommunicationPreference(
   page: Page,
   input: {
-    contactName: string;
-    channel: 'Telefon' | 'E-Mail';
+    contactName?: string;
+    channel: 'Telefon' | 'E-Mail' | 'SMS' | 'Brief' | 'Persönlich';
     state: 'Erlaubt' | 'Nicht erlaubt' | 'Unbekannt';
     purpose?:
       | 'Termin und Service'
@@ -624,8 +647,10 @@ export async function setCustomerCommunicationPreference(
 ): Promise<void> {
   await page.getByRole('button', { name: 'Präferenz', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.locator('#preference-contact').click();
-  await page.getByRole('option', { name: input.contactName, exact: true }).click();
+  if (input.contactName) {
+    await dialog.locator('#preference-contact').click();
+    await page.getByRole('option', { name: input.contactName, exact: true }).click();
+  }
   await dialog.locator('#preference-channel').click();
   await page.getByRole('option', { name: input.channel, exact: true }).click();
   await dialog.locator('#preference-state').click();
@@ -663,6 +688,7 @@ export async function addSiteOnCustomerDetail(
     postalCode?: string;
     city?: string;
     accessNotes?: string;
+    notes?: string;
     primaryContactName?: string;
     isPrimary?: boolean;
   }
@@ -676,6 +702,7 @@ export async function addSiteOnCustomerDetail(
   if (site.postalCode) await page.locator('#site-postal-code').fill(site.postalCode);
   if (site.city) await page.locator('#site-city').fill(site.city);
   if (site.accessNotes) await page.locator('#site-access-notes').fill(site.accessNotes);
+  if (site.notes) await page.locator('#site-notes').fill(site.notes);
   if (site.primaryContactName) {
     await page.locator('#site-primary-contact').click();
     await page.getByRole('option', { name: site.primaryContactName, exact: true }).click();
@@ -777,8 +804,14 @@ export async function createRequestViaDialog(
     contactName?: string;
     callerName?: string;
     callerPhone?: string;
+    callerEmail?: string;
+    callerAddress?: string;
+    details?: string;
     categoryLabel?: string;
     urgencyLabel?: string;
+    sourceLabel?: string;
+    receivedAtLocal?: string;
+    assigneeName?: string;
   }
 ): Promise<string> {
   if ((options.siteName || options.contactName) && !options.clientName) {
@@ -801,6 +834,9 @@ export async function createRequestViaDialog(
   if (options.urgencyLabel) {
     await page.locator('#request-urgency').click();
     await page.getByRole('option', { name: options.urgencyLabel, exact: true }).click();
+  }
+  if (options.receivedAtLocal) {
+    await page.locator('#request-received-at').fill(options.receivedAtLocal);
   }
 
   if (options.clientName) {
@@ -831,6 +867,23 @@ export async function createRequestViaDialog(
   }
   if (options.callerPhone) {
     await page.locator('#request-caller-phone').fill(options.callerPhone);
+  }
+  if (options.callerEmail) {
+    await page.locator('#request-caller-email').fill(options.callerEmail);
+  }
+  if (options.callerAddress) {
+    await page.locator('#request-caller-address').fill(options.callerAddress);
+  }
+  if (options.details) {
+    await page.locator('#request-details').fill(options.details);
+  }
+  if (options.sourceLabel) {
+    await page.locator('#request-source').click();
+    await page.getByRole('option', { name: options.sourceLabel, exact: true }).click();
+  }
+  if (options.assigneeName) {
+    await page.locator('#request-assignee').click();
+    await page.getByRole('option', { name: options.assigneeName, exact: true }).click();
   }
 
   // The submit button carries the same label as the header trigger; scope it

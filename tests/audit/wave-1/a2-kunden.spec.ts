@@ -1,7 +1,10 @@
-import type { Page } from '@playwright/test';
+import { resolve } from 'node:path';
+import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../../golden/support/fixtures';
+import { ARTIFACTS_DIR } from '../../golden/support/world';
 import {
+  getConvertedRequestJobState,
   getCustomerNumber,
   getCustomerRelationshipState,
   getEmployeeRecordStateByUser,
@@ -19,6 +22,7 @@ import {
   attentionTaskLink,
   closeRequestViaDialog,
   completeFollowUpOnCustomerDetail,
+  configureCustomerCommunicationSettings,
   convertRequestToProjectViaDialog,
   createCustomer,
   createFollowUpOnCustomerDetail,
@@ -32,7 +36,10 @@ import {
   openCustomerDetail,
   removeMemberFromDetail,
   restoreCustomerRelation,
+  setCustomerCommunicationPreference,
   setRequestStatusFromDetail,
+  uploadDocumentOnJobPage,
+  uploadDocumentOnRequestDetail,
   visibleText,
 } from '../../golden/support/steps';
 
@@ -74,6 +81,40 @@ async function openProject(page: Page, projectNumber: string): Promise<void> {
   });
 }
 
+async function expectSelectOptions(
+  page: Page,
+  trigger: Locator,
+  labels: string[]
+): Promise<void> {
+  await trigger.click();
+  for (const label of labels) {
+    await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible();
+  }
+  await page.getByRole('option', { name: labels[0], exact: true }).click();
+}
+
+async function createTimelineFollowUp(
+  page: Page,
+  sourceText: string,
+  sourceLabel: string,
+  title: string,
+  dueAtLocal: string
+): Promise<void> {
+  const sourceRow = page
+    .locator('[data-timeline-key]')
+    .filter({ hasText: sourceText })
+    .filter({ has: page.getByRole('button', { name: 'Hierzu nachfassen' }) })
+    .first();
+  await sourceRow.getByRole('button', { name: 'Hierzu nachfassen' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(`Quelle: ${sourceLabel}`);
+  await dialog.locator('#follow-up-title').fill(title);
+  await dialog.locator('#follow-up-due').fill(dueAtLocal);
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, title)).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
   test('A2-01/A2-02/A2-03: Hauptkontakte, Archiv/Wiederherstellung und Kundenadresse als Einsatzort', async ({
     adminPage,
@@ -87,9 +128,34 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
 
     await createCustomer(adminPage, customer, { type: 'Gewerblich', address });
     await openCustomerDetail(adminPage, customer);
+    await adminPage.getByRole('button', { name: 'Ansprechpartner hinzufügen' }).click();
+    const contactDialog = adminPage.getByRole('dialog');
+    await expect(contactDialog.locator('#contact-role')).toHaveAttribute(
+      'list',
+      'contact-role-suggestions'
+    );
+    expect(
+      await contactDialog.locator('#contact-role-suggestions option').evaluateAll(
+        (options) => options.map((option) => option.getAttribute('value'))
+      )
+    ).toEqual([
+      'Eigentümer/in',
+      'Mieter/in',
+      'Hausverwaltung',
+      'Hausmeister/in',
+      'Bauleitung',
+      'Architekt/in',
+      'Einkauf',
+      'Rechnungsempfänger/in',
+      'Notfallkontakt',
+    ]);
+    await contactDialog.getByRole('button', { name: 'Abbrechen' }).click();
     await addContactOnCustomerDetail(adminPage, {
       name: firstContact,
+      role: 'Technische Leitung',
       phone: '+49 30 250001',
+      email: `technik-${world.runId}@example.test`,
+      notes: 'Entscheidet über Wartungsfreigaben',
     });
     await addContactOnCustomerDetail(adminPage, {
       name: primaryContact,
@@ -110,9 +176,15 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       postalCode: '10117',
       city: 'Berlin',
       accessNotes: 'Schlüssel im Büro',
+      notes: 'Anlieferung nur über den Innenhof',
       primaryContactName: primaryContact,
       isPrimary: true,
     });
+    await expect(firstContactRow).toContainText('Technische Leitung');
+    await expect(firstContactRow).toContainText(`technik-${world.runId}@example.test`);
+    await expect(firstContactRow).toContainText('Entscheidet über Wartungsfreigaben');
+    await expect(adminPage.locator('li').filter({ hasText: secondarySite }).first())
+      .toContainText('Anlieferung nur über den Innenhof');
     await expect(adminPage.locator('li').filter({ hasText: secondarySite }).first())
       .toContainText('Hauptstandort');
     await expect(
@@ -219,6 +291,22 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     expect(before.jobs[1].siteId).not.toBe(before.siteId);
     expect(before.jobs[1].contactId).not.toBe(before.contactId);
 
+    await adminPage.goto(`/auftraege/${projectNumber}-2`);
+    await adminPage.getByRole('button', { name: 'Aktionen öffnen' }).click();
+    await adminPage.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+    const jobDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Auftrag bearbeiten' }),
+    });
+    await jobDialog.locator('#edit-job-site').click();
+    await adminPage.getByRole('option').filter({ hasText: inheritedSite }).first().click();
+    await jobDialog.locator('#edit-job-contact').click();
+    await adminPage.getByRole('option', { name: inheritedContact, exact: true }).click();
+    await jobDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(jobDialog).toHaveCount(0, { timeout: 20_000 });
+    const edited = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
+    expect(edited.jobs[1].siteId).toBe(edited.siteId);
+    expect(edited.jobs[1].contactId).toBe(edited.contactId);
+
     await openProject(adminPage, projectNumber);
     await adminPage.getByRole('button', { name: 'Aktionen öffnen' }).click();
     await adminPage.getByRole('menuitem', { name: 'Bearbeiten' }).click();
@@ -299,6 +387,8 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     const requestNumber = `A2-ANF-${world.runId}-09`;
     const caller = `A2 Unbekannte Anruferin ${world.runId}`;
     const phone = '+49 30 290009';
+    const email = `anruf-${world.runId}@example.test`;
+    const address = 'Anrufstraße 9, 10115 Berlin';
 
     await createCustomer(bueroPage, customer);
     await createRequestViaDialog(bueroPage, {
@@ -306,6 +396,8 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       requestNumber,
       callerName: caller,
       callerPhone: phone,
+      callerEmail: email,
+      callerAddress: address,
     });
     await matchRequestToExistingCustomer(bueroPage, customer);
     await bueroPage.reload();
@@ -313,11 +405,36 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(visibleText(bueroPage, 'Erfasste Anruferdaten')).toBeVisible();
     await expect(visibleText(bueroPage, caller)).toBeVisible();
     await expect(visibleText(bueroPage, phone)).toBeVisible();
+    await expect(visibleText(bueroPage, email)).toBeVisible();
+    await expect(visibleText(bueroPage, address)).toBeVisible();
 
     const state = await getRequestAuditState(world.orgId, requestNumber);
     expect(state.clientId).not.toBeNull();
     expect(state.callerName).toBe(caller);
     expect(state.callerPhone).toBe(phone);
+    expect(state.callerEmail).toBe(email);
+    expect(state.callerAddress).toBe(address);
+
+    const promotedCaller = `A2 Neukundin ${world.runId}`;
+    const promotedEmail = `neukundin-${world.runId}@example.test`;
+    const promotedAddress = 'Neukundenweg 29, 10117 Berlin';
+    await createRequestViaDialog(bueroPage, {
+      summary: `A2 Anruferin wird Kundin ${world.runId}`,
+      requestNumber: `A2-ANF-${world.runId}-09B`,
+      callerName: promotedCaller,
+      callerPhone: '+49 30 290010',
+      callerEmail: promotedEmail,
+      callerAddress: promotedAddress,
+    });
+    await bueroPage.getByRole('button', { name: 'Als neuen Kunden anlegen' }).click();
+    await expect(
+      visibleText(bueroPage, 'Kunde wurde angelegt und der Anfrage zugeordnet.')
+    ).toBeVisible({ timeout: 15_000 });
+    await bueroPage.getByRole('link', { name: promotedCaller, exact: true }).click();
+    await expect(visibleText(bueroPage, promotedCaller)).toBeVisible();
+    await expect(visibleText(bueroPage, '+49 30 290010')).toBeVisible();
+    await expect(visibleText(bueroPage, promotedEmail)).toBeVisible();
+    await expect(visibleText(bueroPage, promotedAddress)).toBeVisible();
   });
 
   test('A2-10/A2-11: Eigene Anfragenummer überlebt späten Vorschlag; Klärung und Wiederöffnung bleiben bestehen', async ({
@@ -483,5 +600,513 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     const personnel = await getEmployeeRecordStateByUser(world.orgId, world.invitee.id);
     expect(personnel.membershipJoinedAt).toBeNull();
     expect(personnel.exitDate).not.toBeNull();
+  });
+
+  test('A2-R01: Anfrage erfasst alle optionalen Fakten und die vollständige Auswahl', async ({
+    bueroPage,
+    world,
+  }) => {
+    const customer = `A2 Kundenstamm ${world.runId}`;
+    const requestNumber = `A2-ANF-${world.runId}-R01`;
+    const summary = `A2 Vollständige Anfrage ${world.runId}`;
+    const details = 'Heizkreis prüfen und Rückruf vorbereiten';
+    const receivedAtLocal = `${berlinDateAtOffset(0)}T06:00`;
+    const assignee = fullName(world.users.buero);
+
+    await bueroPage.goto('/anfragen');
+    await bueroPage.getByRole('button', { name: 'Anfrage erfassen' }).click();
+    const dialog = bueroPage.getByRole('dialog');
+    await expect(dialog.locator('#request-received-at')).toBeVisible();
+    await expectSelectOptions(bueroPage, dialog.locator('#request-category'), [
+      'Notfall',
+      'Störung / Reparatur',
+      'Wartung',
+      'Angebotsanfrage',
+      'Installation / Umbau',
+      'Garantie / Mangel',
+      'Allgemeine Frage',
+      'Sonstiges',
+    ]);
+    await expectSelectOptions(bueroPage, dialog.locator('#request-urgency'), [
+      'Niedrig',
+      'Normal',
+      'Hoch',
+      'Notfall',
+    ]);
+    await expectSelectOptions(bueroPage, dialog.locator('#request-source'), [
+      'Telefon',
+      'E-Mail',
+      'Vor Ort',
+      'Sonstiges',
+    ]);
+    await dialog.locator('#request-assignee').click();
+    await expect(bueroPage.getByRole('option', { name: 'Niemand zuständig' })).toBeVisible();
+    await expect(bueroPage.getByRole('option', { name: assignee, exact: true })).toBeVisible();
+    await bueroPage.getByRole('option', { name: 'Niemand zuständig' }).click();
+    await bueroPage.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    await createRequestViaDialog(bueroPage, {
+      summary,
+      details,
+      requestNumber,
+      clientName: customer,
+      siteName: `A2 Nebenstelle ${world.runId}`,
+      contactName: `A2 Hauptkontakt ${world.runId}`,
+      categoryLabel: 'Installation / Umbau',
+      urgencyLabel: 'Notfall',
+      sourceLabel: 'E-Mail',
+      receivedAtLocal,
+      assigneeName: assignee,
+    });
+    await expect(visibleText(bueroPage, details)).toBeVisible();
+    await expect(visibleText(bueroPage, 'Installation / Umbau')).toBeVisible();
+    await expect(visibleText(bueroPage, 'E-Mail')).toBeVisible();
+    await expect(visibleText(bueroPage, assignee)).toBeVisible();
+    await expect(visibleText(bueroPage, `A2 Nebenstelle ${world.runId}`)).toBeVisible();
+    await expect(visibleText(bueroPage, `A2 Hauptkontakt ${world.runId}`)).toBeVisible();
+    await expect(visibleText(bueroPage, 'Anfrage erfasst')).toBeVisible();
+
+    const state = await getRequestAuditState(world.orgId, requestNumber);
+    expect(state).toMatchObject({
+      status: 'offen',
+      details,
+      category: 'installation_umbau',
+      urgency: 'notfall',
+      source: 'email',
+      assignedTo: world.users.buero.id,
+      eventTypes: ['created'],
+      eventActorIds: [world.users.buero.id],
+    });
+    expect(state.clientId).not.toBeNull();
+    expect(state.siteId).not.toBeNull();
+    expect(state.contactId).not.toBeNull();
+    expect(new Date(state.receivedAt).toISOString()).toBe(
+      `${berlinDateAtOffset(0)}T04:00:00.000Z`
+    );
+  });
+
+  test('A2-R02: Anfrage-Anhang öffnet im Viewer und landet im Papierkorb', async ({
+    adminPage,
+    world,
+  }) => {
+    test.setTimeout(300_000);
+    const requestNumber = `A2-ANF-${world.runId}-R02`;
+    await createRequestViaDialog(adminPage, {
+      summary: `A2 Dokumentierte Anfrage ${world.runId}`,
+      requestNumber,
+    });
+    await uploadDocumentOnRequestDetail(
+      adminPage,
+      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      'upload-fixture'
+    );
+    const fileButton = adminPage.getByRole('button', { name: /upload-fixture/ }).first();
+    await fileButton.click();
+    const viewer = adminPage.getByRole('dialog');
+    await expect(viewer.getByRole('heading', { name: /upload-fixture/ })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(viewer.locator('iframe[title*="upload-fixture"]')).toBeVisible({
+      timeout: 20_000,
+    });
+    await adminPage.keyboard.press('Escape');
+    await expect(viewer).toHaveCount(0);
+
+    const fileRow = fileButton.locator('..');
+    await fileRow.getByRole('button', { name: 'Dateiaktionen öffnen' }).click();
+    await adminPage.getByRole('menuitem', { name: 'In Papierkorb verschieben' }).click();
+    await adminPage
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'In Papierkorb verschieben' })
+      .click();
+    await expect(
+      visibleText(adminPage, 'Datei wurde in den Papierkorb verschoben.')
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(adminPage.getByRole('button', { name: /upload-fixture/ })).toHaveCount(0);
+    await adminPage.goto('/dokumente');
+    await adminPage.getByRole('button', { name: 'Papierkorb' }).click();
+    await expect(visibleText(adminPage, 'upload-fixture')).toBeVisible({ timeout: 20_000 });
+  });
+
+  test('A2-R03: Abschlussgründe sind verpflichtend; umgewandelte Anfragen sind schreibgeschützt', async ({
+    bueroPage,
+    world,
+  }) => {
+    const requestNumber = `A2-ANF-${world.runId}-R03`;
+    await createRequestViaDialog(bueroPage, {
+      summary: `A2 Abschluss prüfen ${world.runId}`,
+      requestNumber,
+    });
+    await bueroPage.getByRole('button', { name: 'Schließen', exact: true }).click();
+    const closeDialog = bueroPage.getByRole('dialog');
+    await expect(closeDialog.getByText('Grund *', { exact: true })).toBeVisible();
+    await expectSelectOptions(bueroPage, closeDialog.locator('#close-reason'), [
+      'Kein Bedarf mehr',
+      'Abgelehnt',
+      'Duplikat',
+      'Anderweitig gelöst',
+      'Sonstiges',
+    ]);
+    await expect(closeDialog.locator('#close-reason')).not.toHaveText('');
+    await closeDialog.locator('#close-reason').click();
+    await bueroPage.getByRole('option', { name: 'Duplikat', exact: true }).click();
+    await closeDialog.getByRole('button', { name: 'Anfrage schließen' }).click();
+    await expect(closeDialog).toHaveCount(0, { timeout: 15_000 });
+    await bueroPage.reload();
+    await expect(visibleText(bueroPage, 'Ohne Auftrag geschlossen:')).toBeVisible();
+    await expect(visibleText(bueroPage, 'Duplikat')).toBeVisible();
+    await setRequestStatusFromDetail(bueroPage, 'Wieder öffnen');
+
+    const convertedNumber = `A2-ANF-${world.runId}-13`;
+    await bueroPage.goto('/anfragen');
+    await bueroPage.getByRole('tab', { name: 'Umgewandelt' }).click();
+    await visibleText(bueroPage, convertedNumber).click();
+    await expect(bueroPage.getByRole('button', { name: 'Umwandeln' })).toHaveCount(0);
+    await expect(bueroPage.getByRole('button', { name: 'Bearbeiten' })).toHaveCount(0);
+    await expect(bueroPage.getByRole('button', { name: 'Schließen' })).toHaveCount(0);
+    await expect(bueroPage.locator('input[type="file"]')).toHaveCount(0);
+  });
+
+  test('A2-R04: Auftragsumwandlung ist vollständig vorbefüllt, editierbar, geparkt und versandfrei', async ({
+    adminPage,
+    world,
+  }) => {
+    test.setTimeout(300_000);
+    const customer = `A2 Kundenstamm ${world.runId}`;
+    const contact = `A2 Hauptkontakt ${world.runId}`;
+    const site = `A2 Nebenstelle ${world.runId}`;
+    const requestNumber = `A2-ANF-${world.runId}-R04`;
+    const summary = `A2 Umwandlung komplett ${world.runId}`;
+    const details = 'Ursprüngliche Anfragebeschreibung';
+    const editedTitle = `A2 Editierter Auftrag ${world.runId}`;
+    const editedDescription = 'Im Umwandlungsdialog bewusst ergänzt';
+    await createRequestViaDialog(adminPage, {
+      summary,
+      details,
+      requestNumber,
+      clientName: customer,
+      siteName: site,
+      contactName: contact,
+      urgencyLabel: 'Notfall',
+    });
+    await adminPage.getByRole('button', { name: 'Umwandeln' }).click();
+    const dialog = adminPage.getByRole('dialog');
+    await expect(dialog.locator('#convert-title')).toHaveValue(summary);
+    await expect(dialog.locator('#convert-description')).toHaveValue(details);
+    await expect(dialog.getByRole('combobox').filter({ hasText: customer })).toBeVisible();
+    await expect(dialog.locator('#convert-site')).toContainText(site);
+    await expect(dialog.locator('#convert-contact')).toContainText(contact);
+    await expect(dialog.locator('#convert-priority')).toContainText('Hoch');
+    await expect(dialog.locator('#convert-date')).toHaveValue('');
+    await expect(dialog.getByText('Es wird nichts automatisch terminiert.')).toBeVisible();
+    await dialog.locator('#convert-title').fill(editedTitle);
+    await dialog.locator('#convert-description').fill(editedDescription);
+    await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, { timeout: 15_000 });
+    await dialog.getByRole('button', { name: 'In Auftrag umwandeln' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    const requestLink = adminPage.getByRole('link', { name: /Auftrag AUF-/ });
+    await expect(requestLink).toBeVisible({ timeout: 15_000 });
+    await requestLink.click();
+    await expect(visibleText(adminPage, editedTitle)).toBeVisible();
+    await expect(visibleText(adminPage, editedDescription)).toBeVisible();
+    await expect(visibleText(adminPage, 'Geparkt')).toBeVisible();
+    await expect(adminPage.getByRole('link', { name: `Anfrage ${requestNumber}` })).toBeVisible();
+
+    const state = await getConvertedRequestJobState(world.orgId, requestNumber);
+    expect(state).toMatchObject({
+      title: editedTitle,
+      description: editedDescription,
+      priority: 'hoch',
+      status: 'geparkt',
+      plannedDate: null,
+      planningCount: 0,
+      dispatchCount: 0,
+    });
+    expect(state.clientId).not.toBeNull();
+    expect(state.siteId).not.toBeNull();
+    expect(state.contactId).not.toBeNull();
+  });
+
+  test('A2-R05: Chronik und Nachfassaktionen belegen alle Quellen, Filter und Attribution', async ({
+    adminPage,
+    world,
+  }) => {
+    test.setTimeout(480_000);
+    const customer = `A2 Chronikkunde ${world.runId}`;
+    const contact = `A2 Chronikkontakt ${world.runId}`;
+    const site = `A2 Chronikstandort ${world.runId}`;
+    const jobNumber = `A2-CHR-J-${world.runId}`;
+    const jobTitle = `A2 Chronikauftrag ${world.runId}`;
+    const projectNumber = `A2-CHR-P-${world.runId}`;
+    const projectTitle = `A2 Chronikprojekt ${world.runId}`;
+    const requestNumber = `A2-CHR-A-${world.runId}`;
+    const requestSummary = `A2 Chronikanfrage ${world.runId}`;
+    const actor = fullName(world.users.admin);
+
+    await createCustomer(adminPage, customer);
+    await openCustomerDetail(adminPage, customer);
+    await addContactOnCustomerDetail(adminPage, {
+      name: contact,
+      phone: '+49 30 660001',
+      email: `chronik-${world.runId}@example.test`,
+    });
+    await addSiteOnCustomerDetail(adminPage, { name: site, city: 'Berlin' });
+    await createJob(adminPage, { jobNumber, title: jobTitle, clientName: customer });
+    await uploadDocumentOnJobPage(
+      adminPage,
+      jobNumber,
+      resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
+      'upload-fixture'
+    );
+    await createProject(adminPage, {
+      projectNumber,
+      title: projectTitle,
+      clientName: customer,
+    });
+    await createRequestViaDialog(adminPage, {
+      summary: requestSummary,
+      requestNumber,
+      clientName: customer,
+    });
+    await setRequestStatusFromDetail(adminPage, 'In Klärung setzen');
+    await adminPage.getByRole('button', { name: 'Zurück auf Offen' }).click();
+    await expect(adminPage.getByRole('button', { name: 'In Klärung setzen' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await openCustomerDetail(adminPage, customer);
+
+    const timeline = adminPage.locator('[data-testid="customer-timeline"]');
+    for (const [label, reference] of [
+      ['Anfrage eingegangen', requestSummary],
+      ['Anfrage aktualisiert', requestNumber],
+      ['Auftrag angelegt', jobTitle],
+      ['Projekt angelegt', projectTitle],
+      ['Dokument verknüpft', 'upload-fixture'],
+    ]) {
+      const row = timeline
+        .locator('[data-timeline-key]')
+        .filter({ hasText: label })
+        .filter({ hasText: reference })
+        .first();
+      await expect(row).toContainText(actor);
+      await expect(row.getByRole('link', { name: 'Quelle öffnen' })).toHaveCount(1);
+    }
+    const stableKeys = await timeline.locator('[data-timeline-key]').evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute('data-timeline-key'))
+    );
+    expect(new Set(stableKeys).size).toBe(stableKeys.length);
+
+    const dueAt = `${berlinDateAtOffset(2)}T10:00`;
+    const sources = [
+      ['contact', contact, contact],
+      ['site', site, site],
+      ['request', requestSummary, requestNumber],
+      ['job', jobTitle, jobNumber],
+      ['project', projectTitle, projectNumber],
+    ] as const;
+    for (const [sourceType, sourceText, sourceLabel] of sources) {
+      await createTimelineFollowUp(
+        adminPage,
+        sourceText,
+        sourceLabel,
+        `A2 Quelle ${sourceType} ${world.runId}`,
+        dueAt
+      );
+    }
+    await adminPage
+      .getByRole('button', { name: `Nachfassaktion A2 Quelle contact ${world.runId} erledigen` })
+      .click();
+    await expect(visibleText(adminPage, 'Nachfassaktion erledigt.')).toBeVisible();
+    await adminPage
+      .getByRole('button', { name: `Nachfassaktion A2 Quelle site ${world.runId} abbrechen` })
+      .click();
+    await expect(visibleText(adminPage, 'Nachfassaktion abgebrochen.')).toBeVisible();
+
+    await adminPage.getByRole('button', { name: 'Arbeit', exact: true }).click();
+    await expect(timeline.getByText(jobTitle)).toBeVisible();
+    await expect(timeline.getByText(projectTitle)).toBeVisible();
+    await expect(timeline.getByText(contact)).toHaveCount(0);
+    await adminPage.getByRole('button', { name: 'Dokumente', exact: true }).click();
+    await expect(timeline.getByText('upload-fixture')).toBeVisible();
+    await expect(timeline.getByText(jobTitle)).toHaveCount(0);
+    await adminPage.getByRole('button', { name: 'Intern', exact: true }).click();
+    await expect(timeline.getByText(contact)).toBeVisible();
+    await expect(timeline.getByText(site)).toBeVisible();
+    await expect(timeline.getByText('Nachfassaktion geändert').first()).toBeVisible();
+
+    const relationship = await getCustomerRelationshipState(world.orgId, customer);
+    expect(
+      relationship.followUps
+        .filter((followUp) => followUp.title.startsWith('A2 Quelle'))
+        .map((followUp) => followUp.sourceType)
+        .sort()
+    ).toEqual(['contact', 'job', 'project', 'request', 'site']);
+    expect(
+      relationship.followUps.find((followUp) => followUp.title.includes('contact'))
+    ).toMatchObject({ status: 'completed', completedBy: world.users.admin.id });
+    expect(
+      relationship.followUps.find((followUp) => followUp.title.includes('site'))
+    ).toMatchObject({ status: 'cancelled', cancelledBy: world.users.admin.id });
+  });
+
+  test('A2-R06: Kommunikationspräferenzen sind vollständig automatisiert und E-Mail-Ausnahmen nachvollziehbar', async ({
+    adminPage,
+    world,
+  }) => {
+    test.setTimeout(360_000);
+    const customer = `A2 Chronikkunde ${world.runId}`;
+    const contact = `A2 Chronikkontakt ${world.runId}`;
+    const email = `chronik-${world.runId}@example.test`;
+    await openCustomerDetail(adminPage, customer);
+    await expect(visibleText(adminPage, 'Noch nicht konfiguriert')).toBeVisible();
+    await configureCustomerCommunicationSettings(adminPage, {
+      preferredContactName: contact,
+      preferredChannel: 'E-Mail',
+      doNotContactInstruction: 'Nur nach interner Freigabe kontaktieren.',
+      contactTimeNote: 'Werktags 08:00–11:00 Uhr',
+      languageNote: 'Deutsch',
+      accessibilityNote: 'Bitte langsam und deutlich sprechen',
+      sourceNote: 'A2 Kundengespräch',
+    });
+    const section = adminPage.locator('section[aria-labelledby="communication-heading"]');
+    await expect(section).toContainText('E-Mail');
+    await expect(section).toContainText('Werktags 08:00–11:00 Uhr');
+    await expect(section).toContainText('Deutsch');
+    await expect(section).toContainText('Bitte langsam und deutlich sprechen');
+    await expect(section).toContainText('Es werden keine Nachrichten versendet.');
+    await expect(section).toContainText(
+      'Diese Angaben sind betriebliche Kontaktvorgaben und keine Aussage zur rechtlichen Zulässigkeit.'
+    );
+
+    await adminPage.getByRole('button', { name: 'Präferenz', exact: true }).click();
+    const dialog = adminPage.getByRole('dialog');
+    await expectSelectOptions(adminPage, dialog.locator('#preference-channel'), [
+      'Telefon',
+      'E-Mail',
+      'SMS',
+      'Brief',
+      'Persönlich',
+    ]);
+    await expectSelectOptions(adminPage, dialog.locator('#preference-purpose'), [
+      'Termin und Service',
+      'Marketing',
+      'Erforderliche kaufmännische Kommunikation',
+    ]);
+    await expectSelectOptions(adminPage, dialog.locator('#preference-state'), [
+      'Erlaubt',
+      'Nicht erlaubt',
+      'Unbekannt',
+    ]);
+    await dialog.getByRole('button', { name: 'Abbrechen' }).click();
+
+    await setCustomerCommunicationPreference(adminPage, {
+      channel: 'Telefon',
+      state: 'Erlaubt',
+      purpose: 'Termin und Service',
+    });
+    await setCustomerCommunicationPreference(adminPage, {
+      contactName: contact,
+      channel: 'E-Mail',
+      state: 'Nicht erlaubt',
+      purpose: 'Termin und Service',
+      sourceNote: 'E-Mail unerwünscht',
+    });
+    await setCustomerCommunicationPreference(adminPage, {
+      channel: 'SMS',
+      state: 'Unbekannt',
+      purpose: 'Marketing',
+    });
+    await setCustomerCommunicationPreference(adminPage, {
+      channel: 'Brief',
+      state: 'Erlaubt',
+      purpose: 'Erforderliche kaufmännische Kommunikation',
+    });
+    await setCustomerCommunicationPreference(adminPage, {
+      channel: 'Persönlich',
+      state: 'Nicht erlaubt',
+      purpose: 'Marketing',
+    });
+    await adminPage.getByRole('link', { name: email, exact: true }).click();
+    const warning = adminPage.getByRole('dialog');
+    await expect(warning.getByText(/Nicht-kontaktieren-Hinweis/)).toBeVisible();
+    await expect(warning.getByText(/Kontaktweg.*nicht erlaubt/)).toBeVisible();
+    await expect(warning.getByText(/WerkFlow entscheidet nicht über die rechtliche Zulässigkeit/))
+      .toBeVisible();
+    await expect(warning.getByRole('button', { name: 'Begründet fortfahren' })).toBeDisabled();
+    await warning.locator('#contact-exception-reason').fill(
+      'E-Mail ist für die laufende Störungsbehebung erforderlich'
+    );
+    await warning.getByRole('button', { name: 'Begründet fortfahren' }).click();
+    await expect(warning).toHaveCount(0, { timeout: 15_000 });
+
+    const relationship = await getCustomerRelationshipState(world.orgId, customer);
+    expect(relationship.communicationSettings).toMatchObject({
+      preferredChannel: 'email',
+      doNotContactInstruction: 'Nur nach interner Freigabe kontaktieren.',
+      contactTimeNote: 'Werktags 08:00–11:00 Uhr',
+      languageNote: 'Deutsch',
+      accessibilityNote: 'Bitte langsam und deutlich sprechen',
+    });
+    expect(
+      relationship.communicationPreferences.map((preference) => [
+        preference.channel,
+        preference.purpose,
+        preference.state,
+      ])
+    ).toEqual([
+      ['phone', 'appointment_service', 'allowed'],
+      ['email', 'appointment_service', 'disallowed'],
+      ['sms', 'marketing', 'unknown'],
+      ['letter', 'commercial_required', 'allowed'],
+      ['in_person', 'marketing', 'disallowed'],
+    ]);
+    expect(relationship.preferenceEventTypes).toContain('exception_acknowledged');
+    await adminPage.getByRole('button', { name: 'Intern', exact: true }).click();
+    const preferenceTimelineRow = adminPage
+      .locator('[data-timeline-key]')
+      .filter({ hasText: 'Kontaktvorgabe geändert' })
+      .first();
+    await expect(preferenceTimelineRow).toContainText(fullName(world.users.admin));
+    await expect(preferenceTimelineRow.getByRole('link', { name: 'Quelle öffnen' }))
+      .toHaveCount(1);
+  });
+
+  test('A2-R07: Anfragenliste filtert und sucht alle Katalogidentitäten', async ({
+    bueroPage,
+    world,
+  }) => {
+    const convertedNumber = `A2-ANF-${world.runId}-R04`;
+    const activeNumber = `A2-ANF-${world.runId}-R01`;
+    const closedNumber = `A2-ANF-${world.runId}-R07-CLOSED`;
+    await createRequestViaDialog(bueroPage, {
+      summary: `A2 Dauerhaft geschlossen ${world.runId}`,
+      requestNumber: closedNumber,
+    });
+    await closeRequestViaDialog(bueroPage, 'Sonstiges');
+
+    await bueroPage.goto('/anfragen');
+    await expect(visibleText(bueroPage, activeNumber)).toBeVisible();
+    await expect(bueroPage.getByText(convertedNumber)).toHaveCount(0);
+    await bueroPage.getByRole('tab', { name: 'Umgewandelt' }).click();
+    await expect(visibleText(bueroPage, convertedNumber)).toBeVisible();
+    await bueroPage.getByRole('tab', { name: 'Geschlossen' }).click();
+    await expect(visibleText(bueroPage, closedNumber)).toBeVisible();
+    await bueroPage.getByRole('tab', { name: 'Alle' }).click();
+    await expect(visibleText(bueroPage, activeNumber)).toBeVisible();
+    await expect(visibleText(bueroPage, convertedNumber)).toBeVisible();
+    await expect(visibleText(bueroPage, closedNumber)).toBeVisible();
+
+    const search = bueroPage.getByLabel('Anfragen durchsuchen');
+    for (const [query, expected] of [
+      [`A2 Vollständige Anfrage ${world.runId}`, activeNumber],
+      [`A2 Kundenstamm ${world.runId}`, activeNumber],
+      [`A2 Unbekannte Anruferin ${world.runId}`, `A2-ANF-${world.runId}-09`],
+      [activeNumber, activeNumber],
+      [fullName(world.users.buero), activeNumber],
+    ]) {
+      await search.fill(query);
+      await expect(visibleText(bueroPage, expected)).toBeVisible();
+    }
   });
 });

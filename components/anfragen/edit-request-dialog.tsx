@@ -23,6 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  formatBerlinDateTimeInput,
+  parseBerlinDateTimeInput,
+} from '@/lib/customer-relationships/date-time';
 import { updateClientRequest } from '@/lib/requests/actions';
 import {
   REQUEST_CATEGORY_LABELS,
@@ -44,6 +48,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     'Diese Anfrage kann nicht mehr bearbeitet werden (bereits umgewandelt oder geschlossen).',
   summary_required: 'Bitte beschreibe kurz das Anliegen.',
   request_number_taken: 'Diese Anfragenummer ist bereits vergeben.',
+  invalid_received_at: 'Bitte gib eine gültige Eingangszeit ein.',
   update_failed: 'Die Änderungen konnten nicht gespeichert werden.',
   no_changes: 'Es gibt keine Änderungen zu speichern.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
@@ -73,6 +78,9 @@ export function EditRequestDialog({
   const [category, setCategory] = useState<RequestCategory>(request.category);
   const [urgency, setUrgency] = useState<RequestUrgency>(request.urgency);
   const [source, setSource] = useState<RequestSource>(request.source);
+  const [receivedAt, setReceivedAt] = useState(
+    formatBerlinDateTimeInput(request.receivedAt)
+  );
   const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +99,7 @@ export function EditRequestDialog({
     setCategory(request.category);
     setUrgency(request.urgency);
     setSource(request.source);
+    setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
     setAssignedTo(request.assignedTo ?? '');
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,6 +111,14 @@ export function EditRequestDialog({
 
     if (!summary.trim()) {
       setError(ERROR_MESSAGES.summary_required);
+      return;
+    }
+
+    const receivedAtDate = receivedAt
+      ? parseBerlinDateTimeInput(receivedAt)
+      : null;
+    if (receivedAt && !receivedAtDate) {
+      setError(ERROR_MESSAGES.invalid_received_at);
       return;
     }
 
@@ -118,6 +135,7 @@ export function EditRequestDialog({
         category,
         urgency,
         source,
+        receivedAt: receivedAtDate?.toISOString(),
         assignedTo,
       });
 
@@ -134,6 +152,8 @@ export function EditRequestDialog({
       setIsLoading(false);
     }
   };
+
+  const showReceivedAtError = error === ERROR_MESSAGES.invalid_received_at;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -198,6 +218,31 @@ export function EditRequestDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-request-received-at">Eingangszeit</Label>
+              <Input
+                id="edit-request-received-at"
+                type="datetime-local"
+                value={receivedAt}
+                onChange={(event) => setReceivedAt(event.target.value)}
+                aria-invalid={showReceivedAtError}
+                aria-describedby={
+                  showReceivedAtError
+                    ? 'edit-request-received-at-error'
+                    : undefined
+                }
+                disabled={isLoading}
+              />
+              {showReceivedAtError && (
+                <p
+                  id="edit-request-received-at-error"
+                  className="text-xs text-destructive"
+                >
+                  {ERROR_MESSAGES.invalid_received_at}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-2">

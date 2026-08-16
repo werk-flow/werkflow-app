@@ -640,26 +640,128 @@ export async function getRequestAuditState(
   id: string;
   status: string;
   clientId: string | null;
+  contactId: string | null;
+  siteId: string | null;
   callerName: string | null;
   callerPhone: string | null;
+  callerEmail: string | null;
+  callerAddress: string | null;
+  details: string | null;
+  category: string;
+  urgency: string;
+  source: string;
+  assignedTo: string | null;
+  receivedAt: string;
   convertedProjectId: string | null;
+  eventTypes: string[];
+  eventActorIds: Array<string | null>;
 }> {
-  const { data, error } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from('client_requests')
-    .select('id,status,client_id,caller_name,caller_phone,converted_project_id')
+    .select('id,status,client_id,contact_id,site_id,caller_name,caller_phone,caller_email,caller_address,details,category,urgency,source,assigned_to,received_at,converted_project_id')
     .eq('organization_id', orgId)
     .eq('request_number', requestNumber)
     .single();
   if (error || !data) {
     throw new Error(`No request found with number ${requestNumber}: ${error?.message}`);
   }
+  const { data: events, error: eventsError } = await admin
+    .from('client_request_events')
+    .select('event_type,created_by,created_at')
+    .eq('organization_id', orgId)
+    .eq('request_id', data.id)
+    .order('created_at', { ascending: true });
+  if (eventsError) {
+    throw new Error(`Request events could not be read: ${eventsError.message}`);
+  }
   return {
     id: data.id as string,
     status: data.status as string,
     clientId: (data.client_id as string | null) ?? null,
+    contactId: (data.contact_id as string | null) ?? null,
+    siteId: (data.site_id as string | null) ?? null,
     callerName: (data.caller_name as string | null) ?? null,
     callerPhone: (data.caller_phone as string | null) ?? null,
+    callerEmail: (data.caller_email as string | null) ?? null,
+    callerAddress: (data.caller_address as string | null) ?? null,
+    details: (data.details as string | null) ?? null,
+    category: data.category as string,
+    urgency: data.urgency as string,
+    source: data.source as string,
+    assignedTo: (data.assigned_to as string | null) ?? null,
+    receivedAt: data.received_at as string,
     convertedProjectId: (data.converted_project_id as string | null) ?? null,
+    eventTypes: (events ?? []).map((event) => event.event_type as string),
+    eventActorIds: (events ?? []).map(
+      (event) => (event.created_by as string | null) ?? null
+    ),
+  };
+}
+
+export async function getConvertedRequestJobState(
+  orgId: string,
+  requestNumber: string
+): Promise<{
+  jobNumber: string | null;
+  title: string;
+  description: string | null;
+  clientId: string | null;
+  contactId: string | null;
+  siteId: string | null;
+  priority: string;
+  status: string;
+  plannedDate: string | null;
+  planningCount: number;
+  dispatchCount: number;
+}> {
+  const admin = createAdminClient();
+  const { data: request, error: requestError } = await admin
+    .from('client_requests')
+    .select('converted_job_id')
+    .eq('organization_id', orgId)
+    .eq('request_number', requestNumber)
+    .single();
+  if (requestError || !request?.converted_job_id) {
+    throw new Error(`Converted job missing for ${requestNumber}: ${requestError?.message}`);
+  }
+  const { data: job, error: jobError } = await admin
+    .from('jobs')
+    .select('job_number,title,description,client_id,contact_id,site_id,priority,status,planned_date')
+    .eq('organization_id', orgId)
+    .eq('id', request.converted_job_id)
+    .single();
+  if (jobError || !job) {
+    throw new Error(`Converted job could not be read: ${jobError?.message}`);
+  }
+  const [planningResult, dispatchResult] = await Promise.all([
+    admin
+      .from('planning_occurrences')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('job_id', request.converted_job_id),
+    admin
+      .from('planning_dispatches')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('job_id', request.converted_job_id),
+  ]);
+  const countError = planningResult.error ?? dispatchResult.error;
+  if (countError) {
+    throw new Error(`Converted job side effects could not be read: ${countError.message}`);
+  }
+  return {
+    jobNumber: (job.job_number as string | null) ?? null,
+    title: job.title as string,
+    description: (job.description as string | null) ?? null,
+    clientId: (job.client_id as string | null) ?? null,
+    contactId: (job.contact_id as string | null) ?? null,
+    siteId: (job.site_id as string | null) ?? null,
+    priority: job.priority as string,
+    status: job.status as string,
+    plannedDate: (job.planned_date as string | null) ?? null,
+    planningCount: planningResult.count ?? 0,
+    dispatchCount: dispatchResult.count ?? 0,
   };
 }
 
@@ -1065,9 +1167,26 @@ export async function getCustomerRelationshipState(
     status: string;
     ownerUserId: string;
     completedBy: string | null;
+    cancelledBy: string | null;
+    sourceType: string | null;
+    sourceId: string | null;
   }>;
   followUpEventTypes: string[];
   preferenceEventTypes: string[];
+  communicationSettings: {
+    preferredContactId: string | null;
+    preferredChannel: string | null;
+    doNotContactInstruction: string | null;
+    contactTimeNote: string | null;
+    languageNote: string | null;
+    accessibilityNote: string | null;
+  } | null;
+  communicationPreferences: Array<{
+    contactId: string | null;
+    channel: string;
+    purpose: string;
+    state: string;
+  }>;
 }> {
   const admin = createAdminClient();
   const { data: client, error: clientError } = await admin
@@ -1079,10 +1198,10 @@ export async function getCustomerRelationshipState(
   if (clientError || !client) {
     throw new Error(`Customer ${customerName} not found: ${clientError?.message}`);
   }
-  const [followUps, followUpEvents, preferenceEvents] = await Promise.all([
+  const [followUps, followUpEvents, preferenceEvents, settings, preferences] = await Promise.all([
     admin
       .from('client_follow_ups')
-      .select('id,title,status,owner_user_id,completed_by')
+      .select('id,title,status,owner_user_id,completed_by,cancelled_by,source_type,source_id')
       .eq('organization_id', orgId)
       .eq('client_id', client.id)
       .order('created_at', { ascending: true }),
@@ -1098,8 +1217,20 @@ export async function getCustomerRelationshipState(
       .eq('organization_id', orgId)
       .eq('client_id', client.id)
       .order('created_at', { ascending: true }),
+    admin
+      .from('client_communication_settings')
+      .select('preferred_contact_id,preferred_channel,do_not_contact_instruction,contact_time_note,language_note,accessibility_note')
+      .eq('organization_id', orgId)
+      .eq('client_id', client.id)
+      .maybeSingle(),
+    admin
+      .from('client_communication_preferences')
+      .select('contact_id,channel,purpose,state,created_at')
+      .eq('organization_id', orgId)
+      .eq('client_id', client.id)
+      .order('created_at', { ascending: true }),
   ]);
-  const firstError = followUps.error ?? followUpEvents.error ?? preferenceEvents.error;
+  const firstError = followUps.error ?? followUpEvents.error ?? preferenceEvents.error ?? settings.error ?? preferences.error;
   if (firstError) {
     throw new Error(`Customer relationship observation failed: ${firstError.message}`);
   }
@@ -1111,6 +1242,9 @@ export async function getCustomerRelationshipState(
       status: row.status as string,
       ownerUserId: row.owner_user_id as string,
       completedBy: (row.completed_by as string | null) ?? null,
+      cancelledBy: (row.cancelled_by as string | null) ?? null,
+      sourceType: (row.source_type as string | null) ?? null,
+      sourceId: (row.source_id as string | null) ?? null,
     })),
     followUpEventTypes: (followUpEvents.data ?? []).map(
       (row) => row.event_type as string
@@ -1118,6 +1252,22 @@ export async function getCustomerRelationshipState(
     preferenceEventTypes: (preferenceEvents.data ?? []).map(
       (row) => row.event_type as string
     ),
+    communicationSettings: settings.data
+      ? {
+          preferredContactId: (settings.data.preferred_contact_id as string | null) ?? null,
+          preferredChannel: (settings.data.preferred_channel as string | null) ?? null,
+          doNotContactInstruction: (settings.data.do_not_contact_instruction as string | null) ?? null,
+          contactTimeNote: (settings.data.contact_time_note as string | null) ?? null,
+          languageNote: (settings.data.language_note as string | null) ?? null,
+          accessibilityNote: (settings.data.accessibility_note as string | null) ?? null,
+        }
+      : null,
+    communicationPreferences: (preferences.data ?? []).map((row) => ({
+      contactId: (row.contact_id as string | null) ?? null,
+      channel: row.channel as string,
+      purpose: row.purpose as string,
+      state: row.state as string,
+    })),
   };
 }
 
