@@ -126,6 +126,35 @@ export async function getEmployeeRecordStateByUser(
   };
 }
 
+export type EmployeeRecordEventState = {
+  eventType: string;
+  eventPayload: Record<string, unknown>;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+export async function getEmployeeRecordEventStates(
+  orgId: string,
+  employeeRecordId: string
+): Promise<EmployeeRecordEventState[]> {
+  const { data, error } = await createAdminClient()
+    .from('employee_record_events')
+    .select('event_type, event_payload, created_by, created_at')
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecordId)
+    .order('created_at', { ascending: true });
+  if (error) {
+    throw new Error(`Employee record events query failed: ${error.message}`);
+  }
+
+  return (data ?? []).map((event) => ({
+    eventType: event.event_type as string,
+    eventPayload: (event.event_payload ?? {}) as Record<string, unknown>,
+    createdBy: (event.created_by as string | null) ?? null,
+    createdAt: event.created_at as string,
+  }));
+}
+
 // P1-04: which work-schedule rows a real signed-in user can see under RLS.
 // The UI never shows foreign schedules, so the self-or-manager SELECT policy
 // (managers all org rows, a person exactly their own) is proved here.

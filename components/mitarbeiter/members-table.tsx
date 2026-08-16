@@ -15,9 +15,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MemberActionsMenu } from './member-actions-menu';
 import { StatusBadge } from './status-badge';
 import { HoursDisplay } from './hours-display';
+import {
+  AccessStateBadge,
+  EmploymentStateBadge,
+} from './personnel-state-badges';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status-polling';
+import type { PersonnelListEntry } from '@/lib/personnel/actions';
+import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
 
 // Roles that managers can view status for (same as MANAGED_ROLES in time-tracking/types.ts)
@@ -76,6 +82,7 @@ interface MembersTableProps {
   statusMap?: Record<string, MemberStatus>;
   /** Resolved daily targets per member (P1-04) */
   targetsByUserId?: Record<string, DailyTarget>;
+  personnelByUserId?: Record<string, PersonnelListEntry>;
   removalBlockedByUserId?: Record<string, string>;
 }
 
@@ -143,6 +150,7 @@ function MemberCard({
   onRoleChange,
   status,
   target,
+  personnel,
   removalBlockedMessage,
 }: {
   member: OrgMember;
@@ -159,6 +167,7 @@ function MemberCard({
   ) => void;
   status?: MemberStatus;
   target?: DailyTarget;
+  personnel?: PersonnelListEntry;
   removalBlockedMessage?: string;
 }) {
   const router = useRouter();
@@ -179,6 +188,17 @@ function MemberCard({
             {ROLE_LABELS[member.role] || member.role}
           </span>
         </div>
+        {personnel ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+              <EmploymentStateBadge state={getEmploymentState(personnel.record)} />
+              <AccessStateBadge
+                state={getAccessState(
+                  personnel.record,
+                  personnel.hasPendingInvite
+                )}
+              />
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <StatusBadge
             status={status?.status}
@@ -237,6 +257,7 @@ export function MembersTable({
   skeletonCount = 0,
   statusMap = {},
   targetsByUserId,
+  personnelByUserId,
   removalBlockedByUserId = {},
 }: MembersTableProps) {
   const router = useRouter();
@@ -326,6 +347,7 @@ export function MembersTable({
               onRoleChange={onRoleChange}
               status={statusMap[member.user_id]}
               target={targetsByUserId?.[member.user_id]}
+              personnel={personnelByUserId?.[member.user_id]}
               removalBlockedMessage={removalBlockedByUserId[member.user_id]}
             />
           );
@@ -353,6 +375,7 @@ export function MembersTable({
                   ? `${member.first_name} ${member.last_name}`.trim()
                   : member.email;
               const status = statusMap[member.user_id];
+              const personnel = personnelByUserId?.[member.user_id];
               const canViewStatus = canViewMemberStatus(
                 currentUserRole,
                 currentUserId,
@@ -367,9 +390,26 @@ export function MembersTable({
                   onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
                 >
                   <TableCell className="font-medium">
-                    {member.first_name || member.last_name
-                      ? `${member.first_name} ${member.last_name}`.trim()
-                      : '—'}
+                    <div className="space-y-1">
+                      <span className="block">
+                        {member.first_name || member.last_name
+                          ? `${member.first_name} ${member.last_name}`.trim()
+                          : '—'}
+                      </span>
+                      {personnel ? (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <EmploymentStateBadge
+                            state={getEmploymentState(personnel.record)}
+                          />
+                          <AccessStateBadge
+                            state={getAccessState(
+                              personnel.record,
+                              personnel.hasPendingInvite
+                            )}
+                          />
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell>{member.email}</TableCell>
                   <TableCell className="px-4">

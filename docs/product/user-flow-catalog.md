@@ -140,7 +140,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-04-F01` — Büro/Admin: hinterlegen je Person unter **Arbeitszeitmodell** einen Wochenplan mit Minuten pro Wochentag (0 = kein Arbeitstag), wieder als Gültig-ab-Versionen — historische Tage behalten immer das damals gültige Modell.
 - `P1-04-F02` — Admin: wählt in den Einstellungen das Bundesland für den **Feiertagskalender** (Bayern in zwei Varianten); Büro sieht die Auswahl. Admin und Büro pflegen zusätzlich **Betriebsruhe**-Tage (nur heute/zukünftig, Vergangenes wird nie umgeschrieben).
 - `P1-04-F03` — Alle: Tagesziel, Fortschrittsring, Überstundengrenze und Wochen-Soll in der Zeiterfassung sowie die Fortschrittsbalken der Mitarbeiterliste rechnen jetzt mit dem echten Modell statt pauschal 8 Stunden. Feiertage und Betriebsruhe setzen das Tagessoll auf 0.
-- `P1-04-F04` — Wo kein Modell hinterlegt ist, rechnet die App sichtbar gekennzeichnet weiter („Kein Arbeitszeitmodell hinterlegt") — es werden keine Zahlen erfunden.
+- `P1-04-F04` — Wo kein Modell hinterlegt ist, rechnet die App mit dem sichtbar gekennzeichneten Fallback **„Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden"** weiter; dieses Standardziel bleibt ausdrücklich unkonfiguriertes Verhalten und wird nicht als hinterlegtes Arbeitszeitmodell dargestellt.
 - `P1-04-F05` — Alle: die Kalender-Monatsansicht zeigt Feiertage und Betriebsruhe als beschriftete, nicht anklickbare Ganztages-Hinweise.
 
 ### `P1-05` — Verantwortlichkeiten und Vertretungen (2026-08-06)

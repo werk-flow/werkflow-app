@@ -73,6 +73,15 @@ export function MitarbeiterTabs({
       (entry) => !entry.record.userId || !memberIdSet.has(entry.record.userId)
     );
   }, [personnelEntries, memberIds]);
+  const personnelByUserId = useMemo<Record<string, PersonnelListEntry>>(
+    () =>
+      Object.fromEntries(
+        personnelEntries.flatMap((entry): [string, PersonnelListEntry][] =>
+          entry.record.userId ? [[entry.record.userId, entry]] : []
+        )
+      ),
+    [personnelEntries]
+  );
 
   // Poll for member status (working status and hours)
   const {
@@ -235,6 +244,7 @@ export function MitarbeiterTabs({
             skeletonCount={prevMemberCount}
             statusMap={statusMap}
             targetsByUserId={targetsByUserId}
+            personnelByUserId={personnelByUserId}
             removalBlockedByUserId={removalBlockedByUserId}
           />
           <PersonnelRecordsSection

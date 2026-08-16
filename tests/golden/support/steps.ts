@@ -1234,11 +1234,17 @@ export async function typeIntoTimeInput(
   id: string,
   digits: string
 ): Promise<void> {
+  if (!/^\d{4}$/.test(digits)) {
+    throw new Error('typeIntoTimeInput requires exactly four HHMM digits');
+  }
   const group = dialog.locator(`#${id}`);
-  await group.click();
-  // TimeInput has hour and minute segments, so one ArrowLeft reaches hours.
+  await group.focus();
   await group.press('ArrowLeft');
-  await group.pressSequentially(digits, { delay: 50 });
+  await group.press('Delete');
+  await group.pressSequentially(digits.slice(0, 2), { delay: 50 });
+  await group.press('ArrowRight');
+  await group.press('Delete');
+  await group.pressSequentially(digits.slice(2), { delay: 50 });
 }
 
 export async function createOwnManualTimeEntry(
@@ -1481,7 +1487,24 @@ export async function createPersonnelRecordViaDialog(
   await dialog
     .getByRole('button', { name: 'Personalakte anlegen', exact: true })
     .click();
-  await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
+  const reachedDetail = await page
+    .waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!reachedDetail) {
+    // Realtime can refresh the list after the insert and win the race against
+    // the action's detail redirect. Follow the persisted row instead.
+    const recordName = [options.firstName, options.lastName]
+      .filter(Boolean)
+      .join(' ');
+    const recordLink = page.getByRole('link', {
+      name: recordName,
+      exact: true,
+    });
+    await expect(recordLink).toBeVisible({ timeout: 30_000 });
+    await recordLink.click();
+    await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
+  }
 
   const match = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
   if (!match) {

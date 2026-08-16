@@ -127,6 +127,7 @@ export function HoursDisplay({
       <div className="flex items-center gap-2 min-w-[100px]">
         <Progress
           value={0}
+          aria-label="Tagesfortschritt nicht verfügbar"
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
@@ -145,6 +146,7 @@ export function HoursDisplay({
       >
         <Progress
           value={0}
+          aria-label={`Tagesfortschritt: ${zeroTargetReason}`}
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
@@ -159,6 +161,7 @@ export function HoursDisplay({
     <div className="flex items-center gap-2 min-w-[100px]" title={goalHint}>
       <Progress
         value={percentage}
+        aria-label={`Tagesfortschritt: ${formatPercentage(percentage)}`}
         className={cn('h-2 flex-1 bg-muted/50')}
         indicatorClassName={cn(
           getIndicatorColor(),
