@@ -250,6 +250,66 @@ export async function getLatestManualTimeEntryState(
   return { id: data.id as string, status: data.status as string };
 }
 
+export async function getLatestMembershipRemovalEvent(
+  orgId: string,
+  userId: string
+): Promise<{ autoClockedOut: boolean }> {
+  const admin = createAdminClient();
+  const { data: employeeRecord, error: employeeError } = await admin
+    .from('employee_records')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('user_id', userId)
+    .single();
+  if (employeeError || !employeeRecord) {
+    throw new Error(`Employee record missing for ${userId}: ${employeeError?.message}`);
+  }
+
+  const { data, error } = await admin
+    .from('employee_record_events')
+    .select('event_payload')
+    .eq('organization_id', orgId)
+    .eq('employee_record_id', employeeRecord.id)
+    .eq('event_type', 'membership_removed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  if (error || !data) {
+    throw new Error(`Membership removal event missing for ${userId}: ${error?.message}`);
+  }
+
+  const payload = data.event_payload as Record<string, unknown>;
+  return { autoClockedOut: payload.auto_clocked_out === true };
+}
+
+export async function getJobProjectNumber(
+  orgId: string,
+  jobNumber: string
+): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: job, error: jobError } = await admin
+    .from('jobs')
+    .select('project_id')
+    .eq('organization_id', orgId)
+    .eq('job_number', jobNumber)
+    .single();
+  if (jobError || !job) {
+    throw new Error(`Job ${jobNumber} missing: ${jobError?.message}`);
+  }
+  if (!job.project_id) return null;
+
+  const { data: project, error: projectError } = await admin
+    .from('projects')
+    .select('project_number')
+    .eq('organization_id', orgId)
+    .eq('id', job.project_id)
+    .single();
+  if (projectError || !project) {
+    throw new Error(`Project for ${jobNumber} missing: ${projectError?.message}`);
+  }
+  return project.project_number as string;
+}
+
 export async function expectOwnerRoleMutationRejected(
   orgId: string,
   ownerUserId: string
@@ -1429,6 +1489,20 @@ export async function getOrganizationTimeEntryCount(
     .eq('organization_id', orgId);
   if (error) throw new Error(`Organization time-entry count failed: ${error.message}`);
   return count ?? 0;
+}
+
+export async function getOrganizationTimeEntrySnapshot(
+  orgId: string
+): Promise<Array<Record<string, unknown>>> {
+  const { data, error } = await createAdminClient()
+    .from('time_entries')
+    .select('id, user_id, entry_type, timestamp, status, job_id, is_manual')
+    .eq('organization_id', orgId)
+    .order('id', { ascending: true });
+  if (error) {
+    throw new Error(`Time entry snapshot failed for ${orgId}: ${error.message}`);
+  }
+  return data ?? [];
 }
 
 export async function getVisiblePlanningStateAs(

@@ -587,6 +587,11 @@ export function JobMaterialsSection({
                       +{formatInventoryQuantity(total.returnedQuantity, total.unit)}
                     </MovementPill>
                   )}
+                  {total.billableQuantity > 0 && (
+                    <MovementPill tone="planned">
+                      Abrechenbar {formatInventoryQuantity(total.billableQuantity, total.unit)}
+                    </MovementPill>
+                  )}
                 </div>
               </div>
             ))}
@@ -664,6 +669,11 @@ function MaterialLineRow({
             {line.returnedQuantity > 0 && (
               <MovementPill tone="return">
                 +{formatInventoryQuantity(line.returnedQuantity, line.unit)}
+              </MovementPill>
+            )}
+            {line.billableQuantity > 0 && (
+              <MovementPill tone="planned">
+                Abrechenbar {formatInventoryQuantity(line.billableQuantity, line.unit)}
               </MovementPill>
             )}
           </div>

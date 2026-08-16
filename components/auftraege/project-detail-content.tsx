@@ -213,6 +213,7 @@ export function ProjectDetailContent({
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogAvailableJobs, setDialogAvailableJobs] = useState(availableJobs);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
+  const dialogOptionsRequestInFlightRef = useRef(false);
   const [liveProject, setLiveProject] = useState(project);
   const [liveJobs, setLiveJobs] = useState(jobs);
   const repairTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -265,7 +266,7 @@ export function ProjectDetailContent({
   useEffect(() => {
     if (
       !isAdminOrManager ||
-      isLoadingDialogOptions ||
+      dialogOptionsRequestInFlightRef.current ||
       (
         !showCreateJob &&
         !showEditDialog &&
@@ -291,6 +292,7 @@ export function ProjectDetailContent({
     }
 
     let cancelled = false;
+    dialogOptionsRequestInFlightRef.current = true;
     setIsLoadingDialogOptions(true);
     getAuftraegeDialogOptions()
       .then((result) => {
@@ -300,6 +302,7 @@ export function ProjectDetailContent({
         setDialogAvailableJobs(result.jobs);
       })
       .finally(() => {
+        dialogOptionsRequestInFlightRef.current = false;
         if (!cancelled) setIsLoadingDialogOptions(false);
       });
 
@@ -311,7 +314,6 @@ export function ProjectDetailContent({
     dialogClients.length,
     dialogMembers.length,
     isAdminOrManager,
-    isLoadingDialogOptions,
     showAssignJobsDialog,
     showClientDialog,
     showCreateJob,

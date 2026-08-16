@@ -1,9 +1,13 @@
 import type { Page } from '@playwright/test';
+import { resolve } from 'node:path';
 
 import { expect, test } from '../../golden/support/fixtures';
 import {
   getInventoryLedgerState,
-  getOrganizationTimeEntryCount,
+  getJobProjectNumber,
+  getLatestMembershipRemovalEvent,
+  getOrganizationTimeEntrySnapshot,
+  getPendingInviteCode,
 } from '../../golden/support/db';
 import {
   clockInOnJob,
@@ -18,6 +22,8 @@ import {
   endClockBreak,
   editMetadataTextField,
   expectRedirectedAway,
+  inviteMember,
+  joinOrganizationViaInviteLink,
   loginViaUi,
   openCustomerDetail,
   openTimeApprovals,
@@ -69,14 +75,55 @@ async function setJobStatus(page: Page, status: string): Promise<void> {
   await expect(statusRow).toContainText(status);
 }
 
+async function confirmPlanningWarning(
+  page: Page,
+  reason: string,
+  required = true
+): Promise<void> {
+  const warning = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Planungshinweise prüfen' }),
+  });
+  if (required) {
+    await expect(warning).toBeVisible({ timeout: 30_000 });
+  } else if (!(await warning.isVisible({ timeout: 2_000 }).catch(() => false))) {
+    return;
+  }
+  await warning.locator('#planning-warning-reason').fill(reason);
+  await warning.getByRole('button', { name: 'Mit Begründung speichern' }).click();
+  await expect(warning).toHaveCount(0, { timeout: 20_000 });
+}
+
+async function expectSignedWindowOpen(
+  page: Page,
+  clickDownload: () => Promise<void>
+): Promise<void> {
+  await page.evaluate(() => {
+    document.documentElement.dataset.signedWindowOpenUrl = '';
+    const originalOpen = window.open.bind(window);
+    window.open = (...args: Parameters<typeof window.open>) => {
+      document.documentElement.dataset.signedWindowOpenUrl = String(args[0] ?? '');
+      return originalOpen(...args);
+    };
+  });
+  const popupPromise = page.waitForEvent('popup');
+  await clickDownload();
+  const popup = await popupPromise;
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.signedWindowOpenUrl ?? ''))
+    .toMatch(/^https:\/\/.+X-Amz-(Algorithm|Signature)=/);
+  await popup.close().catch(() => undefined);
+}
+
 test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
   let secondaryOrganizationName = '';
   let secondaryOrganizationCode = '';
+  let signupOrganizationCode = '';
   let customerName = '';
   let renamedCustomerName = '';
   let linkedJobNumber = '';
   let linkedProjectNumber = '';
   let checklistJobNumber = '';
+  let manualTimeJobTitle = '';
   let inventoryLocationName = '';
   let inventoryItemName = '';
 
@@ -121,6 +168,14 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await page.getByRole('button', { name: 'Organisation erstellen' }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
     await expect(visibleText(page, organizationName)).toBeVisible();
+    signupOrganizationCode = (
+      await page.locator('code').filter({ hasText: /[A-Z0-9]{6}/ }).textContent()
+    )?.trim() ?? '';
+    expect(signupOrganizationCode).toMatch(/^[A-Z0-9]{6}$/);
+    await page.goto('/mitarbeiter');
+    const ownerRow = page.locator('tbody tr').filter({ hasText: `Sina Audit-${world.runId}` });
+    await expect(ownerRow).toContainText('Admin');
+    await expect(ownerRow.getByRole('button', { name: 'Aktionen öffnen' })).toHaveCount(0);
 
     await clockInOnJob(page);
     await signOutViaUi(page);
@@ -138,6 +193,8 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     browser,
     world,
   }) => {
+    const primaryOrganizationCustomer = `Nur Hauptorg ${world.runId}`;
+    await createCustomer(adminPage, primaryOrganizationCustomer);
     secondaryOrganizationName = `Golden Test SHK A1 Zweitorg ${world.runId}`;
     await adminPage.goto('/dashboard');
     await adminPage.getByRole('button', { name: 'Organisation erstellen' }).click();
@@ -164,6 +221,17 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(visibleText(employeePage, secondaryOrganizationName)).toBeVisible();
     await expectRedirectedAway(employeePage, '/kunden');
 
+    await employeePage.getByRole('button', { name: 'Organisation beitreten' }).click();
+    await employeePage.locator('#dialog-org-code').fill(signupOrganizationCode);
+    await employeePage.getByRole('button', { name: 'Beitreten', exact: true }).click();
+    await expect(
+      visibleText(
+        employeePage,
+        'Du kannst keiner Organisation beitreten, die nicht vom gleichen Admin stammt wie deine bestehenden Organisationen.'
+      )
+    ).toBeVisible();
+    await employeePage.keyboard.press('Escape');
+
     await employeePage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }).click();
     await employeePage.getByRole('option').filter({ hasText: world.orgName }).click();
     await expect(visibleText(employeePage, world.orgName)).toBeVisible({ timeout: 20_000 });
@@ -174,10 +242,24 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await adminPage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }).click();
     await adminPage.getByRole('option').filter({ hasText: world.orgName }).click();
     await expect(visibleText(adminPage, world.orgName)).toBeVisible({ timeout: 20_000 });
+    await adminPage.goto('/kunden');
+    await expect(adminPage.getByText(`Nur Zweitorg ${world.runId}`)).toHaveCount(0);
+    await adminPage.getByRole('combobox').filter({ hasText: world.orgName }).click();
+    await adminPage.getByRole('option').filter({ hasText: secondaryOrganizationName }).click();
+    await expect(visibleText(adminPage, secondaryOrganizationName)).toBeVisible({ timeout: 20_000 });
+    await adminPage.goto('/kunden');
+    await expect(visibleText(adminPage, `Nur Zweitorg ${world.runId}`)).toBeVisible();
+    await expect(adminPage.getByText(primaryOrganizationCustomer)).toHaveCount(0);
+    await adminPage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }).click();
+    await adminPage.getByRole('option').filter({ hasText: world.orgName }).click();
+    await expect(adminPage.getByRole('combobox').filter({ hasText: world.orgName })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test('A1-04/A1-06: Handwerker-Oberfläche und konservative Rollenregeln', async ({
     adminPage,
+    browser,
     bueroPage,
     employeePage,
     world,
@@ -195,6 +277,62 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(bueroOwnRow.getByRole('button', { name: 'Aktionen öffnen' })).toHaveCount(0);
     await expect(adminRow.getByRole('button', { name: 'Aktionen öffnen' })).toHaveCount(0);
     await expect(employeeRow.getByRole('button', { name: 'Aktionen öffnen' })).toBeVisible();
+    await expect(adminRow).toContainText('Admin');
+    await expect(bueroOwnRow).toContainText('Büro');
+    await expect(employeeRow).toContainText('Handwerker/in');
+    await expect(employeeRow).toContainText(/Nicht eingestempelt|Arbeitet|Macht Pause/);
+    await expect(employeeRow.getByText('%')).toBeVisible();
+    await expect(employeeRow.getByLabel(/Arbeitszeitmodell/)).toBeVisible();
+    await employeeRow.getByRole('button', { name: 'Aktionen öffnen' }).click();
+    await expect(bueroPage.getByRole('menuitem', { name: 'Details anzeigen' })).toBeVisible();
+    await expect(bueroPage.getByRole('menuitem', { name: 'Entfernen' })).toBeVisible();
+    await expect(bueroPage.getByText('Rolle ändern', { exact: true })).toHaveCount(0);
+    await bueroPage.keyboard.press('Escape');
+
+    await employeeRow.click();
+    await expect(bueroPage).toHaveURL(/\/mitarbeiter\//);
+    await expect(visibleText(bueroPage, 'Tagesfortschritt')).toBeVisible();
+
+    const adminInviteEmail = `delivered+a1-admin-${world.runId}@resend.dev`;
+    const bueroInviteEmail = `delivered+a1-buero-${world.runId}@resend.dev`;
+    await inviteMember(adminPage, adminInviteEmail, 'Büro');
+    await adminPage.getByRole('tab', { name: 'Einladungen' }).click();
+    const adminInviteRow = adminPage.locator('tbody tr').filter({ hasText: adminInviteEmail });
+    await expect(adminInviteRow).toContainText('Büro');
+    await expect(adminInviteRow).toContainText('Ausstehend');
+    await adminInviteRow.getByRole('button', { name: 'Aktionen öffnen' }).click();
+    await adminPage.getByRole('menuitem', { name: 'Stornieren' }).click();
+    await adminPage.getByRole('alertdialog').getByRole('button', { name: 'Stornieren' }).click();
+    await expect(adminInviteRow).toContainText('Storniert', { timeout: 20_000 });
+
+    await inviteMember(bueroPage, bueroInviteEmail, 'Handwerker/in');
+    await bueroPage.getByRole('tab', { name: 'Einladungen' }).click();
+    const bueroInviteRow = bueroPage.locator('tbody tr').filter({ hasText: bueroInviteEmail });
+    await expect(bueroInviteRow).toContainText('Handwerker/in');
+    await expect(bueroInviteRow).toContainText('Ausstehend');
+
+    await inviteMember(adminPage, world.invitee.email, 'Büro');
+    const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
+    const inviteeContext = await browser.newContext({ locale: 'de-DE' });
+    const inviteePage = await inviteeContext.newPage();
+    await joinOrganizationViaInviteLink(inviteePage, inviteCode, world.invitee, world.orgId);
+    await expect(visibleText(inviteePage, world.orgName)).toBeVisible();
+    await adminPage.goto('/mitarbeiter');
+    const joinedInviteeRow = adminPage.locator('tbody tr').filter({
+      hasText: world.invitee.firstName,
+    });
+    await expect(joinedInviteeRow).toContainText('Büro');
+
+    await clockInOnJob(inviteePage);
+    await expect(joinedInviteeRow).toContainText('Arbeitet', { timeout: 30_000 });
+    await joinedInviteeRow.getByRole('button', { name: 'Aktionen öffnen' }).click();
+    await adminPage.getByRole('menuitem', { name: 'Entfernen' }).click();
+    await adminPage.getByRole('alertdialog').getByRole('button', { name: 'Entfernen' }).click();
+    await expect(adminPage).toHaveURL(/\/mitarbeiter\?removed_member=/, { timeout: 20_000 });
+    await expect
+      .poll(() => getLatestMembershipRemovalEvent(world.orgId, world.invitee.id))
+      .toEqual({ autoClockedOut: true });
+    await inviteeContext.close();
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
   });
 
@@ -205,23 +343,41 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
   }) => {
     const firstJob = `A1 Zeitauftrag 1 ${world.runId}`;
     const secondJob = `A1 Zeitauftrag 2 ${world.runId}`;
+    const timeProjectNumber = `A1-ZP-${world.runId}`;
+    await createProject(adminPage, {
+      projectNumber: timeProjectNumber,
+      title: `A1 Zeitprojekt ${world.runId}`,
+    });
     await createJob(adminPage, {
       jobNumber: `A1-Z1-${world.runId}`,
       title: firstJob,
       assignEmployeeName: 'Emil',
+      projectNumber: timeProjectNumber,
     });
     await createJob(adminPage, {
       jobNumber: `A1-Z2-${world.runId}`,
       title: secondJob,
       assignEmployeeName: 'Emil',
+      projectNumber: timeProjectNumber,
     });
 
+    await employeePage.goto('/zeiterfassung');
+    await expect(visibleText(employeePage, 'Du bist nicht eingestempelt.')).toBeVisible();
     await adminPage.goto('/mitarbeiter');
     await clockInOnJob(employeePage, firstJob);
+    await employeePage.goto('/zeiterfassung');
+    await expect(visibleText(employeePage, 'Du arbeitest gerade.')).toBeVisible();
+    await expect(visibleText(employeePage, 'Arbeitszeit')).toBeVisible();
+    await expect(visibleText(employeePage, 'Pause')).toBeVisible();
+    await expect(visibleText(employeePage, 'Überstunden heute')).toBeVisible();
     await expect(visibleText(adminPage, 'Arbeitet')).toBeVisible({ timeout: 30_000 });
     await startClockBreak(employeePage);
+    await employeePage.goto('/zeiterfassung');
+    await expect(visibleText(employeePage, 'Du machst gerade Pause.')).toBeVisible();
     await expect(visibleText(adminPage, 'Macht Pause')).toBeVisible({ timeout: 30_000 });
     await endClockBreak(employeePage, firstJob);
+    await employeePage.goto('/zeiterfassung');
+    await expect(visibleText(employeePage, 'Du arbeitest gerade.')).toBeVisible();
     await switchClockJob(employeePage, secondJob);
 
     await employeePage.goto('/dashboard');
@@ -237,8 +393,22 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await employeePage.getByRole('option').filter({ hasText: world.orgName }).click();
     await clockOut(employeePage);
     await employeePage.goto('/zeiterfassung');
+    await expect(visibleText(employeePage, 'Du bist nicht eingestempelt.')).toBeVisible();
     await expect(visibleText(employeePage, 'Arbeitszeit')).toBeVisible();
     await expect(visibleText(employeePage, 'Pause')).toBeVisible();
+    const dailyTimeSummaries = employeePage.getByRole('img', { name: /Anwesenheit.*Arbeitszeit.*Pause.*Überstunden/ });
+    await expect(dailyTimeSummaries).toHaveCount(7);
+    await expect(dailyTimeSummaries.first()).toHaveAttribute(
+      'title',
+      /Anwesenheit.*Arbeitszeit.*Pause.*Überstunden/
+    );
+    await employeePage.goto(`/auftraege/A1-Z1-${world.runId}`);
+    await expect(employeePage.getByText('Noch keine Arbeitszeiten für diesen Auftrag erfasst.')).toHaveCount(0);
+    await employeePage.goto(`/auftraege/A1-Z2-${world.runId}`);
+    await expect(employeePage.getByText('Noch keine Arbeitszeiten für diesen Auftrag erfasst.')).toHaveCount(0);
+    await adminPage.goto(`/auftraege/projekt/${timeProjectNumber}`);
+    await expect(adminPage.getByText('Noch keine Arbeitszeiten für dieses Projekt erfasst.')).toHaveCount(0);
+    await expect(visibleText(adminPage, 'Gesamtstunden (alle Aufträge)')).toBeVisible();
   });
 
   test('A1-09/A1-11: Kundendaten inline und Kunde direkt im Arbeitsdialog', async ({
@@ -247,10 +417,39 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
   }) => {
     customerName = `A1 Kunde ${world.runId}`;
     renamedCustomerName = `A1 Kunde Neu ${world.runId}`;
-    await createCustomer(adminPage, customerName, { type: 'Gewerblich' });
+    await adminPage.goto('/kunden');
+    const initialCount = Number((await adminPage.getByText(/^\d+ Kunden?$/).textContent())?.split(' ')[0]);
+    await adminPage.getByRole('button', { name: 'Kunde hinzufügen' }).click();
+    await adminPage.locator('#client-name').fill(customerName);
+    await adminPage.locator('#client-type').click();
+    await adminPage.getByRole('option', { name: 'Gewerblich', exact: true }).click();
+    await adminPage.locator('#client-email').fill(`a1-kunde-${world.runId}@example.de`);
+    await adminPage.locator('#client-phone').fill('+49 30 1234567');
+    await adminPage.locator('#client-address').fill('Werkstraße 42, 10115 Berlin');
+    await adminPage.locator('#client-notes').fill('Bevorzugt Termine am Vormittag');
+    await adminPage.getByRole('button', { name: 'Kunde erstellen' }).click();
+    await expect(adminPage.getByRole('heading', { name: 'Neuen Kunden anlegen' })).toBeHidden({
+      timeout: 10_000,
+    });
+    await expect(
+      adminPage.getByText(new RegExp(`^${initialCount + 1} Kunde(?:n)?$`))
+    ).toBeVisible();
+    const customerRow = adminPage.locator('tbody tr').filter({ hasText: customerName });
+    await expect(customerRow).toContainText('Gewerblich');
+    await expect(customerRow).toContainText(`a1-kunde-${world.runId}@example.de`);
+    await expect(customerRow).toContainText('+49 30 1234567');
+    await adminPage.getByLabel('Kunden durchsuchen').fill('+49 30 1234567');
+    await expect(customerRow).toBeVisible();
+    await adminPage.getByLabel('Kunden durchsuchen').fill('kein-a1-kunde');
+    await expect(customerRow).toHaveCount(0);
+    await adminPage.getByLabel('Kunden durchsuchen').fill('');
     await openCustomerDetail(adminPage, customerName);
+    await expect(visibleText(adminPage, 'Werkstraße 42, 10115 Berlin')).toBeVisible();
+    await expect(visibleText(adminPage, 'Bevorzugt Termine am Vormittag')).toBeVisible();
     await editMetadataTextField(adminPage, 'Name', renamedCustomerName);
     await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible({ timeout: 15_000 });
+    await adminPage.reload();
+    await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible();
 
     const inlineCustomer = `A1 Inlinekunde ${world.runId}`;
     await adminPage.goto('/auftraege');
@@ -264,10 +463,123 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       timeout: 15_000,
     });
     await expect(adminPage.getByRole('combobox').filter({ hasText: inlineCustomer })).toBeVisible();
-    await adminPage.keyboard.press('Escape');
+    const inlineJobNumber = `A1-INLINE-${world.runId}`;
+    await adminPage.locator('#job-number').fill(inlineJobNumber);
+    await adminPage.locator('#job-title').fill(`A1 Inlineauftrag ${world.runId}`);
+    await adminPage.getByRole('button', { name: 'Auftrag erstellen', exact: true }).click();
     await expect(
       adminPage.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' })
     ).toBeHidden();
+    await adminPage.goto(`/auftraege/${inlineJobNumber}`);
+    await expect(visibleText(adminPage, inlineCustomer)).toBeVisible();
+  });
+
+  test('A1-R01: vollständige Auftragsdaten, Mehrfachzuweisung und Projektableitung [BASE-WORK-F01/F02/F05/F07]', async ({
+    adminPage,
+    employeePage,
+    world,
+  }) => {
+    const projectNumber = `A1-FULL-P-${world.runId}`;
+    const projectTitle = `A1 Vollständiges Projekt ${world.runId}`;
+    const jobNumber = `A1-FULL-J-${world.runId}`;
+    const jobTitle = `A1 Vollständiger Auftrag ${world.runId}`;
+    const plannedDate = berlinDateAtOffset(65);
+
+    await createProject(adminPage, {
+      projectNumber,
+      title: projectTitle,
+      clientName: renamedCustomerName,
+    });
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
+    await expect(visibleText(adminPage, 'Noch keine Aufträge in diesem Projekt.')).toBeVisible();
+    await editMetadataTextField(adminPage, 'Beschreibung', 'Vollständige Projektbeschreibung');
+
+    await adminPage.goto('/auftraege');
+    await adminPage.getByRole('button', { name: 'Erstellen', exact: true }).click();
+    const createDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' }),
+    });
+    await createDialog.getByRole('tab', { name: 'Auftrag erstellen' }).click();
+    await createDialog.locator('#job-number').fill(jobNumber);
+    await createDialog.locator('#job-title').fill(jobTitle);
+    await createDialog.locator('#job-description').fill('Vollständige Auftragsbeschreibung');
+    await createDialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
+    await adminPage.getByPlaceholder('Kunde suchen...').fill(renamedCustomerName);
+    await adminPage
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: renamedCustomerName })
+      .click();
+    await createDialog.locator('#job-priority').click();
+    await adminPage.getByRole('option', { name: 'Hoch', exact: true }).click();
+    await typeIntoDatePicker(createDialog, 'Datum', plannedDate.split('-').reverse().join(''));
+    await typeIntoTimeInput(createDialog, 'job-time', '0815');
+    await createDialog.locator('#job-duration').fill('2,5');
+    await createDialog.locator('#job-location').fill('Heizraum, Werkstraße 42');
+    await createDialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill('Emil');
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Emil' }).click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill('Bruno');
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Bruno' }).click();
+    await createDialog.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' }).click();
+    await createDialog.getByRole('button', { name: 'Auftrag erstellen', exact: true }).click();
+    await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
+
+    await adminPage.goto(`/auftraege/${jobNumber}`);
+    const details = adminPage.getByRole('heading', { name: 'Details' }).locator('..');
+    await expect(details).toContainText(jobNumber);
+    await expect(details).toContainText('Vollständige Auftragsbeschreibung');
+    await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible();
+    await expect(details).toContainText('Hoch');
+    await expect(details).toContainText(plannedDate.split('-').reverse().join('.'));
+    await expect(details).toContainText('08:15');
+    await expect(details).toContainText('2 Std. 30 Min.');
+    await expect(details).toContainText('Heizraum, Werkstraße 42');
+    await expect(visibleText(adminPage, 'Emil')).toBeVisible();
+    await expect(visibleText(adminPage, 'Bruno')).toBeVisible();
+    await expect(visibleText(adminPage, 'Keinem Projekt zugeordnet')).toBeVisible();
+    await employeePage.goto('/auftraege');
+    await expect(visibleText(employeePage, jobNumber)).toBeVisible();
+
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
+    await adminPage.getByRole('button', { name: 'Zuweisen', exact: true }).click();
+    const assignmentDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Aufträge zum Projekt hinzufügen' }),
+    });
+    await assignmentDialog.getByRole('combobox').filter({ hasText: 'Aufträge zuweisen' }).click();
+    await adminPage.getByPlaceholder('Auftrag suchen...').fill(jobNumber);
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: jobNumber }).click();
+    await adminPage.keyboard.press('Escape');
+    await assignmentDialog.getByRole('button', { name: 'Speichern' }).click();
+    await expect(assignmentDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(visibleText(adminPage, jobNumber)).toBeVisible();
+    await expect(visibleText(adminPage, '0%')).toBeVisible();
+
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}/${jobNumber}`);
+    await expect(visibleText(adminPage, projectNumber)).toBeVisible();
+    await expect.poll(() => getJobProjectNumber(world.orgId, jobNumber)).toBe(projectNumber);
+    await setJobStatus(adminPage, 'In Bearbeitung');
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
+    await expect(visibleText(adminPage, 'In Bearbeitung')).toBeVisible();
+    await expect(adminPage.getByTitle(/Im Zeitplan|Leicht verzögert|Stark verzögert/).first()).toBeVisible();
+
+    const statusRow = adminPage.getByText('Status', { exact: true }).locator('..');
+    await statusRow.getByRole('button', { name: 'Status bearbeiten' }).click();
+    await statusRow.getByRole('combobox').click();
+    await adminPage.getByRole('option', { name: 'Abgeschlossen', exact: true }).click();
+    await statusRow.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(statusRow).toContainText('Abgeschlossen');
+    await statusRow.getByRole('button', { name: 'Status bearbeiten' }).click();
+    await statusRow.getByRole('combobox').click();
+    await adminPage.getByRole('option', { name: 'Automatisch (aus Aufträgen)' }).click();
+    await statusRow.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(statusRow).toContainText('In Bearbeitung');
+
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}/${jobNumber}`);
+    await setJobStatus(adminPage, 'Fertig');
+    await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
+    await expect(visibleText(adminPage, 'Abgeschlossen')).toBeVisible();
+    await expect(visibleText(adminPage, '100%')).toBeVisible();
   });
 
   test('A1-10/A1-14: Kunden- und Projektlöschung erhalten die Arbeit', async ({
@@ -296,10 +608,13 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await detailActionsButton(adminPage).click();
     await adminPage.getByRole('menuitem', { name: 'Kunde löschen' }).click();
     await adminPage.getByRole('alertdialog').getByRole('button', { name: 'Löschen' }).click();
-    await expect(adminPage).toHaveURL(/\/kunden$/, { timeout: 20_000 });
+    await expect(adminPage).toHaveURL(/\/kunden$/, { timeout: 60_000 });
     await adminPage.goto('/auftraege');
     await expect(visibleText(adminPage, linkedProjectNumber)).toBeVisible();
-    await adminPage.getByRole('button', { name: 'Projekt aufklappen' }).click();
+    await adminPage
+      .getByRole('row', { name: new RegExp(linkedProjectNumber) })
+      .getByRole('button', { name: 'Projekt aufklappen' })
+      .click();
     await expect(visibleText(adminPage, linkedJobNumber)).toBeVisible();
 
     await adminPage.goto(`/auftraege/projekt/${linkedProjectNumber}`);
@@ -344,7 +659,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await adminPage.getByRole('menuitem', { name: 'Auftrag löschen' }).click();
     await adminPage.getByRole('alertdialog').getByRole('button', { name: 'Löschen' }).click();
     await expect(adminPage).toHaveURL(/\/auftraege$/, { timeout: 20_000 });
-    await expect(adminPage.getByText(jobNumber)).toHaveCount(0);
+    await expect(adminPage.locator('tbody tr').filter({ hasText: jobNumber })).toHaveCount(0);
   });
 
   test('A1-15/A1-16: Entplanen parkt und Projektparken bewahrt fertige Kinder', async ({
@@ -432,9 +747,43 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(persistedInstruction.locator('xpath=../../..')).not.toHaveClass(/opacity-80/, {
       timeout: 15_000,
     });
+    await adminPage
+      .getByRole('textbox', { name: 'Neuen Arbeitsanweisungs-Punkt eingeben' })
+      .fill('Ventile beschriften');
+    await adminPage
+      .getByRole('textbox', { name: 'Neuen Arbeitsanweisungs-Punkt eingeben' })
+      .press('Enter');
+    const secondInstruction = adminPage
+      .getByRole('textbox', { name: 'Arbeitsanweisungs-Punkt bearbeiten' })
+      .nth(1);
+    await expect(secondInstruction).toBeVisible({ timeout: 15_000 });
+    await expect(secondInstruction.locator('xpath=../../..')).not.toHaveClass(/opacity-80/, {
+      timeout: 15_000,
+    });
+    const reorderFinished = adminPage.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        new URL(response.url()).pathname === `/auftraege/${checklistJobNumber}`
+    );
+    await secondInstruction
+      .locator('xpath=../../..')
+      .getByRole('button', { name: 'Punkt nach oben verschieben' })
+      .click();
+    await reorderFinished;
+    await adminPage.reload();
+    await expect(
+      adminPage.getByRole('textbox', { name: 'Arbeitsanweisungs-Punkt bearbeiten' }).first()
+    ).toHaveValue('Ventile beschriften');
+    await expect(
+      adminPage.getByRole('textbox', { name: 'Arbeitsanweisungs-Punkt bearbeiten' }).nth(1)
+    ).toHaveValue('Anlage druckprüfen');
 
     await employeePage.goto(`/auftraege/${checklistJobNumber}`);
-    await employeePage.getByRole('button', { name: 'Punkt als erledigt markieren' }).click();
+    await employeePage
+      .getByText('Ventile beschriften', { exact: true })
+      .locator('xpath=../../..')
+      .getByRole('button', { name: 'Punkt als erledigt markieren' })
+      .click();
     await expect(visibleText(employeePage, 'Zuletzt erledigt von Emil')).toBeVisible();
     await employeePage.getByRole('button', { name: 'Punkt als offen markieren' }).click();
     await expect(visibleText(employeePage, 'Zuletzt offen von Emil')).toBeVisible();
@@ -446,15 +795,34 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(completionRow).toContainText(completionDate, { timeout: 20_000 });
   });
 
-  test('A1-19: Auftragsliste sucht, filtert und trennt Parkplatz/Archiv', async ({
+  test('A1-19: Auftragsliste sucht, filtert, sortiert, klappt Projekte auf und aktualisiert live [BASE-WORK-F08/P1-00-F01]', async ({
     adminPage,
+    bueroPage,
     world,
   }) => {
     const listJobNumber = `A1-LIST-${world.runId}`;
+    const listCustomer = `A1 Listenkunde ${world.runId}`;
+    await createCustomer(adminPage, listCustomer);
     await createJob(adminPage, {
       jobNumber: listJobNumber,
       title: `A1 Listenauftrag ${world.runId}`,
+      clientName: listCustomer,
+      assignEmployeeName: 'Emil',
       plannedDateDigits: berlinDateAtOffset(20).split('-').reverse().join(''),
+    });
+    const listProjectNumber = `A1-LIST-P-${world.runId}`;
+    await createProject(adminPage, {
+      projectNumber: listProjectNumber,
+      title: `A1 Listenprojekt ${world.runId}`,
+      clientName: listCustomer,
+    });
+    const listChildNumber = `A1-LIST-C-${world.runId}`;
+    await createJob(adminPage, {
+      jobNumber: listChildNumber,
+      title: `A1 Listenprojektauftrag ${world.runId}`,
+      projectNumber: listProjectNumber,
+      assignEmployeeName: 'Emil',
+      plannedDateDigits: berlinDateAtOffset(21).split('-').reverse().join(''),
     });
     await createJob(adminPage, {
       jobNumber: `A1-PARK-LIST-${world.runId}`,
@@ -475,16 +843,107 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await search.fill('kein-treffer-a1');
     await expect(adminPage.getByText(listJobNumber)).toHaveCount(0);
     await search.fill('');
+    const activeSection = adminPage
+      .getByRole('heading', { name: 'Aktuelle Aufträge und Projekte' })
+      .locator('../..');
+    await activeSection.getByRole('button', { name: 'Filter' }).click();
+    const filterPanel = activeSection.locator('div.hidden.md\\:block');
+    await filterPanel.getByRole('combobox').filter({ hasText: 'Alle Kunden' }).click();
+    await adminPage.getByRole('option', { name: listCustomer, exact: true }).click();
+    await expect(visibleText(adminPage, listJobNumber)).toBeVisible();
+    await expect(adminPage.getByText(`A1-Z1-${world.runId}`)).toHaveCount(0);
+    await filterPanel.getByRole('combobox').filter({ hasText: 'Alle Mitarbeiter' }).click();
+    await adminPage.getByRole('option', { name: /Emil/ }).click();
+    await expect(visibleText(adminPage, listProjectNumber)).toBeVisible();
+    await filterPanel.getByRole('combobox').filter({ hasText: 'Alle' }).last().click();
+    await adminPage.getByRole('option', { name: 'Nur Projekte', exact: true }).click();
+    await expect(adminPage.getByText(listJobNumber)).toHaveCount(0);
+    await expect(visibleText(adminPage, listProjectNumber)).toBeVisible();
+    await activeSection.getByRole('button', { name: 'Alle zurücksetzen' }).click();
+
+    for (const heading of ['Nr', 'Titel / Beschreibung', 'Kunde', 'Status', 'Priorität', 'Datum']) {
+      const sortButton = activeSection.getByRole('button', { name: heading, exact: true }).first();
+      await expect(sortButton).toBeVisible();
+      await sortButton.click();
+    }
+    const projectRow = activeSection.locator('tbody tr').filter({ hasText: listProjectNumber });
+    await projectRow.getByRole('button', { name: 'Projekt aufklappen' }).click();
+    await expect(visibleText(adminPage, listChildNumber)).toBeVisible();
     await expect(adminPage.getByText(/Parkplatz/).first()).toBeVisible();
     await expect(adminPage.getByText(/Archiv/).first()).toBeVisible();
+
+    const liveJobNumber = `A1-LIVE-${world.runId}`;
+    await search.fill(liveJobNumber);
+    await expect(adminPage.getByText(liveJobNumber)).toHaveCount(0);
+    await createJob(bueroPage, {
+      jobNumber: liveJobNumber,
+      title: `A1 Liveauftrag ${world.runId}`,
+      plannedDateDigits: berlinDateAtOffset(65).split('-').reverse().join(''),
+    });
+    await expect(visibleText(adminPage, liveJobNumber)).toBeVisible({ timeout: 30_000 });
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
+  });
+
+  test('A1-20: Auftrags-Spalten bleiben pro Nutzer wählbar [BASE-WORK-F08]', async ({
+    adminPage,
+    bueroPage,
+    world,
+  }) => {
+    await createJob(adminPage, {
+      jobNumber: `A1-COLUMNS-${world.runId}`,
+      title: `A1 Spaltenprüfung ${world.runId}`,
+      plannedDateDigits: berlinDateAtOffset(65).split('-').reverse().join(''),
+    });
+    await bueroPage.goto('/einstellungen/auftraege-projekte');
+    const bueroCustomerCheckbox = bueroPage
+      .locator('label')
+      .filter({ hasText: /^Kunde$/ })
+      .getByRole('checkbox');
+    const bueroWasChecked = await bueroCustomerCheckbox.isChecked();
+
+    await adminPage.goto('/einstellungen/auftraege-projekte');
+    const customerColumnOption = adminPage.locator('label').filter({ hasText: /^Kunde$/ });
+    const customerCheckbox = customerColumnOption.getByRole('checkbox');
+    const wasChecked = await customerCheckbox.isChecked();
+    await customerCheckbox.click();
+    await adminPage.getByRole('button', { name: 'Ansicht speichern' }).click();
+    await expect(visibleText(adminPage, 'Deine Aufträge-Spalten wurden gespeichert.')).toBeVisible();
+    await adminPage.goto('/auftraege');
+    const adminCustomerColumn = adminPage
+      .getByRole('heading', { name: 'Aktuelle Aufträge und Projekte' })
+      .locator('../..')
+      .getByRole('columnheader', { name: 'Kunde' });
+    if (wasChecked) {
+      await expect(adminCustomerColumn).toHaveCount(0);
+    } else {
+      await expect(adminCustomerColumn).toBeVisible();
+    }
+
+    await bueroPage.reload();
+    await expect(bueroCustomerCheckbox).toBeChecked({ checked: bueroWasChecked });
+    await bueroPage.goto('/auftraege');
+    const bueroCustomerColumn = bueroPage
+      .getByRole('heading', { name: 'Aktuelle Aufträge und Projekte' })
+      .locator('../..')
+      .getByRole('columnheader', { name: /Kunde/ });
+    if (bueroWasChecked) {
+      await expect(bueroCustomerColumn).toBeVisible();
+    } else {
+      await expect(bueroCustomerColumn).toHaveCount(0);
+    }
+
+    await adminPage.goto('/einstellungen/auftraege-projekte');
+    await adminPage.locator('label').filter({ hasText: /^Kunde$/ }).getByRole('checkbox').click();
+    await adminPage.getByRole('button', { name: 'Ansicht speichern' }).click();
   });
 
   test('A1-21/A1-24: Kalenderansichten und getrennte Plan-/Arbeitszeitfilter', async ({
     adminPage,
+    employeePage,
     world,
   }) => {
     const title = `A1 Kalender ${world.runId}`;
+    const otherEmployeeTitle = `A1 Kalender Bruno ${world.runId}`;
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',
       internalTitle: title,
@@ -493,6 +952,15 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       durationHours: 1,
       employeeNames: ['Emil'],
       overrideReason: 'A1 Audit ohne hinterlegten Wochenplan',
+    });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'internal',
+      internalTitle: otherEmployeeTitle,
+      date: berlinDateAtOffset(20),
+      time: '08:00',
+      durationHours: 1,
+      employeeNames: ['Bruno'],
+      overrideReason: 'A1 Organisationssicht ohne hinterlegten Wochenplan',
     });
     await adminPage.goto('/kalender');
     for (const view of ['Tag', 'Woche', 'Monat']) {
@@ -515,9 +983,31 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       await targetDay.getByText(/\+\d+ mehr/).click({ timeout: 5_000 });
     }
     await expect(calendarTitle).toBeVisible({ timeout: 20_000 });
+    await expect(visibleText(adminPage, otherEmployeeTitle)).toBeVisible();
     const calendarMain = adminPage.getByRole('main');
     await expect(calendarMain.getByText('Arbeitszeiten', { exact: true })).toBeVisible();
     await expect(calendarMain.getByText('Aufträge', { exact: true })).toBeVisible();
+    await calendarMain.getByText('Aufträge', { exact: true }).click();
+    await expect(adminPage.getByText(title, { exact: true })).toHaveCount(0);
+    await calendarMain.getByText('Aufträge', { exact: true }).click();
+    await expect(visibleText(adminPage, title)).toBeVisible();
+    await calendarMain.getByRole('button', { name: /Mitarbeiter/ }).click();
+    await adminPage.getByRole('button', { name: 'Keine auswählen' }).click();
+    await adminPage.getByRole('button', { name: /Emil/ }).click();
+    await adminPage.keyboard.press('Escape');
+    await expect(visibleText(adminPage, title)).toBeVisible();
+    await expect(adminPage.getByText(otherEmployeeTitle, { exact: true })).toHaveCount(0);
+
+    await showPlanningMonth(employeePage, planningDate);
+    await expect(visibleText(employeePage, title)).toBeVisible({ timeout: 20_000 });
+    await expect(employeePage.getByText(otherEmployeeTitle, { exact: true })).toHaveCount(0);
+    for (const view of ['Tag', 'Woche', 'Monat']) {
+      await employeePage.getByRole('tab', { name: view, exact: true }).click();
+      await expect(employeePage.getByRole('tab', { name: view, exact: true })).toHaveAttribute(
+        'data-state',
+        'active'
+      );
+    }
   });
 
   test('A1-22: Kalender-Drag verschiebt Planung erst nach bestätigtem Warnpfad', async ({
@@ -551,11 +1041,110 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(adminPage.locator(`.fc-daygrid-day[data-date="${targetDate}"]`).filter({ hasText: title })).toBeVisible();
   });
 
-  test('A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab', async ({
-    employeePage,
+  test('A1-23: Kalender erstellt, skaliert, hängt um und parkt per Drag & Drop [BASE-CALENDAR-F02]', async ({
+    adminPage,
+    world,
   }) => {
-    const completedBusinessDate = berlinDateAtOffset(-1);
+    const plannedDate = berlinDateAtOffset(65);
+    const jobNumber = `A1-CAL-J-${world.runId}`;
+    const title = `A1 Kalenderauftrag ${world.runId}`;
+    await adminPage.goto('/kalender');
+    await adminPage.getByRole('button', { name: 'Kalendereintrag' }).click();
+    const createDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
+    });
+    await createDialog.getByRole('tab', { name: 'Auftrag erstellen' }).click();
+    await createDialog.locator('#job-number').fill(jobNumber);
+    await createDialog.locator('#job-title').fill(title);
+    await typeIntoDatePicker(createDialog, 'Datum', plannedDate.split('-').reverse().join(''));
+    await typeIntoTimeInput(createDialog, 'job-time', '0900');
+    await createDialog.locator('#job-duration').fill('1');
+    await createDialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill('Emil');
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Emil' }).click();
+    await createDialog.getByRole('heading', { name: 'Kalendereintrag erstellen' }).click();
+    await createDialog.getByRole('button', { name: 'Auftrag erstellen', exact: true }).click();
+    await confirmPlanningWarning(adminPage, 'A1 Kalenderauftrag bewusst geplant', false);
+    await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
+
+    await showPlanningMonth(adminPage, plannedDate);
+    await adminPage.locator(`.fc-daygrid-day[data-date="${plannedDate}"]`).click();
+    await expect(adminPage.getByRole('tab', { name: 'Tag', exact: true })).toHaveAttribute(
+      'data-state',
+      'active'
+    );
+    const jobBlock = adminPage.locator(`div.absolute[title="${title}"]`).first();
+    await expect(jobBlock).toBeVisible({ timeout: 20_000 });
+    const widthBefore = (await jobBlock.boundingBox())?.width ?? 0;
+    const rightHandle = jobBlock.locator('div.absolute.right-0');
+    const handleBox = await rightHandle.boundingBox();
+    if (!handleBox) throw new Error('A1-23 resize handle has no bounding box');
+    await adminPage.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await adminPage.mouse.down();
+    await adminPage.mouse.move(handleBox.x + handleBox.width / 2 + 60, handleBox.y + handleBox.height / 2, {
+      steps: 12,
+    });
+    await adminPage.mouse.up();
+    await confirmPlanningWarning(adminPage, 'A1 Dauer bewusst verlängert');
+    await expect.poll(async () => (await jobBlock.boundingBox())?.width ?? 0).toBeGreaterThan(widthBefore + 30);
+
+    let blockBox = await jobBlock.boundingBox();
+    if (!blockBox) throw new Error('A1-23 job block has no bounding box');
+    await adminPage.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y + blockBox.height / 2);
+    await adminPage.mouse.down();
+    await adminPage.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y - 72, { steps: 12 });
+    await adminPage.mouse.up();
+    await confirmPlanningWarning(adminPage, 'A1 Umplanung zu Bruno bewusst bestätigt');
+    await expect(
+      visibleText(
+        adminPage,
+        `Auftrag wurde zu ${world.users.buero.firstName} ${world.users.buero.lastName} verschoben.`
+      )
+    ).toBeVisible({ timeout: 20_000 });
+
+    blockBox = await jobBlock.boundingBox();
+    const parkplatzButton = adminPage.getByRole('button', { name: /Parkplatz/ });
+    const parkplatzBox = await parkplatzButton.boundingBox();
+    if (!blockBox || !parkplatzBox) throw new Error('A1-23 park drag targets are unavailable');
+    await adminPage.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y + blockBox.height / 2);
+    await adminPage.mouse.down();
+    await adminPage.mouse.move(
+      parkplatzBox.x + parkplatzBox.width / 2,
+      parkplatzBox.y + parkplatzBox.height / 2,
+      { steps: 15 }
+    );
+    await adminPage.mouse.up();
+    await expect(visibleText(adminPage, 'Auftrag wurde geparkt.')).toBeVisible({ timeout: 20_000 });
+    const parkingContextDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Parkplatz-Kontext' }),
+    });
+    await expect(parkingContextDialog).toBeVisible({ timeout: 20_000 });
+    await parkingContextDialog.getByRole('button', { name: 'Ohne Kontext lassen' }).click();
+    await expect(parkingContextDialog).toHaveCount(0, { timeout: 20_000 });
+    await parkplatzButton.click();
+    const parkedPill = adminPage.locator('[data-parkplatz-pill]').filter({ hasText: title });
+    await expect(parkedPill).toBeVisible();
+    const timeline = adminPage.locator('[data-timeline-scroll]');
+    await parkedPill.dragTo(timeline, { targetPosition: { x: 620, y: 105 } });
+    await confirmPlanningWarning(adminPage, 'A1 Auftrag aus Parkplatz eingeplant', false);
+    await expect(parkedPill).toHaveCount(0, { timeout: 20_000 });
+    await expect(adminPage.locator(`div.absolute[title="${title}"]`).first()).toBeVisible();
+  });
+
+  test('A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab', async ({
+    adminPage,
+    employeePage,
+    world,
+  }) => {
+    const completedBusinessDate = berlinDateAtOffset(0);
     const digits = completedBusinessDate.split('-').reverse().join('');
+    const manualTimeJobNumber = `A1-MANUAL-${world.runId}`;
+    manualTimeJobTitle = `A1 Manueller Zeitauftrag ${world.runId}`;
+    await createJob(adminPage, {
+      jobNumber: manualTimeJobNumber,
+      title: manualTimeJobTitle,
+      assignEmployeeName: 'Emil',
+    });
     await employeePage.goto('/zeiterfassung');
     await employeePage.getByRole('button', { name: 'Manuelle Eintragung' }).click();
     let dialog = employeePage.getByRole('dialog');
@@ -563,11 +1152,20 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await typeIntoTimeInput(dialog, 'clockInTime', '0900');
     await typeIntoTimeInput(dialog, 'clockOutTime', '0800');
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-    await expect(dialog.getByText('Die Einstempelzeit muss vor der Ausstempelzeit liegen.')).toBeVisible();
+    await expect(
+      dialog.getByText('Die Einstempelzeit muss vor der Ausstempelzeit liegen.')
+    ).toBeVisible({ timeout: 20_000 });
     await dialog.getByRole('button', { name: 'Schließen' }).click();
 
     await employeePage.getByRole('button', { name: 'Manuelle Eintragung' }).click();
     dialog = employeePage.getByRole('dialog');
+    await dialog.getByRole('combobox').filter({ hasText: 'Kein Auftrag' }).click();
+    await employeePage.getByPlaceholder('Auftrag suchen...').fill(manualTimeJobNumber);
+    await employeePage
+      .getByRole('listbox')
+      .getByRole('button')
+      .filter({ hasText: manualTimeJobNumber })
+      .click();
     await typeIntoDatePicker(dialog, 'Datum', digits);
     await typeIntoTimeInput(dialog, 'clockInTime', '0600');
     await typeIntoTimeInput(dialog, 'clockOutTime', '0700');
@@ -582,6 +1180,88 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await typeIntoTimeInput(dialog, 'clockOutTime', '0730');
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(dialog.getByText(/überschneidet|Überlappung/i)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('A1-24/A1-25: Kalender-Zeiteintrag, Blocktrennung, Pending-Dialog, Filter und Realtime [BASE-CALENDAR-F03/F04]', async ({
+    adminPage,
+    bueroPage,
+    world,
+  }) => {
+    const today = berlinDateAtOffset(0);
+    const plannedTitle = `A1 Kalender Planarbeit ${world.runId}`;
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'internal',
+      internalTitle: plannedTitle,
+      date: today,
+      time: '10:00',
+      durationHours: 1,
+      employeeNames: ['Bruno'],
+      overrideReason: 'A1 heutige Planarbeit für Kalendertrennung',
+    });
+
+    await openTimeApprovals(adminPage);
+    const pendingPair = adminPage.getByTestId(/pending-session-/).filter({
+      has: adminPage.getByText(world.users.employee.firstName, { exact: false }),
+    });
+    await expect(pendingPair).toContainText(/06:00.*07:00/);
+    await expect(pendingPair).toContainText(manualTimeJobTitle);
+
+    await adminPage.goto('/kalender');
+    await adminPage.getByRole('button', { name: 'Kalendereintrag' }).click();
+    const manualDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
+    });
+    await manualDialog.getByRole('tab', { name: 'Manuelle Eintragung' }).click();
+    await manualDialog.locator('#manual-entry-member').click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill('Bruno');
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Bruno' }).click();
+    await typeIntoTimeInput(manualDialog, 'clockInTime', '0800');
+    await typeIntoTimeInput(manualDialog, 'clockOutTime', '0900');
+    await manualDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(manualDialog.getByText('Eintrag erfolgreich erstellt!')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(manualDialog).toHaveCount(0, { timeout: 10_000 });
+
+    await adminPage.getByRole('tab', { name: 'Tag', exact: true }).click();
+    await adminPage.getByText('Arbeitszeiten', { exact: true }).click();
+    const plannedBlock = adminPage.locator(`div.absolute[title="${plannedTitle}"]`).first();
+    const workBlock = adminPage.getByTitle(/08:00.*09:00/).filter({ visible: true }).first();
+    await expect(plannedBlock).toBeVisible({ timeout: 20_000 });
+    await expect(workBlock).toBeVisible({ timeout: 20_000 });
+    const calendarMain = adminPage.getByRole('main');
+    await calendarMain.getByText('Aufträge', { exact: true }).click();
+    await expect(plannedBlock).toHaveCount(0);
+    await expect(workBlock).toBeVisible();
+    await calendarMain.getByText('Aufträge', { exact: true }).click();
+    await adminPage.getByText('Arbeitszeiten', { exact: true }).click();
+    await expect(adminPage.getByTitle(/08:00.*09:00/)).toHaveCount(0);
+    await expect(adminPage.locator(`div.absolute[title="${plannedTitle}"]`).first()).toBeVisible();
+    await adminPage.getByText('Arbeitszeiten', { exact: true }).click();
+
+    const pendingBlock = adminPage.getByTitle(/06:00.*07:00/).filter({ visible: true }).first();
+    await expect(pendingBlock).toBeVisible({ timeout: 20_000 });
+    await expect(pendingBlock).toHaveClass(/bg-yellow-/);
+    await pendingBlock.click();
+    await expect(
+      adminPage.getByRole('dialog').filter({
+        has: adminPage.getByRole('heading', { name: 'Eintrag Details' }),
+      })
+    ).toBeVisible();
+    await adminPage.keyboard.press('Escape');
+
+    await showPlanningMonth(adminPage, today);
+    const liveTitle = `A1 Kalender Live ${world.runId}`;
+    await createPlannedCalendarEntry(bueroPage, {
+      kind: 'internal',
+      internalTitle: liveTitle,
+      date: today,
+      time: '12:00',
+      durationHours: 1,
+      employeeNames: ['Bruno'],
+      overrideReason: 'A1 Kalender-Realtime',
+    });
+    await expect(visibleText(adminPage, liveTitle)).toBeVisible({ timeout: 30_000 });
   });
 
   test('A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke', async ({
@@ -618,12 +1298,12 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       .getByRole('button', { name: 'Bearbeiten', exact: true })
       .click({ delay: 250 });
     const clockOutTime = dialog.getByRole('group', { name: 'Uhrzeit' }).nth(1);
-    // The live calendar can replace the editor wrapper while its data refreshes.
-    // Focus avoids Playwright's click-stability wait; each key action re-resolves
-    // the locator if React replaced the node.
+    // The segmented input changes its own DOM when focus selects a segment.
+    // Send the keys to that established browser focus so locator actionability
+    // does not wait on the replaced segment wrapper.
     await clockOutTime.focus();
-    await clockOutTime.press('ArrowLeft');
-    await clockOutTime.pressSequentially('1130');
+    await adminPage.keyboard.press('ArrowLeft');
+    await adminPage.keyboard.type('1130');
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Bearbeiten', exact: true })).toBeVisible({
       timeout: 20_000,
@@ -658,12 +1338,74 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(adminPage.getByTitle(/10:00.*11:30/)).toHaveCount(0, { timeout: 20_000 });
   });
 
+  test('A1-31: Verlauf filtert Zeitraum, Mitarbeiter und Status [BASE-TIME-F06]', async ({
+    adminPage,
+    world,
+  }) => {
+    await adminPage.goto('/zeiterfassung');
+    await adminPage.getByRole('button', { name: 'Manuelle Eintragung' }).click();
+    const manualDialog = adminPage.getByRole('dialog');
+    await manualDialog.locator('#manual-entry-member').click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill('Emil');
+    await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'Emil' }).click();
+    const todayDigits = berlinDateAtOffset(0).split('-').reverse().join('');
+    await typeIntoDatePicker(manualDialog, 'Datum', todayDigits);
+    await typeIntoTimeInput(manualDialog, 'clockInTime', '0400');
+    await typeIntoTimeInput(manualDialog, 'clockOutTime', '0500');
+    await manualDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(manualDialog.getByText('Eintrag erfolgreich erstellt!')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(manualDialog).toHaveCount(0, { timeout: 10_000 });
+
+    await adminPage.getByRole('tab', { name: 'Verlauf' }).click();
+    const history = adminPage.getByRole('tabpanel', { name: 'Verlauf' });
+    await expect(history.getByText(/Einträge? gefunden/)).toBeVisible({ timeout: 20_000 });
+    const filters = history.getByRole('combobox');
+    await filters.filter({ hasText: 'Alle Mitarbeiter' }).click();
+    await adminPage.getByRole('option', { name: /Emil/ }).click();
+    await filters.filter({ hasText: 'Alle' }).click();
+    await adminPage.getByRole('option', { name: 'Ausstehend', exact: true }).click();
+    await history.getByRole('button', { name: 'Laden' }).click();
+    const pendingRows = history.locator('tbody tr');
+    await expect(pendingRows).toHaveCount(2, { timeout: 20_000 });
+    for (const row of await pendingRows.all()) {
+      await expect(row).toContainText('Emil');
+      await expect(row).toContainText('Ausstehend');
+    }
+
+    const fromDate = history.getByText('Von', { exact: true }).locator('..');
+    const toDate = history.getByText('Bis', { exact: true }).locator('..');
+    await typeIntoDatePicker(fromDate, 'Datum', todayDigits);
+    await typeIntoDatePicker(toDate, 'Datum', todayDigits);
+    await history.getByRole('button', { name: 'Laden' }).click();
+    await expect(pendingRows).toHaveCount(2, { timeout: 20_000 });
+
+    await filters.filter({ hasText: 'Ausstehend' }).click();
+    await adminPage.getByRole('option', { name: 'Genehmigt', exact: true }).click();
+    await history.getByRole('button', { name: 'Laden' }).click();
+    const approvedRows = history.locator('tbody tr');
+    await expect(approvedRows).toHaveCount(2, { timeout: 20_000 });
+    for (const row of await approvedRows.all()) {
+      await expect(row).toContainText('Emil');
+      await expect(row).toContainText('Genehmigt');
+    }
+
+    await filters.filter({ hasText: /Emil/ }).click();
+    await adminPage.getByRole('option', { name: /Bruno/ }).click();
+    await filters.filter({ hasText: 'Genehmigt' }).click();
+    await adminPage.getByRole('option', { name: 'Ausstehend', exact: true }).click();
+    await history.getByRole('button', { name: 'Laden' }).click();
+    await expect(visibleText(adminPage, 'Keine Einträge gefunden')).toBeVisible({ timeout: 20_000 });
+    await expect(visibleText(adminPage, world.orgName)).toBeVisible();
+  });
+
   test('A1-32: Nur Admin ändert Pausenregel und abgeschlossene Historie bleibt stabil', async ({
     adminPage,
     bueroPage,
     world,
   }) => {
-    const countBefore = await getOrganizationTimeEntryCount(world.orgId);
+    const entriesBefore = await getOrganizationTimeEntrySnapshot(world.orgId);
     await adminPage.goto('/einstellungen/zeiterfassung');
     await adminPage.getByLabel('Art der Pausenbuchung').click();
     await adminPage.getByRole('option', { name: 'Pause automatisch abziehen' }).click();
@@ -675,7 +1417,146 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await bueroPage.goto('/einstellungen/zeiterfassung');
     await expect(bueroPage.getByLabel('Art der Pausenbuchung')).toBeDisabled();
     await expect(visibleText(bueroPage, 'Du kannst diese Regeln einsehen, aber nur der Admin kann sie ändern.')).toBeVisible();
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(countBefore);
+    expect(await getOrganizationTimeEntrySnapshot(world.orgId)).toEqual(entriesBefore);
+  });
+
+  test('A1-33: Stapel, Ordner, Drag & Drop und großer Upload mit echtem Fortschritt [BASE-DOCUMENT-F02/P1-00A-F01]', async ({
+    adminPage,
+    world,
+  }) => {
+    await adminPage.goto('/dokumente');
+    const fileInput = adminPage.locator('input[type="file"]:not([webkitdirectory])');
+    await fileInput.setInputFiles([
+      {
+        name: `a1-batch-a-${world.runId}.txt`,
+        mimeType: 'text/plain',
+        buffer: Buffer.from('A1 batch file A'),
+      },
+      {
+        name: `a1-batch-b-${world.runId}.txt`,
+        mimeType: 'text/plain',
+        buffer: Buffer.from('A1 batch file B'),
+      },
+    ]);
+    await expect(adminPage.getByRole('dialog')).toBeVisible();
+    await expect(adminPage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    await adminPage.reload();
+    await expect(visibleText(adminPage, `a1-batch-a-${world.runId}.txt`)).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(visibleText(adminPage, `a1-batch-b-${world.runId}.txt`)).toBeVisible();
+
+    await adminPage.locator('input[webkitdirectory]').setInputFiles(
+      resolve(process.cwd(), 'tests/audit/fixtures/folder-upload')
+    );
+    await expect(adminPage.getByRole('dialog')).toBeVisible();
+    await expect(adminPage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    await adminPage.reload();
+    await expect(visibleText(adminPage, 'folder-upload')).toBeVisible({ timeout: 20_000 });
+
+    await adminPage.evaluate((fileName) => {
+      const heading = Array.from(document.querySelectorAll('h1')).find(
+        (candidate) => candidate.textContent?.trim() === 'Dokumente'
+      );
+      const target = heading?.parentElement?.parentElement?.parentElement;
+      if (!target) throw new Error('Document library drop target is missing');
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['A1 external drop'], fileName, { type: 'text/plain' }));
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: transfer }));
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: transfer }));
+    }, `a1-drop-${world.runId}.txt`);
+    await expect(adminPage.getByRole('dialog')).toBeVisible();
+    await expect(adminPage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    await adminPage.reload();
+    await expect(visibleText(adminPage, `a1-drop-${world.runId}.txt`)).toBeVisible({
+      timeout: 20_000,
+    });
+
+    await adminPage.evaluate(() => {
+      document.documentElement.dataset.nativeUploadProgress = '';
+      document.documentElement.dataset.uploadProgressValues = '';
+      document.documentElement.dataset.uploadProgressBarSeen = 'false';
+      const recordProgressBar = () => {
+        const progressBar = document.querySelector('[role="progressbar"]');
+        if (!progressBar) return;
+        document.documentElement.dataset.uploadProgressBarSeen = 'true';
+        const value = progressBar.getAttribute('aria-valuenow');
+        if (!value) return;
+        const existing = document.documentElement.dataset.uploadProgressValues ?? '';
+        document.documentElement.dataset.uploadProgressValues = `${existing},${value}`;
+      };
+      const progressObserver = new MutationObserver(recordProgressBar);
+      progressObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['aria-valuenow'],
+        childList: true,
+        subtree: true,
+      });
+      const originalSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function sendWithProgressEvidence(body) {
+        this.upload.addEventListener('progress', (event) => {
+          if (!event.lengthComputable) return;
+          const existing = document.documentElement.dataset.nativeUploadProgress ?? '';
+          document.documentElement.dataset.nativeUploadProgress =
+            `${existing},${event.loaded}/${event.total}`;
+        });
+        return originalSend.call(this, body);
+      };
+    });
+    const networkSession = await adminPage.context().newCDPSession(adminPage);
+    await networkSession.send('Network.enable');
+    await networkSession.send('Network.emulateNetworkConditions', {
+      offline: false,
+      latency: 20,
+      downloadThroughput: 10 * 1024 * 1024,
+      uploadThroughput: 512 * 1024,
+      connectionType: 'cellular3g',
+    });
+    try {
+      await fileInput.setInputFiles({
+        name: `a1-large-${world.runId}.bin`,
+        mimeType: 'application/octet-stream',
+        buffer: Buffer.alloc(6 * 1024 * 1024, 65),
+      });
+      await expect(
+        adminPage.getByRole('progressbar', { name: 'Gesamtfortschritt des Uploads' })
+      ).toBeVisible();
+      await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
+        timeout: 90_000,
+      });
+    } finally {
+      await networkSession.send('Network.emulateNetworkConditions', {
+        offline: false,
+        latency: 0,
+        downloadThroughput: -1,
+        uploadThroughput: -1,
+      });
+      await networkSession.detach();
+    }
+    const progressEvidence = await adminPage.evaluate(() => ({
+      barSeen: document.documentElement.dataset.uploadProgressBarSeen,
+      values: (document.documentElement.dataset.uploadProgressValues ?? '')
+        .split(',')
+        .filter(Boolean)
+        .map(Number),
+      nativeSamples: (document.documentElement.dataset.nativeUploadProgress ?? '')
+        .split(',')
+        .filter(Boolean)
+        .map((sample) => sample.split('/').map(Number)),
+    }));
+    expect(progressEvidence.barSeen).toBe('true');
+    expect(progressEvidence.values).toContain(100);
+    expect(
+      progressEvidence.nativeSamples.some(([, total]) => total === 6 * 1024 * 1024)
+    ).toBe(true);
+    expect(progressEvidence.nativeSamples.at(-1)).toEqual([
+      6 * 1024 * 1024,
+      6 * 1024 * 1024,
+    ]);
+    await adminPage.reload();
+    await expect(visibleText(adminPage, `a1-large-${world.runId}.bin`)).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test('A1-34/A1-35: Ordner, Verschieben/Kopieren und Arbeitsverknüpfung', async ({
@@ -710,8 +1591,46 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     });
     await linkDialog.getByPlaceholder('Auftrag suchen...').fill(checklistJobNumber);
     await linkDialog.getByRole('button').filter({ hasText: checklistJobNumber }).click();
+    await linkDialog.getByRole('button', { name: /Projekte/ }).click();
+    await linkDialog.getByPlaceholder('Projekt suchen...').fill(`A1-LIST-P-${world.runId}`);
+    await linkDialog.getByRole('button').filter({ hasText: `A1-LIST-P-${world.runId}` }).click();
+    await linkDialog.getByRole('button', { name: /Kunden/ }).click();
+    await linkDialog.getByPlaceholder('Kunde suchen...').fill(`A1 Listenkunde ${world.runId}`);
+    await linkDialog.getByRole('button').filter({ hasText: `A1 Listenkunde ${world.runId}` }).click();
+    await linkDialog.getByRole('button', { name: /Mitarbeiter/ }).click();
+    await linkDialog.getByPlaceholder('Mitarbeiter suchen...').fill('Emil');
+    await linkDialog.getByRole('button').filter({ hasText: 'Emil' }).click();
     await linkDialog.getByRole('button', { name: 'Speichern' }).click();
     await expect(linkDialog).toHaveCount(0, { timeout: 20_000 });
+
+    await adminPage.getByRole('link', { name: 'Alle Dateien' }).click();
+    await expect(adminPage).toHaveURL(/view=all/);
+    const documentSearch = adminPage.getByPlaceholder('Dokumente suchen...');
+    await documentSearch.fill(fileName);
+    await documentSearch.press('Enter');
+    const documentRows = adminPage.locator('tbody tr').filter({ hasText: fileName });
+    await expect(documentRows).toHaveCount(1);
+    for (const linkFilter of ['Aufträge', 'Projekte', 'Kunden', 'Mitarbeiter']) {
+      await adminPage.getByRole('button', { name: 'Filter' }).click();
+      await adminPage.getByRole('combobox', { name: 'Verknüpfung filtern' }).click();
+      await adminPage.getByRole('option', { name: linkFilter, exact: true }).click();
+      await expect(documentRows).toHaveCount(1);
+      await adminPage.getByRole('button', { name: 'Filter' }).click();
+    }
+    await adminPage.getByRole('button', { name: 'Filter' }).click();
+    await adminPage.getByRole('combobox', { name: 'Kategorie filtern' }).click();
+    await adminPage.getByRole('option', { name: 'Sonstige', exact: true }).click();
+    await expect(documentRows).toHaveCount(1);
+    await adminPage.getByRole('combobox', { name: 'Verknüpfung filtern' }).click();
+    await adminPage.getByRole('option', { name: 'Alle Verknüpfungen', exact: true }).click();
+    await documentSearch.fill('kein-a1-dokument');
+    await documentSearch.press('Enter');
+    await expect(documentRows).toHaveCount(0);
+    await documentSearch.fill('');
+    await documentSearch.press('Enter');
+    await adminPage.getByRole('main').getByRole('link', { name: 'Dokumente' }).click();
+    await expect(adminPage).toHaveURL(/view=folders/);
+    await expect(visibleText(adminPage, folderName)).toBeVisible();
 
     await adminPage.getByRole('button', { name: `Dateiaktionen für ${fileName} öffnen` }).click();
     await adminPage.getByRole('menuitem', { name: 'Kopieren' }).click();
@@ -736,6 +1655,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     adminPage,
     world,
   }) => {
+    test.setTimeout(300_000);
     const fileName = `a1-version-${world.runId}.pdf`;
     await adminPage.goto('/dokumente');
     await adminPage.getByRole('button', { name: 'Hochladen oder Erstellen' }).click();
@@ -798,23 +1718,113 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     const viewerFileChooserPromise = adminPage.waitForEvent('filechooser');
     await adminPage.getByRole('menuitem', { name: 'Dateien hochladen' }).click();
     const viewerFileChooser = await viewerFileChooserPromise;
-    await viewerFileChooser.setFiles({
-      name: `a1-viewer-${world.runId}.png`,
+    const imageViewerFile = `a1-viewer-${world.runId}.png`;
+    const pdfViewerFile = `a1-viewer-${world.runId}.pdf`;
+    await viewerFileChooser.setFiles([
+      {
+        name: imageViewerFile,
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+          'base64'
+        ),
+      },
+      {
+        name: pdfViewerFile,
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF'),
+      },
+    ]);
+    await expect(adminPage.getByText('2 von 2 abgeschlossen')).toBeVisible({ timeout: 60_000 });
+    await adminPage.getByRole('button', { name: 'Schließen' }).first().click();
+    await visibleText(adminPage, imageViewerFile).click();
+    let viewer = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: imageViewerFile }),
+    });
+    const imagePreview = viewer.getByRole('img', { name: imageViewerFile });
+    await expect(imagePreview).toBeVisible({ timeout: 20_000 });
+    await expect(viewer.getByRole('link', { name: 'Neuer Tab' })).toHaveAttribute(
+      'href',
+      /^https:\/\/.+X-Amz-(Algorithm|Signature)=/
+    );
+    await expectSignedWindowOpen(adminPage, () =>
+      viewer.getByRole('button', { name: 'Herunterladen' }).click()
+    );
+    await adminPage.keyboard.press('Escape');
+
+    await visibleText(adminPage, pdfViewerFile).click();
+    viewer = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: pdfViewerFile }),
+    });
+    await expect(viewer.getByTitle(pdfViewerFile)).toHaveAttribute(
+      'src',
+      /^https:\/\/.+X-Amz-(Algorithm|Signature)=.+#toolbar=0/
+    );
+  });
+
+  test('A1-38: Handwerker lädt am zugewiesenen Auftrag hoch, öffnet und lädt signiert herunter [BASE-DOCUMENT-F04/P1-00A-F02]', async ({
+    adminPage,
+    bueroPage,
+    employeePage,
+    world,
+  }) => {
+    const assignedJobNumber = `A1-DOC-E-${world.runId}`;
+    const unassignedJobNumber = `A1-DOC-X-${world.runId}`;
+    const fileName = `a1-employee-${world.runId}.png`;
+    await createJob(adminPage, {
+      jobNumber: assignedJobNumber,
+      title: `A1 Mitarbeiterdokument ${world.runId}`,
+      assignEmployeeName: 'Emil',
+    });
+    await createJob(adminPage, {
+      jobNumber: unassignedJobNumber,
+      title: `A1 Nicht zugewiesen ${world.runId}`,
+    });
+
+    await expectRedirectedAway(employeePage, '/dokumente');
+    await employeePage.goto(`/auftraege/${assignedJobNumber}`);
+    const documentsSection = employeePage
+      .getByRole('heading', { name: 'Dokumente & Bilder' })
+      .locator('xpath=ancestor::div[contains(@class, "bg-card")][1]');
+    await documentsSection.locator('input[type="file"]').setInputFiles({
+      name: fileName,
       mimeType: 'image/png',
       buffer: Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
         'base64'
       ),
     });
-    await expect(adminPage.getByText('1 von 1 abgeschlossen')).toBeVisible({ timeout: 60_000 });
-    await adminPage.getByRole('button', { name: 'Schließen' }).first().click();
-    await expect(visibleText(adminPage, `a1-viewer-${world.runId}.png`)).toBeVisible({
-      timeout: 20_000,
+    await expect(employeePage.getByRole('dialog')).toBeVisible();
+    await expect(employeePage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    await employeePage.reload();
+    await employeePage.getByRole('button', { name: new RegExp(fileName) }).click();
+    const viewer = employeePage.getByRole('dialog').filter({
+      has: employeePage.getByRole('heading', { name: fileName }),
     });
+    await expect(viewer.getByRole('img', { name: fileName })).toBeVisible({ timeout: 20_000 });
+    await expectSignedWindowOpen(employeePage, () =>
+      viewer.getByRole('button', { name: 'Herunterladen' }).click()
+    );
+    await employeePage.keyboard.press('Escape');
+    await expectRedirectedAway(employeePage, `/auftraege/${unassignedJobNumber}`);
+
+    const liveFileName = `a1-doc-live-${world.runId}.txt`;
+    await adminPage.goto('/dokumente?view=all');
+    await bueroPage.goto('/dokumente');
+    await bueroPage.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
+      name: liveFileName,
+      mimeType: 'text/plain',
+      buffer: Buffer.from('A1 document Realtime'),
+    });
+    await expect(bueroPage.getByRole('dialog')).toBeVisible();
+    await expect(bueroPage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    await expect(visibleText(adminPage, liveFileName)).toBeVisible({ timeout: 30_000 });
   });
 
   test('A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten', async ({
     adminPage,
+    bueroPage,
+    employeePage,
     world,
   }) => {
     inventoryLocationName = `A1 Lager ${world.runId}`;
@@ -827,6 +1837,66 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       supplierName: `A1 Lieferant ${world.runId}`,
     });
     await adminPage.goto('/inventar');
+    const row = adminPage.locator('tbody tr').filter({ hasText: inventoryItemName });
+    await row.getByRole('button').last().click();
+    await adminPage.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+    let itemDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Artikel bearbeiten' }),
+    });
+    await itemDialog.locator('#inventory-item-type').click();
+    for (const type of ['Material', 'Verbrauchsmaterial', 'Werkzeug', 'Gerät / Anlage']) {
+      await expect(adminPage.getByRole('option', { name: type, exact: true })).toBeVisible();
+    }
+    await adminPage.getByRole('option', { name: 'Material', exact: true }).click();
+    await itemDialog.locator('#inventory-item-unit').click();
+    await adminPage.getByRole('option', { name: 'Meter', exact: true }).click();
+    await itemDialog.locator('#inventory-item-internal-sku').fill(`SKU-${world.runId}`);
+    await itemDialog.locator('#inventory-item-barcode').fill(`400${world.runId.replace(/\D/g, '').slice(-10)}`);
+    await itemDialog.locator('#inventory-item-manufacturer').fill('WerkFlow Prüfhersteller');
+    await itemDialog.locator('#inventory-item-supplier-number').fill(`LIEF-${world.runId}`);
+    await itemDialog.locator('#inventory-item-minimum-stock').fill('2');
+    await itemDialog.locator('#inventory-item-target-stock').fill('12');
+    await itemDialog.locator('#inventory-item-purchase-price').fill('12,50');
+    await itemDialog.locator('#inventory-item-sale-price').fill('24,90');
+    await itemDialog.locator('#inventory-item-description').fill('A1 vollständige Artikelbeschreibung');
+    await itemDialog.locator('#inventory-item-notes').fill('A1 interne Notiz');
+    const billableCheckbox = itemDialog.getByRole('checkbox', { name: 'Abrechenbar' });
+    if (!(await billableCheckbox.isChecked())) await billableCheckbox.click();
+    await itemDialog.getByRole('button', { name: 'Speichern' }).click();
+    await expect(itemDialog).toHaveCount(0, { timeout: 20_000 });
+
+    for (const [suffix, type] of [
+      ['V', 'Verbrauchsmaterial'],
+      ['W', 'Werkzeug'],
+      ['G', 'Gerät / Anlage'],
+    ] as const) {
+      await adminPage.getByRole('button', { name: 'Artikel', exact: true }).click();
+      itemDialog = adminPage.getByRole('dialog').filter({
+        has: adminPage.getByRole('heading', { name: 'Artikel anlegen' }),
+      });
+      await itemDialog.locator('#inventory-item-name').fill(`A1 Typ ${suffix} ${world.runId}`);
+      await itemDialog.locator('#inventory-item-type').click();
+      await adminPage.getByRole('option', { name: type, exact: true }).click();
+      await itemDialog.getByRole('button', { name: 'Speichern' }).click();
+      await expect(itemDialog).toHaveCount(0, { timeout: 20_000 });
+    }
+
+    await adminPage.getByRole('button', { name: 'Lager', exact: true }).click();
+    const locationDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Lager anlegen' }),
+    });
+    const vehicleLocation = `A1 Fahrzeug ${world.runId}`;
+    await locationDialog.locator('#inventory-location-name').fill(vehicleLocation);
+    await locationDialog.locator('#inventory-location-type').click();
+    for (const type of ['Lager', 'Lagerraum', 'Regal', 'Fahrzeug', 'Sonstiges']) {
+      await expect(adminPage.getByRole('option', { name: type, exact: true })).toBeVisible();
+    }
+    await adminPage.getByRole('option', { name: 'Fahrzeug', exact: true }).click();
+    await locationDialog.locator('#inventory-location-description').fill('Servicefahrzeug Nord');
+    await locationDialog.getByRole('button', { name: 'Speichern' }).click();
+    await expect(locationDialog).toHaveCount(0, { timeout: 20_000 });
+
+    await adminPage.goto('/inventar');
     await expect(visibleText(adminPage, inventoryItemName)).toBeVisible();
     for (const view of ['Alle Artikel', 'Lager', 'Geplant', 'Bewegungen']) {
       await adminPage.getByRole('tab', { name: view, exact: true }).click();
@@ -835,6 +1905,32 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
         'active'
       );
     }
+    await adminPage.getByRole('tab', { name: 'Lager', exact: true }).click();
+    await expect(adminPage.locator('div.rounded-lg.border').filter({ hasText: vehicleLocation })).toContainText('Fahrzeug');
+    await adminPage.getByRole('tab', { name: 'Alle Artikel', exact: true }).click();
+    await adminPage.getByLabel('Artikel suchen').fill(inventoryItemName);
+    await expect(visibleText(adminPage, inventoryItemName)).toBeVisible();
+    await expect(adminPage.getByText(`A1 Typ W ${world.runId}`)).toHaveCount(0);
+    await adminPage.getByLabel('Artikel suchen').fill('');
+    await adminPage.getByLabel('Nach Typ filtern').click();
+    await adminPage.getByRole('option', { name: 'Werkzeug', exact: true }).click();
+    await expect(visibleText(adminPage, `A1 Typ W ${world.runId}`)).toBeVisible();
+    await expect(adminPage.getByText(inventoryItemName)).toHaveCount(0);
+    await adminPage.getByLabel('Nach Typ filtern').click();
+    await adminPage.getByRole('option', { name: 'Alle Typen', exact: true }).click();
+    await adminPage.getByLabel('Nach Lager filtern').click();
+    await adminPage.getByRole('option', { name: inventoryLocationName, exact: true }).click();
+    await expect(visibleText(adminPage, inventoryItemName)).toBeVisible();
+    await expect(adminPage.getByText(`A1 Typ W ${world.runId}`)).toHaveCount(0);
+
+    await expectRedirectedAway(employeePage, '/inventar');
+    await adminPage.getByLabel('Nach Lager filtern').click();
+    await adminPage.getByRole('option', { name: 'Alle Lager', exact: true }).click();
+    const liveItemName = `A1 Inventar Live ${world.runId}`;
+    await adminPage.getByLabel('Artikel suchen').fill(liveItemName);
+    await expect(adminPage.getByText(liveItemName)).toHaveCount(0);
+    await createInventoryItem(bueroPage, { name: liveItemName });
+    await expect(visibleText(adminPage, liveItemName)).toBeVisible({ timeout: 30_000 });
   });
 
   test('A1-41: Zu-/Abgang, Negativsperre und nachvollziehbare Bewegung', async ({
@@ -859,6 +1955,18 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       has: adminPage.getByRole('heading', { name: 'Bestand ändern' }),
     });
     await dialog.getByRole('button', { name: 'Entnehmen' }).click();
+    await dialog.locator('#inventory-stock-quantity').fill('1');
+    await dialog.locator('#inventory-stock-reason').fill('A1 Ausgang');
+    await dialog.getByRole('button', { name: 'Speichern' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+
+    row = adminPage.locator('tbody tr').filter({ hasText: inventoryItemName });
+    await row.getByRole('button').last().click();
+    await adminPage.getByRole('menuitem', { name: 'Bestand ändern' }).click();
+    dialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Bestand ändern' }),
+    });
+    await dialog.getByRole('button', { name: 'Entnehmen' }).click();
     await dialog.locator('#inventory-stock-quantity').fill('999');
     await dialog.locator('#inventory-stock-reason').fill('A1 Negativtest');
     await dialog.getByRole('button', { name: 'Speichern' }).click();
@@ -872,6 +1980,12 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       .filter({ hasText: 'Eingang' });
     await expect(movement).toContainText('A1 Zugang');
     await expect(movement).toContainText(/5.*7|7.*5/);
+    const outboundMovement = adminPage
+      .locator('tbody tr')
+      .filter({ hasText: inventoryItemName })
+      .filter({ hasText: 'Ausgang' });
+    await expect(outboundMovement).toContainText('A1 Ausgang');
+    await expect(outboundMovement).toContainText(/7.*6|6.*7/);
   });
 
   test('A1-39/A1-42: Material planen, geplant und ungeplant entnehmen, Projekt summiert', async ({
@@ -915,12 +2029,58 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await employeePage.getByRole('option', { name: /Hauptlager \(Golden\)/ }).click();
     await dialog.getByRole('button', { name: 'Entnahme buchen' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    const worldMaterialLine = employeePage
+      .locator('div.rounded-md.border')
+      .filter({ hasText: world.inventory.itemName })
+      .first();
+    await worldMaterialLine.getByRole('button', { name: 'Zurücklegen' }).click();
+    dialog = employeePage.getByRole('dialog').filter({
+      has: employeePage.getByRole('heading', { name: 'Material zurücklegen' }),
+    });
+    await dialog.locator('input[id$="-quantity"]').fill('1');
+    await dialog.locator('button[id$="-location"]').click();
+    await employeePage.getByRole('option', { name: /Hauptlager \(Golden\)/ }).click();
+    await dialog.getByRole('button', { name: 'Zurücklegen' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(worldMaterialLine).toContainText(/\+1/);
+    await expect(worldMaterialLine).toContainText(/Abrechenbar\s+1/);
     await takeMaterialOnJobPage(employeePage, jobNumber, inventoryItemName, 1);
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
+    const stockBeforeDirectPlan = await getInventoryLedgerState(
+      world.orgId,
+      world.inventory.itemId,
+      world.inventory.locationId
+    );
+    await adminPage.getByRole('button', { name: 'Material planen' }).click();
+    dialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Material planen' }),
+    });
+    await dialog.getByLabel('Artikel suchen').fill(world.inventory.itemName);
+    await dialog.getByRole('button').filter({ hasText: world.inventory.itemName }).click();
+    await dialog.locator('input[id$="-quantity"]').fill('1');
+    await dialog.locator('button[id$="-location"]').click();
+    await adminPage.getByRole('option', { name: world.inventory.locationName }).click();
+    await dialog.getByRole('button', { name: 'Speichern' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    expect(
+      await getInventoryLedgerState(
+        world.orgId,
+        world.inventory.itemId,
+        world.inventory.locationId
+      )
+    ).toEqual(stockBeforeDirectPlan);
+    await expect(adminPage.getByText('Noch kein direktes Projektmaterial erfasst.')).toHaveCount(0);
     await expect(visibleText(adminPage, 'Aus Aufträgen übernommen')).toBeVisible();
     await expect(visibleText(adminPage, 'Projekt gesamt')).toBeVisible();
     await expect(visibleText(adminPage, world.inventory.itemName)).toBeVisible();
+    const projectTotal = adminPage.locator('div.rounded-md.border').filter({
+      has: adminPage.getByText(world.inventory.itemName, { exact: true }),
+    }).last();
+    await expect(projectTotal).toContainText('Bedarf');
+    await expect(projectTotal).toContainText(/-2/);
+    await expect(projectTotal).toContainText(/\+1/);
+    await expect(projectTotal).toContainText(/Abrechenbar\s+1/);
   });
 
   test('A1-43: CSV-Spaltenzuordnung legt Stammdaten und Anfangsbewegung an', async ({
@@ -955,10 +2115,23 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     }
     await dialog.getByRole('button', { name: 'Importieren' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(visibleText(adminPage, importedItem)).toBeVisible({ timeout: 20_000 });
+    const importedRow = adminPage.locator('tbody tr').filter({ hasText: importedItem });
+    await expect(importedRow).toContainText('A1 Kategorie', { timeout: 20_000 });
+    await expect(importedRow).toContainText(importedLocation);
+    await expect(importedRow).toContainText(/4/);
+    await importedRow.getByRole('button').last().click();
+    await adminPage.getByRole('menuitem', { name: 'Bearbeiten' }).click();
+    const itemDialog = adminPage.getByRole('dialog').filter({
+      has: adminPage.getByRole('heading', { name: 'Artikel bearbeiten' }),
+    });
+    await expect(itemDialog.locator('#inventory-item-category')).toContainText('A1 Kategorie');
+    await expect(itemDialog.locator('#inventory-item-supplier')).toContainText('A1 CSV Lieferant');
+    await itemDialog.getByRole('button', { name: 'Abbrechen' }).click();
     await adminPage.getByRole('tab', { name: 'Lager' }).click();
     await expect(visibleText(adminPage, importedLocation)).toBeVisible();
     await adminPage.getByRole('tab', { name: 'Bewegungen' }).click();
-    await expect(visibleText(adminPage, importedItem)).toBeVisible();
+    const initialMovement = adminPage.locator('tbody tr').filter({ hasText: importedItem });
+    await expect(initialMovement).toContainText('Erstbestand');
+    await expect(initialMovement).toContainText(/0.*4|4.*0/);
   });
 });

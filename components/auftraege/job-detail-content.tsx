@@ -279,6 +279,7 @@ export function JobDetailContent({
   const [dialogClients, setDialogClients] = useState(clients);
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogProjects, setDialogProjects] = useState(projects);
+  const dialogOptionsRequestInFlightRef = useRef(false);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
   const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
   const handleEditDialogOpenChange = (open: boolean) => {
@@ -352,7 +353,7 @@ export function JobDetailContent({
   useEffect(() => {
     if (
       !isAdminOrManager ||
-      isLoadingDialogOptions ||
+      dialogOptionsRequestInFlightRef.current ||
       (
         !showAssignDialog &&
         !showClientDialog &&
@@ -375,6 +376,7 @@ export function JobDetailContent({
     }
 
     let cancelled = false;
+    dialogOptionsRequestInFlightRef.current = true;
     setIsLoadingDialogOptions(true);
     getAuftraegeDialogOptions()
       .then((result) => {
@@ -384,6 +386,7 @@ export function JobDetailContent({
         setDialogProjects(result.projects);
       })
       .finally(() => {
+        dialogOptionsRequestInFlightRef.current = false;
         if (!cancelled) setIsLoadingDialogOptions(false);
       });
 
@@ -395,7 +398,6 @@ export function JobDetailContent({
     dialogMembers.length,
     dialogProjects.length,
     isAdminOrManager,
-    isLoadingDialogOptions,
     showAssignDialog,
     showClientDialog,
     showEditDialog,

@@ -1408,10 +1408,12 @@ export async function getProjectMaterialSummary(
         plannedQuantity: 0,
         takenQuantity: 0,
         returnedQuantity: 0,
+        billableQuantity: 0,
       };
     current.plannedQuantity += line.plannedQuantity;
     current.takenQuantity += line.takenQuantity;
     current.returnedQuantity += line.returnedQuantity;
+    current.billableQuantity += line.billableQuantity;
     totalMap.set(key, current);
   }
 

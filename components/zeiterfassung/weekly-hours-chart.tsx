@@ -143,11 +143,15 @@ export function WeeklyHoursChart({
             const workPx = minutesToPx(day.workMinutes);
             const breakPx = minutesToPx(day.breakMinutes);
             const overtimePx = minutesToPx(day.overtimeMinutes);
+            const detailsLabel = `${day.label}: Anwesenheit ${formatDuration(day.totalMinutes)}, Arbeitszeit ${formatDuration(day.workMinutes)}, Pause ${formatDuration(day.breakMinutes)}, Überstunden ${formatDuration(day.overtimeMinutes)}`;
 
             return (
               <div
                 key={day.date}
                 className="flex h-full flex-1 flex-col items-center justify-end"
+                role="img"
+                aria-label={detailsLabel}
+                title={detailsLabel}
               >
                 <div
                   className={cn(

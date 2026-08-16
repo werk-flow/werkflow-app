@@ -319,6 +319,7 @@ export type ProjectMaterialSummary = {
     plannedQuantity: number;
     takenQuantity: number;
     returnedQuantity: number;
+    billableQuantity: number;
   }>;
 };
 

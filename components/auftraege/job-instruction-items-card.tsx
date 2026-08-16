@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ClipboardList, Loader2, Trash2 } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ClipboardList,
+  Loader2,
+  Trash2,
+} from 'lucide-react';
 
 import {
   ActionBanner,
@@ -14,6 +21,7 @@ import {
   createJobInstructionItem,
   deleteJobInstructionItem,
   getJobInstructionItems,
+  reorderJobInstructionItems,
   toggleJobInstructionItemCompletion,
   updateJobInstructionItemContent,
 } from '@/lib/jobs/instruction-items-actions';
@@ -46,6 +54,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   delete_failed: 'Der Punkt konnte nicht gelöscht werden.',
   toggle_failed: 'Der Status konnte nicht geändert werden.',
   reorder_failed: 'Die Reihenfolge der Punkte konnte nicht gespeichert werden.',
+  invalid_reorder: 'Die Reihenfolge der Punkte ist nicht mehr aktuell.',
   item_not_found: 'Der Eintrag wurde nicht gefunden.',
   job_not_found: 'Der Auftrag wurde nicht gefunden.',
   unexpected_error: 'Es ist ein unerwarteter Fehler aufgetreten.',
@@ -95,9 +104,11 @@ export function JobInstructionItemsCard({
   );
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const [reorderingItemId, setReorderingItemId] = useState<string | null>(null);
   const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
   const [activeBanner, setActiveBanner] = useState<ActionBannerState | null>(null);
   const bannerSequenceRef = useRef(0);
+  const reorderInFlightRef = useRef(false);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const itemTextareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const toggleMutationSequenceRef = useRef<Map<string, number>>(new Map());
@@ -343,6 +354,50 @@ export function JobInstructionItemsCard({
     setItems(remainingItems);
   }
 
+  async function handleMoveItem(itemId: string, direction: -1 | 1) {
+    if (reorderInFlightRef.current || items.some((item) => item.isOptimistic)) return;
+
+    const currentIndex = items.findIndex((item) => item.id === itemId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= items.length) return;
+
+    const previousItems = items;
+    const nextItems = [...items];
+    [nextItems[currentIndex], nextItems[nextIndex]] = [
+      nextItems[nextIndex],
+      nextItems[currentIndex],
+    ];
+
+    setItems(nextItems.map((item, index) => ({ ...item, sortOrder: index })));
+    reorderInFlightRef.current = true;
+    setReorderingItemId(itemId);
+    try {
+      const result = await reorderJobInstructionItems({
+        jobId,
+        itemIds: nextItems.map((item) => item.id),
+      });
+
+      if (result.success) {
+        await syncItemsFromServer();
+        return;
+      }
+
+      setItems(previousItems);
+      await syncItemsFromServer();
+      showErrorBanner(getErrorMessage(result.error));
+    } catch {
+      setItems(previousItems);
+      await syncItemsFromServer();
+      showErrorBanner(getErrorMessage('reorder_failed'));
+    } finally {
+      reorderInFlightRef.current = false;
+      setReorderingItemId(null);
+    }
+  }
+
+  const isReorderingDisabled =
+    reorderingItemId !== null || items.some((item) => item.isOptimistic);
+
   return (
     <>
       <ActionBanner banner={activeBanner} onDismiss={() => setActiveBanner(null)} />
@@ -415,6 +470,7 @@ export function JobInstructionItemsCard({
               }
 
               const item = entry.item;
+              const itemIndex = items.findIndex((currentItem) => currentItem.id === item.id);
               const editingValue = editingValues[item.id] ?? item.content;
               const isDeleting = deletingItemId === item.id;
               const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatDateTime(item.createdAt)}`;
@@ -498,7 +554,36 @@ export function JobInstructionItemsCard({
                           {statusLabel && <p className="mt-1 break-words">{statusLabel}</p>}
                         </div>
                         {isAdminOrManager && (
-                          <div className="flex shrink-0 self-end">
+                          <div className="flex shrink-0 self-end gap-0.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground"
+                              onClick={() => handleMoveItem(item.id, -1)}
+                              disabled={itemIndex <= 0 || isReorderingDisabled}
+                              aria-label="Punkt nach oben verschieben"
+                            >
+                              <ArrowUp className="size-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground"
+                              onClick={() => handleMoveItem(item.id, 1)}
+                              disabled={
+                                itemIndex === items.length - 1 ||
+                                isReorderingDisabled
+                              }
+                              aria-label="Punkt nach unten verschieben"
+                            >
+                              {reorderingItemId === item.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <ArrowDown className="size-3.5" />
+                              )}
+                            </Button>
                             <Button
                               type="button"
                               variant="ghost"

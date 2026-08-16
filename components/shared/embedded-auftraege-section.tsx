@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Briefcase, ChevronRight, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -174,7 +174,7 @@ export function EmbeddedAuftraegeSection({
   const [dialogProjects, setDialogProjects] = useState<ProjectWithDetails[]>(
     allProjectsForJobCreation ?? []
   );
-  const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
+  const dialogOptionsRequestInFlightRef = useRef(false);
   const {
     jobs,
     setJobs,
@@ -200,14 +200,13 @@ export function EmbeddedAuftraegeSection({
       !isAdminOrManager ||
       !createDialogOpen ||
       hasDialogOptions ||
-      isLoadingDialogOptions
+      dialogOptionsRequestInFlightRef.current
     ) {
       return;
     }
 
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- this lazy dialog bootstrap intentionally flips into a loading state before the async fetch resolves
-    setIsLoadingDialogOptions(true);
+    dialogOptionsRequestInFlightRef.current = true;
     getAuftraegeDialogOptions()
       .then((result) => {
         if (cancelled || !result.success) return;
@@ -216,13 +215,13 @@ export function EmbeddedAuftraegeSection({
         setDialogProjects(result.projects);
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingDialogOptions(false);
+        dialogOptionsRequestInFlightRef.current = false;
       });
 
     return () => {
       cancelled = true;
     };
-  }, [createDialogOpen, hasDialogOptions, isAdminOrManager, isLoadingDialogOptions]);
+  }, [createDialogOpen, hasDialogOptions, isAdminOrManager]);
 
   const dialogProjectOptions =
     dialogProjects.length > 0 ? dialogProjects : allProjectsForJobCreation ?? projects;

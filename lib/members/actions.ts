@@ -232,6 +232,8 @@ export async function removeMember(
       };
     }
 
+    let autoClockedOut = false;
+
     // If the member is currently working today in this org, insert an automatic clock_out
     // before removal (best-effort). This mirrors "clock out via FAB, then remove from org".
     try {
@@ -280,6 +282,8 @@ export async function removeMember(
 
         if (clockOutError) {
           console.error('Error inserting auto clock_out on member removal:', clockOutError);
+        } else {
+          autoClockedOut = true;
         }
       } else if (lastEntryError) {
         console.error('Error checking open session on member removal:', lastEntryError);
@@ -361,7 +365,10 @@ export async function removeMember(
               organization_id: orgId,
               employee_record_id: personnelRecord.id,
               event_type: 'membership_removed',
-              event_payload: { exit_date: todayIso },
+              event_payload: {
+                exit_date: todayIso,
+                auto_clocked_out: autoClockedOut,
+              },
               created_by: user.id,
             });
           if (eventError) {
