@@ -84,7 +84,7 @@ Use `docs/product/` for business context that should not always be loaded into e
 
 `docs/product/product-capability-map.md` is the product-wide map for the complete operational core and later intelligent-automation phase. Use it to keep feature specs coherent, resolve cross-feature ownership, and distinguish a product capability from a release or implementation plan.
 
-`docs/product/user-flow-catalog.md` is the tactical per-slice list of every new user-visible flow in plain German (what a user can now do and what the app does in response). It is updated as part of every slice's acceptance, feeds the eventual handover explanation, and is the test inventory for wave-end harness audits.
+`docs/product/user-flow-catalog.md` is the tactical per-slice list of every new user-visible flow in plain German (what a user can now do and what the app does in response). Every bullet has a stable technical flow ID. It is updated as part of every slice's acceptance, feeds the eventual handover explanation, and is the exhaustive test inventory for wave-end harness audits. Audit mapping is many-to-many, but every relevant ID and every observable clause inside its bullet must be evidenced under testing rule 12; test count does not need to equal flow count.
 
 ### Implementation Plans
 

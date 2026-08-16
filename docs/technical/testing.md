@@ -1,8 +1,8 @@
 # Testing And Golden-Gate Harness
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-16
 
-WerkFlow's regression safety net is a Playwright end-to-end harness that runs the roadmap's golden-gate scenarios (`GG-XX` in [`docs/plans/phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md)) as real multi-role browser journeys against a locally running app and the live Supabase project.
+WerkFlow's regression safety net is a Playwright end-to-end harness that runs the roadmap's golden-gate scenarios (`GG-XX` in [`docs/plans/phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md)) as real multi-role browser journeys against a locally running app and the live Supabase project. The separate wave-audit battery is the exhaustive catalog-flow layer: golden gates stay lean, while audit sessions must account for every relevant stable flow ID in [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md).
 
 ## Running
 
@@ -10,6 +10,8 @@ WerkFlow's regression safety net is a Playwright end-to-end harness that runs th
 bun run test:golden          # all golden-gate specs
 bun run test:golden:gg00     # only GG-00
 bunx playwright test --grep @GG-03   # any single gate by tag
+bun run test:audit:w1        # entire Wave 1 audit battery
+bunx playwright test --config playwright.audit.config.ts --grep @AUDIT-W1-A5
 ```
 
 Requirements: `.env.local` with Supabase and R2 credentials, and an app server on `http://localhost:3000` (an existing server is reused; otherwise the config starts `bun run dev`). Results/report/trace live in `tests/golden/.results` and `.report` (gitignored). Record every gate run in [`docs/plans/golden-gate-log.md`](../plans/golden-gate-log.md). Never run plain `bun test` — Bun's runner loads the Playwright specs and fails at their loader guard; unit tests run only via `bun run test:unit`, browser specs only via Playwright.
@@ -27,6 +29,7 @@ Hard-earned operational rules (2026-08-04):
 9. **After a harness-only fix, rerun the focused spec (`--grep @P1-XX`) before another full suite.** A full run costs 9–17 minutes depending on machine/sync load; the focused spec answers the same question in a fraction of that. The full suite is for proving the shared-state chain, not for iterating on one selector.
 10. **A failed full run is never the confirmation run.** Classify the failure, fix it, verify with the focused spec, then run the full suite AGAIN. "Full suite exactly once" (rule 8) bounds iteration on a green path — it is not a lifetime budget, and it never waives the acceptance requirement of one green full run. The P1-09 cycle stranded an otherwise finished slice in `verification` by misreading it as a budget.
 11. **Never trust an existing port-3000 server after a rebuild.** Both Playwright configs set `reuseExistingServer: true`, so whatever is already listening on 3000 silently wins — including a server started before your fix was built, which then makes correct fixes look ineffective run after run (this cost the Wave 1 A1 audit two debugging detours, one of which produced speculative product edits that had to be reverted). After any `bun run build`: stop the old listener (verify its command line targets this workspace before killing), start a fresh detached server, and confirm the listener PID is the process you just started before running any test.
+12. **Audit catalog coverage is exhaustive and many-to-many.** Every user-flow bullet relevant to an audit session has one stable catalog flow ID, and every relevant ID must appear in at least one ledger row. A ledger row or Playwright test may cover multiple catalog IDs, and a catalog ID may span multiple rows/tests; test count never needs to equal flow count. Mapping an ID means the actual assertion bodies evidence every observable clause of that catalog bullet, including roles, defaults, warnings, denials, state transitions, persistence, privacy, and negative promises. A title, helper call, implementation path, or partial assertion is not full coverage. Record partial mappings as `partial`, name the missing clauses, and supplement them before closure. Manual evidence may replace Playwright only when automation genuinely cannot observe the behavior and the owner explicitly approves that named exception. Session closure requires set equality between the catalog IDs owned by the session and the union mapped in its ledger rows, every mapped bullet fully evidenced, and zero partial or unmapped IDs. A material catalog-wording change reopens that ID until its mapped assertion bodies are rechecked.
 
 ## Debugging Failed Runs
 
@@ -49,6 +52,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 | Piece | Purpose |
 | --- | --- |
 | `playwright.config.ts` | Serial execution (shared world state), German locale, Europe/Berlin, screenshots/traces on failure |
+| `playwright.audit.config.ts` | Separate serial wave-audit battery; shares the golden world artifacts and therefore never runs concurrently with the golden suite |
 | `tests/golden/global-setup.ts` | Removes leftovers from crashed runs, seeds a fresh world, logs in all roles via the real `/login` UI, saves per-role sessions, generates a 6 MB upload fixture |
 | `tests/golden/support/seed.ts` | Creates/destroys the disposable world with the service-role key: primary org (admin/Büro/employee), outsider org (isolation checks), active subscriptions, deterministic profile names. Teardown deletes R2 objects under both org prefixes, org rows (everything cascades), subscriptions, and auth users |
 | `tests/golden/support/world.ts` | The world contract and artifact paths |
@@ -66,6 +70,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 ## Conventions
 
 - One spec file per golden gate, tagged `@GG-XX`, tests in `serial` mode.
+- Wave-audit specs follow `docs/plans/wave-1-audit.md`. Each session ledger records stable catalog flow IDs and concise whole-bullet clause evidence per rule 12; do not infer completeness from test counts or titles.
 - New slices extend `steps.ts` with their business actions and add/extend the gate spec named by their roadmap row. Do not put raw selectors in specs.
 - Use `visibleText()` for text assertions — pages render text twice (desktop table + hidden mobile card) and strict-mode locators fail otherwise.
 - Absence assertions (`toHaveCount(0)`) prove role/organization boundaries; every gate should include at least one negative check.
