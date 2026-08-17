@@ -79,7 +79,10 @@ export function usePlanningWarningConfirmation(): {
                 key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`}
                 className="rounded-md border bg-muted/30 px-3 py-2"
               >
-                <p className="font-medium">{conflict.message}</p>
+                <p className="font-medium">
+                  {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
+                  {conflict.message}
+                </p>
                 {conflict.localDate && (
                   <p className="text-xs text-muted-foreground">
                     {conflict.localDate}

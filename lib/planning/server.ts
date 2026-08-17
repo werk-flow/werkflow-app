@@ -578,7 +578,7 @@ export async function assessPlanningOccurrences(input: {
   ] = await Promise.all([
     admin
       .from('employee_records')
-      .select('id')
+      .select('id, user_id, first_name, last_name')
       .eq('organization_id', input.orgId)
       .in('id', employeeRecordIds),
     admin
@@ -928,8 +928,50 @@ export async function assessPlanningOccurrences(input: {
   const qualificationFingerprint = await fingerprintSnapshot(
     qualificationSnapshot
   );
+  // Warnings must explain the affected person, not only the date. The name is
+  // attached AFTER fingerprinting so snapshots and fingerprints stay
+  // name-independent (a later rename never invalidates a stored assessment).
+  // Member-linked records carry their names on the profile, so resolution
+  // follows the same precedence as the planning pickers.
+  const conflictUserIds = (recordsResult.data ?? []).flatMap((record) =>
+    record.user_id ? [record.user_id as string] : []
+  );
+  const conflictProfilesResult = conflictUserIds.length
+    ? await admin
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', conflictUserIds)
+        .limit(201)
+    : { data: [], error: null };
+  if (conflictProfilesResult.error) return null;
+  const profileNameByUserId = new Map(
+    (conflictProfilesResult.data ?? []).map((profile) => [
+      profile.id as string,
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim(),
+    ])
+  );
+  const nameByRecordId = new Map(
+    (recordsResult.data ?? []).map((record) => {
+      const profileName = record.user_id
+        ? profileNameByUserId.get(record.user_id as string)
+        : null;
+      const recordName = [record.first_name, record.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return [record.id as string, profileName || recordName || null];
+    })
+  );
+  const withEmployeeName = (conflict: PlanningConflict): PlanningConflict => ({
+    ...conflict,
+    employeeName: conflict.employeeRecordId
+      ? nameByRecordId.get(conflict.employeeRecordId) ?? null
+      : null,
+  });
   return {
-    conflicts: [...capacity.conflicts, ...qualificationConflicts],
+    conflicts: [...capacity.conflicts, ...qualificationConflicts].map(
+      withEmployeeName
+    ),
     assessmentFingerprint: await fingerprintSnapshot({
       capacityFingerprint,
       qualificationFingerprint,
@@ -989,7 +1031,9 @@ export async function loadPlanningCalendarEntries(input: {
     .from('planning_occurrences')
     .select('id, series_id, series_lineage_id, job_id, entry_kind, internal_type, time_kind, status, is_exception, title, description, location, start_at, end_at, start_date, end_date_exclusive, version')
     .eq('organization_id', input.orgId)
-    .eq('status', 'scheduled')
+    // Skipped/cancelled occurrences stay traceably visible in the calendar
+    // (P1-11-F03); overlap/capacity checks keep their own scheduled-only query.
+    .in('status', ['scheduled', 'skipped', 'cancelled'])
     .or(
       `and(start_at.lt.${toInstant.instant.toISOString()},end_at.gt.${fromInstant.instant.toISOString()}),and(start_date.lte.${input.to},end_date_exclusive.gt.${input.from})`
     )

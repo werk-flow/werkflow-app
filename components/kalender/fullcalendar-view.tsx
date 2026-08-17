@@ -20,6 +20,7 @@ import type {
   WorkSession
 } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import type { CalendarView } from './calendar-container';
 import { JobEventPopover } from './job-event-popover';
 import { clearCalendarDragState, startCalendarDragState } from './drag-state';
@@ -433,22 +434,34 @@ export function FullCalendarView({
         return null;
       }
 
+      // Skipped/cancelled occurrences stay traceably visible but muted and
+      // read-only: no drag, no reschedule (P1-11-F03).
+      const isInactiveOccurrence =
+        job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled';
+
       return {
         id: `job-${job.id}`,
         title: '',
         start,
         end,
         allDay: isAllDay,
-        backgroundColor: 'rgb(123 44 191 / 0.15)',
-        borderColor: 'rgb(123 44 191 / 0.4)',
+        backgroundColor: isInactiveOccurrence
+          ? 'rgb(123 44 191 / 0.06)'
+          : 'rgb(123 44 191 / 0.15)',
+        borderColor: isInactiveOccurrence
+          ? 'rgb(123 44 191 / 0.2)'
+          : 'rgb(123 44 191 / 0.4)',
         textColor: 'inherit',
-        editable: true,
+        editable: !isInactiveOccurrence,
         extendedProps: {
           isJobEvent: true,
           jobId: job.id,
           job
         },
-        classNames: ['fc-event-job']
+        classNames: [
+          'fc-event-job',
+          isInactiveOccurrence ? 'fc-event-job-inactive' : ''
+        ].filter(Boolean)
       };
     }).filter((e): e is NonNullable<typeof e> => e !== null);
   }, [jobs]);
@@ -867,6 +880,9 @@ export function FullCalendarView({
 
     if (eventInfo.event.extendedProps.isJobEvent) {
       const job = eventInfo.event.extendedProps.job as CalendarJob;
+      const inactiveStatusLabel = job.occurrenceStatus
+        ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
+        : undefined;
       return (
         <div className="flex items-center gap-1 pl-1 pr-0.5 overflow-hidden w-full text-foreground">
           {job.entryKind === 'internal' ? (
@@ -874,9 +890,17 @@ export function FullCalendarView({
           ) : (
             <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
           )}
-          <span className="font-medium truncate text-xs" title={job.title}>
+          <span
+            className={`font-medium truncate text-xs ${inactiveStatusLabel ? 'line-through opacity-70' : ''}`}
+            title={job.title}
+          >
             {job.title}
           </span>
+          {inactiveStatusLabel && (
+            <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+              {inactiveStatusLabel}
+            </span>
+          )}
           {job.jobNumber && (
             <span className="text-[10px] text-muted-foreground truncate">
               {job.jobNumber}
@@ -1621,6 +1645,15 @@ export function FullCalendarView({
           background-color: rgb(123 44 191 / 0.12) !important;
           border: 1px solid rgb(123 44 191 / 0.35) !important;
           border-left: 3px solid rgb(123 44 191 / 0.7) !important;
+        }
+
+        /* Skipped/cancelled occurrences stay visible but muted (P1-11-F03).
+           The base rules above use !important, so the muted variant must too. */
+        .fullcalendar-wrapper .fc-event-job.fc-event-job-inactive {
+          background-color: rgb(123 44 191 / 0.05) !important;
+          border-color: rgb(123 44 191 / 0.2) !important;
+          border-left-color: rgb(123 44 191 / 0.35) !important;
+          opacity: 0.75;
         }
 
         @keyframes fc-pulse {

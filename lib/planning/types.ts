@@ -72,9 +72,21 @@ export type PlanningConflict = {
   kind: PlanningConflictKind;
   severity: 'warning';
   employeeRecordId: string | null;
+  // Display name resolved server-side AFTER fingerprinting, so warnings can
+  // explain the affected person without name changes altering fingerprints.
+  employeeName?: string | null;
   localDate: string | null;
   message: string;
   details: Record<string, string | number | boolean | null>;
+};
+
+// German labels for non-scheduled occurrence statuses. Skipped/cancelled
+// occurrences stay traceably visible in the calendar instead of disappearing.
+export const PLANNING_OCCURRENCE_STATUS_LABELS: Partial<
+  Record<PlanningOccurrenceStatus, string>
+> = {
+  skipped: 'Ausgelassen',
+  cancelled: 'Abgesagt',
 };
 
 export type CapacityDayContext = {

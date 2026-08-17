@@ -18,6 +18,7 @@ import type {
   EntryChangeRequestMap
 } from '@/lib/time-tracking/types';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import type { OrgRole } from '@/lib/members/actions';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { getRoleLabel } from '@/lib/roles';
@@ -364,8 +365,9 @@ export function WeekView({
                             <button
                               key={job.id}
                               type="button"
-                              draggable
+                              draggable={job.occurrenceStatus !== 'skipped' && job.occurrenceStatus !== 'cancelled'}
                               onDragStart={(e) => {
+                                if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') return;
                                 didDragRef.current = true;
                                 const payload: DragJobPayload = {
                                   jobId: job.id,
@@ -389,13 +391,27 @@ export function WeekView({
                                   position: { x: rect.right + 8, y: rect.top }
                                 });
                               }}
-                              className="week-view-entry w-full rounded-md border border-brand-purple/30 bg-brand-purple/10 p-1 text-left text-xs text-foreground shadow-sm transition-opacity hover:opacity-80"
+                              className={cn(
+                                'week-view-entry w-full rounded-md border border-brand-purple/30 bg-brand-purple/10 p-1 text-left text-xs text-foreground shadow-sm transition-opacity hover:opacity-80',
+                                (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') && 'opacity-60'
+                              )}
                             >
                               <span className="flex items-center gap-1">
                                 <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-                                <span className="truncate text-[10px] font-medium" title={job.title}>
+                                <span
+                                  className={cn(
+                                    'truncate text-[10px] font-medium',
+                                    (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') && 'line-through'
+                                  )}
+                                  title={job.title}
+                                >
                                   {job.title}
                                 </span>
+                                {job.occurrenceStatus && PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus] && (
+                                  <span className="shrink-0 rounded-sm bg-muted px-1 text-[9px] font-medium text-muted-foreground">
+                                    {PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]}
+                                  </span>
+                                )}
                               </span>
                             </button>
                           ))}
@@ -794,9 +810,10 @@ export function WeekView({
                               <button
                                 key={job.id}
                                 type="button"
-                                draggable={isAdminOrManager}
+                                draggable={isAdminOrManager && job.occurrenceStatus !== 'skipped' && job.occurrenceStatus !== 'cancelled'}
                                 onDragStart={(e) => {
                                   if (!isAdminOrManager) return;
+                                  if (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') return;
                                   didDragRef.current = true;
                                   const payload: DragJobPayload = {
                                     jobId: job.id,
@@ -818,12 +835,26 @@ export function WeekView({
                                     position: { x: rect.right + 8, y: rect.top }
                                   });
                                 }}
-                                className="week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80 bg-brand-purple/10 border border-brand-purple/30 text-foreground"
+                                className={cn(
+                                  'week-view-entry text-xs p-1 rounded-md flex items-center gap-1 shadow-sm w-full text-left transition-opacity cursor-pointer hover:opacity-80 bg-brand-purple/10 border border-brand-purple/30 text-foreground',
+                                  (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') && 'opacity-60'
+                                )}
                               >
                                 <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-                                <span className="font-medium truncate text-[10px]" title={job.title}>
+                                <span
+                                  className={cn(
+                                    'font-medium truncate text-[10px]',
+                                    (job.occurrenceStatus === 'skipped' || job.occurrenceStatus === 'cancelled') && 'line-through'
+                                  )}
+                                  title={job.title}
+                                >
                                   {job.title}
                                 </span>
+                                {job.occurrenceStatus && PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus] && (
+                                  <span className="shrink-0 rounded-sm bg-muted px-1 text-[9px] font-medium text-muted-foreground">
+                                    {PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]}
+                                  </span>
+                                )}
                               </button>
                             ))}
                             {extraJobs > 0 && (

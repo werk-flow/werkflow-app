@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -110,6 +111,11 @@ export function JobEventPopover({
 
   const statusInfo = STATUS_LABELS[job.status] ?? STATUS_LABELS.nicht_bearbeitet;
   const priorityInfo = PRIORITY_LABELS[job.priority] ?? PRIORITY_LABELS.mittel;
+  // Skipped/cancelled occurrences stay visible for traceability but are
+  // read-only: the status badge explains the state, editing is not offered.
+  const inactiveStatusLabel = job.occurrenceStatus
+    ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
+    : undefined;
 
   const jobUrl = job.jobNumber
     ? job.projectNumber
@@ -143,9 +149,15 @@ export function JobEventPopover({
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
-        <span className="inline-flex items-center rounded-full bg-brand-purple-soft px-2 py-0.5 text-xs font-medium text-brand-purple-foreground">
-          Geplant
-        </span>
+        {inactiveStatusLabel ? (
+          <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {inactiveStatusLabel}
+          </span>
+        ) : (
+          <span className="inline-flex items-center rounded-full bg-brand-purple-soft px-2 py-0.5 text-xs font-medium text-brand-purple-foreground">
+            Geplant
+          </span>
+        )}
         {job.seriesId && (
           <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             <Repeat2 className="size-3" /> Serie
@@ -222,7 +234,7 @@ export function JobEventPopover({
       </div>
 
       <div className="mt-3 grid gap-2">
-      {canEditPlanning && job.occurrenceId && (
+      {canEditPlanning && job.occurrenceId && !inactiveStatusLabel && (
         <Button variant="default" size="sm" onClick={() => setEditOpen(true)}>
           Termin bearbeiten
         </Button>

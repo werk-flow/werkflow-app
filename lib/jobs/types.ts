@@ -192,6 +192,8 @@ export type CalendarJob = {
   endDateExclusive?: string | null;
   isException?: boolean;
   version?: number;
+  /** Planning occurrence status; skipped/cancelled render muted + read-only. */
+  occurrenceStatus?: 'scheduled' | 'skipped' | 'cancelled';
   assignedEmployeeRecordIds?: string[];
   jobNumber: string | null;
   title: string;

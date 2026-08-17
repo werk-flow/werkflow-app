@@ -11,6 +11,7 @@ export function toCalendarJob(entry: PlanningCalendarEntry): CalendarJob {
     entryKind: entry.entryKind,
     internalType: entry.internalType,
     timeKind: entry.timeKind,
+    occurrenceStatus: entry.status,
     startAt: entry.startAt,
     endAt: entry.endAt,
     endDateExclusive: entry.endDateExclusive,

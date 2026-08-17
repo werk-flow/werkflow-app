@@ -5,6 +5,7 @@ import { Briefcase, Building2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBlockDrag } from './use-block-drag';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 
 export interface JobMoveResizeResult {
   jobId: string;
@@ -71,11 +72,15 @@ export function JobBlock({
   const compact = layoutHeight <= 32;
   const canShowMetadata = layoutHeight >= 72 && width >= 150;
   const addressLine = job.location ?? job.clientAddress;
+  // Skipped/cancelled occurrences stay visible but muted and immovable.
+  const inactiveStatusLabel = job.occurrenceStatus
+    ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
+    : undefined;
 
   const canDrag = useMemo(() => {
-    if (!onMoveResize) return false;
+    if (!onMoveResize || inactiveStatusLabel) return false;
     return !!job.plannedTime && !!job.estimatedDurationMinutes;
-  }, [onMoveResize, job.plannedTime, job.estimatedDurationMinutes]);
+  }, [onMoveResize, inactiveStatusLabel, job.plannedTime, job.estimatedDurationMinutes]);
 
   const handleDragComplete = useCallback(
     (newLeft: number, newWidth: number) => {
@@ -151,6 +156,7 @@ export function JobBlock({
                 'border-l-[3px] border-l-brand-purple/70',
                 'hover:shadow-md hover:z-20 hover:bg-brand-purple/25',
               ],
+          inactiveStatusLabel && 'opacity-60',
           'focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1'
         )}
         style={{
@@ -199,9 +205,20 @@ export function JobBlock({
             <div className="flex h-full w-full flex-col justify-center gap-1.5 overflow-hidden px-2 py-1.5">
               <div className="flex min-w-0 items-center gap-1">
                 <Briefcase className="h-3 w-3 shrink-0 text-brand-purple" />
-                <span className="line-clamp-2 break-words font-medium" title={job.title}>
+                <span
+                  className={cn(
+                    'line-clamp-2 break-words font-medium',
+                    inactiveStatusLabel && 'line-through'
+                  )}
+                  title={job.title}
+                >
                   {job.title}
                 </span>
+                {inactiveStatusLabel && (
+                  <span className="shrink-0 rounded-sm bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+                    {inactiveStatusLabel}
+                  </span>
+                )}
               </div>
               {job.clientName && (
                 <div className="flex min-w-0 items-center gap-1 text-[10px]/[1.3] text-muted-foreground">
@@ -220,7 +237,12 @@ export function JobBlock({
             <div className="flex h-full w-full items-center gap-1 overflow-hidden px-2">
               <Briefcase className={cn('shrink-0 text-brand-purple', compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
               {displayWidth > 48 && (
-                <span className="font-medium truncate" title={job.title}>{job.title}</span>
+                <span
+                  className={cn('font-medium truncate', inactiveStatusLabel && 'line-through')}
+                  title={job.title}
+                >
+                  {job.title}
+                </span>
               )}
             </div>
           )}

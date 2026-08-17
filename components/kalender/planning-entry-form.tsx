@@ -393,7 +393,7 @@ export function PlanningEntryForm({
       {conflicts.length > 0 && (
         <div data-planning-warning className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3" role="alert">
           <div><p className="font-medium">Planungshinweise prüfen</p><p className="text-xs text-muted-foreground">Die Hinweise blockieren berechtigte Ausnahmen nicht. Eine bewusste Abweichung benötigt einen Grund.</p></div>
-          <ul className="space-y-1.5 text-sm">{conflicts.map((conflict, index) => <li key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`} className="flex gap-2"><span aria-hidden="true">•</span><span>{conflict.message}{conflict.localDate ? ` (${conflict.localDate})` : ''}</span></li>)}</ul>
+          <ul className="space-y-1.5 text-sm">{conflicts.map((conflict, index) => <li key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`} className="flex gap-2"><span aria-hidden="true">•</span><span>{conflict.employeeName ? `${conflict.employeeName}: ` : ''}{conflict.message}{conflict.localDate ? ` (${conflict.localDate})` : ''}</span></li>)}</ul>
           <div className="space-y-2"><Label htmlFor="planning-override">Begründung der Abweichung</Label><Textarea id="planning-override" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Warum ist diese Planung trotzdem sinnvoll?" /></div>
         </div>
       )}

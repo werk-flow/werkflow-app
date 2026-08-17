@@ -2514,7 +2514,13 @@ export type PlanningEntryStepOptions = {
   durationDays?: number;
   employeeNames?: string[];
   teamNames?: string[];
-  recurrence?: { frequency?: 'daily' | 'weekly'; count: number };
+  recurrence?: {
+    frequency?: 'daily' | 'weekly' | 'monthly';
+    count: number;
+    // German weekday labels (Mo/Di/…) that must be pressed for weekly series;
+    // the form preselects the start date's weekday automatically.
+    weekdayLabels?: string[];
+  };
   overrideReason?: string;
 };
 
@@ -2640,12 +2646,33 @@ export async function createPlannedCalendarEntry(
 
   if (options.recurrence) {
     await dialog.getByText('Wiederholen', { exact: true }).click();
-    if (options.recurrence.frequency === 'daily') {
+    if (options.recurrence.frequency) {
+      const frequencyLabels = {
+        daily: /T.glich/,
+        weekly: /W.chentlich/,
+        monthly: /Monatlich/,
+      } as const;
       const recurrenceBlock = dialog
         .getByText('Rhythmus', { exact: true })
         .locator('..');
       await recurrenceBlock.getByRole('combobox').click();
-      await page.getByRole('option', { name: /T.glich/ }).click();
+      await page
+        .getByRole('option', { name: frequencyLabels[options.recurrence.frequency] })
+        .click();
+    }
+    // Scope weekday toggles to the Wochentage row so short labels (Mo/Di/…)
+    // can never match another dialog button (e.g. a team named alike).
+    const weekdayRow = dialog
+      .getByText('Wochentage', { exact: true })
+      .locator('..');
+    for (const weekdayLabel of options.recurrence.weekdayLabels ?? []) {
+      const weekdayButton = weekdayRow.getByRole('button', {
+        name: weekdayLabel,
+        exact: true,
+      });
+      if ((await weekdayButton.getAttribute('aria-pressed')) !== 'true') {
+        await weekdayButton.click();
+      }
     }
     await dialog
       .locator('#planning-count')
@@ -2757,7 +2784,8 @@ export async function setPlannedCalendarOccurrenceStatus(
     .filter({ has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }) });
   await dialog
     .getByRole('button', {
-      name: options.status === 'skip' ? 'Auslassen' : 'Absagen',
+      // The cancel action renders as "Termin absagen" in the dialog footer.
+      name: options.status === 'skip' ? 'Auslassen' : 'Termin absagen',
       exact: true,
     })
     .click();
