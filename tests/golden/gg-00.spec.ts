@@ -89,7 +89,14 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     world,
   }) => {
     // Two users are signed in simultaneously in separate browser contexts.
-    await bueroPage.goto('/kunden');
+    await Promise.all([
+      bueroPage.waitForEvent('console', {
+        predicate: (message) =>
+          message.text() === `[Realtime] subscribed to org-${world.orgId}`,
+        timeout: 30_000,
+      }),
+      bueroPage.goto('/kunden'),
+    ]);
     await expect(visibleText(bueroPage, `Testkunde ${world.runId}`)).toBeVisible();
 
     await createCustomer(adminPage, `Realtime Kunde ${world.runId}`);

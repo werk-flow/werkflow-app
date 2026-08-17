@@ -701,8 +701,8 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await createOwnManualTimeEntry(adminPage, {
       memberName: employeeName,
       dateDigits: toDatePickerDigits(today),
-      clockInDigits: '0010',
-      clockOutDigits: '0210',
+      clockInDigits: '0300',
+      clockOutDigits: '0500',
     });
     expect(
       (await getLatestManualTimeEntryState(world.orgId, world.users.employee.id))
@@ -717,7 +717,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const overtime = employeePage
       .getByText('Überstunden heute', { exact: true })
       .locator('..');
-    await expect(overtime).not.toContainText('0 Min.');
+    await expect(overtime).not.toHaveText(/Überstunden heute\s*0 Min\.\s*$/);
     const mondayBasedDayIndex =
       (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
     const mondayIso = shiftIsoDate(today, -mondayBasedDayIndex);
@@ -778,7 +778,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await removeClosureDayViaSettings(adminPage, toGermanDate(today));
     }
 
-    await deleteWorkBlockViaCalendar(adminPage, /00:10.*02:10/);
+    await deleteWorkBlockViaCalendar(adminPage, /03:00.*05:00/);
     await openMemberDetailFromList(adminPage, employeeName);
     await deleteWorkScheduleViaDetail(adminPage, today, scheduleNote);
     const cleanedContext = await getTargetContextForRecord(

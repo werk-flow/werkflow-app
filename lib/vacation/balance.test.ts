@@ -13,6 +13,7 @@ import {
   countVacationDays,
   countVacationDaysByYear,
   formatVacationDays,
+  isValidIsoDate,
   listIsoDatesInRange,
   MAX_VACATION_RANGE_DAYS,
   resolveVacationEntitlementForYear,
@@ -151,6 +152,19 @@ describe('countCalendarDaysInRange', () => {
     expect(
       countCalendarDaysInRange('2026-01-01', '2027-01-01')
     ).toBeLessThanOrEqual(MAX_VACATION_RANGE_DAYS);
+  });
+});
+
+describe('isValidIsoDate', () => {
+  test('rejects rolled calendar days and accepts leap-day only in leap years', () => {
+    expect(isValidIsoDate('not-a-date')).toBe(false);
+    expect(isValidIsoDate('2026-00-10')).toBe(false);
+    expect(isValidIsoDate('2026-13-01')).toBe(false);
+    expect(isValidIsoDate('2026-01-00')).toBe(false);
+    expect(isValidIsoDate('2026-02-30')).toBe(false);
+    expect(isValidIsoDate('2026-02-29')).toBe(false);
+    expect(isValidIsoDate('2028-02-29')).toBe(true);
+    expect(isValidIsoDate('2026-03-15')).toBe(true);
   });
 });
 

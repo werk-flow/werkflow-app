@@ -1474,7 +1474,6 @@ export function FullCalendarView({
           padding: 0.125rem 0.4rem;
           border-radius: 0.375rem;
           font-size: 0.7rem;
-          border: none !important;
           cursor: pointer;
         }
 

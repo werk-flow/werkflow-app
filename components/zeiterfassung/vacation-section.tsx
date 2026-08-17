@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   createVacationRequest,
   getOwnVacationOverview,
+  previewVacationRequest,
   withdrawVacationRequest,
   type OwnVacationOverview,
   type VacationRequestListItem,
@@ -52,6 +53,14 @@ const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du darfst diesen Antrag nicht ändern.',
   insert_failed: 'Der Antrag konnte nicht gespeichert werden.',
   unexpected_error: 'Der Antrag konnte nicht gespeichert werden.',
+};
+
+const PREVIEW_ERROR_MESSAGES: Record<string, string> = {
+  no_employee_record: REQUEST_ERROR_MESSAGES.no_employee_record,
+  not_authenticated: REQUEST_ERROR_MESSAGES.not_authenticated,
+  not_a_member: REQUEST_ERROR_MESSAGES.not_a_member,
+  load_failed: 'Die Urlaubstage konnten nicht berechnet werden.',
+  unexpected_error: 'Die Urlaubstage konnten nicht berechnet werden.',
 };
 
 const STATUS_BADGE_CLASSES: Record<VacationRequestStatus, string> = {
@@ -333,8 +342,54 @@ function VacationRequestDialog({
   const [comment, setComment] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewDays, setPreviewDays] = useState<number | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const previewGenerationRef = useRef(0);
 
   const isSingleDay = startDate === endDate;
+  const dayPortion = halfDay && isSingleDay ? 'half_day' : 'full';
+  const rangePreviewError =
+    startDate && endDate && endDate < startDate
+      ? REQUEST_ERROR_MESSAGES.invalid_range
+      : null;
+
+  const invalidatePreview = () => {
+    previewGenerationRef.current += 1;
+    setPreviewDays(null);
+    setIsPreviewing(false);
+    setPreviewError(null);
+  };
+
+  useEffect(() => {
+    if (!startDate || !endDate || endDate < startDate) return;
+    const generation = ++previewGenerationRef.current;
+    const timer = setTimeout(() => {
+      setIsPreviewing(true);
+      setPreviewError(null);
+      void previewVacationRequest({ startDate, endDate, dayPortion })
+        .then((result) => {
+          if (generation !== previewGenerationRef.current) return;
+          if (result.success) {
+            setPreviewDays(result.totalDays);
+          } else {
+            setPreviewError(result.error);
+          }
+        })
+        .catch(() => {
+          if (generation === previewGenerationRef.current) {
+            setPreviewError('unexpected_error');
+          }
+        })
+        .finally(() => {
+          if (generation === previewGenerationRef.current) {
+            setIsPreviewing(false);
+          }
+        });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [dayPortion, endDate, previewRefreshKey, startDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,7 +409,7 @@ function VacationRequestDialog({
     const result = await createVacationRequest({
       startDate,
       endDate,
-      dayPortion: halfDay && isSingleDay ? 'half_day' : 'full',
+      dayPortion,
       comment: comment.trim() || undefined,
     });
     setIsSaving(false);
@@ -375,8 +430,9 @@ function VacationRequestDialog({
         <DialogHeader>
           <DialogTitle>Urlaub beantragen</DialogTitle>
           <DialogDescription>
-            Der Antrag wird zur Freigabe eingereicht. Wochenenden, Feiertage und
-            freie Tage laut Arbeitszeitmodell kosten keine Urlaubstage.
+            Der Antrag wird zur Freigabe eingereicht. Wochenenden, Feiertage,
+            Betriebsruhe und freie Tage laut Arbeitszeitmodell kosten keine
+            Urlaubstage.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
@@ -392,6 +448,7 @@ function VacationRequestDialog({
                   }
                   onChange={(date) => {
                     const next = date ? toLocalDateString(date) : '';
+                    invalidatePreview();
                     setStartDate(next);
                     if (next && (!endDate || endDate < next)) setEndDate(next);
                   }}
@@ -404,9 +461,10 @@ function VacationRequestDialog({
                   id="vacation-end-date"
                   ariaLabel="Bis"
                   value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
-                  onChange={(date) =>
-                    setEndDate(date ? toLocalDateString(date) : '')
-                  }
+                  onChange={(date) => {
+                    invalidatePreview();
+                    setEndDate(date ? toLocalDateString(date) : '');
+                  }}
                   disabled={isSaving}
                 />
               </div>
@@ -416,7 +474,10 @@ function VacationRequestDialog({
               <Checkbox
                 id="vacation-half-day"
                 checked={halfDay && isSingleDay}
-                onCheckedChange={(checked) => setHalfDay(checked === true)}
+                onCheckedChange={(checked) => {
+                  invalidatePreview();
+                  setHalfDay(checked === true);
+                }}
                 disabled={isSaving || !isSingleDay}
               />
               <Label
@@ -429,6 +490,43 @@ function VacationRequestDialog({
                 Halbtägig (0,5 Tage)
                 {!isSingleDay && ' – nur bei einem einzelnen Tag'}
               </Label>
+            </div>
+
+            <div
+              aria-live="polite"
+              className="rounded-md border bg-muted/30 px-3 py-2 text-sm"
+            >
+              {isPreviewing ? (
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Urlaubstage werden berechnet...
+                </span>
+              ) : previewDays !== null ? (
+                <span data-testid="vacation-days-preview">
+                  Berechnete Urlaubstage:{' '}
+                  <strong>{formatVacationDays(previewDays)}</strong>
+                </span>
+              ) : rangePreviewError ? (
+                <span className="text-destructive">{rangePreviewError}</span>
+              ) : previewError ? (
+                <span className="flex items-center justify-between gap-3 text-destructive">
+                  {PREVIEW_ERROR_MESSAGES[previewError] ??
+                    'Die Urlaubstage konnten nicht berechnet werden.'}
+                  {(previewError === 'load_failed' ||
+                    previewError === 'unexpected_error') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPreviewRefreshKey((value) => value + 1)
+                      }
+                    >
+                      Erneut berechnen
+                    </Button>
+                  )}
+                </span>
+              ) : null}
             </div>
 
             <div className="grid gap-2">
@@ -466,7 +564,16 @@ function VacationRequestDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !startDate || !endDate}>
+            <Button
+              type="submit"
+              disabled={
+                isSaving ||
+                isPreviewing ||
+                Boolean(rangePreviewError) ||
+                !startDate ||
+                !endDate
+              }
+            >
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird eingereicht...' : 'Antrag einreichen'}
             </Button>

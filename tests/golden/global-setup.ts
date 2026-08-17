@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium, expect, type FullConfig } from '@playwright/test';
 
 import { loadEnvLocal } from './support/env';
 import { createTestWorld, destroyLeftoverTestWorlds } from './support/seed';
@@ -15,6 +15,7 @@ async function loginAndSaveState(
   baseURL: string,
   email: string,
   password: string,
+  expectedOrgId: string,
   statePath: string
 ): Promise<void> {
   const browser = await chromium.launch();
@@ -40,6 +41,13 @@ async function loginAndSaveState(
       throw new Error(`Login did not reach the dashboard for ${email}`);
     }
 
+    await expect
+      .poll(
+        async () =>
+          (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value,
+        { timeout: 10_000 }
+      )
+      .toBe(expectedOrgId);
     await context.storageState({ path: statePath });
     await context.close();
   } finally {
@@ -73,24 +81,28 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     baseURL,
     world.users.admin.email,
     world.users.admin.password,
+    world.orgId,
     storageStatePath('admin')
   );
   await loginAndSaveState(
     baseURL,
     world.users.buero.email,
     world.users.buero.password,
+    world.orgId,
     storageStatePath('buero')
   );
   await loginAndSaveState(
     baseURL,
     world.users.employee.email,
     world.users.employee.password,
+    world.orgId,
     storageStatePath('employee')
   );
   await loginAndSaveState(
     baseURL,
     world.outsider.admin.email,
     world.outsider.admin.password,
+    world.outsider.orgId,
     storageStatePath('outsider')
   );
 

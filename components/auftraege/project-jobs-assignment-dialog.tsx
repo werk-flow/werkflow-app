@@ -19,6 +19,10 @@ interface ProjectJobsAssignmentDialogProps {
   jobs: Job[];
   title?: string;
   isSaving?: boolean;
+  isLoading?: boolean;
+  loadError?: string | null;
+  saveError?: string | null;
+  onRetry?: () => void;
   onSave: (jobIds: string[]) => Promise<void> | void;
 }
 
@@ -28,6 +32,10 @@ export function ProjectJobsAssignmentDialog({
   jobs,
   title = 'Aufträge zuweisen',
   isSaving = false,
+  isLoading = false,
+  loadError,
+  saveError,
+  onRetry,
   onSave,
 }: ProjectJobsAssignmentDialogProps) {
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
@@ -37,6 +45,14 @@ export function ProjectJobsAssignmentDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the dialog should always start from a clean job selection
     setSelectedJobIds([]);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- successful partial assignments disappear from the retry selection
+    setSelectedJobIds((current) =>
+      current.filter((jobId) => jobs.some((job) => job.id === jobId))
+    );
+  }, [jobs, open]);
 
   const handleSave = async () => {
     await onSave(selectedJobIds);
@@ -57,9 +73,32 @@ export function ProjectJobsAssignmentDialog({
             disabled={isSaving}
           />
 
-          {jobs.length === 0 && (
+          {loadError ? (
+            <div className="flex items-center justify-between gap-3">
+              <p role="alert" className="text-sm text-destructive">
+                {loadError}
+              </p>
+              {onRetry && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRetry}
+                  disabled={isLoading}
+                >
+                  Erneut laden
+                </Button>
+              )}
+            </div>
+          ) : jobs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Es sind keine verfügbaren Aufträge ohne Projekt vorhanden.
+            </p>
+          ) : null}
+
+          {saveError && (
+            <p role="alert" className="text-sm text-destructive">
+              {saveError}
             </p>
           )}
 
@@ -73,9 +112,16 @@ export function ProjectJobsAssignmentDialog({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={isSaving || selectedJobIds.length === 0}
+              disabled={
+                isSaving ||
+                isLoading ||
+                Boolean(loadError) ||
+                selectedJobIds.length === 0
+              }
             >
-              {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {(isSaving || isLoading) && (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              )}
               Speichern
             </Button>
           </div>

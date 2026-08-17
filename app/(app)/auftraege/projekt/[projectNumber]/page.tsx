@@ -129,7 +129,6 @@ async function ProjectDetailData({
         project={project}
         client={client}
         jobs={jobs}
-        availableJobs={[]}
         derivedStatus={derivedStatus}
         clients={clients}
         members={[]}

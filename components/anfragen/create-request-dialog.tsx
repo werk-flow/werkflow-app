@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Plus } from 'lucide-react';
 
@@ -77,6 +77,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
   const [summary, setSummary] = useState('');
   const [details, setDetails] = useState('');
   const [requestNumber, setRequestNumber] = useState('');
+  const requestNumberEditedRef = useRef(false);
   const [clientId, setClientId] = useState('');
   const [siteId, setSiteId] = useState('');
   const [contactId, setContactId] = useState('');
@@ -103,7 +104,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
     let isCurrent = true;
     getNextRequestNumber()
       .then((result) => {
-        if (isCurrent && result.success) {
+        if (isCurrent && result.success && !requestNumberEditedRef.current) {
           setRequestNumber((current) => current || result.requestNumber);
         }
       })
@@ -114,6 +115,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
   }, [open]);
 
   const resetForm = () => {
+    requestNumberEditedRef.current = false;
     setSummary('');
     setDetails('');
     setRequestNumber('');
@@ -419,7 +421,10 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                   id="request-number"
                   placeholder="ANF-2026-001"
                   value={requestNumber}
-                  onChange={(e) => setRequestNumber(e.target.value)}
+                  onChange={(event) => {
+                    requestNumberEditedRef.current = true;
+                    setRequestNumber(event.target.value);
+                  }}
                   disabled={isLoading}
                 />
               </div>

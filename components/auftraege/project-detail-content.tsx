@@ -171,7 +171,6 @@ interface ProjectDetailContentProps {
   project: Project;
   client: Client | null;
   jobs: Job[];
-  availableJobs?: Job[];
   derivedStatus: DerivedProjectStatus;
   clients: Client[];
   members: OrgMemberOption[];
@@ -188,7 +187,6 @@ interface ProjectDetailContentProps {
 export function ProjectDetailContent({
   project,
   jobs,
-  availableJobs = [],
   clients,
   members,
   isAdminOrManager,
@@ -211,8 +209,11 @@ export function ProjectDetailContent({
   const [isAssigningJobs, startAssignJobsTransition] = useTransition();
   const [dialogClients, setDialogClients] = useState(clients);
   const [dialogMembers, setDialogMembers] = useState(members);
-  const [dialogAvailableJobs, setDialogAvailableJobs] = useState(availableJobs);
+  const [dialogAvailableJobs, setDialogAvailableJobs] = useState<Job[]>([]);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
+  const [dialogOptionsError, setDialogOptionsError] = useState<string | null>(null);
+  const [assignJobsError, setAssignJobsError] = useState<string | null>(null);
+  const [dialogOptionsRefreshKey, setDialogOptionsRefreshKey] = useState(0);
   const dialogOptionsRequestInFlightRef = useRef(false);
   const [liveProject, setLiveProject] = useState(project);
   const [liveJobs, setLiveJobs] = useState(jobs);
@@ -239,10 +240,6 @@ export function ProjectDetailContent({
   useEffect(() => {
     setDialogMembers(members);
   }, [members]);
-
-  useEffect(() => {
-    setDialogAvailableJobs(availableJobs);
-  }, [availableJobs]);
 
   useEffect(() => {
     return () => {
@@ -294,12 +291,22 @@ export function ProjectDetailContent({
     let cancelled = false;
     dialogOptionsRequestInFlightRef.current = true;
     setIsLoadingDialogOptions(true);
+    setDialogOptionsError(null);
     getAuftraegeDialogOptions()
       .then((result) => {
-        if (cancelled || !result.success) return;
+        if (cancelled) return;
+        if (!result.success) {
+          setDialogOptionsError('Die verfügbaren Aufträge konnten nicht geladen werden.');
+          return;
+        }
         setDialogClients(result.clients);
         setDialogMembers(result.members);
         setDialogAvailableJobs(result.jobs);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDialogOptionsError('Die verfügbaren Aufträge konnten nicht geladen werden.');
+        }
       })
       .finally(() => {
         dialogOptionsRequestInFlightRef.current = false;
@@ -313,6 +320,7 @@ export function ProjectDetailContent({
     dialogAvailableJobs.length,
     dialogClients.length,
     dialogMembers.length,
+    dialogOptionsRefreshKey,
     isAdminOrManager,
     showAssignJobsDialog,
     showClientDialog,
@@ -513,14 +521,20 @@ export function ProjectDetailContent({
 
   const handleAssignJobsSave = async (jobIds: string[]) => {
     startAssignJobsTransition(async () => {
-      await Promise.allSettled(
+      setAssignJobsError(null);
+      const results = await Promise.allSettled(
         jobIds.map((jobId) => updateJob(jobId, { projectId: project.id }))
       );
-      setShowAssignJobsDialog(false);
+      const assignedJobIds = jobIds.filter((_, index) => {
+        const result = results[index];
+        return result.status === 'fulfilled' && result.value.success;
+      });
       setLiveJobs((prev) => {
         const knownIds = new Set(prev.map((job) => job.id));
         const promotedJobs = dialogAvailableJobs
-          .filter((job) => jobIds.includes(job.id) && !knownIds.has(job.id))
+          .filter(
+            (job) => assignedJobIds.includes(job.id) && !knownIds.has(job.id)
+          )
           .map((job) => ({
             ...job,
             projectId: project.id,
@@ -529,6 +543,18 @@ export function ProjectDetailContent({
 
         return [...prev, ...promotedJobs];
       });
+      if (assignedJobIds.length !== jobIds.length) {
+        setDialogAvailableJobs((previous) =>
+          previous.filter((job) => !assignedJobIds.includes(job.id))
+        );
+        setAssignJobsError(
+          'Einige Aufträge konnten nicht hinzugefügt werden. Bitte versuche es erneut.'
+        );
+        return;
+      }
+
+      setShowAssignJobsDialog(false);
+      setDialogAvailableJobs([]);
     });
   };
 
@@ -1058,10 +1084,17 @@ export function ProjectDetailContent({
 
       <ProjectJobsAssignmentDialog
         open={showAssignJobsDialog}
-        onOpenChange={setShowAssignJobsDialog}
+        onOpenChange={(open) => {
+          setShowAssignJobsDialog(open);
+          if (!open) setAssignJobsError(null);
+        }}
         jobs={assignableJobs}
         title="Aufträge zum Projekt hinzufügen"
-        isSaving={isAssigningJobs || isLoadingDialogOptions}
+        isSaving={isAssigningJobs}
+        isLoading={isLoadingDialogOptions}
+        loadError={dialogOptionsError}
+        saveError={assignJobsError}
+        onRetry={() => setDialogOptionsRefreshKey((value) => value + 1)}
         onSave={handleAssignJobsSave}
       />
 

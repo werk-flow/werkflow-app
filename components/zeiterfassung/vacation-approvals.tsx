@@ -263,6 +263,12 @@ export function VacationApprovals() {
                     Notiz: {item.request.comment}
                   </p>
                 )}
+                {item.hasAbsenceOverlap && (
+                  <p className="mt-1 text-xs font-medium text-yellow-700 dark:text-yellow-300">
+                    Hinweis: Für diese Person liegt im beantragten Zeitraum eine
+                    weitere Abwesenheit vor.
+                  </p>
+                )}
                 {item.assignedJobsInRange.length > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     Im Zeitraum eingeplant:{' '}

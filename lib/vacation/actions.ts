@@ -18,6 +18,7 @@ import {
   countCalendarDaysInRange,
   countVacationDays,
   countVacationDaysByYear,
+  isValidIsoDate,
   MAX_VACATION_RANGE_DAYS,
   resolveVacationEntitlementForYear,
   type VacationBalance,
@@ -34,7 +35,29 @@ import {
   type VacationRequestRow,
 } from './types';
 
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+type VacationRequestInput = {
+  startDate: string;
+  endDate: string;
+  dayPortion: VacationDayPortion;
+  comment?: string;
+};
+
+function validateVacationRequestInput(input: VacationRequestInput): string | null {
+  if (!isValidIsoDate(input.startDate) || !isValidIsoDate(input.endDate)) {
+    return 'invalid_dates';
+  }
+  if (input.endDate < input.startDate) return 'invalid_range';
+  if (countCalendarDaysInRange(input.startDate, input.endDate) > MAX_VACATION_RANGE_DAYS) {
+    return 'range_too_long';
+  }
+  if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
+    return 'invalid_portion';
+  }
+  if (input.dayPortion === 'half_day' && input.startDate !== input.endDate) {
+    return 'half_day_needs_single_day';
+  }
+  return null;
+}
 
 type ActionContext = {
   userId: string;
@@ -162,38 +185,51 @@ export type CreateVacationRequestResult =
   | { success: true; request: VacationRequest }
   | { success: false; error: string };
 
-export async function createVacationRequest(input: {
-  startDate: string;
-  endDate: string;
-  dayPortion: VacationDayPortion;
-  comment?: string;
-}): Promise<CreateVacationRequestResult> {
+export type VacationRequestPreviewResult =
+  | { success: true; totalDays: number }
+  | { success: false; error: string };
+
+export async function previewVacationRequest(
+  input: VacationRequestInput
+): Promise<VacationRequestPreviewResult> {
+  try {
+    const auth = await resolveActionContext();
+    if (!auth.success) return auth;
+    const validationError = validateVacationRequestInput(input);
+    if (validationError) return { success: false, error: validationError };
+
+    const admin = createSupabaseAdminClient();
+    const { data: record, error } = await admin
+      .from('employee_records')
+      .select('id')
+      .eq('organization_id', auth.context.orgId)
+      .eq('user_id', auth.context.userId)
+      .maybeSingle();
+    if (error) {
+      console.error('Error fetching employee record for vacation preview:', error);
+      return { success: false, error: 'load_failed' };
+    }
+    if (!record) return { success: false, error: 'no_employee_record' };
+
+    const context = await loadVacationCountingContext(auth.context.orgId, record.id);
+    if (!context) return { success: false, error: 'load_failed' };
+    return { success: true, totalDays: countVacationDays(input, context) };
+  } catch (error) {
+    console.error('Unexpected error in previewVacationRequest:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+export async function createVacationRequest(
+  input: VacationRequestInput
+): Promise<CreateVacationRequestResult> {
   try {
     const auth = await resolveActionContext();
     if (!auth.success) return auth;
     const { userId, orgId } = auth.context;
 
-    if (
-      !ISO_DATE_PATTERN.test(input.startDate) ||
-      !ISO_DATE_PATTERN.test(input.endDate)
-    ) {
-      return { success: false, error: 'invalid_dates' };
-    }
-    if (input.endDate < input.startDate) {
-      return { success: false, error: 'invalid_range' };
-    }
-    if (
-      countCalendarDaysInRange(input.startDate, input.endDate) >
-      MAX_VACATION_RANGE_DAYS
-    ) {
-      return { success: false, error: 'range_too_long' };
-    }
-    if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
-      return { success: false, error: 'invalid_portion' };
-    }
-    if (input.dayPortion === 'half_day' && input.startDate !== input.endDate) {
-      return { success: false, error: 'half_day_needs_single_day' };
-    }
+    const validationError = validateVacationRequestInput(input);
+    if (validationError) return { success: false, error: validationError };
 
     const admin = createSupabaseAdminClient();
     const { data: record, error: recordError } = await admin
@@ -700,11 +736,8 @@ export type ApproverVacationRequest = {
   personName: string;
   totalDays: number;
   balance: VacationBalance | null;
-  /** Conflict signals — visible context, never blocking. */
-  overlappingApprovedVacation: Array<{
-    startDate: string;
-    endDate: string;
-  }>;
+  /** Privacy-safe conflict signal — visible context, never blocking. */
+  hasAbsenceOverlap: boolean;
   assignedJobsInRange: Array<{ title: string; plannedDate: string }>;
   hasEntitlement: boolean;
 };
@@ -740,6 +773,17 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
     const maps = await loadRequestTargetMaps(admin, orgId, recordIds);
     if (!maps) return { success: false, error: 'fetch_failed' };
     const { recordById, roleByUserId, profileByUserId } = maps;
+
+    const { data: activeAbsenceRows, error: absenceError } = await admin
+      .from('sickness_reports')
+      .select('employee_record_id, start_date, end_date')
+      .eq('organization_id', orgId)
+      .eq('status', 'reported')
+      .in('employee_record_id', recordIds);
+    if (absenceError) {
+      console.error('Error fetching active absences for vacation approvals:', absenceError);
+      return { success: false, error: 'fetch_failed' };
+    }
 
     // One batched assignment lookup instead of one query per pending row.
     const pendingUserIds = [
@@ -814,19 +858,12 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
         ? computeVacationBalance(year, requests, context)
         : null;
 
-      // Conflict signals: the person's other approved vacation and their
-      // assigned jobs planned inside the requested range.
-      const overlappingApprovedVacation = (requests ?? [])
-        .filter(
-          (candidate) =>
-            candidate.status === 'approved' &&
-            candidate.startDate <= row.end_date &&
-            candidate.endDate >= row.start_date
-        )
-        .map((candidate) => ({
-          startDate: candidate.startDate,
-          endDate: candidate.endDate,
-        }));
+      const hasAbsenceOverlap = (activeAbsenceRows ?? []).some(
+        (absence) =>
+          absence.employee_record_id === record.id &&
+          absence.start_date <= row.end_date &&
+          (absence.end_date === null || absence.end_date >= row.start_date)
+      );
 
       const jobIds = jobIdsByUserId.get(record.user_id) ?? [];
       let assignedJobsInRange: Array<{ title: string; plannedDate: string }> =
@@ -862,7 +899,7 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
           context
         ),
         balance,
-        overlappingApprovedVacation,
+        hasAbsenceOverlap,
         assignedJobsInRange,
         hasEntitlement:
           resolveVacationEntitlementForYear(context.conditions, year) !== null,
@@ -949,7 +986,7 @@ export async function getDecidableApprovedVacationRequests(): Promise<ApproverVa
         ),
         totalDays: sumApprovedDays(request),
         balance: null,
-        overlappingApprovedVacation: [],
+        hasAbsenceOverlap: false,
         assignedJobsInRange: [],
         hasEntitlement: true,
       });

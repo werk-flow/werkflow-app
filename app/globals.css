@@ -265,6 +265,10 @@ body.fc-parking .fc-event-dragging {
   pointer-events: none;
 }
 
+.fc .fc-daygrid-event.fc-vacation-approved {
+  border: none !important;
+}
+
 .fc .fc-vacation-pending {
   background-color: color-mix(in oklab, var(--brand-purple) 8%, transparent);
   /* !important: the daygrid base rule strips borders with !important; the
