@@ -48,3 +48,6 @@ tests/golden/.report/
 # Wave-audit test artifacts (world/auth artifacts are shared under tests/golden/.artifacts)
 tests/audit/.results/
 tests/audit/.report/
+
+# Agent working logs (review transcripts, server logs) — never Playwright-owned
+.agent-logs/

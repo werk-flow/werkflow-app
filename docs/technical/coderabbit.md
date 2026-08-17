@@ -191,7 +191,7 @@ bun run lint
 bun run build
 ```
 
-Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop.
+Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure if you should run it again, it is generally speaking better to let it run once more than not to. However since we currently are still on the free plan, we are limited to 3 CLI reviews per hour so beware of that when running multiple subsequent reviews during a specific task.
 
 ## Plans, Free Use, And Limits
 

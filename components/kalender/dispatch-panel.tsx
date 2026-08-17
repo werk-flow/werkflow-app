@@ -44,6 +44,7 @@ import {
   getDispatchOverview,
   previewBatchReschedule,
   resolveDispatchChallenge,
+  type BatchPreviewItem,
 } from '@/lib/dispatch/actions';
 import {
   DISPATCH_RECIPIENT_STATE_LABELS,
@@ -83,7 +84,12 @@ function shiftIsoDate(dateIso: string, days: number): string {
     .slice(0, 10);
 }
 
-function formatOccurrenceSchedule(entry: DispatchOverviewOccurrence): string {
+// Also formats the batch preview's old/new instants — keep the two surfaces
+// visually identical so the preview reads like the panel rows it moves.
+function formatOccurrenceSchedule(entry: {
+  startAt: string | null;
+  startDate: string | null;
+}): string {
   if (entry.startAt) {
     const start = new Date(entry.startAt);
     const dateText = start.toLocaleDateString('de-DE', {
@@ -383,6 +389,7 @@ export function DispatchPanel({
   const [batchReason, setBatchReason] = useState('');
   const [batchPreview, setBatchPreview] = useState<{
     itemCount: number;
+    items: BatchPreviewItem[];
     commitmentMismatchTitles: string[];
     invalidatedAcknowledgementCount: number;
     conflictCount: number;
@@ -506,6 +513,7 @@ export function DispatchPanel({
     }
     setBatchPreview({
       itemCount: result.itemCount,
+      items: result.items,
       commitmentMismatchTitles: result.commitmentMismatchTitles,
       invalidatedAcknowledgementCount: result.invalidatedAcknowledgementCount,
       conflictCount: result.conflicts.length,
@@ -988,6 +996,34 @@ export function DispatchPanel({
                 verschoben. Die Änderung erfolgt vollständig oder gar nicht.
               </DialogDescription>
             </DialogHeader>
+            <ul
+              className="max-h-44 space-y-1 overflow-y-auto text-xs"
+              role="group"
+              aria-label="Alte und neue Zeitpunkte je Besuch"
+              tabIndex={0}
+            >
+              {batchPreview.items.map((item) => (
+                <li
+                  key={item.occurrenceId}
+                  className="tabular-nums text-muted-foreground"
+                  data-batch-preview-item={item.occurrenceId}
+                >
+                  <span className="font-medium text-foreground">
+                    {item.title}
+                  </span>
+                  {': '}
+                  {formatOccurrenceSchedule({
+                    startAt: item.oldStartAt,
+                    startDate: item.oldStartDate,
+                  })}
+                  {' → '}
+                  {formatOccurrenceSchedule({
+                    startAt: item.newStartAt,
+                    startDate: item.newStartDate,
+                  })}
+                </li>
+              ))}
+            </ul>
             <ul className="space-y-1.5 text-sm">
               {batchPreview.conflictCount > 0 && (
                 <li className="text-yellow-700 dark:text-yellow-400">

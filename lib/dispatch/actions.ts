@@ -653,8 +653,20 @@ const batchSelectionSchema = z.object({
     .nullable(),
 });
 
+// One preview row per selected occurrence: the catalog promises the manager
+// sees each visit's old and new schedule BEFORE committing the batch.
+export type BatchPreviewItem = {
+  occurrenceId: string;
+  title: string;
+  oldStartAt: string | null;
+  oldStartDate: string | null;
+  newStartAt: string | null;
+  newStartDate: string | null;
+};
+
 type BatchPreparation = {
   items: BatchShiftItem[];
+  previewItems: BatchPreviewItem[];
   conflicts: PlanningConflict[];
   assessmentFingerprint: string;
   capacitySnapshot: Record<string, unknown>;
@@ -852,6 +864,33 @@ async function prepareBatchReschedule(
       job.title.trim() || job.description?.trim() || 'Auftrag',
     ])
   );
+  const previewSortKey = (
+    startAt: string | null,
+    startDate: string | null
+  ): number =>
+    startAt
+      ? new Date(startAt).getTime()
+      : startDate
+        ? Date.parse(`${startDate}T00:00:00Z`)
+        : 0;
+  const previewItems: BatchPreviewItem[] = shiftResult.items
+    .map((item) => {
+      const source = (rows ?? []).find((row) => row.id === item.occurrenceId)!;
+      return {
+        occurrenceId: item.occurrenceId,
+        title: jobTitles.get(source.job_id ?? '') ?? 'Auftragsbesuch',
+        oldStartAt: source.start_at,
+        oldStartDate: source.start_date,
+        newStartAt: item.startAt,
+        newStartDate: item.startDate,
+      };
+    })
+    .sort(
+      (left, right) =>
+        previewSortKey(left.oldStartAt, left.oldStartDate) -
+          previewSortKey(right.oldStartAt, right.oldStartDate) ||
+        left.occurrenceId.localeCompare(right.occurrenceId)
+    );
   const commitmentMismatchTitles = [
     ...new Set(
       (commitmentsResult.data ?? []).flatMap((commitment) => {
@@ -923,6 +962,7 @@ async function prepareBatchReschedule(
     success: true,
     preparation: {
       items: shiftResult.items,
+      previewItems,
       conflicts,
       assessmentFingerprint,
       capacitySnapshot,
@@ -953,6 +993,7 @@ export async function previewBatchReschedule(rawInput: unknown) {
   return {
     success: true as const,
     itemCount: prepared.preparation.items.length,
+    items: prepared.preparation.previewItems,
     conflicts: prepared.preparation.conflicts,
     assessmentFingerprint: prepared.preparation.assessmentFingerprint,
     commitmentMismatchTitles: prepared.preparation.commitmentMismatchTitles,

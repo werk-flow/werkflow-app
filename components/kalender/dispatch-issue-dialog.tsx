@@ -173,16 +173,19 @@ export function DispatchIssueDialog({
                     {dimension.state === 'ok' ? (
                       <CircleCheck
                         className="size-4 text-green-600 dark:text-green-400"
+                        data-readiness-icon="ok"
                         aria-hidden="true"
                       />
                     ) : dimension.state === 'warning' ? (
                       <AlertTriangle
                         className="size-4 text-yellow-600 dark:text-yellow-400"
+                        data-readiness-icon="warning"
                         aria-hidden="true"
                       />
                     ) : (
                       <CircleHelp
                         className="size-4 text-muted-foreground"
+                        data-readiness-icon="unknown"
                         aria-hidden="true"
                       />
                     )}
