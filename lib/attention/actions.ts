@@ -799,6 +799,16 @@ async function deriveParkingReviewTasks(
   return { tasks, failed: false };
 }
 
+// The reason belonging to a decision's current status: the cancellation
+// reason for cancelled requests, otherwise the decision comment.
+function resolveDecisionReason(
+  status: string,
+  decisionComment: string | null,
+  cancellationReason: string | null
+): string | null {
+  return status === 'cancelled' ? cancellationReason : decisionComment;
+}
+
 async function deriveOwnNotifications(
   context: ActionContext
 ): Promise<{ notifications: AttentionNotification[]; failed: boolean }> {
@@ -868,10 +878,11 @@ async function deriveOwnNotifications(
       startDate: row.start_date,
       endDate: row.end_date,
       dayPortion: row.day_portion as VacationDayPortion,
-      comment:
-        facts.status === 'cancelled'
-          ? row.cancellation_reason
-          : row.decision_comment,
+      comment: resolveDecisionReason(
+        facts.status,
+        row.decision_comment,
+        row.cancellation_reason
+      ),
       stateVersion: facts.stateVersion,
       occurredAt: facts.occurredAt,
       unread: isNotificationUnread(
@@ -1201,6 +1212,11 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
         dayPortion: request.dayPortion,
         status: request.status,
         totalDays: request.totalDays,
+        decisionReason: resolveDecisionReason(
+          request.status,
+          request.decisionComment,
+          request.cancellationReason
+        ),
       }));
 
     return {

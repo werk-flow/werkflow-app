@@ -195,6 +195,10 @@ export type OwnAttentionRequest = {
   dayPortion: VacationDayPortion;
   status: 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled';
   totalDays: number;
+  // The reason belonging to the current status: the cancellation reason for
+  // cancelled requests, otherwise the decision comment. Sourced from the
+  // authoritative vacation request row — no parallel reason storage.
+  decisionReason: string | null;
 };
 
 export type AttentionOverview = {

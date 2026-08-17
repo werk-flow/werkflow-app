@@ -79,7 +79,12 @@ export function OwnQualificationOverview({
               );
               const future = record.validFrom > today;
               return (
-                <Card key={record.id} className="gap-2 p-4">
+                <Card
+                  key={record.id}
+                  className="gap-2 p-4"
+                  data-testid="own-qualification-card"
+                  data-capability-name={definition.name}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="font-medium">{definition.name}</h3>

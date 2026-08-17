@@ -525,11 +525,18 @@ export function AufgabenContent() {
                 className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
                 data-own-request-source={request.sourceId}
               >
-                <p className="text-sm tabular-nums">
-                  {formatRange(request.startDate, request.endDate)}
-                  {request.dayPortion === 'half_day' ? ' (halbtags)' : ''}
-                  {` · ${formatVacationDays(request.totalDays)}`}
-                </p>
+                <div className="min-w-0">
+                  <p className="text-sm tabular-nums">
+                    {formatRange(request.startDate, request.endDate)}
+                    {request.dayPortion === 'half_day' ? ' (halbtags)' : ''}
+                    {` · ${formatVacationDays(request.totalDays)}`}
+                  </p>
+                  {request.decisionReason && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Grund: {request.decisionReason}
+                    </p>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   {VACATION_STATUS_LABELS[request.status]}
                 </p>
