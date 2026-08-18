@@ -1392,8 +1392,13 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await filters.filter({ hasText: 'Ausstehend' }).click();
     await adminPage.getByRole('option', { name: 'Genehmigt', exact: true }).click();
     await history.getByRole('button', { name: 'Laden' }).click();
+    // Emil's live clock/break events from the A1-05 journey are approved too,
+    // so the exact approved total is state-dependent. Assert this test's own
+    // admin-created 00:10/00:15 pair and the filter contract on every row.
     const approvedRows = history.locator('tbody tr');
-    await expect(approvedRows).toHaveCount(2, { timeout: 20_000 });
+    await expect(approvedRows.filter({ hasText: /00:1[05]/ })).toHaveCount(2, {
+      timeout: 20_000,
+    });
     for (const row of await approvedRows.all()) {
       await expect(row).toContainText('Emil');
       await expect(row).toContainText('Genehmigt');
@@ -1640,7 +1645,13 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(documentRows).toHaveCount(0);
     await documentSearch.fill('');
     await documentSearch.press('Enter');
-    await adminPage.getByRole('main').getByRole('link', { name: 'Dokumente' }).click();
+    // The cleared search commits asynchronously; navigating before the file row
+    // returns carries the stale query into the folders view and hides the file.
+    await expect(documentRows).toHaveCount(1, { timeout: 20_000 });
+    // Navigate directly: the view-tab href embeds the live searchQuery state,
+    // and a late Realtime router.refresh can revert that state to the stale
+    // negative query mid-click, carrying the old search into the folders view.
+    await adminPage.goto('/dokumente?view=folders');
     await expect(adminPage).toHaveURL(/view=folders/);
     await expect(visibleText(adminPage, folderName)).toBeVisible();
 

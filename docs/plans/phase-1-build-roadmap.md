@@ -15,7 +15,7 @@ This is a **living implementation index**, not a substitute for feature specific
 
 > **Roadmap established:** 4 August 2026  
 > **Current phase:** Phase 1 — Complete Operational Core  
-> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete`; `P1-13` is `ready`
+> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); `P1-13` is `ready` and unblocked
 > **Formally accepted roadmap slices:** 13 of 56 (`P1-00` and `P1-00a` through `P1-54`)
 > **Phase 2 implementation:** Not authorized by this roadmap
 
@@ -29,13 +29,13 @@ They do not make later roadmap slices complete automatically. `P1-00` must first
 
 | Field | Current value |
 | --- | --- |
-| Active slice | None — `P1-12` accepted complete 2026-08-14; the Wave 1 flow audit ([`wave-1-audit.md`](./wave-1-audit.md), sessions A1–A7 + final gate) runs before `P1-13` starts |
-| Next slice | `P1-13` (work templates) is `ready` and closes into Wave 2; it must not run concurrently with audit sessions |
+| Active slice | None — the Wave 1 flow audit ([`wave-1-audit.md`](./wave-1-audit.md)) is COMPLETE: all sessions A1–A7 Rule-12 certified and the final gate F closed 2026-08-18 (full Golden 93/93 + full audit battery 74/74 + 119/119 catalog-ID proof) |
+| Next slice | `P1-13` (work templates) is `ready` and UNBLOCKED — Wave 1 is audited; `P1-13` may start |
 | Other ready slices | `P1-13` |
-| Current implementation wave | Wave 1 complete with `P1-12`; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
-| Latest completed golden gate | `GG-03`: full suite 93/93 on the accepted production build, 2026-08-14, world `mssf5xs4`, 15.1m (`docs/plans/golden-gate-log.md`) |
+| Current implementation wave | Wave 1 complete with `P1-12` and audited; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
+| Latest completed golden gate | `AUDIT-W1` final gate: full Golden 93/93 (world `msy9a4vb`, 17.1m) + full audit battery 74/74 (world `msydek02`, 28.5m) on build `Fi1jZsuahgN7eLsjPFAvH`, 2026-08-18 (`docs/plans/golden-gate-log.md`) |
 | Known execution blocker | None |
-| Last roadmap review | 14 August 2026 |
+| Last roadmap review | 18 August 2026 |
 
 Agents must update this table whenever a slice enters `in_progress`, `verification`, `complete`, or `decision_blocked`.
 
