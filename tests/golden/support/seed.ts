@@ -335,6 +335,17 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
     }
   }
 
+  // Clear selected-responsibility configurations first: on partially
+  // torn-down worlds the cascaded member deletes would otherwise trip
+  // app_private.protect_last_selected_responsibility_holder.
+  const { error: responsibilityConfigError } = await admin
+    .from('organization_responsibility_configurations')
+    .delete()
+    .in('organization_id', organizationIds);
+  if (responsibilityConfigError) {
+    failures.push(`responsibility configuration delete: ${responsibilityConfigError.message}`);
+  }
+
   // Every org-scoped table cascades from organizations (verified 2026-08-04).
   const { error: orgDeleteError } = await admin
     .from('organizations')
@@ -354,7 +365,9 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
 
   for (const userId of userIds) {
     const { error } = await admin.auth.admin.deleteUser(userId);
-    if (error) {
+    // An already-deleted user is the expected state after an interrupted
+    // earlier teardown, not a cleanup failure.
+    if (error && !/user not found/i.test(error.message)) {
       failures.push(`auth user delete ${userId}: ${error.message}`);
     }
   }
@@ -387,6 +400,16 @@ export async function destroyLeftoverTestWorlds(): Promise<number> {
     }
   }
   if (orgIds.length > 0) {
+    // Same ordering as destroyTestWorld: clear selected-responsibility
+    // configurations so protect_last_selected_responsibility_holder cannot
+    // block the cascaded member deletes of a partially torn-down world.
+    const { error: configError } = await admin
+      .from('organization_responsibility_configurations')
+      .delete()
+      .in('organization_id', orgIds);
+    if (configError) {
+      throw new Error(`Leftover responsibility cleanup failed: ${configError.message}`);
+    }
     const { error } = await admin.from('organizations').delete().in('id', orgIds);
     if (error) {
       throw new Error(`Leftover organization cleanup failed: ${error.message}`);
@@ -407,7 +430,7 @@ export async function destroyLeftoverTestWorlds(): Promise<number> {
         `subscription delete ${userId}: ${subscriptionError.message}`
       );
     }
-    if (authError) {
+    if (authError && !/user not found/i.test(authError.message)) {
       failures.push(`auth user delete ${userId}: ${authError.message}`);
     }
     if (!subscriptionError && !authError) removedUsers++;
