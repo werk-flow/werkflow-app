@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-04
+- **Update 2026-08-18:** the shared dev/test/prod Supabase project follow-up is resolved — development and testing moved to a dedicated dev project; see [0003](0003-dev-prod-environment-split.md).
 - **Owner:** Product owner (Tamay), evaluated with agent research across database, auth, storage, and deployment
 - **Affects:** Every feature area; see the relevance map below
 

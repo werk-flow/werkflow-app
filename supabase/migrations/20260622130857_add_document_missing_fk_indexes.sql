@@ -1,0 +1,2 @@
+create index if not exists document_links_created_by_idx on public.document_links (created_by);
+create index if not exists documents_copied_from_document_id_idx on public.documents (copied_from_document_id) where copied_from_document_id is not null;

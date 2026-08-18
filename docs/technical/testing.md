@@ -94,9 +94,16 @@ A test that passes must mean the business outcome happened: pair every positive 
 
 - **Manual time entries in specs must lie in the past.** The dialog rejects future times („Manuelle Einträge können nicht in der Zukunft liegen."), so a spec that runs in the morning fails with today's 09:00–10:00; use yesterday with times clear of other specs' yesterday entries (`@P1-05` uses 06–07 and 08–09, `@GG-02` uses 10–11).
 
-## Shared-Database Caution
+## Dedicated Dev/Test Backend (split done 2026-08-18)
 
-Local dev, the deployed app, and this harness currently share **one** Supabase project and **one** R2 bucket. The harness isolates itself through disposable organizations and cleans up in teardown, but test users transiently exist in the real auth pool. Before test volume grows (around Wave 2), stand up a separate dev/staging Supabase project and pair it with the reserved `werkflow-documents-dev` bucket; the harness then targets that environment via `.env` switching. Track this as an infrastructure follow-up to [decision 0001](../decisions/0001-infrastructure-stack.md).
+The shared-database phase is over. Local dev and this harness now target a dedicated dev Supabase project — `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev", org "WerkFlow Dev", free tier, NANO compute, AWS eu-central-1) — paired with the `werkflow-documents-dev` R2 bucket (EU jurisdiction, localhost-only CORS). Production (`jbgaqpdjauzoocplgdsn`) never sees development or test traffic again. The full environment model, tooling access, and per-machine onboarding live in [environments.md](environments.md); the decision record is [0003](../decisions/0003-dev-prod-environment-split.md).
+
+Operational facts for test runs:
+
+- `.env.local` points at dev; Vercel holds production's env independently, so no local file change can affect the deployed app. `bun run env:dev` / `bun run env:prod` swap `.env.local` between the gitignored backups (`.env.dev-backup`, `.env.live-backup`) — prod-local sessions are a deliberate, loudly-warned exception.
+- The dev project is on the free tier: it **auto-pauses after ~1 week idle**. A paused project makes run setup fail with connection errors — restore it in the Supabase dashboard (or via the Management API); this is an environment condition, not a code bug.
+- Dev runs NANO compute, weaker than what the suite saw on prod: measured on 2026-08-18, the full Golden suite took 27.4m (vs 14–17m on prod-class compute) and focused `@AUDIT-W1-A7` 6.2m (vs 3.3m) — roughly 2× slower, with all tests green (93/93 and 9/9 on the first attempt). The documented transient classes (Realtime freshness, long-run latency) still apply and may be somewhat more frequent; classify per rule 10 (focused rerun of the affected tag first) instead of looping full reruns, and read durations against the ~2× NANO baseline before suspecting a regression.
+- The teardown leftover sweep (`LEFTOVER_SWEEP`) now executes against dev, via the account-wide Supabase MCP server (`.mcp.json`) or the CLI with `SUPABASE_ACCESS_TOKEN`; the claude.ai org-scoped connector cannot see the dev project.
 
 ## Unit Tests
 

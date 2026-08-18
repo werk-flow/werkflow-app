@@ -1,0 +1,1 @@
+ALTER TYPE client_type RENAME VALUE 'geschaeftlich' TO 'gewerblich';

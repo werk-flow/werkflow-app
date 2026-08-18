@@ -1,0 +1,1 @@
+create index planning_series_job_idx on public.planning_series(job_id) where job_id is not null;

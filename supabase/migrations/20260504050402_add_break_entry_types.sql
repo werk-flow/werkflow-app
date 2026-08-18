@@ -1,0 +1,2 @@
+alter table public.time_entries drop constraint if exists time_entries_entry_type_check;
+alter table public.time_entries add constraint time_entries_entry_type_check check (entry_type = any (array['clock_in'::text, 'clock_out'::text, 'break_start'::text, 'break_end'::text]));

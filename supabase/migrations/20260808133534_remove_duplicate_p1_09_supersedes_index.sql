@@ -1,0 +1,1 @@
+drop index if exists public.employee_capabilities_supersedes_once;
