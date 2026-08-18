@@ -46,7 +46,7 @@ Never run the Playwright harness or destructive scripts while `.env.local` point
 | Account-wide Supabase MCP server (`.mcp.json`) | yes | yes | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only. |
 | Supabase CLI (`bunx supabase`) | yes (forbidden to link/push) | yes | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod. |
 | Management API (`api.supabase.com`) | yes | yes | Same PAT. Used for read-only prod inspection and dev configuration. |
-| R2 API token (in `.env.local`) | object read/write | object read/write | Object-scoped: it cannot manage bucket settings (CORS is set in the Cloudflare dashboard). |
+| R2 API tokens (S3 credentials) | prod token: prod bucket only | dev token: dev bucket only | Per-bucket account tokens since 2026-08-19: `.env.local`/`.env.dev-backup` carry the dev-scoped token, Vercel and `.env.live-backup` carry the prod-scoped one. Both are object-scoped and cannot manage bucket settings (CORS is set in the Cloudflare dashboard). |
 
 ## The migration rule
 

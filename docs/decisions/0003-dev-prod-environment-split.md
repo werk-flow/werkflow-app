@@ -40,7 +40,7 @@ Never write schema changes to prod that are not a committed migration file. Neve
 
 - Both edge function sources are now versioned in `supabase/functions/` (fetched from prod) and deployed to dev with `verify_jwt=false` preserved. Dev's secret store carries `RESEND_API_KEY` (the "werkflow-dev" Resend key) and `FROM_EMAIL` (`WerkFlow <noreply@werk-flow.app>`); the platform injects `SUPABASE_SECRET_KEYS` etc. automatically. Prod's Resend key remains prod-only.
 - Dev auth mirrors prod's custom SMTP (smtp.resend.com:465) with the dev Resend key; site URL and redirect allow-list point at `http://localhost:3000`.
-- Both R2 buckets are EU-jurisdiction. The shared R2 API token is object-scoped; bucket settings (CORS) are managed in the Cloudflare dashboard. Follow-up: consider per-bucket-scoped tokens so dev credentials cannot touch the prod bucket.
+- Both R2 buckets are EU-jurisdiction. Since 2026-08-19 each environment has its own bucket-scoped R2 account token (verified both directions: the dev token is denied on the prod bucket and vice versa), so local dev credentials cannot touch production bytes. Tokens are object-scoped; bucket settings (CORS) are managed in the Cloudflare dashboard.
 
 ## Acceptance evidence (2026-08-18)
 
