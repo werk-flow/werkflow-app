@@ -103,7 +103,7 @@ Example:
 
 ## Suggested Tables
 
-Exact table/column names should be verified and applied through live Supabase. Do not create local migration files unless the workflow changes.
+Exact table/column names should be verified and applied through live Supabase. ~~Do not create local migration files unless the workflow changes.~~ *(Historical note: the workflow changed on 2026-08-18 — schema changes are now committed migration files in `supabase/migrations/`, applied dev-first, prod-second; see decision 0003.)*
 
 ### `inventory_locations`
 

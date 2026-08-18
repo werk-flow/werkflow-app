@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-08-16
 
-WerkFlow's regression safety net is a Playwright end-to-end harness that runs the roadmap's golden-gate scenarios (`GG-XX` in [`docs/plans/phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md)) as real multi-role browser journeys against a locally running app and the live Supabase project. The separate wave-audit battery is the exhaustive catalog-flow layer: golden gates stay lean, while audit sessions must account for every relevant stable flow ID in [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md).
+WerkFlow's regression safety net is a Playwright end-to-end harness that runs the roadmap's golden-gate scenarios (`GG-XX` in [`docs/plans/phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md)) as real multi-role browser journeys against a locally running app and the dedicated dev Supabase project (see [environments.md](environments.md)). The separate wave-audit battery is the exhaustive catalog-flow layer: golden gates stay lean, while audit sessions must account for every relevant stable flow ID in [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md).
 
 ## Running
 

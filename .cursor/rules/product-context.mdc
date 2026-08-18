@@ -20,4 +20,4 @@ Product-facing decisions should follow these principles:
 - Prefer speed, simple defaults, excellent UI/UX, and operational usefulness over broad generic SaaS features.
 - The intended product scope includes employee/time management, projects/jobs, document management, future AI automations, and inventory as a major near-term planned module; distinguish current implementation from planned scope.
 - Do not invent offer, pricing, acquisition, or avatar details; ask or leave TODOs until product docs exist.
-- When schema details matter, treat live Supabase inspection and generated types as more reliable than potentially outdated architecture docs.
+- When schema details matter, treat live Supabase inspection and generated types as more reliable than potentially outdated architecture docs. Production (`jbgaqpdjauzoocplgdsn`) is the source of truth for production state; the dev project (`mbkkzuqjbdvzelqvuzcn`) mirrors it via the committed `supabase/migrations/` history and is where development, tests, and schema changes go first (see `docs/technical/environments.md`).

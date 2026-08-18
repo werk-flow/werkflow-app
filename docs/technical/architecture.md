@@ -69,7 +69,7 @@ The app uses multiple Supabase clients for different trust boundaries:
 
 Server code that uses the admin client must validate the authenticated user first. The current pattern is to validate users with Supabase Auth `getUser()` before privileged server actions.
 
-Live Supabase state is the practical source of truth for database-aware tasks. The repo intentionally does not use local migration files as the default workflow.
+Since 2026-08-18 WerkFlow runs two Supabase projects (decision [0003](../decisions/0003-dev-prod-environment-split.md)): production `jbgaqpdjauzoocplgdsn` and the dedicated dev project `mbkkzuqjbdvzelqvuzcn`, which serves `.env.local` and the test harness. The committed migration history in `supabase/migrations/` is the schema workflow: every change is a migration file applied dev-first, prod-second, and `lib/supabase/database.types.ts` is generated from dev. Live Supabase inspection remains the source of truth for platform state; see [environments.md](environments.md).
 
 Supabase Auth's leaked-password-protection advisory is an acknowledged Free Plan limitation: the feature is available only on Pro and above, so this specific advisory may remain open until the planned Supabase upgrade and should then be enabled and re-evaluated. Continue to inspect and disposition every other Supabase Security and Performance Advisor finding normally.
 
