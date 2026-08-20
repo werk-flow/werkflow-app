@@ -28,6 +28,19 @@ const EXPECTED_DIVERGENT = new Set([
   'smtp_user',
   'smtp_pass',
   'smtp_sender_name',
+  // Platform-managed internal flag (newer projects have it on; PATCH is a
+  // silent no-op). No user-visible auth behavior; not worth chasing.
+  'index_worker_ensure_user_search_indexes_exist',
+]);
+
+// Non-mailer fields that must still match prod (found divergent 2026-08-20):
+// dev's defaults throttled auth emails to 2/hour and enabled a newer platform
+// toggle prod has off. Explicit allowlist — never blind-sync unknown fields.
+const SYNC_EXTRA = new Set([
+  'rate_limit_email_sent',
+  'index_worker_ensure_user_search_indexes_exist',
+  'security_update_password_require_reauthentication',
+  'smtp_admin_email',
 ]);
 
 const SECRET_PATTERN = /(pass|secret|key|token)/i;
@@ -90,7 +103,11 @@ if (!apply) {
 
 const mailerPatch: Record<string, unknown> = {};
 for (const key of Object.keys(prod)) {
-  if (key.startsWith('mailer_') && JSON.stringify(prod[key]) !== JSON.stringify(dev[key])) {
+  // *_custom_contents are derived bookkeeping (which fields are customized);
+  // the API rejects them in a PATCH, which silently voids the whole payload.
+  if (key.endsWith('_custom_contents')) continue;
+  const inScope = key.startsWith('mailer_') || SYNC_EXTRA.has(key);
+  if (inScope && JSON.stringify(prod[key]) !== JSON.stringify(dev[key])) {
     mailerPatch[key] = prod[key];
   }
 }
@@ -110,6 +127,8 @@ if (!patchResponse.ok) {
   throw new Error(`PATCH dev auth config failed: ${patchResponse.status} ${await patchResponse.text()}`);
 }
 
+// The config propagates asynchronously; an immediate re-read can be stale.
+await new Promise((resolve) => setTimeout(resolve, 8000));
 const devAfter = await getAuthConfig(DEV_REF);
 const stillDifferent = Object.keys(mailerPatch).filter(
   (key) => JSON.stringify(devAfter[key]) !== JSON.stringify(prod[key])

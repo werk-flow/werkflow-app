@@ -60,7 +60,7 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
 
 ## Per-machine onboarding checklist
 
-1. **PAT**: create/obtain a Supabase Personal Access Token and export it in the shell profile: `export SUPABASE_ACCESS_TOKEN=sbp_…` (never commit it; the committed `.mcp.json` expands it from the environment).
+1. **PAT**: create/obtain a Supabase Personal Access Token and make it available as `SUPABASE_ACCESS_TOKEN` — the exact name matters; every consumer (the committed `.mcp.json`, the CLI, `scripts/sync-dev-auth-from-prod.ts`) reads that variable and nothing reads other names. On Windows set it user-wide (`[Environment]::SetEnvironmentVariable('SUPABASE_ACCESS_TOKEN','sbp_…','User')`, then restart the agent session so it inherits it); on Unix export it in the shell profile. It additionally lives in the gitignored `.env.local` **and both backups** (a `bun run env:dev/env:prod` swap overwrites `.env.local`, so a copy only there gets wiped), which lets `bun` scripts find it even without the user-wide variable. Never commit it.
 2. **Env file**: obtain `.env.local` (dev values) from the owner's password manager / another machine; place it in the repo root. Optionally also `.env.live-backup` if prod-local sessions are expected. Copy `.env.local` to `.env.dev-backup`.
 3. **Claude Code**: approve the project-scoped `.mcp.json` server on first start. Project permissions travel via git (`.claude/settings.json`); the autoMode environment note about the dev project lives in the user-level `~/.claude/settings.json`.
 4. **Codex**: add the same account-wide server to `~/.codex/config.toml`:
