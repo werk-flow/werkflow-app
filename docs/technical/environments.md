@@ -7,14 +7,14 @@ WerkFlow runs on two fully separated backend environments since 2026-08-18 (deci
 | | Production | Dev / Test |
 | --- | --- | --- |
 | Supabase project | `jbgaqpdjauzoocplgdsn` | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev") |
-| Supabase org | "WerkFlow" (`svxdwqapsmvfkchswonc`) | "WerkFlow Dev" (`sptlkyimyrrmthjezafx`) |
+| Supabase org | "WerkFlow" (`svxdwqapsmvfkchswonc`) | same org since 2026-08-20 (transfer verified: refs/keys unchanged) |
 | Region / compute | AWS eu-central-1, Postgres 17 | AWS eu-central-1 (same, deliberate), Postgres 17, free tier NANO |
 | R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS: localhost only) |
 | Serves | Deployed app on Vercel, real customers | Local dev server, Playwright harness (Golden + audit) |
 | Edge functions | `send-invite-email`, `send-email-change-current-otp` | Same two, deployed from `supabase/functions/` |
 | Auth | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key) |
 
-Orgs are separate because Supabase plans are per-org: prod's org can move to Pro without dragging the dev project onto a paid plan.
+Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "WerkFlow Dev" org was deleted after the transfer). Supabase bills per org plus per-project compute, so one Pro plan covers both: $25 plan + 2× $10 Micro − $10 credit ≈ **$35/month**. As of the transfer the org is **still on the free plan** — until the Pro upgrade happens, both projects share the free org's quotas (5 GB egress/month, the pool that already triggered a fair-use warning), dev keeps auto-pausing, and both stay on Nano compute.
 
 The dev project is on the free tier and **auto-pauses after roughly a week of inactivity**. Symptoms: local app/harness cannot connect, `db push` fails. Fix: restore the project in the Supabase dashboard, wait a minute, retry. Not a code bug.
 
@@ -44,7 +44,7 @@ Never run the Playwright harness or destructive scripts while `.env.local` point
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
-| claude.ai Supabase connector (OAuth, org-scoped) | read/write | **no access** | Scoped to the "WerkFlow" org only; it cannot see the dev project. Use for prod reads. |
+| claude.ai Supabase connector (OAuth, org-scoped) | read/write | read/write (since the 2026-08-20 org consolidation) | Scoped to the "WerkFlow" org, which now contains both projects. Address projects by ref; prod writes remain forbidden outside the migration rule. |
 | Account-wide Supabase MCP server (`.mcp.json`) | yes | yes | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only. |
 | Supabase CLI (`bunx supabase`) | yes (forbidden to link/push) | yes | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod. |
 | Management API (`api.supabase.com`) | yes | yes | Same PAT. Used for read-only prod inspection and dev configuration. |

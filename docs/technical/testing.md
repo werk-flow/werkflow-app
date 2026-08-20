@@ -96,7 +96,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 
 ## Dedicated Dev/Test Backend (split done 2026-08-18)
 
-The shared-database phase is over. Local dev and this harness now target a dedicated dev Supabase project — `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev", org "WerkFlow Dev", free tier, NANO compute, AWS eu-central-1) — paired with the `werkflow-documents-dev` R2 bucket (EU jurisdiction, localhost-only CORS). Production (`jbgaqpdjauzoocplgdsn`) never sees development or test traffic again. The full environment model, tooling access, and per-machine onboarding live in [environments.md](environments.md); the decision record is [0003](../decisions/0003-dev-prod-environment-split.md).
+The shared-database phase is over. Local dev and this harness now target a dedicated dev Supabase project — `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev", in the "WerkFlow" org since the 2026-08-20 consolidation, Nano compute until the org's Pro upgrade, AWS eu-central-1) — paired with the `werkflow-documents-dev` R2 bucket (EU jurisdiction, localhost-only CORS). Production (`jbgaqpdjauzoocplgdsn`) never sees development or test traffic again. The full environment model, tooling access, and per-machine onboarding live in [environments.md](environments.md); the decision record is [0003](../decisions/0003-dev-prod-environment-split.md).
 
 Operational facts for test runs:
 
