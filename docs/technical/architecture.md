@@ -134,7 +134,7 @@ When adding new operational data that must stay live:
 
 ## UI And Language
 
-User-facing UI copy is German. Code, identifiers, comments, commits, and developer-facing artifacts are English. See `.cursor/rules/language-and-coding-guidelines.mdc`.
+User-facing UI copy is German. Code, identifiers, comments, commits, and developer-facing artifacts are English. See the language and coding standards in `AGENTS.md`.
 
 The app should feel fast, modern, clear, and hard to misuse, especially for field-worker (`Handwerker/in`) workflows.
 

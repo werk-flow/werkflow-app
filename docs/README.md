@@ -1,11 +1,11 @@
 # WerkFlow Docs
 
-This folder is the deeper reference library for WerkFlow. It is for durable product and technical explanations that are too detailed for `AGENTS.md` or `.cursor/rules/`, but important enough that future agents and developers should not rediscover them from scratch.
+This folder is the deeper reference library for WerkFlow. It is for durable product and technical explanations that are too detailed for `AGENTS.md`, but important enough that future agents and developers should not rediscover them from scratch.
 
 ## Source Of Truth
 
 - Product direction and user context: `AGENTS.md`.
-- Always-applied agent guidance: `.cursor/rules/*.mdc`.
+- Always-applied agent guidance: the "Always-On Repository Rules" section of `AGENTS.md` and the skills in `.claude/skills/` (mirrored in `.agents/skills/`).
 - Exact database state: live Supabase inspection through the MCP/plugin workflow.
 - Generated database types: `lib/supabase/database.types.ts`.
 - Current implementation behavior: the application code.

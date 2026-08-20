@@ -142,9 +142,9 @@ The following topics should likely become separate docs instead of making this f
 
 When those files exist, agents should read them for tasks that touch positioning, onboarding, monetization, growth, or sales-driven product changes.
 
-## Repo-Level Rules Mirrored From Cursor
+## Always-On Repository Rules
 
-This section mirrors the Cursor rules that were marked as always apply in `.cursor/rules`. The `.cursor` folder remains Cursor-specific; Codex and Claude expect durable repository-level agent guidance in `AGENTS.md`, so these rules live here to make Codex and Claude follow the same always-on project expectations.
+These rules apply to every task in this repository. They originated as Cursor rules; the `.cursor` folder was removed on 2026-08-20 (Cursor is no longer used), and this file is now their sole source for all agents (Claude reads it via `CLAUDE.md`, Codex reads it directly).
 
 ### Language And Coding Standards
 
@@ -162,6 +162,7 @@ This section mirrors the Cursor rules that were marked as always apply in `.curs
 - Reduce incidental complexity before adding an abstraction: reuse the existing source of truth and established patterns, keep related behavior together, and do not create parallel models or frameworks for a problem the current domain already owns. Extract a helper or abstraction only when it removes real duplication, makes a complex rule materially easier to understand and test, or enforces a necessary boundary.
 - Simplicity and fewer lines are never reasons to omit safeguards. Preserve authorization, organization isolation, validation, data integrity, historical meaning, accessibility, auditability, failure visibility, and recovery. When a business rule is inherently complex, contain it in a focused, clearly named domain module with precise types, explicit invariants, and focused tests so its callers stay small and readable.
 - Keep comments concise and purposeful. Explain non-obvious rationale, invariants, edge cases, or security/performance caveats.
+- Apply the `unslop` skill (`.claude/skills/unslop`, mirrored in `.agents/skills/unslop`) to every piece of prose you produce — chat responses, documentation, commit/PR text, and user-facing copy alike. Load it at the start of a task that will produce prose; do not wait to be asked.
 - Match existing formatting and project conventions. Keep related logic close together and extract helpers only when they improve clarity.
 - Do not leave linter or type errors. Add focused tests when the change has non-trivial risk.
 - Preserve accessibility with ARIA where appropriate, keyboard/focus behavior, visible focus states, and sufficient contrast. Localize user-facing accessibility text in German.

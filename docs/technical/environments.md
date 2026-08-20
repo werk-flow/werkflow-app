@@ -18,6 +18,8 @@ Orgs are separate because Supabase plans are per-org: prod's org can move to Pro
 
 The dev project is on the free tier and **auto-pauses after roughly a week of inactivity**. Symptoms: local app/harness cannot connect, `db push` fails. Fix: restore the project in the Supabase dashboard, wait a minute, retry. Not a code bug.
 
+**Auth/config parity:** project configuration (auth email templates, SMTP, rate limits) is not schema and is not covered by migrations or the decision-0003 object comparison. `bun scripts/sync-dev-auth-from-prod.ts` diffs the complete auth config of both projects and with `--apply` syncs the `mailer_*` fields prod → dev (this fixed the 2026-08-20 gap where dev sent confirmation links instead of the app's 6-digit OTP). Run the diff after any dashboard-side auth change on prod.
+
 ## Env-file ownership
 
 `.env.local` (gitignored) is the only env file Next.js loads locally, and it points at **dev**. Vercel holds production's environment variables independently — no local file change can ever affect deployed behavior (NEXT_PUBLIC_* values are baked at build time per deployment).

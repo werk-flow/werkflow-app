@@ -57,4 +57,4 @@ The generic `frontend-design` skill is useful for craft (typography discipline, 
 
 1. Adjust tokens in `app/globals.css` (colors, radius, dark mode) — this restyles ~80% of the app coherently.
 2. For control sizing/feel, adjust the primitives in `components/ui/`.
-3. Update this file only when the *intent* changes, and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). Keep `AGENTS.md`'s styling section and `.cursor/rules/styling-and-color-guidelines.mdc` in sync.
+3. Update this file only when the *intent* changes, and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). Keep `AGENTS.md`'s styling section in sync.

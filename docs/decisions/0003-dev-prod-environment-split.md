@@ -42,6 +42,15 @@ Never write schema changes to prod that are not a committed migration file. Neve
 - Dev auth mirrors prod's custom SMTP (smtp.resend.com:465) with the dev Resend key; site URL and redirect allow-list point at `http://localhost:3000`.
 - Both R2 buckets are EU-jurisdiction. Since 2026-08-19 each environment has its own bucket-scoped R2 account token (verified both directions: the dev token is denied on the prod bucket and vice versa), so local dev credentials cannot touch production bytes. Tokens are object-scoped; bucket settings (CORS) are managed in the Cloudflare dashboard.
 
+## Known gap found after acceptance (2026-08-20): auth email templates
+
+The fidelity proof above covers the **database** exhaustively, but Supabase auth **email templates are project configuration, not schema** — they live outside `pg_dump`, migrations, and the object comparison. Dev therefore shipped with Supabase's default confirmation-**link** template while the app's signup flow deliberately uses the 6-digit **OTP** (`{{ .Token }}`) that prod's customized template sends. The first real manual signup against dev surfaced it.
+
+Consequences and fixes:
+
+- `scripts/sync-dev-auth-from-prod.ts` now diffs the complete auth config of both projects (all fields, secrets redacted, expected env-specific divergences separated) and with `--apply` syncs all `mailer_*` fields (templates, subjects, OTP expiry, autoconfirm) prod → dev. Run the diff after any dashboard-side auth change on prod.
+- **Lesson for any future environment cloning:** schema fidelity is not environment fidelity. Project configuration (auth templates and settings, storage settings, edge-function secrets, SMTP, rate limits) needs its own diff via the Management API as part of acceptance — a green test suite does not prove it, because the harness confirms users server-side and never reads real email content.
+
 ## Acceptance evidence (2026-08-18)
 
 - Statics: `tsc` clean, lint clean, unit tests 188/188.
