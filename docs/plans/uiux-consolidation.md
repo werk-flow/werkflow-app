@@ -75,6 +75,19 @@ The `werkflow-design` skill (`.claude/skills/werkflow-design/SKILL.md`, mirrored
 - **Long forms in dialogs:** today long dialogs scroll internally on short screens (see the Anfrage dialog). Decide deliberately: keep scroll-in-dialog with sticky header/footer? Multi-step? Side panel for the longest forms? Owner wants an explicit, elegant convention.
 - **Inspiration transcripts:** `temporary-transcripts/` holds UX-video transcripts as idea nudges. Read them during canon drafting; adopt only what fits WerkFlow's calm operational language; never cite them as rationale; the folder stays unreferenced in durable docs (see its README).
 
+## End-state architecture (the target, so the effort doesn't produce doc sprawl)
+
+When this effort closes, UI/UX knowledge lives in exactly this stack, each kind in one home, and the total number of standing artifacts does NOT grow:
+
+1. **Tokens** (`app/globals.css`) own every value. Unchanged.
+2. **Primitives and registered components own behavior in code.** Wherever a convention can be encoded, encode it instead of documenting it: the one `Banner` carries the variants and timings, a dialog/form primitive carries Enter handling and the Realtime suspension, `SearchableSelect` carries empty states and search. An agent then gets the convention by using the component; deviating takes more effort than complying.
+3. **The `werkflow-design` skill is the single document** — visual language (already there) + component registry + interaction canon + feedback matrix + shipping checklist. It is what every UI-touching agent loads; there is no second UI/UX doc to keep in sync. Mirrored `.claude`/`.agents` as always.
+4. **AGENTS.md stays a thin pointer** to the skill (as today).
+5. **Mechanical guards catch what prose can't:** the ESLint bans, CodeRabbit review context, and the slice-prompt checklist item.
+6. **Leeway is a rule, not an accident:** the skill states decision rules and defaults (when raw `Select` is fine, when a banner fires), not pixel prescriptions. Feature-specific composites (like `DocumentLinkDialog`) remain welcome as compositions OF the primitives. When a genuinely new interaction pattern is needed, the rule is "design it deliberately and add a registry entry in the same change" — extension is allowed, silent one-offs are not.
+
+This plan document itself becomes a closed historical ledger afterwards (like `wave-1-audit.md`), and `temporary-transcripts/` gets deleted. Nothing else new persists.
+
 ## Proposed plan (three steps, sessioned like the Wave 1 audit)
 
 **Step 1 — the canon.** Draft the complete convention set and get one owner confirmation gate before touching code:
