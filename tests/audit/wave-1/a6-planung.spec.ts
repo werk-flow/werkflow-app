@@ -23,6 +23,8 @@ import {
   reportOwnSicknessViaDialog,
   setHolidayRegionViaSettings,
   showPlanningMonth,
+  typeIntoDatePickerById,
+  typeIntoTimeInput,
 } from '../../golden/support/steps';
 import {
   addLocalMonthsClamped,
@@ -200,7 +202,7 @@ async function fillInternalPlanningDraft(
 ): Promise<void> {
   await dialog.getByRole('button', { name: 'Interner Termin' }).click();
   await dialog.locator('#planning-title').fill(options.title);
-  await dialog.locator('#planning-date').fill(options.dateIso);
+  await typeIntoDatePickerById(dialog, 'planning-date', options.dateIso);
   if (options.assignEmployeeName) {
     await dialog
       .getByRole('combobox')
@@ -613,7 +615,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await adminPage
       .getByRole('option', { name: 'Nur dieser Termin', exact: true })
       .click();
-    await pastDialog.locator('#planning-edit-time').fill('09:30');
+    await typeIntoTimeInput(pastDialog, 'planning-edit-time', '0930');
     await pastDialog
       .getByRole('button', { name: 'Änderung speichern', exact: true })
       .click();
@@ -640,7 +642,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await adminPage
       .getByRole('option', { name: 'Ganze Serie ab frühestem änderbaren Termin' })
       .click();
-    await seriesDialog.locator('#planning-edit-time').fill('10:00');
+    await typeIntoTimeInput(seriesDialog, 'planning-edit-time', '1000');
     await seriesDialog
       .getByRole('button', { name: 'Änderung speichern', exact: true })
       .click();

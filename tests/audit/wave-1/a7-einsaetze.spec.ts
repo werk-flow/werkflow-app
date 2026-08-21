@@ -24,6 +24,7 @@ import {
   openDispatchPanel,
   openParkplatzPanel,
   parkplatzCard,
+  selectFromSearchable,
   showPlanningMonth,
   typeIntoDatePicker,
   typeIntoTimeInput,
@@ -1041,12 +1042,11 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await contextDialog
       .locator('#parking-note')
       .fill('A7 Freigabe des Eigentümers steht aus.');
-    await contextDialog.locator('#parking-responsible').click();
-    await adminPage
-      .getByRole('option')
-      .filter({ hasText: world.users.buero.firstName })
-      .first()
-      .click();
+    await selectFromSearchable(
+      adminPage,
+      contextDialog.locator('#parking-responsible'),
+      world.users.buero.firstName
+    );
     // A review date of TODAY is already overdue (≤ business today).
     await typeIntoDatePicker(
       contextDialog,

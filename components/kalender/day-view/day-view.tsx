@@ -36,7 +36,7 @@ import {
 } from '@/lib/time-tracking/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import type { JobMoveResizeResult } from './job-block';
-import { ActionBanner, type ActionBannerState } from './undo-banner';
+import { useBanner } from '@/components/ui/banner';
 import type { MoveResizeResult } from './work-session-block';
 import type {
   InteractiveCalendarSession,
@@ -169,9 +169,6 @@ export function DayView({
   const [dragCreateClockOut, setDragCreateClockOut] = useState<string>('17:00');
   const [entryDraft, setEntryDraft] = useState<CalendarEntryDraft | null>(null);
 
-  const bannerSeqRef = useRef(0);
-  const [activeBanner, setActiveBanner] = useState<ActionBannerState | null>(null);
-
   const handleDragCreate = useCallback((memberId: string, startTime: string, endTime: string) => {
     const startMinutes = parseTimeToMinutes(startTime);
     const endMinutes = parseTimeToMinutes(endTime);
@@ -199,6 +196,40 @@ export function DayView({
   }, []);
 
   const silentRefresh = onSilentRefresh ?? onRefresh;
+
+  const { showBanner } = useBanner();
+  // Adapter over the global banner (feedback canon): drag/drop successes carry
+  // the undo action, errors persist until dismissed. A failed undo still
+  // settles the in-flight counter via silentRefresh so later Realtime
+  // refreshes are not suppressed forever.
+  const showActionBanner = useCallback(
+    (banner: {
+      variant: 'success' | 'error';
+      message: string;
+      onUndo?: () => Promise<void>;
+    }) => {
+      showBanner({
+        variant: banner.variant,
+        message: banner.message,
+        ...(banner.variant === 'success' && banner.onUndo
+          ? {
+              actionLabel: 'Rückgängig',
+              onAction: () => {
+                void banner.onUndo?.().catch(() => {
+                  silentRefresh();
+                  showBanner({
+                    variant: 'error',
+                    message:
+                      'Die Aktion konnte nicht rückgängig gemacht werden.',
+                  });
+                });
+              },
+            }
+          : {}),
+      });
+    },
+    [showBanner, silentRefresh]
+  );
 
   const {
     scrollContainerRef,
@@ -372,8 +403,7 @@ export function DayView({
     const message = isMove
       ? 'Zeiteintrag wurde verschoben.'
       : 'Zeiteintrag wurde geändert.';
-    setActiveBanner({
-      id: ++bannerSeqRef.current,
+    showActionBanner({
       variant: 'success',
       message,
       onUndo: async () => {
@@ -452,8 +482,7 @@ export function DayView({
           return next;
         });
         silentRefresh();
-        setActiveBanner({
-          id: ++bannerSeqRef.current,
+        showActionBanner({
           variant: 'error',
           message: isMove
             ? 'Zeiteintrag konnte nicht verschoben werden.'
@@ -499,17 +528,16 @@ export function DayView({
       const errorMsg = isMove
         ? 'Zeiteintrag konnte nicht verschoben werden.'
         : 'Zeiteintrag konnte nicht geändert werden.';
-      setActiveBanner({ id: ++bannerSeqRef.current, variant: 'error', message: errorMsg });
+      showActionBanner({ variant: 'error', message: errorMsg });
     }
-  }, [currentUserId, entries, silentRefresh, onOperationStart]);
+  }, [currentUserId, entries, silentRefresh, onOperationStart, showActionBanner]);
 
   const handleInvalidSessionPlacement = useCallback((message: string) => {
-    setActiveBanner({
-      id: ++bannerSeqRef.current,
+    showActionBanner({
       variant: 'error',
       message
     });
-  }, []);
+  }, [showActionBanner]);
 
   const handleJobMoveResize = useCallback(async (result: JobMoveResizeResult) => {
     const { jobId, newPlannedTime, newDurationMinutes, originalPlannedTime, originalDurationMinutes } = result;
@@ -527,8 +555,7 @@ export function DayView({
 
     const undone = { current: false };
 
-    setActiveBanner({
-      id: ++bannerSeqRef.current,
+    showActionBanner({
       variant: 'success',
       message: isMove ? 'Auftrag wurde verschoben.' : 'Auftrag wurde geändert.',
       onUndo: async () => {
@@ -564,13 +591,12 @@ export function DayView({
       });
       silentRefresh();
       if (updateResult.error === 'qualification_declined') return;
-      setActiveBanner({
-        id: ++bannerSeqRef.current,
+      showActionBanner({
         variant: 'error',
         message: isMove ? 'Auftrag konnte nicht verschoben werden.' : 'Auftrag konnte nicht geändert werden.',
       });
     }
-  }, [silentRefresh, onOperationStart, updateCalendarJob]);
+  }, [silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]);
 
   // ── Cross-row drag state ──
   type DragBlockPayload =
@@ -925,8 +951,7 @@ export function DayView({
 
       const undone = { current: false };
 
-      setActiveBanner({
-        id: ++bannerSeqRef.current,
+      showActionBanner({
         variant: 'success',
         message: `Zeiteintrag wurde zu ${targetName} verschoben.`,
         onUndo: async () => {
@@ -997,8 +1022,7 @@ export function DayView({
           return next;
         });
         silentRefresh();
-        setActiveBanner({
-          id: ++bannerSeqRef.current,
+        showActionBanner({
           variant: 'error',
           message: result.error === 'overlapping_session'
             ? `Überschneidung mit bestehendem Eintrag von ${targetName}.`
@@ -1006,7 +1030,7 @@ export function DayView({
         });
       }
     },
-    [effectiveHourWidth, date, silentRefresh, onOperationStart]
+    [effectiveHourWidth, date, silentRefresh, onOperationStart, showActionBanner]
   );
 
   const handleCrossJobMoveRef = useRef<
@@ -1046,8 +1070,7 @@ export function DayView({
 
       const undone = { current: false };
 
-      setActiveBanner({
-        id: ++bannerSeqRef.current,
+      showActionBanner({
         variant: 'success',
         message: `Auftrag wurde zu ${targetName} verschoben.`,
         onUndo: async () => {
@@ -1092,14 +1115,13 @@ export function DayView({
         });
         silentRefresh();
         if (moveResult.error === 'qualification_declined') return;
-        setActiveBanner({
-          id: ++bannerSeqRef.current,
+        showActionBanner({
           variant: 'error',
           message: `Auftrag konnte nicht zu ${targetName} verschoben werden.`,
         });
       }
     },
-    [effectiveHourWidth, silentRefresh, onOperationStart, updateCalendarJob]
+    [effectiveHourWidth, silentRefresh, onOperationStart, updateCalendarJob, showActionBanner]
   );
 
   const initiateCrossRowDrag = useCallback(
@@ -1849,8 +1871,6 @@ export function DayView({
         onManualEntrySuccess={onManualEntrySuccess}
         onJobSuccess={onJobSuccess}
       />
-
-      <ActionBanner banner={activeBanner} onDismiss={() => setActiveBanner(null)} />
     </div>
   );
 }

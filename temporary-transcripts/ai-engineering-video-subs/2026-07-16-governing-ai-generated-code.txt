@@ -1,0 +1,47 @@
+# The trust gap between using AI and governing what it produces
+
+Source: https://www.instagram.com/reel/Da3gktKj0oX/
+Creator: @mattmurphyai
+Posted: 2026-07-16
+Topic: ai-engineering-video-subs
+
+## Summary
+
+92% of developers use AI daily.
+
+## Transcript
+
+92% of developers are now using AI tools daily,
+even if they're denying it.
+But only 29% of them trust the outputs.
+So let that gap sink in.
+And 48% do not review AI generated code
+before committing it to production.
+Not to mention 45% of that code
+contains OWASP security vulnerabilities on day one.
+So the AI adoption question is clearly settled.
+Everyone is using AI to build.
+The trust question is not settled.
+Almost nobody is governing what it's producing.
+And trust, trust isn't a technology problem.
+It's a governance and orchestration problem.
+The market is shifting from can the tool produce code,
+because it can, to can the human that's producing it
+govern the output.
+And that is the exact shift from vibe coder
+to AI directed engineer.
+The tool writes the code,
+but the engineer verifies that it works.
+The engineer confirms it's secure.
+The engineer decides that it's ready for production.
+So without that critical human layer of judgment,
+you're just shipping at the speed of AI
+without the quality of a coin flip.
+The bottleneck, it's not the AI.
+The bottleneck is the lack of trust.
+And factions AI directed engineering certification
+cures that bottleneck.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

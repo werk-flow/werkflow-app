@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -17,7 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Label } from '@/components/ui/label';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
   SelectContent,
@@ -37,8 +40,6 @@ import {
   type JobParkingContext,
   type JobParkingReason,
 } from '@/lib/parking/types';
-
-const NO_RESPONSIBLE = 'none';
 
 function toLocalIsoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -63,12 +64,13 @@ export function ParkingContextDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { showBanner } = useBanner();
   const [reason, setReason] = useState<JobParkingReason>(
     existingContext?.reason ?? 'sonstiges'
   );
   const [note, setNote] = useState(existingContext?.note ?? '');
   const [responsibleId, setResponsibleId] = useState<string>(
-    existingContext?.responsibleEmployeeRecordId ?? NO_RESPONSIBLE
+    existingContext?.responsibleEmployeeRecordId ?? ''
   );
   const [reviewDate, setReviewDate] = useState<Date | undefined>(
     fromIsoDate(existingContext?.nextReviewDate ?? null)
@@ -98,7 +100,7 @@ export function ParkingContextDialog({
   // A stored responsible person must remain selectable even when the option
   // list fails to load or no longer contains them.
   const selectableOptions =
-    responsibleId !== NO_RESPONSIBLE &&
+    responsibleId !== '' &&
     !options.some((option) => option.employeeRecordId === responsibleId)
       ? [
           {
@@ -109,7 +111,8 @@ export function ParkingContextDialog({
         ]
       : options;
 
-  const handleSave = async () => {
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsSaving(true);
     setError(null);
     try {
@@ -117,8 +120,7 @@ export function ParkingContextDialog({
         jobId,
         reason,
         note: note.trim() || null,
-        responsibleEmployeeRecordId:
-          responsibleId === NO_RESPONSIBLE ? null : responsibleId,
+        responsibleEmployeeRecordId: responsibleId || null,
         nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : null,
       });
       if (!result.success) {
@@ -128,6 +130,10 @@ export function ParkingContextDialog({
         );
         return;
       }
+      showBanner({
+        variant: 'success',
+        message: 'Parkplatz-Kontext wurde gespeichert.',
+      });
       onSaved();
     } catch {
       setError(PARKING_ERROR_MESSAGES.unexpected_error);
@@ -146,7 +152,7 @@ export function ParkingContextDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form onSubmit={handleSave} noValidate className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="parking-reason">Grund</Label>
             <Select
@@ -179,29 +185,25 @@ export function ParkingContextDialog({
 
           <div className="space-y-2">
             <Label htmlFor="parking-responsible">Verantwortlich (Büro)</Label>
-            <Select value={responsibleId} onValueChange={setResponsibleId}>
-              <SelectTrigger id="parking-responsible" className="w-full">
-                <SelectValue placeholder="Person auswählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_RESPONSIBLE}>
-                  Keine Person hinterlegen
-                </SelectItem>
-                {selectableOptions.map((option) => (
-                  <SelectItem
-                    key={option.employeeRecordId}
-                    value={option.employeeRecordId}
-                  >
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {optionsError && (
-              <p className="text-xs text-destructive">
-                Die Personenliste konnte nicht geladen werden.
-              </p>
-            )}
+            <SearchableSelect
+              id="parking-responsible"
+              options={selectableOptions.map((option) => ({
+                value: option.employeeRecordId,
+                label: option.label,
+              }))}
+              value={responsibleId}
+              onChange={setResponsibleId}
+              placeholder="Person auswählen"
+              searchPlaceholder="Person suchen …"
+              emptyMessage="Keine Person gefunden"
+              allowNone
+              noneLabel="Keine Person hinterlegen"
+            />
+            <ErrorText className="text-xs">
+              {optionsError
+                ? 'Die Personenliste konnte nicht geladen werden.'
+                : null}
+            </ErrorText>
           </div>
 
           <div className="space-y-2">
@@ -216,23 +218,19 @@ export function ParkingContextDialog({
               placeholder="Datum wählen"
             />
           </div>
-        </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+          <ErrorText>{error}</ErrorText>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Ohne Kontext lassen
-          </Button>
-          <Button disabled={isSaving} onClick={() => void handleSave()}>
-            {isSaving && <Loader2 className="size-4 animate-spin" />}
-            Kontext speichern
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Ohne Kontext lassen
+            </Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving && <Loader2 className="size-4 animate-spin" />}
+              Kontext speichern
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

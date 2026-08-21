@@ -16,19 +16,34 @@ function createAdminClient(): SupabaseClient {
 }
 
 async function listTestUserIds(admin: SupabaseClient): Promise<string[]> {
-  const [goldenDomainResult, resendResult] = await Promise.all([
-    admin.from('profiles').select('id').like('email', '%@werkflow-golden.test'),
-    admin.from('profiles').select('id').like('email', 'delivered+gg-%@resend.dev'),
-  ]);
-  const error = goldenDomainResult.error ?? resendResult.error;
-  if (error) throw new Error(`Test user lookup failed: ${error.message}`);
-  return [
-    ...new Set(
-      [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])].map(
-        (profile) => profile.id as string
-      )
-    ),
-  ];
+  // The sb_secret keys are exchanged for a gateway-minted JWT per request;
+  // Supabase-side clock skew between nodes intermittently rejects one with
+  // "JWT issued at future" (environment class, observed 2026-08-21 killing
+  // global setup twice). A bounded retry rides over the skewed node.
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 1; ; attempt += 1) {
+    const [goldenDomainResult, resendResult] = await Promise.all([
+      admin.from('profiles').select('id').like('email', '%@werkflow-golden.test'),
+      admin.from('profiles').select('id').like('email', 'delivered+gg-%@resend.dev'),
+    ]);
+    const error = goldenDomainResult.error ?? resendResult.error;
+    if (!error) {
+      return [
+        ...new Set(
+          [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])].map(
+            (profile) => profile.id as string
+          )
+        ),
+      ];
+    }
+    if (attempt >= MAX_ATTEMPTS || !error.message.includes('JWT')) {
+      throw new Error(`Test user lookup failed: ${error.message}`);
+    }
+    console.warn(
+      `[golden] transient auth error during leftover sweep (attempt ${attempt}/${MAX_ATTEMPTS}): ${error.message}`
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 // Mailbox stand-in for UI signup tests. The production flow requires the user

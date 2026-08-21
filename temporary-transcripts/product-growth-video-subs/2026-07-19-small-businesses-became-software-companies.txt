@@ -1,0 +1,32 @@
+# The small businesses that became software companies overnight
+
+Source: https://www.instagram.com/reel/Da_jHp2gITN/
+Creator: @mattmurphyai
+Posted: 2026-07-19
+Topic: product-growth-video-subs
+
+## Summary
+
+The florist built a delivery app. The gym owner automated scheduling.
+
+## Transcript
+
+Told you yesterday about that florist who built a delivery app. Well, there's a gym owner building automated scheduling
+There's contractors out there tracking permits on tablets instead of paper and every one of them
+Just became a software company. Well, that also means they now have to follow software company rules
+They just don't know it yet
+But the moment they deployed an app that handles customer data had processes payments and runs 24 7
+They took on every responsibility that comes with running a software company
+Security uptime data protection compliance support all the fun stuff. They just don't have engineers
+They don't have a security team. Many of them don't have an ops department that covers any of this
+They do have an AI and they do have a business to run
+So AI directed engineering exists because these new software companies need a discipline
+that teaches them how to orchestrate their AI across every layer of a production system inside their business and
+Doing it without hiring a team of traditional software companies that spent millions building it before
+That's the outcome of everything we're teaching at this point not learning to code not collecting badges
+Building and operating a real software company with AI is your engineering team and production judgment as your skill as the human in the loop
+The world just added a billion new software companies. None of them have engineers. We're building them one at a time
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

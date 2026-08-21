@@ -1,0 +1,49 @@
+# Every layer of a production stack, recapped
+
+Source: https://www.instagram.com/reel/DZAw8CcRXM6/
+Creator: @mattmurphyai
+Posted: 2026-05-31
+Topic: infrastructure-video-subs
+
+## Summary
+
+Full Tech Stack Recap!
+
+## Transcript
+
+Two weeks ago, I asked you a simple question.
+How many layers does your production stack have?
+And most vibe coders, they have two.
+Front end and a database, sometimes off.
+But that leaves 10 plus layers completely missing.
+And those 10 layers that are missing,
+separate a demo from a real product.
+So here's every layer, one last time.
+Layer one, front end foundations.
+Layer two, APIs and back end logic.
+Layer three, database and storage.
+Layer four, auth and permissions.
+Layer five, hosting and deployment.
+Layer six is cloud and compute.
+Layer seven is CI, CD and version control.
+Layer eight, security and row level security.
+It's an important one.
+Layer nine, rate limiting.
+Layer 10, caching and CDN.
+Layer 11 is load balancing and scaling.
+Layer 12 is air tracking and logs.
+And layer 13, availability and recovery.
+That's the full production stack, all 13 layers.
+Two weeks of content.
+Each one has a full playbook behind it.
+And if you followed this series,
+you now know more about production infrastructure
+than 90% of vibe coders who shipped an app this year.
+So if the question isn't whether you know it,
+it's whether you've built it.
+And the folks on the end of these videos,
+they're out there building it.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

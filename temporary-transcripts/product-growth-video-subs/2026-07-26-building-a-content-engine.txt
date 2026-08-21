@@ -1,0 +1,61 @@
+# Building a content engine from zero
+
+Source: https://www.instagram.com/reel/DbQzWwMlS-F/
+Creator: @mattmurphyai
+Posted: 2026-07-26
+Topic: product-growth-video-subs
+
+## Summary
+
+Zero to 50,000+ followers in 90 days.
+
+## Transcript
+
+0 to 50,000 followers in 90 days, 5 million views and I haven't spent a single dollar.
+Not an ad, no promotions, no paid boosts, no cute edits or yapping, 50,000 followers,
+5 million views, 300,000 follower interactions and half a million accounts reached and interacted
+with from 0 in 90 days.
+So here are the three things you direct your AI to build so your content machine runs the
+exact same way.
+Step 1.
+A weekly content audit system that tells you exactly what's working and what to kill.
+Every week I review what performs, what flops, what the audience has saved, what they shared
+and what they skipped all together.
+Then I adjust every single week based on that real data.
+When something works, I double down.
+When something flops, I kill it and it never runs again.
+So direct your AI to build a performance tracking dashboard that pulls your engagement
+data and surfaces any sort of patterns or trends.
+By topic, format, posting time of day, stop guessing, start deciding.
+The content machine is not set it and forget it.
+It's a weekly obsession with understanding what your audience needs and then delivering
+it before they ask for it.
+Step 2.
+A value first content strategy where you give away your best work for free.
+I give away everything, every fix, every framework, every script, every prompt.
+My audience saved 128,000 of my videos.
+They shared 39,000 of them and they built a reference library out of my content in so
+many unique ways because I gave them something worth saving.
+When you give away real value, your audience does your marketing for you.
+That's a win.
+Step 3.
+A community response system because every reply you send is a signal.
+I personally replied to every single comment in DM, every single one.
+71% of my views came from people who had never seen me before.
+They discovered me because the algorithm saw engagement and pushed my content to the new
+audiences.
+That engagement came from the community I built one reply at a time.
+So direct your AI to build a priority notification queue so you never miss a comment that matters.
+The algorithm will reward you for engagement and your replies, that's engagement.
+So you don't need a budget, you need a product worth talking about and the discipline to
+show up every single day and deliver it.
+So 50,000 followers, it's a start, 5 million views, we're moving right along, zero dollars,
+that's the win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Build so your content machine runs the exact same way.
+2. Build a performance tracking dashboard that pulls your engagement data and surfaces any sort of patterns or trends.
+3. Build a priority notification queue so you never miss a comment that matters.

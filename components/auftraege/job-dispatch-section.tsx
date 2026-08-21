@@ -10,6 +10,7 @@ import { CalendarCheck, Loader2, MessageSquare, Send } from 'lucide-react';
 
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   Dialog,
   DialogContent,
@@ -179,9 +180,7 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
           <Send className="size-4" />
           Mein Einsatz
         </h3>
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <ErrorText>{error}</ErrorText>
       </section>
     );
   }
@@ -200,11 +199,7 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
         <Send className="size-4" />
         Mein Einsatz
       </h3>
-      {error && (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <ErrorText className="mb-3">{error}</ErrorText>
       <div className="space-y-3">
         {cards.map((card) => (
           <div
@@ -292,38 +287,50 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
               bis das Büro entscheidet.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="dispatch-challenge-reason">Begründung</Label>
-            <Textarea
-              id="dispatch-challenge-reason"
-              value={challengeReason}
-              onChange={(event) => setChallengeReason(event.target.value)}
-              placeholder="z. B. Terminüberschneidung mit anderem Einsatz"
-              maxLength={500}
-            />
-            <p className="text-xs text-muted-foreground">
-              Mindestens 8 Zeichen.
-            </p>
-          </div>
-          {challengeError && (
-            <p role="alert" className="text-sm text-destructive">
-              {challengeError}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setChallengeTarget(null)}>
-              Abbrechen
-            </Button>
-            <Button
-              disabled={
-                challengeReason.trim().length < 8 ||
-                busyDispatchId === challengeTarget?.dispatchId
-              }
-              onClick={() => void handleChallenge()}
-            >
-              Rückfrage senden
-            </Button>
-          </DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleChallenge();
+            }}
+            noValidate
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="dispatch-challenge-reason">Begründung</Label>
+              <Textarea
+                id="dispatch-challenge-reason"
+                value={challengeReason}
+                onChange={(event) => setChallengeReason(event.target.value)}
+                placeholder="z. B. Terminüberschneidung mit anderem Einsatz"
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground">
+                Mindestens 8 Zeichen.
+              </p>
+            </div>
+            <ErrorText>{challengeError}</ErrorText>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setChallengeTarget(null);
+                  setChallengeError(null);
+                }}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  challengeReason.trim().length < 8 ||
+                  busyDispatchId === challengeTarget?.dispatchId
+                }
+              >
+                Rückfrage senden
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </section>

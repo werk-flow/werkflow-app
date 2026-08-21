@@ -1,0 +1,75 @@
+# What a security auditor finds in a weekend build
+
+Source: https://www.instagram.com/reel/DbTF4zkEegn/
+Creator: @mattmurphyai
+Posted: 2026-07-27
+Topic: security-video-subs
+
+## Summary
+
+Your AI built your app in a weekend. A security auditor would shut it down by Monday.
+
+## Transcript
+
+Yeah, your AI built an app in a weekend,
+but a security auditor walks in on Monday morning,
+shuts it right down.
+Every default wide open, stack trace, totally public.
+Endpoints, accepting requests from anywhere.
+Rate limits that don't even exist.
+And logging that's capturing nothing.
+So yeah, your AI optimized for speed
+and built something fast.
+But a security auditor that walks in
+is gonna optimize for survival.
+Right now, your app won't pass a basic review.
+So here are three things you direct your AI
+to lockdown right now,
+before someone tests your app the way an auditor would.
+Step one, air handling that protects your internals.
+Right now, when something breaks,
+your app returns a stack trace that tells an attacker
+exactly what framework you're running,
+what databases you're using, where your code has failed.
+So your AI built air handling for debugging, right?
+But it didn't build air handling for production protection.
+So generic messages to the users,
+detailed logs on the backend,
+and your AI can split all these in an hour.
+Without it, every error your app throws
+is a map for someone who wants to break in.
+And those actually for sale on the dark web.
+Step two, security headers on every response.
+Content security policies, X frame options,
+strict transport security.
+These are HTTP level headers
+that tell browsers how to protect your users.
+Your AI never set them because most frameworks
+do not even include them by default.
+A security auditor checks these first
+because they take five minutes to configure
+and their absence tells the auditor
+that nobody is paying attention in this build.
+And step three, input validation on every endpoint.
+Not just your login form, every form,
+every API parameter, every query stream.
+Your AI validates what it thinks a user will submit.
+An attacker submits what your AI never imagined,
+SQL injections, cross-site scripting,
+malformed payloads designed to break your parser in half.
+Your AI can add validation libraries
+to every input in an afternoon.
+Without them, your app is trusting
+every request it receives.
+And trust is how breaches always start.
+So your AI builds fast, doesn't build quality,
+and it does not build safe.
+So direct your AI to lock it down
+before someone else tests what your AI left wide open.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Lockdown right now, before someone tests your app the way an auditor would.
+2. Lock it down before someone else tests what your AI left wide open.

@@ -1,0 +1,89 @@
+# Using AI to define your ideal customer profile
+
+Source: https://www.instagram.com/reel/DbbaGawGG3_/
+Creator: @mattmurphyai
+Posted: 2026-07-30
+Topic: product-growth-video-subs
+
+## Summary
+
+Your AI can find your perfect customer before you post a single ad.
+
+## Transcript
+
+Your AI can find you the perfect customers
+before you post a single ad about your product.
+And almost nobody is using it this way.
+So when I was building the Faction Builders community,
+I did not guess who my audience was.
+I had a pretty good idea.
+But I directed my AI to build an ICP for my products
+based on my specific background, my skillset,
+and the market I was entering.
+It narrowed down every community and every program
+that modeled what I was trying to build.
+So here are the three things you direct your AI to do
+before you launch anything at all.
+Step one, build your ICP from your actual skillset,
+your skillset, not from wishful thinking
+or an idea you had about a problem.
+Most builders pick a market because it sounds profitable.
+You need to direct your AI to analyze your background,
+your experience, and your competitive advantages.
+And then map those against a market segment
+where those advantages matter the most.
+That's how you find the customers
+who need exactly what you're gonna bring with your product.
+And that keeps you from chasing customers
+who do not know you exist for that same reason.
+Step two, research the communities
+where your customers already live
+and go learn from the inside out.
+I paid to enter the communities that best modeled
+what I was trying to build.
+Not to sell them anything, not to pitch them anything,
+but to learn.
+I consumed everything in their communities,
+every piece of content, every course structure,
+every community interaction.
+I was reverse engineering what worked and what didn't.
+And also documenting what I would do differently.
+For me, that was an important process.
+We learned a massive amount about communities and builders.
+We also learned exactly where our approach needed
+to diverge away from the others who were just talking.
+So direct your AI to build a competitive analysis framework
+and do this before you join a community
+so you know exactly what to look for
+and what to document when you're inside it.
+Step three, turn that research into your product blueprint.
+Before you write a single line of code,
+direct your AI to take your ICP research
+and your competitive analysis
+and generate a product positioning document
+that is focused on you, who you serve, what you deliver,
+how you are different, where you compete,
+what your experience means.
+That document becomes foundation
+for every piece of content you make,
+every landing page you have,
+every sales conversation you will ever have
+with a customer.
+The builders who do this work before they launch
+build a big audience.
+The builders who skip it build for themselves.
+And then they wonder why nobody is showing up to their app.
+Well, your ICP is not a guess.
+It's a research project you've got to complete.
+So direct your AI to start it before another feature
+nobody asked for, and that is a win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Do before you launch anything at all.
+2. Analyze your background, your experience, and your competitive advantages.
+3. Build a competitive analysis framework and do this before you join a community so you know exactly what to look for and what to document when you're inside it.
+4. Take your ICP research and your competitive analysis and generate a product positioning document that is focused on you, who you serve, what you deliver, how you are different, where you compete, what your experience means.
+5. Start it before another feature nobody asked for, and that is a win.

@@ -457,19 +457,6 @@ export function EntryDetailsDialog({
     () => (clockOutTimestamp ? new Date(clockOutTimestamp) : null),
     [clockOutTimestamp]
   );
-  const sessionBreakSignature = useMemo(
-    () =>
-      sessionBreaks
-        .map(
-          (workBreak) =>
-            `${workBreak.breakStart.id}:${workBreak.breakStart.timestamp}:${
-              workBreak.breakEnd?.id ?? 'open'
-            }:${workBreak.breakEnd?.timestamp ?? 'open'}`
-        )
-        .join('|'),
-    [sessionBreaks]
-  );
-
   const sessionEntriesForReview = useMemo(
     () =>
       sourceEntries.filter(
@@ -491,7 +478,7 @@ export function EntryDetailsDialog({
   useEffect(() => {
     if (!open || !session.jobId) {
       if (!jobName) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- the dialog clears the fetched job metadata when it switches to a session without a linked job
+         
         setResolvedJob(null);
       }
       return;
@@ -541,7 +528,7 @@ export function EntryDetailsDialog({
     // refresh-interrupted-dialog defect class. handleStartEdit re-seeds the
     // draft from the current snapshot when editing begins, so the snapshot
     // values are deliberately read without being dependencies here.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the dialog intentionally resets the editable draft back to the incoming session snapshot
+     
     setIsEditing(startInEditMode);
     setError(null);
     setSuccessMessage(null);

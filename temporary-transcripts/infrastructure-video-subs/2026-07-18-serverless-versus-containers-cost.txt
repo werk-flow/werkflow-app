@@ -1,0 +1,70 @@
+# When serverless stops being the cheap option
+
+Source: https://www.instagram.com/reel/Da8FYMdlAL9/
+Creator: @mattmurphyai
+Posted: 2026-07-18
+Topic: infrastructure-video-subs
+
+## Summary
+
+Serverless was predictable at 10 users. At 1,000 the bill is climbing.
+
+## Transcript
+
+That serverless bill sure was predictable at 10 users.
+At a thousand users, it's unpredictable, climbing fast.
+And your team, they wanna move to containers.
+That means managing infrastructure for the first time,
+for your team.
+And this is not a technology decision,
+it's a business maturity decision
+and everybody goes through it when you're scaling.
+Step one, the cost of convenience.
+Serverless charges per invocation.
+Every request costs you money.
+You pay more per unit than a dedicated server,
+but you manage nothing at all.
+No updates, no capacity planning, no on-call rotations.
+For early stage companies and products,
+that's the right deal.
+Your time is worth more than the premium.
+The question is, when does that premium exceed the cost
+of managing it yourself?
+Figure that out.
+Step two, the cost of control.
+Containers cost less per unit,
+but they also cost you operationally.
+Someone monitors server health,
+someone's handling your scaling,
+someone manages deployments.
+If that someone is you and you are also the founder,
+the salesperson, the support team and the product designer,
+which many solo printers are,
+so that means the operation's burden may cost more
+in lost focus than serverless premium costs and dollars.
+I'd suggest you direct your AI to run that gap analysis.
+Monthly serverless cost at current usage,
+equivalent container costs,
+and hours per week for container operations.
+That math or the result of it will tell you
+which model fits your stage.
+And step three is the hybrid answer.
+Most production systems should be running both.
+Serverless for request response
+and containers for background processing.
+Your API stays serverless, queue workers move to containers,
+scheduled jobs run on dedicated compute,
+and you direct your AI to architect the split
+by the workload type.
+Not by what a YouTube tutorial recommended,
+but the decision is not serverless versus containers.
+It is which workloads belong where
+based on your business reality.
+Not a technical preference, the business reality.
+And that's where you're gonna find the win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Architect the split by the workload type.

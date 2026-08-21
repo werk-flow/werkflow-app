@@ -39,7 +39,7 @@ import { ParkingContextDialog } from './parking-context-dialog';
 import { getJobParkingContexts } from '@/lib/parking/actions';
 import type { JobParkingContext } from '@/lib/parking/types';
 import { clearCalendarDragState } from './drag-state';
-import { ActionBanner, type ActionBannerState } from './day-view/undo-banner';
+import { useBanner } from '@/components/ui/banner';
 import { cn } from '@/lib/utils';
 import { usePlanningWarningConfirmation } from './planning-warning-dialog';
 
@@ -306,8 +306,6 @@ export function CalendarContainer({
     showJobs: true
   });
 
-  const parkplatzBannerSeqRef = useRef(0);
-  const [parkplatzBanner, setParkplatzBanner] = useState<ActionBannerState | null>(null);
   const parkplatzButtonRef = useRef<HTMLButtonElement>(null);
   const calendarHeaderRef = useRef<HTMLDivElement>(null);
   const realtimePausedUntilRef = useRef(0);
@@ -902,6 +900,40 @@ export function CalendarContainer({
     }, 300);
   }, [fetchEntries, fetchJobs, fetchParkedJobs, isAdminOrManager, refetchVacationEntries, refetchSicknessEntries]);
 
+  const { showBanner } = useBanner();
+  // Adapter over the global banner (feedback canon): parkplatz/drag successes
+  // carry the undo action, errors persist until dismissed. A failed undo still
+  // settles the in-flight counter via handleSilentRefresh so later silent
+  // refreshes are not suppressed forever.
+  const showParkplatzBanner = useCallback(
+    (banner: {
+      variant: 'success' | 'error';
+      message: string;
+      onUndo?: () => Promise<void>;
+    }) => {
+      showBanner({
+        variant: banner.variant,
+        message: banner.message,
+        ...(banner.variant === 'success' && banner.onUndo
+          ? {
+              actionLabel: 'Rückgängig',
+              onAction: () => {
+                void banner.onUndo?.().catch(() => {
+                  handleSilentRefresh();
+                  showBanner({
+                    variant: 'error',
+                    message:
+                      'Die Aktion konnte nicht rückgängig gemacht werden.',
+                  });
+                });
+              },
+            }
+          : {}),
+      });
+    },
+    [showBanner, handleSilentRefresh]
+  );
+
   const handleManualEntrySuccess = useCallback(
     (newEntries: TimeEntry[]) => {
       handleOperationStart();
@@ -1100,8 +1132,7 @@ export function CalendarContainer({
     if (!job) return;
     const authoritativeJobId = job.jobId ?? (job.occurrenceId ? null : job.id);
     if (!authoritativeJobId) {
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Interne Termine werden abgesagt oder verschoben, nicht geparkt.',
       });
@@ -1124,8 +1155,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde geparkt.',
       onUndo: async () => {
@@ -1153,8 +1183,7 @@ export function CalendarContainer({
     if (!result.success) {
       setParkedJobs((prev) => prev.filter((j) => j.id !== authoritativeJobId));
       setCalendarJobs((prev) => [...prev, job]);
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht geparkt werden.',
       });
@@ -1165,7 +1194,7 @@ export function CalendarContainer({
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, showParkplatzBanner]);
 
   const handleUnparkJob = useCallback(async (
     jobId: string,
@@ -1203,8 +1232,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde eingeplant.',
       onUndo: async () => {
@@ -1246,8 +1274,7 @@ export function CalendarContainer({
         handleSilentRefresh();
         return;
       }
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht eingeplant werden.',
       });
@@ -1256,7 +1283,7 @@ export function CalendarContainer({
     }
 
     if (!undone.current) handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
 
   const handleScheduleJob = useCallback(async (
     jobId: string,
@@ -1290,8 +1317,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde eingeplant.',
       onUndo: async () => {
@@ -1332,8 +1358,7 @@ export function CalendarContainer({
         handleSilentRefresh();
         return;
       }
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht eingeplant werden.',
       });
@@ -1342,7 +1367,7 @@ export function CalendarContainer({
     }
 
     if (!undone.current) handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
 
   const handleJobWeekHeaderMove = useCallback(async (
     jobId: string,
@@ -1373,8 +1398,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde verschoben.',
       onUndo: async () => {
@@ -1412,14 +1436,13 @@ export function CalendarContainer({
         handleSilentRefresh();
         return;
       }
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht verschoben werden.',
       });
     }
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
 
   const handleJobDateChange = useCallback(async (
     jobId: string,
@@ -1441,8 +1464,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde verschoben.',
       onUndo: async () => {
@@ -1474,15 +1496,14 @@ export function CalendarContainer({
         handleSilentRefresh();
         return;
       }
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht verschoben werden.',
       });
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
 
   const handleJobWeekMove = useCallback(async (
     jobId: string,
@@ -1516,8 +1537,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Auftrag wurde verschoben.',
       onUndo: async () => {
@@ -1560,14 +1580,13 @@ export function CalendarContainer({
         handleSilentRefresh();
         return;
       }
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: 'Auftrag konnte nicht verschoben werden.',
       });
     }
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob]);
+  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
 
   const handleSessionWeekMove = useCallback(async (
     session: WorkSession,
@@ -1598,10 +1617,9 @@ export function CalendarContainer({
 
     const todayKey = toLocalDateString(new Date());
     if (newDate > todayKey) {
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
-        message: 'Zeiteintraege koennen nicht in die Zukunft verschoben werden.',
+        message: 'Zeiteinträge können nicht in die Zukunft verschoben werden.',
       });
       return;
     }
@@ -1639,8 +1657,7 @@ export function CalendarContainer({
 
     const undone = { current: false };
 
-    setParkplatzBanner({
-      id: ++parkplatzBannerSeqRef.current,
+    showParkplatzBanner({
       variant: 'success',
       message: 'Eintrag wurde verschoben.',
       onUndo: async () => {
@@ -1682,8 +1699,7 @@ export function CalendarContainer({
           return e;
         })
       );
-      setParkplatzBanner({
-        id: ++parkplatzBannerSeqRef.current,
+      showParkplatzBanner({
         variant: 'error',
         message: result.error === 'overlapping_session'
           ? 'Überlappende Arbeitszeit am Ziel.'
@@ -1692,7 +1708,7 @@ export function CalendarContainer({
     }
 
     handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh]);
+  }, [handleOperationStart, handleSilentRefresh, showParkplatzBanner]);
 
   // Use the custom renderers for day/week so break-aware work blocks behave
   // consistently for every role. FullCalendar remains the month renderer.
@@ -1899,11 +1915,6 @@ export function CalendarContainer({
           }}
         />
       )}
-
-      <ActionBanner
-        banner={parkplatzBanner}
-        onDismiss={() => setParkplatzBanner(null)}
-      />
 
       {/* Floating drag preview that follows cursor during parkplatz drags */}
       {parkplatzDragJob && parkplatzDragCursor && (() => {

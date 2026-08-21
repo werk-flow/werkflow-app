@@ -14,7 +14,7 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       Your status page says operational. Your customers are screenshotting error messages in your support chan
 05  2026-08-18  ai-engineering-video-subs  https://www.instagram.com/reel/DcMWtOgEgaE/
       GitHub just showed you exactly where your AI money goes.
-06  2026-08-18  infrastructure-video-subs  https://www.instagram.com/reel/DcLzI-pFJlM/
+06  2026-08-18  engineering-practice-video-subs  https://www.instagram.com/reel/DcLzI-pFJlM/
       Your AI pushed 47 files to production in one commit.
 07  2026-08-17  product-growth-video-subs  https://www.instagram.com/reel/DcJx3MyDnHE/
       You have paid your payment processor $30,000.
@@ -52,7 +52,7 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       You built it. Nobody came.
 24  2026-08-09  product-growth-video-subs  https://www.instagram.com/reel/Db0n5e6DAUl/
       AI Directed Engineering gets you to launch.
-25  2026-08-08  ai-engineering-video-subs  https://www.instagram.com/reel/Dbymz5CE5ZP/
+25  2026-08-08  product-growth-video-subs  https://www.instagram.com/reel/Dbymz5CE5ZP/
       If you are building for builders, your product needs to be something an agent can buy.
 26  2026-08-08  database-video-subs   https://www.instagram.com/reel/DbyDJomAkQv/
       Your AI built your database. It never planned for the day you have to change it.
@@ -76,7 +76,7 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       Nobody is measuring whether their AI build is actually making money. You can tell me what you pay for yo
 36  2026-08-02  security-video-subs   https://www.instagram.com/reel/DbjN2IVCeEm/
       One kid with a laptop can take your entire product offline right now.
-37  2026-08-02  product-growth-video-subs  https://www.instagram.com/reel/DbimVuCkZqi/
+37  2026-08-02  security-video-subs   https://www.instagram.com/reel/DbimVuCkZqi/
       A customer just called you. They are looking at someone else's revenue dashboard. Their invoices. Their 
 38  2026-08-01  security-video-subs   https://www.instagram.com/reel/DbgDhezjelJ/
       Seven out of my last ten audits had API keys committed to GitHub.
@@ -88,7 +88,7 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       Your AI built an app that 1.3 billion people cannot use.
 42  2026-07-29  ai-engineering-video-subs  https://www.instagram.com/reel/DbZSrUOl6sN/
       They just paid sixty billion dollars for the tool I teach you to use for free.
-43  2026-07-29  ai-engineering-video-subs  https://www.instagram.com/reel/DbYgfWbDWW2/
+43  2026-07-29  product-growth-video-subs  https://www.instagram.com/reel/DbYgfWbDWW2/
       Your next customer might not be a human.
 44  2026-07-29  infrastructure-video-subs  https://www.instagram.com/reel/DbY-1HLDHm6/
       Your AI picked your infrastructure. It also picked your customer ceiling. The bundled stack is not wrong
@@ -102,13 +102,13 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       Your AI built your app in a weekend. A security auditor would shut it down by Monday.
 49  2026-07-26  product-growth-video-subs  https://www.instagram.com/reel/DbQzWwMlS-F/
       Zero to 50,000+ followers in 90 days.
-50  2026-07-26  security-video-subs   https://www.instagram.com/reel/DbQmjD1D_ua/
+50  2026-07-26  engineering-practice-video-subs  https://www.instagram.com/reel/DbQmjD1D_ua/
       2,000 builders asked us to look at their apps.
 51  2026-07-25  security-video-subs   https://www.instagram.com/reel/DbOpQ2mDrD1/
       You picked your auth provider because it was free.
 52  2026-07-25  compliance-video-subs  https://www.instagram.com/reel/DbOGY9aEY0-/
       Your AI built a healthcare app. It has never heard of HIPAA.
-53  2026-07-24  infrastructure-video-subs  https://www.instagram.com/reel/DbLW867jzzG/
+53  2026-07-24  product-growth-video-subs  https://www.instagram.com/reel/DbLW867jzzG/
       You have 6,000 users and fewer of them come back every week.
 54  2026-07-24  infrastructure-video-subs  https://www.instagram.com/reel/DbL-9-3kT8H/
       Your app went down and your customers think you stole their money. Six hours of downtime.
@@ -128,15 +128,15 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       Your user clicked delete my account.
 62  2026-07-20  product-growth-video-subs  https://www.instagram.com/reel/DbBsA6ljkur/
       Your first customer dispute will freeze your Stripe account.
-63  2026-07-20  compliance-video-subs  https://www.instagram.com/reel/DbBCtEGiaMM/
+63  2026-07-20  product-growth-video-subs  https://www.instagram.com/reel/DbBCtEGiaMM/
       Your AI built a product. It did not register a business.
 64  2026-07-19  product-growth-video-subs  https://www.instagram.com/reel/Da_jHp2gITN/
       The florist built a delivery app. The gym owner automated scheduling.
-65  2026-07-19  product-growth-video-subs  https://www.instagram.com/reel/Da-xLx0GH9f/
+65  2026-07-19  security-video-subs   https://www.instagram.com/reel/Da-xLx0GH9f/
       Your API is simultaneously a security surface, a product surface, and a contract surface.
-66  2026-07-18  database-video-subs   https://www.instagram.com/reel/Da8FYMdlAL9/
+66  2026-07-18  infrastructure-video-subs  https://www.instagram.com/reel/Da8FYMdlAL9/
       Serverless was predictable at 10 users. At 1,000 the bill is climbing.
-67  2026-07-18  ai-engineering-video-subs  https://www.instagram.com/reel/Da6fdVGCokJ/
+67  2026-07-18  product-growth-video-subs  https://www.instagram.com/reel/Da6fdVGCokJ/
       One billion new builders just entered the software market.
 68  2026-07-17  product-growth-video-subs  https://www.instagram.com/reel/Da5cIxGDdca/
       They survived the first 48 hours.
@@ -146,7 +146,7 @@ Three of these are pinned posts, so their dates sit outside the recent run.
       92% of developers use AI daily.
 71  2026-07-16  engineering-practice-video-subs  https://www.instagram.com/reel/Da3CmFEDSpG/
       Your checkout works with credit cards.
-72  2026-05-31  product-growth-video-subs  https://www.instagram.com/reel/DZAw8CcRXM6/
+72  2026-05-31  infrastructure-video-subs  https://www.instagram.com/reel/DZAw8CcRXM6/
       Full Tech Stack Recap!
 73  2026-05-20  database-video-subs   https://www.instagram.com/reel/DYkAobpgwjI/
       50 users broke your app.

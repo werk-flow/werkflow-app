@@ -1,0 +1,53 @@
+# Building new features while the existing ones are broken
+
+Source: https://www.instagram.com/reel/DbeZo5Zx5i2/
+Creator: @mattmurphyai
+Posted: 2026-07-31
+Topic: product-growth-video-subs
+
+## Summary
+
+Your AI keeps building new features while your existing features are broken.
+
+## Transcript
+
+Your AI keeps building new features while your existing features are totally broken.
+And you keep letting it because building feels like progress.
+Something breaks, a payment flow fails, your onboarding drops people at step 3.
+Instead of fixing it, you ask your AI to build the next feature.
+Guess what?
+Been there, done that.
+Because new features feel like momentum, and there's a lot of dopamine in the AI system.
+Building feels like you're going backwards.
+Here are three reasons that your instinct is destroying your product.
+Step 1.
+Every new feature stacked on a broken foundation makes the foundation more fragile.
+Your AI will happily add a notification system on top of an off-flow that drops sessions.
+It will build a reporting dashboard that queries a database that has no indexes.
+So your AI builds what you ask for, but it never asks whether the thing underneath it
+can hold the weight of what you're building.
+Step 2.
+Your customers are not asking for new features.
+They are asking for the current ones to work perfectly.
+Go read your support inbox.
+The signal is not, I wish this had more features.
+It never is.
+The signal is, this does not work the way I expected.
+New features attract customers, sure.
+Broken features lose them fast.
+And losing is more expensive than delaying.
+Step 3.
+Protect your AI to run a feature health audit before it builds anything new.
+What is live?
+What is broken?
+What has active users versus zero adoption?
+Broken and used gets fixed first.
+Broken and unused gets killed.
+Only after the foundation is solid do you build the next thing.
+Your AI will build forever if you let it.
+But your job as an AI-directed engineer is to tell it when to stop building and start
+fixing.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

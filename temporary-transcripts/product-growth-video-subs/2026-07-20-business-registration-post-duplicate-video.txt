@@ -1,0 +1,23 @@
+# Post captioned about registering a business, carrying the Stripe dispute video
+
+Source: https://www.instagram.com/reel/DbBCtEGiaMM/
+Creator: @mattmurphyai
+Posted: 2026-07-20
+Topic: product-growth-video-subs
+
+## Note
+
+There is no transcript here because there is nothing unique to transcribe.
+
+The caption on this post describes registering a business entity so that a
+product's liabilities stay separate from personal assets. The video actually
+attached to the post is the Stripe dispute video published the same day, word
+for word identical to:
+
+  2026-07-20-stripe-disputes-and-chargebacks.txt
+
+The two posts are separate Instagram records with different media IDs and
+different video files, but the audio is the same clip and both run 137.4
+seconds. That points to an upload mix-up by the author rather than a fault in
+the transcription. If the business-registration video is ever posted properly,
+it would need to be fetched again.

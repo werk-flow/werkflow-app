@@ -1,0 +1,43 @@
+# What the Cursor acquisition means for builders
+
+Source: https://www.instagram.com/reel/DbZSrUOl6sN/
+Creator: @mattmurphyai
+Posted: 2026-07-29
+Topic: ai-engineering-video-subs
+
+## Summary
+
+They just paid sixty billion dollars for the tool I teach you to use for free.
+
+## Transcript
+
+they just paid 60 billion dollars for the tool I teach you guys to use for
+free. SpaceX just acquired cursor 60 billion dollars, the largest acquisition
+of a venture-backed startup in history in fact, all for an AI coding tool. The
+same tool sets that AI directed engineers use every single day to build
+production software. So here are the three things this means for you as a
+builder right now. Number one, the career path you are on is no longer speculative.
+When Elon Musk's pays 60 billion dollars for anything but for an AI coding tool
+the market is telling you that directing AI to build software is not a trend. It's
+now critical infrastructure and every person who told you that vibe coding is
+a fad, that AI generated code is a toy, that this whole thing is going away just
+got a 60 billion dollar answer to that question. The tools are validated, the
+skill set to use it is what matters the most right now. So number two, you are
+learning the skill set that these companies are going to pay the most for.
+Cursor crossed two billion dollars in annual revenue before the acquisition.
+Two billion, from people paying to use an AI coding tool, same like you're using.
+The demand for people who know how to direct those tools, who know how to
+verify the outputs, who know how to take what it builds and make it production
+ready, that demand is about to explode. And you're not late to this, you are early.
+And number three, the gap between the tool and the outcome is still just you.
+Cursor got a 60 billion dollar valuation because the tool is super powerful. But
+the tool does not ship production software on its own, we all know
+that. It needs direction, it needs judgment, it needs someone who knows what
+to verify, what to harden and what to protect before it goes live. Well that
+person is an AI-directed engineer, period. And that is the role you are building
+toward right now, following my content, taking my courses. 60 billion dollars for
+the tool, not the person using it. Be the person using it. And that is the win.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

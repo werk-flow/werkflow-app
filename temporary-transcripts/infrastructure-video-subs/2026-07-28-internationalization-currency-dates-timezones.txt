@@ -1,0 +1,82 @@
+# Building for twelve countries when the AI assumed one
+
+Source: https://www.instagram.com/reel/DbVvJBgDv7n/
+Creator: @mattmurphyai
+Posted: 2026-07-28
+Topic: infrastructure-video-subs
+
+## Summary
+
+Your AI built your app for one country.
+
+## Transcript
+
+Your AI built your app for one country,
+but your customers live in 12 countries.
+Right now, someone in Lagos is trying to pay you
+and your payment processor is rejecting their card.
+Someone in Mumbai is looking at a date picker
+that makes no sense
+because your AI hard-coded the American date format.
+And someone in London is getting your support emails
+at 3 a.m. because your AI scheduled everything
+in American Central Time.
+So your AI built for the country you live in, that's great,
+but your business does not live in one country.
+Here are the three things you're gonna direct your AI
+to fix before your international customers
+stop trying at all.
+Step one, multi-currency payment support.
+Your AI connected Stripe with one currency.
+Stripe supports 135 currencies natively.
+So your AI will never turn it on
+because you never told it your customers live
+outside of your zone in the United States.
+So direct your AI to enable automatic currency conversion
+at checkout.
+So a customer in Kenya sees Kenyan shillings
+and a customer in the UK sees pounds.
+The integration takes you an afternoon.
+The customers you are losing
+take their money somewhere else permanently.
+So step two, locale aware formatting
+across your entire application.
+Dates, times, numbers, currencies, and addresses.
+Every one of these displays differently
+depending on where your customers live.
+So your AI hard-coded American formatting
+because that's what the tutorials use
+and that's where you live.
+But you need to direct your AI
+to implement locale detection
+and format every user-facing data point
+based on the customer's actual location.
+One wrong date format tells an international customer
+this product was not built for them.
+And step three, time zone aware scheduling
+for every automated communication.
+Emails, notifications, reminders, subscription renewals.
+All of them should fire relative
+to your customer's time zone, not yours.
+So direct your AI to store each user's time zone at signup
+and reference it for every scheduled event in the system.
+A renewal reminder at 3 a.m. is not a reminder at all.
+It's just noise.
+So your AI built a product for your time zone,
+your currency, and your language.
+And it did great.
+But your customers do not agree
+to any of those limitations.
+So direct your AI to build
+for where your customers are actually living.
+And that's a win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Fix before your international customers stop trying at all.
+2. Enable automatic currency conversion at checkout.
+3. Implement locale detection and format every user-facing data point based on the customer's actual location.
+4. Store each user's time zone at signup and reference it for every scheduled event in the system.
+5. Build for where your customers are actually living.

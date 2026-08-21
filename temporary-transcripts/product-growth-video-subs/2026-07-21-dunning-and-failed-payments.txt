@@ -1,0 +1,58 @@
+# The revenue that disappears through failed card charges
+
+Source: https://www.instagram.com/reel/DbETSNnjeGn/
+Creator: @mattmurphyai
+Posted: 2026-07-21
+Topic: product-growth-video-subs
+
+## Summary
+
+Your revenue is disappearing every month and you cannot see it.
+
+## Transcript
+
+Your revenue is disappearing before your eyes every month and you can't even see it.
+Right now, a customer's credit card just expired.
+The charge failed, your app did nothing, no retry, no notification, no email at all.
+That subscription just silently died and that customer is gone forever.
+They do not even know what happened, it's called dunning.
+And most builders, they don't even know the word dunning exists while it quietly is
+bleeding them dry.
+Here are three things you direct your AI to build before your MRR becomes a ghost town.
+Step 1.
+A retry schedule that fights for the payment before it dies.
+When a charge fails, your system should be trying on a staggered sequence over the next
+7 to 14 days.
+Not one and done.
+The strategic cadence that catches cards that were temporarily declined or expired and got
+reissued in that window of time.
+Stripe supports this natively, but your AI will never configure it because it thinks
+a failed charge is the final answer.
+It's not.
+It's a recoverable event.
+Step 2.
+A failed payment needs an email sequence.
+Your customer is not ignoring you.
+They have no idea their card has failed.
+A three email sequence that says, your payment failed, here's how to update your card, recovers
+up to 30 to 40% of failed charges.
+That is a revenue you already earned walking out the back door.
+All because nobody told the customer what just happened.
+And step 3.
+A grace period before cancellation.
+When retries fail and emails go unanswered, your system needs a defined window before
+it kills the subscription altogether.
+Not instant cancellation or first failure.
+A 7 to 14 day buffer where the account stays active.
+The difference between a hard cutoff and a grace period is thousands of dollars per
+month walking out versus walking back in.
+Your AI built the front door to your revenue, but it never noticed your customers were walking
+out the back door.
+So you need to direct your AI to lock the back door before your next payment cycle runs.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Build before your MRR becomes a ghost town.
+2. Lock the back door before your next payment cycle runs.

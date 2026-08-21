@@ -1,0 +1,45 @@
+# Preparing for the dispute that freezes your payouts
+
+Source: https://www.instagram.com/reel/DbBsA6ljkur/
+Creator: @mattmurphyai
+Posted: 2026-07-20
+Topic: product-growth-video-subs
+
+## Summary
+
+Your first customer dispute will freeze your Stripe account.
+
+## Transcript
+
+Your first customer dispute will freeze your Stripe account, not some of your
+funds, all of your funds. Your rent money, your server costs, your next payroll,
+frozen. And you're sitting there with no refund policy, no dispute response
+template, no chargeback threshold alerts, because your AI never built any of it
+for you. So here are the three things you direct your AI to set up before your
+first dispute hits. Number one, a published refund policy that matches
+your actual terms. Not the Stripe default, not some template that you downloaded.
+You got to get your terms written out specific for you. Linked from your
+checkout page, visible before the customer pays. Because when a customer
+disputes a charge and you have no published refund policy, Stripe sides
+with that customer every single time. It's not a bug, that's how the system
+works. Step two, chargeback threshold alerts. Stripe will let your dispute
+rate climb silently until it crosses their threshold, cha-ching, and then they
+act. By then, it's too late. So your AI can configure alerts that warn you when
+disputes start trending. So you can fix the problem before Stripe fixes it for
+you. The difference between monitoring and reacting is the difference between
+keeping your account and potentially losing it. Step three, a dispute response
+workflow. When a chargeback hits, you have days to respond with evidence, not
+weeks, not whenever you get around to it, you have days and it has to be
+organized. So your AI can build a response template for you with
+transaction logs, delivery confirmations, a refund policy with screenshots
+pre-loaded. Having that template built before the first claim, well that means
+you respond with documentation instead of panicking like you've never dealt
+with it before. You built the revenue engine, now you have to direct your AI to
+protect it for you. Because your first dispute is not a question of if, it's
+when Murphy's law, it's coming.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Set up before your first dispute hits.

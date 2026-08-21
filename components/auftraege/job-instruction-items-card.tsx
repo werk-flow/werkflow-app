@@ -10,10 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import {
-  ActionBanner,
-  type ActionBannerState,
-} from '@/components/kalender/day-view/undo-banner';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -106,8 +103,7 @@ export function JobInstructionItemsCard({
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [reorderingItemId, setReorderingItemId] = useState<string | null>(null);
   const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
-  const [activeBanner, setActiveBanner] = useState<ActionBannerState | null>(null);
-  const bannerSequenceRef = useRef(0);
+  const { showBanner } = useBanner();
   const reorderInFlightRef = useRef(false);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const itemTextareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
@@ -169,12 +165,7 @@ export function JobInstructionItemsCard({
   }
 
   function showErrorBanner(message: string) {
-    bannerSequenceRef.current += 1;
-    setActiveBanner({
-      id: bannerSequenceRef.current,
-      variant: 'error',
-      message,
-    });
+    showBanner({ variant: 'error', message });
   }
 
   async function syncItemsFromServer(): Promise<RenderedInstructionItem[]> {
@@ -400,7 +391,6 @@ export function JobInstructionItemsCard({
 
   return (
     <>
-      <ActionBanner banner={activeBanner} onDismiss={() => setActiveBanner(null)} />
       <div className="min-w-0 w-full overflow-hidden rounded-lg border bg-card p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>

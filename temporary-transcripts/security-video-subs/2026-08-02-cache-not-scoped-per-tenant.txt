@@ -1,0 +1,61 @@
+# Cache that isn't tenant-scoped shows customers each other's data
+
+Source: https://www.instagram.com/reel/DbimVuCkZqi/
+Creator: @mattmurphyai
+Posted: 2026-08-02
+Topic: security-video-subs
+
+## Summary
+
+A customer just called you. They are looking at someone else's revenue dashboard. Their invoices. Their customer list. Their monthly revenue. Your AI cached a query result without scoping it to the tenant.
+
+## Transcript
+
+A customer just called you.
+They're looking at someone else's revenue dashboard on your system.
+Their invoices, their customer list, their monthly revenue.
+On your customer screen right now.
+So your AI set up caching to speed up your app, but it never scoped the cache to the
+appropriate tenant.
+So customer A loaded their dashboard and the result got cached.
+Customer B loaded the same page and boom, your cache serve customer A's financial data
+instantly to customer B.
+Here's why this happens and what you need to direct your AI to do to fix it immediately.
+Step one, your database security is irrelevant if your cache layer completely bypasses it.
+So you might have perfect row level security on your databases.
+A lot of people do, but your cache sits in front of your database.
+So when your AI cached that query result, it cached the output after your security rules
+ran for customer A.
+So customer B never hit the database.
+They get customer A's cached results served directly to them.
+So you need to direct your AI to scope every single cache key to the tenant ID.
+No exceptions.
+Every cached query, every cached page fragment, every cached API response must include a tenant
+context in that key.
+Step two, caching is not the only shared layer leaking.
+Search indexes, background job queues, file storage pads and logging pipelines, right?
+Every shared service in your stack is a potential cross tenant leak if your AI never scoped
+it appropriately.
+So direct your AI to audit every shared layer and verify tenant isolation on every single
+one.
+If the layer does not know which tenant is serving, it should not be serving anything
+at all.
+And step three, test this before your customer figures it out.
+Direct your AI to build a cross tenant access test.
+Log in as customer A, load a page, log out, log in as customer B, load that same page.
+If any data from customer A appears, your cache is leaking.
+This takes 10 minutes to test.
+The lawsuit from not testing it will take you years and a couple of bucks, promised.
+So one cache query, two customers and zero trust is left in your product.
+Direct your AI to scope every shared layer to every tenant today.
+That's the win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Do to fix it immediately.
+2. Scope every single cache key to the tenant ID.
+3. Audit every shared layer and verify tenant isolation on every single one.
+4. Build a cross tenant access test.
+5. Scope every shared layer to every tenant today.

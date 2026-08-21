@@ -1,0 +1,43 @@
+# How default infrastructure choices cap the customers you can win
+
+Source: https://www.instagram.com/reel/DbY-1HLDHm6/
+Creator: @mattmurphyai
+Posted: 2026-07-29
+Topic: infrastructure-video-subs
+
+## Summary
+
+Your AI picked your infrastructure. It also picked your customer ceiling. The bundled stack is not wrong. It is the right foundation for your first ten customers. But enterprise is not your next customer. It is your tenth evolution. Know your ceiling. Know who you can serve today. Direct your AI to document it before your next pitch.
+
+## Transcript
+
+When you started building your AI likely picked your infrastructure. It also picked your customer ceiling
+So platforms like Vercel and Sentry, Superbase and Clerk
+Well, your AI will default to those basic bundled stacks. It's not wrong. It's starting you in the right place
+Those platforms have SLAs, support teams, as well as the operational and security
+certifications you could not earn on your own in less than two years
+But that choice defines who you can sell to and most builders have no idea where that ceiling is
+So here's what you need to understand about how you sell the customers depending on your tools
+Step one the bundled stack is the right foundation for your first ten customers a dentist office a chiropractor a local service business
+They don't care where your servers live. They care that the products work
+So your first ten customers teach you more about production operations than anything else
+Will the builders who never serve a small customer have no business thinking about enterprise customers step two?
+Enterprise is not your next customer past those first ten. It's your tenth evolution, right?
+We all know enterprise procurement will ask where your data lives who owns it who can access it
+Whether you can deploy into their VPC and where your SOC 2 attestation forms are
+Well answering those questions requires owning the infrastructure for a while not like yesterday
+You got to manage your own security. You got to provide your own support contracts and that's not a weekend application spin-up
+This is an entire organization to support an enterprise customer and it takes years to build for enterprise
+Regardless of the speed of AI so it is what it is step three direct your AI to document your customer ceiling right now
+What size customer can you serve today? What compliance requirements?
+Can you meet today and what would you need to change to level up?
+The builders who know their ceiling close deals all day long the builders who pretend they have no ceiling lose deals to questions
+They can't answer for the customer
+So your AI picked the most appropriate stat you decide what it says yes to and what it says not yet to
+That is an orchestration decision made by an AI directed engineer
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Document your customer ceiling right now What size customer can you serve today?

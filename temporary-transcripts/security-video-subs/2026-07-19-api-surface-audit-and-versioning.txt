@@ -1,0 +1,47 @@
+# Auditing every API endpoint for what it gives away
+
+Source: https://www.instagram.com/reel/Da-xLx0GH9f/
+Creator: @mattmurphyai
+Posted: 2026-07-19
+Topic: security-video-subs
+
+## Summary
+
+Your API is simultaneously a security surface, a product surface, and a contract surface.
+
+## Transcript
+
+This is what I've been thinking about. So every API endpoint your product exposes is a door to your product and your business
+Right now most of those doors are wide open and you do not know what's walking out
+Here's how I work with clients on this in their day-to-day operations step one
+What date are you giving away? Well, your AI built an API that returns everything right every field every internal ID every relationship
+so an attacker
+Does not need to hack your database. They just need to call your API and read the response
+Your user endpoint returns email phone billing address and internal database IDs
+Guess what they do with those IDs?
+They enumerate every user by incrementing the number and then with the email they build a list
+With the billing address they have information that should have never left your server
+So none of this required a very sophisticated attack to get their hands on
+One API call and the ability to read JSON
+So you need to direct your AI to audit every single one of your endpoints strip everything the client does not need
+That's a win. Step two your API is also a product if you ever want integrations
+partnerships or enterprise API access
+Your API is what technical buyers are going to evaluate first an API that returns
+Unfiltered data and uses sequential IDs tells a reviewer everything about your engineering maturity
+They will not tell you
+They'll just choose a competitor whose API looks intentional. They're out the door your API
+It's a first impression. You do not get to redo it. I see him every day. Trust me. I don't call back
+Step three versioning from day one your API has customers. Also, they built integrations against your response structure
+So you change a field name and their integration breaks. They got users on it
+They call it a bug maybe but you need to direct your AI to implement API versioning from day one to protect your customers
+Version one stays stable and version two that adds capabilities
+Customers migrate on their own timeline an
+Unversioned API with customers is a contract. You did not write that you are about to violate
+So your API is either your biggest liability or your most valuable asset
+Most builders do not know which one it is. So you need to find out before your customers find out for you
+
+## Orchestration prompt
+
+Source: written by the author in the post caption.
+
+Perform a complete API security and design audit. For each endpoint: list returned fields, flag over-exposed data, identify sequential ID usage, check for missing auth. Implement API versioning with /v1/ prefix. Create an API changelog and public documentation page.

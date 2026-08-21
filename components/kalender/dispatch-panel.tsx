@@ -27,8 +27,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+import { ErrorText } from '@/components/ui/error-text';
 import { Label } from '@/components/ui/label';
+import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -168,7 +170,8 @@ function CommitmentDialog({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
     if (!committedDate) return;
     setIsSaving(true);
     setError(null);
@@ -204,7 +207,7 @@ function CommitmentDialog({
             Es wird keine Nachricht versendet.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <form onSubmit={handleSave} noValidate className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="commitment-date">Zugesagter Tag</Label>
             <DatePicker
@@ -256,28 +259,24 @@ function CommitmentDialog({
               </SelectContent>
             </Select>
           </div>
-        </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Abbrechen
-          </Button>
-          <Button
-            disabled={
-              isSaving ||
-              !committedDate ||
-              (windowStart !== '') !== (windowEnd !== '')
-            }
-            onClick={() => void handleSave()}
-          >
-            {isSaving && <Loader2 className="size-4 animate-spin" />}
-            Zusage erfassen
-          </Button>
-        </DialogFooter>
+          <ErrorText>{error}</ErrorText>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                isSaving ||
+                !committedDate ||
+                (windowStart !== '') !== (windowEnd !== '')
+              }
+            >
+              {isSaving && <Loader2 className="size-4 animate-spin" />}
+              Zusage erfassen
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -301,6 +300,20 @@ function ReasonDialog({
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleConfirm = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      const failure = await onConfirm(reason.trim());
+      if (failure) setError(failure);
+    } catch {
+      setError(dispatchErrorMessage('unexpected_error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -308,47 +321,33 @@ function ReasonDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="dispatch-reason-dialog">Begründung</Label>
-          <Textarea
-            id="dispatch-reason-dialog"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            maxLength={1000}
-          />
-          <p className="text-xs text-muted-foreground">
-            Mindestens {minLength} Zeichen.
-          </p>
-        </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Abbrechen
-          </Button>
-          <Button
-            disabled={reason.trim().length < minLength || isSaving}
-            onClick={() =>
-              void (async () => {
-                setIsSaving(true);
-                try {
-                  const failure = await onConfirm(reason.trim());
-                  if (failure) setError(failure);
-                } catch {
-                  setError(dispatchErrorMessage('unexpected_error'));
-                } finally {
-                  setIsSaving(false);
-                }
-              })()
-            }
-          >
-            {isSaving && <Loader2 className="size-4 animate-spin" />}
-            {confirmLabel}
-          </Button>
-        </DialogFooter>
+        <form onSubmit={handleConfirm} noValidate className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="dispatch-reason-dialog">Begründung</Label>
+            <Textarea
+              id="dispatch-reason-dialog"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              maxLength={1000}
+            />
+            <p className="text-xs text-muted-foreground">
+              Mindestens {minLength} Zeichen.
+            </p>
+          </div>
+          <ErrorText>{error}</ErrorText>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Abbrechen
+            </Button>
+            <Button
+              type="submit"
+              disabled={reason.trim().length < minLength || isSaving}
+            >
+              {isSaving && <Loader2 className="size-4 animate-spin" />}
+              {confirmLabel}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -628,20 +627,17 @@ export function DispatchPanel({
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
-        {loadError && (
-          <p role="alert" className="text-sm text-destructive">
-            {loadError}
-          </p>
-        )}
-        {actionError && (
-          <p role="alert" className="text-sm text-destructive">
-            {actionError}
-          </p>
-        )}
+        <ErrorText>{loadError}</ErrorText>
+        <ErrorText>{actionError}</ErrorText>
         {!overview && !loadError && (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Einsätze werden geladen …
+          <div className="space-y-2" role="status" aria-busy="true">
+            <span className="sr-only">Einsätze werden geladen …</span>
+            <div aria-hidden="true" className="space-y-2">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+            </div>
           </div>
         )}
 
@@ -936,14 +932,11 @@ export function DispatchPanel({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="batch-day-shift">Verschieben um (Tage)</Label>
-              <Input
+              <QuantityStepper
                 id="batch-day-shift"
-                type="number"
-                inputMode="numeric"
                 min={-366}
-                max={366}
                 value={dayShiftText}
-                onChange={(event) => setDayShiftText(event.target.value)}
+                onChange={setDayShiftText}
               />
             </div>
             <div className="space-y-1.5">

@@ -2711,13 +2711,18 @@ export async function createPlannedCalendarEntry(
       .fill(options.internalTitle ?? 'Interner Termin');
   }
 
-  await dialog.locator('#planning-date').fill(options.date);
+  await typeIntoDatePickerById(dialog, 'planning-date', options.date);
   if (options.durationDays !== undefined) {
     await dialog.locator('#planning-time-kind').click();
     await page.getByRole('option', { name: /Ganzt.gig/ }).click();
     await dialog.locator('#planning-days').fill(String(options.durationDays));
   } else {
-    await dialog.locator('#planning-time').fill(options.time ?? '09:00');
+    await typeIntoTimeInput(
+      dialog,
+      'planning-time',
+      (options.time ?? '09:00').replace(':', '')
+    );
+    // DurationHoursInput keeps the element id on its inner text input.
     await dialog
       .locator('#planning-duration')
       .fill(String(options.durationHours ?? 1));
@@ -2847,8 +2852,16 @@ export async function editPlannedCalendarOccurrence(
       .first()
       .click();
   }
-  if (options.date) await dialog.locator('#planning-edit-date').fill(options.date);
-  if (options.time) await dialog.locator('#planning-edit-time').fill(options.time);
+  if (options.date) {
+    await typeIntoDatePickerById(dialog, 'planning-edit-date', options.date);
+  }
+  if (options.time) {
+    await typeIntoTimeInput(
+      dialog,
+      'planning-edit-time',
+      options.time.replace(':', '')
+    );
+  }
   if (options.durationHours !== undefined) {
     await dialog
       .locator('#planning-edit-duration')
@@ -3028,12 +3041,11 @@ export async function setParkingContextFromParkplatz(
   await page.getByRole('option', { name: options.reasonLabel, exact: true }).click();
   if (options.note) await dialog.locator('#parking-note').fill(options.note);
   if (options.responsibleName) {
-    await dialog.locator('#parking-responsible').click();
-    await page
-      .getByRole('option')
-      .filter({ hasText: options.responsibleName })
-      .first()
-      .click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#parking-responsible'),
+      options.responsibleName
+    );
   }
   if (options.reviewDigits) {
     await typeIntoDatePicker(dialog, 'Wiedervorlagedatum', options.reviewDigits);

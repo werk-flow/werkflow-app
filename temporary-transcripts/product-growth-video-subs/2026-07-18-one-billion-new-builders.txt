@@ -1,0 +1,47 @@
+# A billion new builders who will never write code
+
+Source: https://www.instagram.com/reel/Da6fdVGCokJ/
+Creator: @mattmurphyai
+Posted: 2026-07-18
+Topic: product-growth-video-subs
+
+## Summary
+
+One billion new builders just entered the software market.
+
+## Transcript
+
+One billion new builders entered the software market. None of them will ever
+write a single line of code. They are already solving problems the
+traditional software industry had been ignoring for years and they really don't
+care that you know how to write code. So here are the three things you need to
+understand about what just happened to the whole software industry. Number one,
+new builders are already building period. A florist on a street corner is building
+a delivery app to cut DoorDash's 30% fee. Her own app, her own customers, her
+own data, and an asset that she now owns in her business. A builder in the Cook
+Islands is creating the country's first digital time clock for a government that
+has never tracked time electronically. Mind-blowing. And two Uber drivers in
+Vegas are building an app to capture referral revenue from the venues where
+they drop passengers. These are not engineers, not software people at all.
+These are people with problems we're solving who now have the tools to solve
+them on their own. Number two, none of them have bad habits. Traditional
+developers carry 20 years of habits that fight AI-directed workflows every day.
+They want to control every line. They resist letting the AI lead. New builders,
+they do not have that resistance. They think in outcomes, not syntax. Build me
+this, fix the thing that broke. That's orchestration. They're all doing it
+naturally because they never learned the old way. Meanwhile, traditional developers
+shitting on them are also using AI to write their own code. They just haven't
+admitted it out loud yet. And three, what they need to learn is not coding
+ability. It's engineering judgment. How to verify what the AI built, how to secure
+it, how to monitor it, how to support it when it breaks. They do not need a CS
+degree. Sorry you got one. They do not need a boot camp. Doesn't teach much and
+they do not need permission from the traditional software industry to do any
+of this. They just need the discipline that teaches them to direct AI with
+production level judgment. So we built that discipline. It's called AI-directed
+engineering and it exists because one billion people just prove they do not
+need to write code to build software. They just need to know how to ship it
+safely and that is the win.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

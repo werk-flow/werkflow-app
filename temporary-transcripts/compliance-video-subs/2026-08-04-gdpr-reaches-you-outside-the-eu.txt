@@ -1,0 +1,48 @@
+# GDPR applies when you don't know where your users live
+
+Source: https://www.instagram.com/reel/DboLRcsl9ag/
+Creator: @mattmurphyai
+Posted: 2026-08-04
+Topic: compliance-video-subs
+
+## Summary
+
+Half of you said you do not care about the EU. Got it.
+
+## Transcript
+
+half of you said you do not care what's happening in the EU I totally get it
+you're based in the United States or somewhere other than the EU and you
+built your product in your living room on your laptop the EU feels like someone
+else's issue altogether got it but your app does not know where your users live
+and that is the problem that I'm talking about here are the three things you are
+missing about compliance on a global product one you do not get to choose who
+signs up your app it's on the internet anyone in the world can create an account
+enter their payment information and become your customer it's online it's
+the way it works you do not have to have a gate at the door that says no EU
+residents it's not the way it works a developer in Berlin find your product
+through Instagram subscribes and now you are subject to regulations you never even
+read so your compliance obligations are determined by where your users are not
+where you are or where you built your app step 2 this is not new people it's
+not new compliance isn't new GDPR has been the law since 2018 if you have a
+single subscriber in the UK Germany France or EU the member states you are
+already required to handle their data under GDPR the AI act adds transparency
+obligations on top of GDPR if your product generates AI content and an EU
+resident consumes it you now have to have labeling and disclosure
+requirements that's it you did not opt into this it wasn't your choice your
+users location opted you in it is what it is step 3 putting regional boundaries
+on a web-based product is much harder than you think geofencing IP filtering
+misses VPNs country drop-downs get ignored terms of service exclusions are
+unenforceable if you are still collecting their data and serving them
+content no matter where they're at the internet does not have boundaries your
+product doesn't have borders if you're selling it on the internet so your
+compliance obligations do not either I'm not a lawyer not trying to be one I'm
+also not telling you what to do I'm just telling you what exists so don't shoot
+the messenger direct your AI to figure out where your users are at before it
+gets you and that that might be a win we'll see
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Figure out where your users are at before it gets you and that that might be a win we'll see

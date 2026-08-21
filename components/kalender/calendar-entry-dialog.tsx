@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Briefcase, CalendarPlus, Clock } from 'lucide-react';
+import { useBanner } from '@/components/ui/banner';
 import {
   Dialog,
   DialogContent,
@@ -105,6 +106,7 @@ export function CalendarEntryDialog({
   onDraftChange,
 }: CalendarEntryDialogProps) {
   const { activeOrg, activeOrgId } = useOrganization();
+  const { showBanner } = useBanner();
   const activeOrgIdRef = useRef(activeOrgId);
   const [activeTab, setActiveTab] = useState<string>('job');
   const activeTabRef = useRef(activeTab);
@@ -313,7 +315,7 @@ export function CalendarEntryDialog({
           </TabsList>
 
           {isAdminOrManager && (
-            <TabsContent value="planning">
+            <TabsContent value="planning" className="flex min-h-0 flex-1 flex-col">
               <PlanningEntryForm
                 defaultDate={preselectedDate}
                 defaultTime={preselectedClockInTime}
@@ -364,7 +366,17 @@ export function CalendarEntryDialog({
               onDraftChange={handleManualDraftChange}
               onSuccess={async (entries) => {
                 await onManualEntrySuccess?.(entries);
-                setTimeout(() => onOpenChange(false), 1500);
+                // Close-then-banner convention: the dialog closes immediately
+                // and the global banner confirms (the form's inline flash is
+                // its other host's concern until M5 migrates it).
+                onOpenChange(false);
+                showBanner({
+                  variant: 'success',
+                  message:
+                    entries.length > 1
+                      ? 'Einträge erfolgreich erstellt!'
+                      : 'Eintrag erfolgreich erstellt!',
+                });
               }}
             />
           </TabsContent>
