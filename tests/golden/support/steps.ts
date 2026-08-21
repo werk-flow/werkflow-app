@@ -1103,6 +1103,63 @@ export async function typeIntoDatePicker(
   await group.pressSequentially(digits, { delay: delayMs });
 }
 
+// (TimeInput already has a shared helper: typeIntoTimeInput below, addressed
+// by element id. Reuse it for every migrated time field.)
+
+// UI/UX consolidation shared steps: every SearchableSelect/-MultiSelect in the
+// app has the same anatomy (combobox trigger → search textbox → option buttons
+// in a listbox). Specs pass the trigger locator (by id or by visible text via
+// page.getByRole('combobox').filter({ hasText })). Migrating a form onto the
+// registry components means switching its spec steps to these helpers, so a
+// future component change touches only this file.
+
+export async function selectFromSearchable(
+  page: Page,
+  trigger: Locator,
+  optionText: string,
+  options?: { searchFirst?: boolean }
+): Promise<void> {
+  await trigger.click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  if (options?.searchFirst ?? true) {
+    await listbox
+      .locator('..')
+      .getByRole('textbox')
+      .fill(optionText);
+  }
+  await listbox
+    .getByRole('button')
+    .filter({ hasText: optionText })
+    .first()
+    .click();
+  // Single select closes its popover on selection.
+  await expect(listbox).toBeHidden();
+}
+
+export async function toggleInSearchableMulti(
+  page: Page,
+  trigger: Locator,
+  optionTexts: string[]
+): Promise<void> {
+  await trigger.click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  const search = listbox.locator('..').getByRole('textbox');
+  for (const optionText of optionTexts) {
+    await search.fill(optionText);
+    await listbox
+      .getByRole('button')
+      .filter({ hasText: optionText })
+      .first()
+      .click();
+  }
+  // The multi popover stays open; close by toggling the trigger. Never press
+  // Escape here — inside a dialog it closes the whole dialog (known gotcha).
+  await trigger.click();
+  await expect(listbox).toBeHidden();
+}
+
 // P1-05: scoped responsibilities, effective previews, and substitutions.
 
 export async function previewResponsibilityChange(

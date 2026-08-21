@@ -8,6 +8,7 @@ import {
   formatMinutesAsHoursInput,
   parseHoursInputToMinutes,
 } from '@/lib/jobs/planned-working';
+import { sanitizeDecimalInput } from '@/lib/ui/decimal';
 
 interface DurationHoursInputProps
   extends Omit<
@@ -16,26 +17,6 @@ interface DurationHoursInputProps
   > {
   value: string;
   onChange: (value: string) => void;
-}
-
-function sanitizeHoursInput(value: string) {
-  const normalized = value.replace(',', '.');
-  let result = '';
-  let hasDot = false;
-
-  for (const char of normalized) {
-    if (char >= '0' && char <= '9') {
-      result += char;
-      continue;
-    }
-
-    if (char === '.' && !hasDot) {
-      result += char;
-      hasDot = true;
-    }
-  }
-
-  return result;
 }
 
 export const DurationHoursInput = React.forwardRef<
@@ -67,7 +48,7 @@ export const DurationHoursInput = React.forwardRef<
         type="text"
         inputMode="decimal"
         value={value}
-        onChange={(e) => onChange(sanitizeHoursInput(e.target.value))}
+        onChange={(e) => onChange(sanitizeDecimalInput(e.target.value))}
         onBlur={(e) => {
           onChange(formatMinutesAsHoursInput(parseHoursInputToMinutes(e.target.value)));
           onBlur?.(e);

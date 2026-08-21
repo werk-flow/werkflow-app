@@ -5,6 +5,7 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import { RegisterOpenDialog } from "@/components/ui/open-dialog-context"
 
 function AlertDialog({
   ...props
@@ -46,6 +47,7 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -58,7 +60,12 @@ function AlertDialogContent({
           className
         )}
         {...props}
-      />
+      >
+        {/* Suspends Realtime router refreshes while open; must sit inside the
+            presence-gated primitive content (see open-dialog-context.tsx). */}
+        <RegisterOpenDialog />
+        {children}
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   )
 }

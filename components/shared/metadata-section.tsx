@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { TimeInput } from '@/components/ui/time-input';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
@@ -329,24 +330,34 @@ function MetadataFieldRow({
                 rows={3}
               />
             )}
-            {config.type === 'select' && (
-              <Select
-                value={editValue}
-                onValueChange={onEditValueChange}
-                disabled={isPending}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {config.options?.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            {config.type === 'select' &&
+              // Registry rule: entity-sized lists get search; short fixed
+              // enums keep the plain select.
+              ((config.options?.length ?? 0) > 8 ? (
+                <SearchableSelect
+                  options={config.options ?? []}
+                  value={editValue}
+                  onChange={onEditValueChange}
+                  disabled={isPending}
+                />
+              ) : (
+                <Select
+                  value={editValue}
+                  onValueChange={onEditValueChange}
+                  disabled={isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {config.options?.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ))}
             {config.type === 'date' && (
               <DatePicker
                 value={editValue ? new Date(editValue) : undefined}

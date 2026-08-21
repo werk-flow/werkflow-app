@@ -6,6 +6,7 @@ import { XIcon } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '@/lib/utils';
+import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
 
 const Sheet = SheetPrimitive.Root;
 const SheetTrigger = SheetPrimitive.Trigger;
@@ -55,7 +56,8 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = 'right', className, children, ...props }, ref) => (
+>(({ side = 'right', className, children, ...props }, ref) => {
+  return (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
@@ -63,6 +65,9 @@ const SheetContent = React.forwardRef<
       className={cn(sheetVariants({ side }), className)}
       {...props}
     >
+      {/* Suspends Realtime router refreshes while open; must sit inside the
+          presence-gated primitive content (see open-dialog-context.tsx). */}
+      <RegisterOpenDialog />
       <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:pointer-events-none data-[state=open]:bg-secondary">
         <XIcon className="size-4" />
         <span className="sr-only">Schließen</span>
@@ -70,7 +75,8 @@ const SheetContent = React.forwardRef<
       {children}
     </SheetPrimitive.Content>
   </SheetPortal>
-));
+  );
+});
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 
 const SheetHeader = ({

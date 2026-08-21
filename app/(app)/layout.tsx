@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { OrganizationProvider } from '@/components/organization/organization-context';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
+import { BannerProvider } from '@/components/ui/banner';
+import { OpenDialogProvider } from '@/components/ui/open-dialog-context';
 import { AppShell } from '@/components/sidebar/app-shell';
 import { ClockFAB } from '@/components/clock-fab';
 import { ActiveJobsProvider } from '@/components/active-jobs-provider';
@@ -95,20 +97,24 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
     >
       <RealtimeProvider>
         <UserProfileProvider initialProfile={profile}>
-          <ActiveJobsProvider
-            initialActiveJobIds={initialRuntimeState.activeJobIds}
-            initialOrganizationId={activeOrgId}
-          >
-            <ClockStateProvider initialState={initialRuntimeState.clockState}>
-              <AppShell
-                initialAttentionCounts={initialRuntimeState.attentionCounts}
+          <OpenDialogProvider>
+            <BannerProvider>
+              <ActiveJobsProvider
+                initialActiveJobIds={initialRuntimeState.activeJobIds}
                 initialOrganizationId={activeOrgId}
               >
-                {children}
-              </AppShell>
-              <ClockFAB />
-            </ClockStateProvider>
-          </ActiveJobsProvider>
+                <ClockStateProvider initialState={initialRuntimeState.clockState}>
+                  <AppShell
+                    initialAttentionCounts={initialRuntimeState.attentionCounts}
+                    initialOrganizationId={activeOrgId}
+                  >
+                    {children}
+                  </AppShell>
+                  <ClockFAB />
+                </ClockStateProvider>
+              </ActiveJobsProvider>
+            </BannerProvider>
+          </OpenDialogProvider>
         </UserProfileProvider>
       </RealtimeProvider>
     </OrganizationProvider>

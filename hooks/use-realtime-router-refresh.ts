@@ -8,6 +8,7 @@ import {
   type RealtimeTable,
 } from '@/components/realtime/realtime-provider';
 import { shouldScheduleRealtimeRefresh } from '@/lib/realtime/events';
+import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 
 type UseRealtimeRouterRefreshOptions = {
   tables: RealtimeTable[];
@@ -26,8 +27,20 @@ export function useRealtimeRouterRefresh({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tableSet = useMemo(() => new Set(tables), [tables]);
 
+  // Dialog convention (werkflow-design skill): while any Dialog/AlertDialog/
+  // Sheet is open, refreshes are suspended so they can't remount the dialog
+  // mid-interaction; one catch-up refresh fires after it closes.
+  const anyDialogOpen = useAnyDialogOpen();
+  const anyDialogOpenRef = useRef(anyDialogOpen);
+  const pendingWhileSuspendedRef = useRef(false);
+
   const scheduleRefresh = useCallback((event?: RealtimeChangeEvent) => {
     if (!enabled || (event && !shouldScheduleRealtimeRefresh(event, eventFilter))) {
+      return;
+    }
+
+    if (anyDialogOpenRef.current) {
+      pendingWhileSuspendedRef.current = true;
       return;
     }
 
@@ -40,6 +53,25 @@ export function useRealtimeRouterRefresh({
       router.refresh();
     }, debounceMs);
   }, [debounceMs, enabled, eventFilter, router]);
+
+  useEffect(() => {
+    anyDialogOpenRef.current = anyDialogOpen;
+
+    if (anyDialogOpen) {
+      // Drop an already-scheduled refresh so it can't land mid-dialog.
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+        pendingWhileSuspendedRef.current = true;
+      }
+      return;
+    }
+
+    if (pendingWhileSuspendedRef.current) {
+      pendingWhileSuspendedRef.current = false;
+      scheduleRefresh();
+    }
+  }, [anyDialogOpen, scheduleRefresh]);
 
   useEffect(() => {
     return () => {

@@ -38,9 +38,9 @@ The full canon is in the `werkflow-design` skill. The owner confirmed:
 
 | | |
 | --- | --- |
-| Done | Brief + two full inventories (2026-08-21); canon proposal verified against code and confirmed by owner; **S1** (canon: skill rewrite, this roadmap, ESLint warn rules, environment doc updates) |
-| Next | **S2** — primitive gap-closing |
-| Then | M1 → M2 → M3 → M4 → M5 → final gate |
+| Done | Brief + two full inventories (2026-08-21); canon proposal verified against code and confirmed by owner; **S1** (canon: skill rewrite, this roadmap, ESLint warn rules, environment doc updates); **S2** (primitive gap-closing, full golden 93/93 on the frozen build) |
+| Next | **M1** — Anfragen + Kunden |
+| Then | M2 → M3 → M4 → M5 → final gate |
 
 ## Session plan
 
@@ -48,7 +48,7 @@ The full canon is in the `werkflow-design` skill. The owner confirmed:
 
 Skill rewritten (visual language kept; component registry, interaction canon, feedback vocabulary, loading canon, Realtime-dialog convention, extension rule, expanded shipping checklist added; the old "prefer the shadcn primitives" line replaced). This roadmap written. ESLint restrictions added at **warn** severity (escalated to error in M5): native date/time/datetime-local/number inputs, native `<select>`, sonner imports — scoped to `app/**` and `components/**`, excluding `components/ui/**`. Environments/testing docs updated for the Supabase Pro upgrade and Micro compute. Validation: statics only (docs + config).
 
-### S2 — Primitive gap-closing
+### S2 — Primitive gap-closing — **done 2026-08-21**
 
 Everything migrations need, so M-sessions stay mechanical:
 
@@ -228,3 +228,4 @@ All 16 UI/UX transcripts in `temporary-transcripts/ui-ux-video-subs/` were read 
 | 2026-08-21 | Brief written from the two full inventories; process docs, testing rules, and roadmap sequencing updated; effort scheduled before `P1-13` | done |
 | 2026-08-21 | Canon proposal: brief verified against code (12+ spot checks, all confirmed), skeleton + long-form inventories completed (sections E/F), transcripts evaluated, owner confirmed all six rulings (transcripts folder kept) | done |
 | 2026-08-21 | **S1**: skill rewritten to carry the full canon; this document restructured into the living roadmap/ledger; ESLint warn-level bans added (`eslint.config.mjs`); environments/testing docs updated for Supabase Pro + Micro compute | done |
+| 2026-08-21 | **S2**: all planned primitives landed (see the S2 section; `job-detail-content.tsx`'s manual `enabled: !suspendRealtimeRefresh` patch intentionally left in place — M2 removes it). Validation: statics → focused `@GG-00` → CodeRabbit (1 minor finding, applied) → full golden **93/93** (25.8m, world `mt2suo7e`; details in `golden-gate-log.md`). **What M-sessions inherit:** (1) the open-dialog registration MUST stay inside the presence-gated primitive content (`<RegisterOpenDialog />`) — putting it in a wrapper body counts always-rendered closed dialogs (the sidebar org dialogs) as open and silently suspends Realtime refresh app-wide; the ladder caught exactly this. (2) Residual refresh race: an in-flight reconciliation can't be cancelled, so a refresh fired between two back-to-back dialogs can still land inside the second — the first full run lost `@P1-10`'s preference test to this class once (focused 6/6, rerun 93/93; classified per testing rule 10). Migrating sessions that see a mid-dialog reset should check this before hardening tests. (3) New harness steps available: `selectFromSearchable`, `toggleInSearchableMulti` (plus the pre-existing `typeIntoDatePicker`/`typeIntoTimeInput`). (4) Full-run duration baseline on Micro compute: ~26m. | done |

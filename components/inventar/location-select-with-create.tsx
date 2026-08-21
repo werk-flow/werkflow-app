@@ -1,12 +1,10 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { Loader2 } from 'lucide-react';
 
-import {
-  SearchableSelect,
-  type SearchableSelectOption,
-} from '@/components/ui/searchable-select';
+import { SelectWithCreate } from '@/components/ui/select-with-create';
+import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -42,6 +40,14 @@ type LocationSelectWithCreateProps = {
   noneLabel?: string;
 };
 
+function locationOption(location: InventoryLocation): SearchableSelectOption {
+  return {
+    value: location.id,
+    label: location.name,
+    description: INVENTORY_LOCATION_TYPE_LABELS[location.locationType],
+  };
+}
+
 export function LocationSelectWithCreate({
   id,
   locations,
@@ -53,61 +59,29 @@ export function LocationSelectWithCreate({
   allowNone = false,
   noneLabel = 'Kein Lager',
 }: LocationSelectWithCreateProps) {
-  const [createOpen, setCreateOpen] = useState(false);
-  const [localLocations, setLocalLocations] = useState<InventoryLocation[]>([]);
-
-  const allLocations = useMemo(() => {
-    const merged = [...locations];
-    for (const location of localLocations) {
-      if (!merged.some((entry) => entry.id === location.id)) {
-        merged.push(location);
-      }
-    }
-    return merged;
-  }, [locations, localLocations]);
-
-  const options: SearchableSelectOption[] = useMemo(
-    () =>
-      allLocations.map((location) => ({
-        value: location.id,
-        label: location.name,
-        description: INVENTORY_LOCATION_TYPE_LABELS[location.locationType],
-      })),
-    [allLocations]
-  );
-
-  function handleCreated(location: InventoryLocation) {
-    setLocalLocations((current) => [...current, location]);
-    onValueChange(location.id);
-    onLocationCreated?.(location);
-  }
-
   return (
-    <>
-      <SearchableSelect
-        id={id}
-        options={options}
-        value={value}
-        onChange={onValueChange}
-        placeholder={placeholder}
-        searchPlaceholder="Lager suchen..."
-        emptyMessage="Kein Lager gefunden"
-        disabled={disabled}
-        allowNone={allowNone}
-        noneLabel={noneLabel}
-        action={{
-          label: 'Neues Lager erstellen',
-          icon: <Plus className="size-4" />,
-          onClick: () => setCreateOpen(true),
-        }}
-      />
-
-      <CreateLocationDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={handleCreated}
-      />
-    </>
+    <SelectWithCreate
+      id={id}
+      items={locations}
+      getOption={locationOption}
+      value={value}
+      onValueChange={onValueChange}
+      onCreated={onLocationCreated}
+      placeholder={placeholder}
+      searchPlaceholder="Lager suchen..."
+      emptyMessage="Kein Lager gefunden"
+      disabled={disabled}
+      allowNone={allowNone}
+      noneLabel={noneLabel}
+      createLabel="Neues Lager erstellen"
+      renderCreateDialog={({ open, onOpenChange, onCreated }) => (
+        <CreateLocationDialog
+          open={open}
+          onOpenChange={onOpenChange}
+          onCreated={onCreated}
+        />
+      )}
+    />
   );
 }
 

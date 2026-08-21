@@ -4,6 +4,7 @@ import * as React from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Search, Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { filterByQuery } from '@/lib/ui/search';
 
 export interface SearchableSelectOption {
   value: string;
@@ -21,6 +22,20 @@ interface SearchableSelectBaseProps {
     icon?: React.ReactNode;
     onClick: () => void;
   };
+  /** Replaces the default label/description block of each option row. */
+  renderOption?: (
+    option: SearchableSelectOption,
+    isSelected: boolean
+  ) => React.ReactNode;
+}
+
+function filterOptions(
+  options: SearchableSelectOption[],
+  search: string
+): SearchableSelectOption[] {
+  return filterByQuery(options, search, (option) =>
+    option.description ? `${option.label} ${option.description}` : option.label
+  );
 }
 
 function handleListWheel(e: React.WheelEvent<HTMLDivElement>) {
@@ -145,6 +160,7 @@ export function SearchableSelect({
   allowNone = false,
   noneLabel = 'Keine Auswahl',
   action,
+  renderOption,
   readOnly = false,
   readOnlyLabel,
 }: SearchableSelectProps) {
@@ -162,15 +178,10 @@ export function SearchableSelect({
     }
   }, [open]);
 
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return options;
-    const q = search.toLowerCase();
-    return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(q) ||
-        (o.description && o.description.toLowerCase().includes(q))
-    );
-  }, [options, search]);
+  const filtered = React.useMemo(
+    () => filterOptions(options, search),
+    [options, search]
+  );
   const { side, maxHeight } = useDialogAwareDropdownLayout(
     triggerRef,
     open,
@@ -332,14 +343,18 @@ export function SearchableSelect({
                   >
                     {isSelected && <Check className="size-2.5" />}
                   </div>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <p className="font-medium truncate">{option.label}</p>
-                    {option.description && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {option.description}
-                      </p>
-                    )}
-                  </div>
+                  {renderOption ? (
+                    renderOption(option, isSelected)
+                  ) : (
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="font-medium truncate">{option.label}</p>
+                      {option.description && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {option.description}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -361,6 +376,11 @@ interface SearchableMultiSelectProps extends SearchableSelectBaseProps {
   onSelectionChange: (ids: string[]) => void;
   placeholder?: string;
   selectedLabel?: (count: number) => string;
+  /** Adds a row that clears the whole selection. */
+  allowNone?: boolean;
+  noneLabel?: string;
+  readOnly?: boolean;
+  readOnlyLabel?: string;
 }
 
 export function SearchableMultiSelect({
@@ -371,7 +391,13 @@ export function SearchableMultiSelect({
   selectedLabel,
   searchPlaceholder = 'Suchen...',
   emptyMessage = 'Keine Ergebnisse',
-  disabled = false
+  disabled = false,
+  action,
+  renderOption,
+  allowNone = false,
+  noneLabel = 'Auswahl leeren',
+  readOnly = false,
+  readOnlyLabel,
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -387,19 +413,14 @@ export function SearchableMultiSelect({
     }
   }, [open]);
 
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return options;
-    const q = search.toLowerCase();
-    return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(q) ||
-        (o.description && o.description.toLowerCase().includes(q))
-    );
-  }, [options, search]);
+  const filtered = React.useMemo(
+    () => filterOptions(options, search),
+    [options, search]
+  );
   const { side, maxHeight } = useDialogAwareDropdownLayout(
     triggerRef,
     open,
-    filtered.length
+    filtered.length + (allowNone ? 1 : 0) + (action ? 1 : 0)
   );
 
   const toggle = (val: string) => {
@@ -416,6 +437,19 @@ export function SearchableMultiSelect({
       : selectedLabel
         ? selectedLabel(selectedIds.length)
         : `${selectedIds.length} ausgewählt`;
+
+  if (readOnly) {
+    return (
+      <div
+        className={cn(
+          'flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-1 text-base md:text-sm',
+          'cursor-default select-none text-muted-foreground'
+        )}
+      >
+        <span className="truncate">{readOnlyLabel ?? label}</span>
+      </div>
+    );
+  }
 
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -489,6 +523,37 @@ export function SearchableMultiSelect({
             style={{ maxHeight }}
             onWheelCapture={handleListWheel}
           >
+            {action && (
+              <button
+                type="button"
+                onClick={() => {
+                  action.onClick();
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-primary hover:bg-accent transition-colors"
+              >
+                {action.icon}
+                {action.label}
+              </button>
+            )}
+
+            {allowNone && (
+              <button
+                type="button"
+                onClick={() => onSelectionChange([])}
+                disabled={selectedIds.length === 0}
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+                  selectedIds.length === 0
+                    ? 'cursor-default opacity-50'
+                    : 'hover:bg-accent'
+                )}
+              >
+                <div className="flex size-4 shrink-0 items-center justify-center rounded-sm border-2 border-muted-foreground/30" />
+                <span className="text-muted-foreground">{noneLabel}</span>
+              </button>
+            )}
+
             {filtered.map((option) => {
               const isSelected = selectedIds.includes(option.value);
               return (
@@ -511,14 +576,18 @@ export function SearchableMultiSelect({
                   >
                     {isSelected && <Check className="size-2.5" />}
                   </div>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <p className="font-medium truncate">{option.label}</p>
-                    {option.description && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {option.description}
-                      </p>
-                    )}
-                  </div>
+                  {renderOption ? (
+                    renderOption(option, isSelected)
+                  ) : (
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="font-medium truncate">{option.label}</p>
+                      {option.description && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {option.description}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
