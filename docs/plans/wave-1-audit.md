@@ -1,6 +1,6 @@
 # Wave 1 Flow Audit
 
-Wave 1 (`P1-00` through `P1-12`) is accepted complete and **AUDITED**: session F closed the final gate on 2026-08-18 with the recorded sequential pair — full Golden suite 93/93 and entire `@AUDIT-W1` battery 74/74 on one fresh production build — plus the mechanical 119/119 catalog-ID proof (`0 partial; 0 unmapped`). All sessions A1–A7 are Rule-12 certified; R1 closed at `88/88 mapped; 88/88 fully evidenced; 0 partial; 0 unmapped`. `P1-13` is unblocked. This document remains the protocol, the session plan, and the **coverage ledger** (the authoritative record of what was tested, how, and what came of it).
+Wave 1 (`P1-00` through `P1-12`) is accepted complete and **AUDITED**: session F closed the final gate on 2026-08-18 with the recorded sequential pair — full Golden suite 93/93 and entire `@AUDIT-W1` battery 74/74 on one fresh production build — plus the mechanical 119/119 catalog-ID proof (`0 partial; 0 unmapped`). All sessions A1–A7 are Rule-12 certified; R1 closed at `88/88 mapped; 88/88 fully evidenced; 0 partial; 0 unmapped`. `P1-13` is unblocked. This document remains the protocol, the session plan, and the **coverage ledger** (the authoritative record of what was tested, how, and what came of it). **This wave-end-session model is retired:** since Wave 2, every slice ships its own rule-12 audit coverage at acceptance and the wave end only certifies — see [`wave-2-audit.md`](./wave-2-audit.md).
 
 ## Why this exists
 

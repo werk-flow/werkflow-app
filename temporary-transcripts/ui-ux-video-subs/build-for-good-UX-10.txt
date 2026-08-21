@@ -1,0 +1,32 @@
+If a part of your app just fails to load,
+do you just throw an error on the screen
+and hide everything else?
+This is part 10 of my series of building with good UX.
+And today we're breaking down graceful degradation.
+How to keep your app usable even when some parts fail.
+The general rule is that every section on your page
+should be responsible for its own data,
+its own loading state, and its own errors.
+Your profile section fetches its own data.
+Your feed fetches its own data.
+If a section fails, it should have its own error message
+and its own retry button.
+The rest of the page stays completely usable.
+When you open Instagram,
+your feed might load immediately,
+but it might actually be a cached version of photos
+and videos from a couple of hours ago
+that shows while the fresh content loads in the background.
+Once the new data is ready, it just swaps into your feed,
+you've been scrolling content this whole time,
+you didn't even notice this trick.
+When you're planning an app,
+both from a design and development perspective,
+you wanna think about how to build things
+so they operate individually,
+what the page might look like when some things work
+and others don't,
+and how to make that feel as seamless as possible
+to the user.
+In the next video, we're gonna be covering success states,
+so follow for more.

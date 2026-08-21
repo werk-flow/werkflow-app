@@ -1,0 +1,26 @@
+00:00:00 
+Beautiful UI with bad UX will make people leave. This is a series on how to build with good UX. And for part one, we need to understand the difference between UI and UX. UI stands for user interface, and it is what your app looks like.
+
+
+00:00:12 
+Think colors, buttons, layout. And having good UI is attractive to people using it. But now I want you to think of a time when you were using an app or on a website, and you clicked on a button and you had an unpredictable result,
+
+
+00:00:22 
+or nothing at all happened, so you tried again and then got confused. And then you might go as far as even blaming yourself like, Oh, maybe I didn't do this right or something. That is bad UX. That stands for user experience.
+
+
+00:00:32 
+Can someone figure out what to do without extensive instructions? What happens if something fails? Does the user get to know about that in a graceful way? And here's the thing, a lot of AI tools inherently are not good at giving you good UX.
+
+
+00:00:42 
+They often build what I like to call the happy path, what the screen looks like when everything goes perfectly like you planned it. But here's the thing, as someone who is building this, you're gonna know your app in and out, and so sometimes the way that you behave on your
+
+
+00:00:52 
+app is not the way that the user will. And AI tools will often miss the loading state, the empty state, the error state. Good UX can also build a lot of trust with your product as well. And if your app is beautiful
+
+
+00:01:02 
+but hard to use or there's too many steps, that creates friction, and friction causes people to leave. In this series, I'm gonna unpack many different scenarios. If you're building software and you wanna have good UX, you're gonna wanna know these.

@@ -15,7 +15,7 @@ This is a **living implementation index**, not a substitute for feature specific
 
 > **Roadmap established:** 4 August 2026  
 > **Current phase:** Phase 1 — Complete Operational Core  
-> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); `P1-13` is `ready` and unblocked
+> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); the UI/UX consolidation ([`uiux-consolidation.md`](./uiux-consolidation.md)) runs next, then `P1-13` under the per-slice audit model
 > **Formally accepted roadmap slices:** 13 of 56 (`P1-00` and `P1-00a` through `P1-54`)
 > **Phase 2 implementation:** Not authorized by this roadmap
 
@@ -30,7 +30,7 @@ They do not make later roadmap slices complete automatically. `P1-00` must first
 | Field | Current value |
 | --- | --- |
 | Active slice | None — the Wave 1 flow audit ([`wave-1-audit.md`](./wave-1-audit.md)) is COMPLETE: all sessions A1–A7 Rule-12 certified and the final gate F closed 2026-08-18 (full Golden 93/93 + full audit battery 74/74 + 119/119 catalog-ID proof) |
-| Next slice | `P1-13` (work templates) is `ready` and UNBLOCKED — Wave 1 is audited; `P1-13` may start |
+| Next slice | `P1-13` (work templates) is `ready` — but the **UI/UX consolidation runs first** ([`uiux-consolidation.md`](./uiux-consolidation.md), owner decision 2026-08-21); `P1-13` starts after it closes, under the new per-slice audit model ([`wave-2-audit.md`](./wave-2-audit.md)) |
 | Other ready slices | `P1-13` |
 | Current implementation wave | Wave 1 complete with `P1-12` and audited; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
 | Latest completed golden gate | `AUDIT-W1` final gate: full Golden 93/93 (world `msy9a4vb`, 17.1m) + full audit battery 74/74 (world `msydek02`, 28.5m) on build `Fi1jZsuahgN7eLsjPFAvH`, 2026-08-18 (`docs/plans/golden-gate-log.md`) |
@@ -134,6 +134,7 @@ These are deliberate warnings for future agents and the product owner, recorded 
 3. Read the required sources listed above.
 4. Inspect current code, generated types, migrations, RLS, Realtime/cache behavior, and live Supabase state where relevant.
 5. Restate the bounded outcome, non-goals, affected roles, direct dependencies, and acceptance criteria.
+5a. **Propose the slice's complete user-flow list** (since Wave 2, per the per-slice audit model): draft the slice's catalog bullets as German flows with provisional `P1-XX-FNN` IDs and include them in the pre-implementation report, so the owner confirms product behavior and the flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
 6. Identify unresolved decisions. Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
 7. Create a slice-specific implementation plan under `docs/plans/` when the work spans multiple sessions, schema migrations, or several coordinated rollout steps.
 
@@ -146,6 +147,7 @@ These are deliberate warnings for future agents and the product owner, recorded 
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
 - Add focused tests at the domain boundary and end-to-end tests for the slice outcome. Concretely: extend the golden-gate harness (`docs/technical/testing.md`) — add the slice's business actions to `tests/golden/support/steps.ts` and cover the slice outcome in the gate spec named by its roadmap row (or a dedicated spec if no gate is due yet). A slice without an automated end-to-end check of its own outcome is not done.
+- **Ship the slice's audit coverage with the slice** (since Wave 2): a spec in `tests/audit/wave-N/` that maps every one of the slice's catalog flow IDs with full clause evidence under testing rule 12, plus the ledger rows in the wave's audit doc (`docs/plans/wave-2-audit.md` for Wave 2). Golden gates stay lean cross-slice scenarios; the audit spec is where exhaustive flow coverage lives. The wave-end audit is a thin certification gate, not a discovery phase — discovery already happened here.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
 - Record a decision in `docs/decisions/` when future agents must understand why a durable choice was made.
 
@@ -162,7 +164,8 @@ The slice is not complete until all applicable items are satisfied:
 - the slice's focused acceptance criteria pass;
 - every golden scenario named in the slice row passes;
 - the primary feature doc moves implemented behavior into **Current Product Baseline**;
-- [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md) gains the slice's complete list of new user-visible flows in German (every new action any role can take and what the app does in response — not just the golden-gate flows); every new bullet receives a stable flow ID, existing IDs are never reused, and a material wording change reopens that ID's audit mapping under testing rule 12;
+- [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md) gains the slice's complete list of new user-visible flows in German with stable `P1-XX-FNN` IDs (every new action any role can take and what the app does in response — not just the golden-gate flows);
+- (since Wave 2) the slice's audit spec in `tests/audit/wave-N/` maps **all** of those flow IDs with full clause evidence per testing rule 12, its ledger rows in the wave's audit doc are closed with the `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped` invariant, and the focused audit spec ran green in the acceptance ladder; every new bullet receives a stable flow ID, existing IDs are never reused, and a material wording change reopens that ID's audit mapping under testing rule 12;
 - connected feature contracts and open decisions are updated;
 - conceptual data-model and technical docs are updated if ownership or architecture changed;
 - this roadmap records status, completion date, evidence, follow-up work, and any split/superseding slices;
@@ -546,6 +549,8 @@ Create or use a slice-specific plan with this minimum structure when more detail
 
 ## Migration And Rollback
 
+## User Flows (Catalog IDs)
+
 ## Acceptance Criteria
 
 ## Automated And Manual Verification
@@ -567,9 +572,9 @@ Use this as a starting point; replace the placeholders with the actual slice row
 >
 > Bounded outcome: `[copy the outcome from the roadmap and refine only with confirmed decisions]`.
 >
-> Before coding, report the verified current behavior, affected ownership boundaries, proposed state transitions, permissions, migration/backward-compatibility behavior, failure recovery, acceptance criteria, non-goals, and unresolved decisions. Ask for confirmation when a decision would materially change product behavior.
+> Before coding, report the verified current behavior, affected ownership boundaries, proposed state transitions, permissions, migration/backward-compatibility behavior, failure recovery, acceptance criteria, non-goals, unresolved decisions, **and the slice's proposed user-flow list** (German catalog bullets with provisional `P1-XX-FNN` IDs). Ask for confirmation when a decision would materially change product behavior.
 >
-> After approval, implement the complete slice across data, authorization, backend, UI, audit, tests, and documentation. Preserve existing flows unless the accepted plan migrates them. Update the roadmap status/evidence, primary feature baseline, connected contracts, conceptual data model, and technical docs as applicable. Run the slice's focused tests, the required golden gate, and the repository's normal validation.
+> After approval, implement the complete slice across data, authorization, backend, UI, audit, tests, and documentation. Preserve existing flows unless the accepted plan migrates them. Update the roadmap status/evidence, primary feature baseline, connected contracts, conceptual data model, technical docs, and the user-flow catalog as applicable. Run the slice's focused tests, the required golden gate, the slice's rule-12 audit spec, and the repository's normal validation.
 
 ## Roadmap Update Protocol
 
@@ -617,6 +622,7 @@ Keep newest entries first. Link commits, pull requests, implementation plans, de
 
 | Date | Slice / gate | Change | Owner / evidence |
 | --- | --- | --- | --- |
+| 2026-08-21 | Process | Two owner decisions recorded before Wave 2 starts. (1) **Per-slice audit model:** slices propose their complete user-flow list (German bullets, provisional `P1-XX-FNN` IDs) in the pre-implementation report, ship a rule-12 audit spec in `tests/audit/wave-N/` at acceptance, and close their ledger rows in [`wave-2-audit.md`](./wave-2-audit.md); wave ends shrink to certification gates (protocol step 5a and the new acceptance items above; testing rules 12–13; audit config/scripts widened to all waves). Wave 1's R1 reconciliation is the recorded cost of the old wave-end model. (2) **UI/UX consolidation precedes `P1-13`:** the app-wide component/feedback/form-convention cleanup runs first, in its own sessions per [`uiux-consolidation.md`](./uiux-consolidation.md), because every Wave 2 slice is picker-heavy and would compound today's inconsistencies. | Product-owner instruction in this session |
 | 2026-08-18 | Infrastructure | Dev/prod environment split ([decision 0003](../decisions/0003-dev-prod-environment-split.md)): local dev and the entire test harness moved to the dedicated dev Supabase project `mbkkzuqjbdvzelqvuzcn` + `werkflow-documents-dev`; the full prod migration history (120 files, MD5-verified) plus four idempotent baseline repair migrations materialized in `supabase/migrations/` with a zero-discrepancy fidelity proof; schema changes are now committed migration files applied dev-first, prod-second. Acceptance on dev: statics clean, 188/188 unit, GG-00 13/13, full Golden 93/93, audit A7 9/9, `LEFTOVER_SWEEP=0`; prod untouched. See `docs/technical/environments.md` | Owner-directed session; published to `origin/partner-preview` |
 | 2026-08-16 | Wave 1 audit | Strengthened catalog completeness before A5: all 119 catalog bullets now have stable flow IDs; testing rule 12 and the audit protocol require many-to-many set equality plus whole-bullet assertion-body evidence, with no partial/unmapped flow and no manual substitution without an owner-approved named exception. Reconciliation session R1 now precedes A5 and retroactively certifies A1–A4's 88 owned flow IDs; A5 and later sessions remain blocked until R1 closes. | Product-owner instruction in this session |
 | 2026-08-15 | Wave 1 audit | Wave-end flow-audit protocol established before `P1-13`: [`docs/product/user-flow-catalog.md`](../product/user-flow-catalog.md) (tactical per-slice German user-flow list, now a required acceptance artifact per the checklist above) and [`wave-1-audit.md`](./wave-1-audit.md) (session plan A1–A7 + final gate, provisional triaged coverage ledger over ~120 flows, audit battery scaffolding: `playwright.audit.config.ts`, `tests/audit/wave-1/`, `bun run test:audit:w1`, separate from the golden suite and never run concurrently with it). No audit test exists yet; no app code changed. | Product-owner instruction in this session |

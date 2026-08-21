@@ -1,0 +1,43 @@
+Nobody likes filling out forms.
+This is part six of my series of building with good UX.
+And here are six ways that you can produce user frustration
+when filling out forms.
+One is don't let the user submit
+until everything is filled out correctly.
+Keep that button grayed out
+until all the required fields are done.
+But please make it really obvious what's missing.
+A grayed out button with no explanation
+is even more frustrating.
+Mark your required fields
+so the user is never guessing why they can't submit.
+Two is validate inline.
+The moment that someone leaves an email field
+and it's not a real email address,
+you need to let them know.
+Nothing is more frustrating than filling out a form,
+submitting it, having it load,
+and then you have to scroll all the way up
+just to fix something.
+Three is show character count.
+If a field has a limit,
+show how many characters are left as they're typing.
+Like why would you let someone write a whole paragraph
+and then, time to find out, they have to delete half of it.
+Four is pre-fill what you can.
+If they're logged in,
+don't make them type their email again.
+Five, show the password requirement as they type
+and make sure to check off what they've done.
+Don't let someone submit a password
+and then it turns out they need a capital letter.
+Six is when you can, be forgiving with formatting.
+If someone types their phone number with dashes
+or parentheses or nothing at all,
+can you handle all of those
+and just take care of formatting it
+to be the same in the backend?
+If you can't, it just makes it easier for the user.
+In the next video, we're gonna cover more about errors
+and how the placement of errors matters,
+so follow for more.

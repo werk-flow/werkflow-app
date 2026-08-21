@@ -7,7 +7,7 @@ This file is the tactical, exhaustive answer to one question per slice: **what c
 It exists for two planned uses:
 
 1. **Handover:** after Phase 1 (possibly in steps), this list explains every new capability to the customer in plain German without roadmap terminology.
-2. **Wave audits:** after each wave, this list is the test inventory for a large harness audit that exercises far more flows than the golden gates cover.
+2. **Audit coverage:** this list is the test inventory for the exhaustive audit batteries that exercise far more flows than the golden gates cover. Wave 1 audited it in wave-end sessions; **since Wave 2 every slice ships audit coverage for its own flow IDs as part of acceptance** (see `docs/plans/wave-2-audit.md` and testing rule 12), and the wave end only certifies.
 
 Rules for maintaining this file:
 
@@ -16,11 +16,11 @@ Rules for maintaining this file:
 - One flow ID = one bullet of 1–3 sentences: what the user does, step by step where needed, and what they see / what the app does in return. A bullet may contain several observable clauses; audit coverage of its ID means **every clause** is evidenced, not merely its headline behavior.
 - Be **exhaustive**, not aspirational: list every new user-visible action, including small ones (a new filter, a new badge, a new warning, a new denial). Do not list planned or deferred behavior — only what works today.
 - Prefix flows with the acting role where it matters: `Büro/Admin`, `Admin`, `Handwerker`, `Alle`.
-- Update this file **as part of every slice's acceptance**, while the behavior is fresh — not retroactively at wave end.
+- Update this file **as part of every slice's acceptance**, while the behavior is fresh — not retroactively at wave end. Since Wave 2, the slice's flow list is additionally **proposed up front**: the pre-implementation report drafts the bullets with provisional IDs for owner confirmation, implementation refines them, and acceptance finalizes them here together with the slice's rule-12 audit coverage.
 - If a later slice changes an earlier flow, correct the earlier flow in place and note the changing slice in parentheses. The catalog describes the app as it is now, per the slice that introduced each capability.
 - A material wording change reopens the affected flow ID's audit mapping until the assertion bodies have been rechecked against the complete revised bullet.
 - This catalog intentionally repeats things that also live in feature docs. Feature docs describe the product model for agents; this file describes concrete user actions for humans. Do not "deduplicate" it away.
-- For wave-audit traceability, the set of relevant IDs here must equal the union of IDs mapped in that session's coverage ledger. Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See testing rule 12 and `docs/plans/wave-1-audit.md`.
+- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See testing rule 12, `docs/plans/wave-1-audit.md`, and `docs/plans/wave-2-audit.md`.
 
 ---
 

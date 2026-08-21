@@ -4,16 +4,20 @@ import { loadEnvLocal } from './tests/golden/support/env';
 
 loadEnvLocal();
 
-// Wave-audit battery (docs/plans/wave-1-audit.md). Runs the exhaustive
-// user-flow audit specs against a locally running app and the live Supabase
-// project, reusing the golden harness (world seeder, steps, db helpers).
+// Wave-audit battery (docs/plans/wave-1-audit.md, wave-2-audit.md, …). Runs
+// the exhaustive user-flow audit specs against a locally running app and the
+// dev Supabase project, reusing the golden harness (world seeder, steps, db
+// helpers). testDir covers every wave; scope runs with --grep @AUDIT-W<N>
+// (or a slice tag like @AUDIT-W2-P1-13). A no-grep run executes all waves in
+// ONE shared world, which is why fixture-date partitions are unique across
+// waves (W1: +20…+69, W2: +70…, see the wave audit docs).
 //
 // IMPORTANT: never run this battery and the golden suite at the same time.
 // Both configs share tests/golden/.artifacts (world.json, auth states) and
 // the global setup destroys leftover worlds from "earlier" runs — a
 // concurrent run would clobber the other's world.
 export default defineConfig({
-  testDir: './tests/audit/wave-1',
+  testDir: './tests/audit',
   globalSetup: './tests/golden/global-setup',
   globalTeardown: './tests/golden/global-teardown',
   timeout: 180_000,
