@@ -18,6 +18,10 @@
  * as expected divergences and never synced.
  */
 
+// Top-level await requires module context; this file has no imports/exports,
+// so declare it a module explicitly or Next's build-time typecheck fails.
+export {};
+
 const PROD_REF = 'jbgaqpdjauzoocplgdsn';
 const DEV_REF = 'mbkkzuqjbdvzelqvuzcn';
 const API = 'https://api.supabase.com/v1/projects';
