@@ -99,7 +99,10 @@ export function Banner({
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Schließen"
+          // Distinct from action buttons and dialog closes named „Schließen" —
+          // two identical labels on one screen are ambiguous for screen
+          // readers and break strict-mode test locators.
+          aria-label="Hinweis schließen"
           className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
         >
           <X className="size-4" />

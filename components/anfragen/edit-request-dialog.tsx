@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -23,6 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { DateTimeField } from '@/components/ui/date-time-field';
+import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 import {
   formatBerlinDateTimeInput,
   parseBerlinDateTimeInput,
@@ -68,6 +73,7 @@ export function EditRequestDialog({
   onOpenChange,
 }: EditRequestDialogProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [summary, setSummary] = useState(request.summary);
   const [details, setDetails] = useState(request.details ?? '');
   const [requestNumber, setRequestNumber] = useState(request.requestNumber ?? '');
@@ -145,6 +151,7 @@ export function EditRequestDialog({
       }
 
       onOpenChange(false);
+      showBanner({ variant: 'success', message: 'Änderungen gespeichert.' });
       router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
@@ -158,7 +165,7 @@ export function EditRequestDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]"
+        className="sm:max-w-[520px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -167,8 +174,8 @@ export function EditRequestDialog({
             Änderungen werden im Verlauf der Anfrage festgehalten.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <DialogBody className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label htmlFor="edit-request-summary">Anliegen *</Label>
               <Input
@@ -221,28 +228,23 @@ export function EditRequestDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-request-received-at">Eingangszeit</Label>
-              <Input
-                id="edit-request-received-at"
-                type="datetime-local"
+              <Label htmlFor="edit-request-received-at-date">Eingangszeit</Label>
+              <DateTimeField
+                idPrefix="edit-request-received-at"
                 value={receivedAt}
-                onChange={(event) => setReceivedAt(event.target.value)}
-                aria-invalid={showReceivedAtError}
-                aria-describedby={
+                onChange={setReceivedAt}
+                disabled={isLoading}
+                dateAriaLabel="Eingangsdatum"
+                invalid={showReceivedAtError}
+                describedById={
                   showReceivedAtError
                     ? 'edit-request-received-at-error'
                     : undefined
                 }
-                disabled={isLoading}
               />
-              {showReceivedAtError && (
-                <p
-                  id="edit-request-received-at-error"
-                  className="text-xs text-destructive"
-                >
-                  {ERROR_MESSAGES.invalid_received_at}
-                </p>
-              )}
+              <ErrorText id="edit-request-received-at-error" className="text-xs">
+                {showReceivedAtError ? ERROR_MESSAGES.invalid_received_at : null}
+              </ErrorText>
             </div>
 
             <div className="grid gap-2">
@@ -337,30 +339,26 @@ export function EditRequestDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="edit-request-assignee">Zuständig</Label>
-              <Select
-                value={assignedTo || '__none__'}
-                onValueChange={(value) =>
-                  setAssignedTo(value === '__none__' ? '' : value)
-                }
+              <SearchableSelect
+                id="edit-request-assignee"
+                options={assignees.map((assignee) => ({
+                  value: assignee.userId,
+                  label: assignee.name,
+                }))}
+                value={assignedTo}
+                onChange={setAssignedTo}
+                placeholder="Niemand zuständig"
+                searchPlaceholder="Mitarbeiter suchen..."
+                emptyMessage="Kein Mitarbeiter gefunden"
+                allowNone
+                noneLabel="Niemand zuständig"
                 disabled={isLoading}
-              >
-                <SelectTrigger id="edit-request-assignee">
-                  <SelectValue placeholder="Niemand zuständig" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Niemand zuständig</SelectItem>
-                  {assignees.map((assignee) => (
-                    <SelectItem key={assignee.userId} value={assignee.userId}>
-                      {assignee.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          </div>
-          <DialogFooter>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"

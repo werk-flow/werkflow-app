@@ -3,21 +3,13 @@
 import { useEffect, useState } from 'react';
 
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { getClientRelations } from '@/lib/clients/actions';
 import {
   formatSiteAddress,
   type ClientContact,
   type ClientSite,
 } from '@/lib/clients/types';
-
-const NONE_VALUE = '__none__';
 
 interface SiteContactFieldsProps {
   clientId: string;
@@ -85,61 +77,47 @@ export function SiteContactFields({
       {(isLoading || sites.length > 0) && (
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-site`}>Einsatzort</Label>
-          <Select
-            value={siteId || NONE_VALUE}
-            onValueChange={(value) => {
-              const nextSiteId = value === NONE_VALUE ? '' : value;
+          <SearchableSelect
+            id={`${idPrefix}-site`}
+            options={sites.map((site) => ({
+              value: site.id,
+              label: site.name,
+              description: formatSiteAddress(site) || undefined,
+            }))}
+            value={siteId}
+            onChange={(nextSiteId) => {
               const site = sites.find((entry) => entry.id === nextSiteId) ?? null;
               onSiteChange(nextSiteId, site);
             }}
+            placeholder={isLoading ? 'Wird geladen...' : 'Kein Einsatzort'}
+            searchPlaceholder="Einsatzort suchen..."
+            emptyMessage="Kein Einsatzort gefunden"
+            allowNone
+            noneLabel="Kein Einsatzort"
             disabled={disabled || isLoading}
-          >
-            <SelectTrigger id={`${idPrefix}-site`}>
-              <SelectValue
-                placeholder={isLoading ? 'Wird geladen...' : 'Kein Einsatzort'}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>Kein Einsatzort</SelectItem>
-              {sites.map((site) => {
-                const address = formatSiteAddress(site);
-                return (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name}
-                    {address ? ` · ${address}` : ''}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
 
       {(isLoading || contacts.length > 0) && (
         <div className="grid gap-2">
           <Label htmlFor={`${idPrefix}-contact`}>Ansprechpartner</Label>
-          <Select
-            value={contactId || NONE_VALUE}
-            onValueChange={(value) =>
-              onContactChange(value === NONE_VALUE ? '' : value)
-            }
+          <SearchableSelect
+            id={`${idPrefix}-contact`}
+            options={contacts.map((contact) => ({
+              value: contact.id,
+              label: contact.name,
+              description: contact.role || undefined,
+            }))}
+            value={contactId}
+            onChange={onContactChange}
+            placeholder={isLoading ? 'Wird geladen...' : 'Kein Ansprechpartner'}
+            searchPlaceholder="Ansprechpartner suchen..."
+            emptyMessage="Kein Ansprechpartner gefunden"
+            allowNone
+            noneLabel="Kein Ansprechpartner"
             disabled={disabled || isLoading}
-          >
-            <SelectTrigger id={`${idPrefix}-contact`}>
-              <SelectValue
-                placeholder={isLoading ? 'Wird geladen...' : 'Kein Ansprechpartner'}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE_VALUE}>Kein Ansprechpartner</SelectItem>
-              {contacts.map((contact) => (
-                <SelectItem key={contact.id} value={contact.id}>
-                  {contact.name}
-                  {contact.role ? ` (${contact.role})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
       )}
     </>

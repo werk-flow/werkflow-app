@@ -23,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
 
@@ -63,8 +65,8 @@ export function EditClientDialog({
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
   const router = useRouter();
+  const { showBanner } = useBanner();
 
   useEffect(() => {
     if (open) {
@@ -76,7 +78,6 @@ export function EditClientDialog({
       setNotes(client.notes ?? '');
       setError(null);
       setNameError(null);
-      setSuccess(false);
       setHasAttemptedSubmit(false);
     }
   }, [open, client]);
@@ -93,7 +94,6 @@ export function EditClientDialog({
     }
 
     setIsLoading(true);
-    setSuccess(false);
 
     try {
       const input: UpdateClientInput = {
@@ -108,12 +108,9 @@ export function EditClientDialog({
       const result = await updateClient(client.id, input);
 
       if (result.success) {
-        setSuccess(true);
-        setTimeout(() => {
-          onOpenChange(false);
-          setSuccess(false);
-          router.refresh();
-        }, 1500);
+        onOpenChange(false);
+        showBanner({ variant: 'success', message: 'Kunde gespeichert.' });
+        router.refresh();
       } else {
         setError(
           ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
@@ -152,19 +149,17 @@ export function EditClientDialog({
                   setName(e.target.value);
                   if (nameError) setNameError(null);
                 }}
-                disabled={isLoading || success}
+                disabled={isLoading}
                 aria-invalid={showNameError ? true : undefined}
               />
-              {showNameError && (
-                <p className="text-sm text-destructive">{nameError}</p>
-              )}
+              <ErrorText>{showNameError ? nameError : null}</ErrorText>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-client-type">Typ</Label>
               <Select
                 value={clientType}
                 onValueChange={(value) => setClientType(value as ClientType)}
-                disabled={isLoading || success}
+                disabled={isLoading}
               >
                 <SelectTrigger id="edit-client-type">
                   <SelectValue placeholder="Typ auswählen" />
@@ -187,7 +182,7 @@ export function EditClientDialog({
                 placeholder="kunde@beispiel.de"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
             </div>
             <div className="grid gap-2">
@@ -198,7 +193,7 @@ export function EditClientDialog({
                 placeholder="+49 123 456789"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
             </div>
             <div className="grid gap-2">
@@ -208,7 +203,7 @@ export function EditClientDialog({
                 placeholder="Straße, PLZ Ort"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
             </div>
             <div className="grid gap-2">
@@ -218,18 +213,13 @@ export function EditClientDialog({
                 placeholder="Optionale Notizen zum Kunden..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                disabled={isLoading || success}
+                disabled={isLoading}
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {success && (
-              <p className="text-sm text-green-600">
-                Kunde erfolgreich aktualisiert!
-              </p>
-            )}
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading || success || !name.trim()}>
+            <Button type="submit" disabled={isLoading || !name.trim()}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Speichern'}
             </Button>

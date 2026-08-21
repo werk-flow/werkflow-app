@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -28,14 +29,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 
 import {
   createClientContact,
@@ -71,8 +68,6 @@ function errorMessage(error: string): string {
 function normalizePhoneHref(phone: string): string {
   return phone.replace(/(?!^\+)[^\d]/g, '');
 }
-
-const NO_CONTACT_VALUE = '__none__';
 
 type ContactDraft = SaveClientContactInput;
 type SiteDraft = SaveClientSiteInput;
@@ -122,6 +117,7 @@ export function ClientRelationsSection({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [sectionError, setSectionError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
 
   const [contactDialog, setContactDialog] = useState<{
     contactId: string | null;
@@ -154,6 +150,7 @@ export function ClientRelationsSection({
         return;
       }
       setContactDialog(null);
+      showBanner({ variant: 'success', message: 'Ansprechpartner gespeichert.' });
       router.refresh();
     });
   }
@@ -173,6 +170,7 @@ export function ClientRelationsSection({
         return;
       }
       setSiteDialog(null);
+      showBanner({ variant: 'success', message: 'Einsatzort gespeichert.' });
       router.refresh();
     });
   }
@@ -558,7 +556,7 @@ export function ClientRelationsSection({
         )}
       </div>
 
-      {sectionError && <p className="text-sm text-destructive">{sectionError}</p>}
+      <ErrorText>{sectionError}</ErrorText>
 
       {/* Contact dialog */}
       <Dialog
@@ -578,7 +576,14 @@ export function ClientRelationsSection({
             </DialogDescription>
           </DialogHeader>
           {contactDialog && (
-            <div className="grid gap-4">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveContact();
+              }}
+              noValidate
+              className="grid gap-4"
+            >
               <div className="grid gap-2">
                 <Label htmlFor="contact-name">Name</Label>
                 <Input
@@ -673,27 +678,26 @@ export function ClientRelationsSection({
                 />
                 Als Hauptkontakt festlegen
               </label>
-              {contactDialog.error && (
-                <p className="text-sm text-destructive">{contactDialog.error}</p>
-              )}
-            </div>
+              <ErrorText>{contactDialog.error}</ErrorText>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setContactDialog(null)}
+                  disabled={isPending}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isPending || !contactDialog.draft.name.trim()}
+                >
+                  {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Speichern
+                </Button>
+              </DialogFooter>
+            </form>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setContactDialog(null)}
-              disabled={isPending}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              onClick={saveContact}
-              disabled={isPending || !contactDialog?.draft.name.trim()}
-            >
-              {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Speichern
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -713,7 +717,15 @@ export function ClientRelationsSection({
             </DialogDescription>
           </DialogHeader>
           {siteDialog && (
-            <div className="grid gap-4">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveSite();
+              }}
+              noValidate
+              className="flex min-h-0 flex-1 flex-col"
+            >
+            <DialogBody className="grid gap-4 py-1">
               <div className="grid gap-2">
                 <Label htmlFor="site-name">Bezeichnung</Label>
                 <Input
@@ -788,38 +800,36 @@ export function ClientRelationsSection({
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="site-primary-contact">Ansprechpartner vor Ort</Label>
-                <Select
-                  value={siteDialog.draft.primaryContactId ?? NO_CONTACT_VALUE}
-                  onValueChange={(value) =>
+                <SearchableSelect
+                  id="site-primary-contact"
+                  options={contacts
+                    // Archived contacts stay visible only while they are the
+                    // current selection, so editing never silently drops them.
+                    .filter(
+                      (contact) =>
+                        contact.isActive ||
+                        contact.id === siteDialog.draft.primaryContactId
+                    )
+                    .map((contact) => ({
+                      value: contact.id,
+                      label: `${contact.name}${contact.role ? ` (${contact.role})` : ''}${!contact.isActive ? ' · archiviert' : ''}`,
+                    }))}
+                  value={siteDialog.draft.primaryContactId ?? ''}
+                  onChange={(value) =>
                     setSiteDialog({
                       ...siteDialog,
                       draft: {
                         ...siteDialog.draft,
-                        primaryContactId: value === NO_CONTACT_VALUE ? null : value,
+                        primaryContactId: value || null,
                       },
                     })
                   }
-                >
-                  <SelectTrigger id="site-primary-contact">
-                    <SelectValue placeholder="Nicht festgelegt" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_CONTACT_VALUE}>Nicht festgelegt</SelectItem>
-                    {contacts
-                      .filter(
-                        (contact) =>
-                          contact.isActive ||
-                          contact.id === siteDialog.draft.primaryContactId
-                      )
-                      .map((contact) => (
-                        <SelectItem key={contact.id} value={contact.id}>
-                          {contact.name}
-                          {contact.role ? ` (${contact.role})` : ''}
-                          {!contact.isActive ? ' · archiviert' : ''}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                  placeholder="Nicht festgelegt"
+                  searchPlaceholder="Ansprechpartner suchen..."
+                  emptyMessage="Kein Ansprechpartner gefunden"
+                  allowNone
+                  noneLabel="Nicht festgelegt"
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="site-notes">Notizen</Label>
@@ -847,27 +857,27 @@ export function ClientRelationsSection({
                 />
                 Als Hauptstandort festlegen
               </label>
-              {siteDialog.error && (
-                <p className="text-sm text-destructive">{siteDialog.error}</p>
-              )}
-            </div>
+              <ErrorText>{siteDialog.error}</ErrorText>
+            </DialogBody>
+            <DialogFooter className="pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSiteDialog(null)}
+                disabled={isPending}
+              >
+                Abbrechen
+              </Button>
+              <Button
+                type="submit"
+                disabled={isPending || !siteDialog.draft.name.trim()}
+              >
+                {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Speichern
+              </Button>
+            </DialogFooter>
+            </form>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSiteDialog(null)}
-              disabled={isPending}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              onClick={saveSite}
-              disabled={isPending || !siteDialog?.draft.name.trim()}
-            >
-              {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Speichern
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

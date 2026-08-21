@@ -17,12 +17,11 @@ import {
   Plus,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -39,6 +38,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { DateTimeField } from '@/components/ui/date-time-field';
+import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 import {
   createCustomerFollowUp,
   getCustomerRelationshipBundle,
@@ -191,9 +194,11 @@ export function CustomerRelationshipWorkspace({
   >(undefined);
   const [timelineFilter, setTimelineFilter] = useState<'all' | TimelineCategory>('all');
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft | null>(null);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferenceOpen, setPreferenceOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { showBanner } = useBanner();
 
   const bundle = useMemo(() => {
     if (nextTimelineCursor === undefined) return initialBundle;
@@ -236,7 +241,10 @@ export function CustomerRelationshipWorkspace({
     startTransition(async () => {
       const result = await getCustomerRelationshipBundle(clientId, cursor);
       if (!result.success) {
-        toast.error('Die Kundenhistorie konnte nicht aktualisiert werden.');
+        showBanner({
+          variant: 'error',
+          message: 'Die Kundenhistorie konnte nicht aktualisiert werden.',
+        });
         return;
       }
       setPersistedTimelineItems((current) => {
@@ -291,9 +299,10 @@ export function CustomerRelationshipWorkspace({
 
   function saveFollowUp() {
     if (!followUpDraft) return;
+    setFollowUpError(null);
     const dueDate = parseBerlinDateTimeInput(followUpDraft.dueAt);
     if (!followUpDraft.title.trim() || !followUpDraft.ownerUserId || !dueDate) {
-      toast.error('Bitte fülle Titel, Zuständigkeit und Fälligkeit aus.');
+      setFollowUpError('Bitte fülle Titel, Zuständigkeit und Fälligkeit aus.');
       return;
     }
     const input: FollowUpInput = {
@@ -309,11 +318,11 @@ export function CustomerRelationshipWorkspace({
         ? await updateCustomerFollowUp(clientId, followUpDraft.id, input)
         : await createCustomerFollowUp(clientId, input);
       if (!result.success) {
-        toast.error('Die Nachfassaktion konnte nicht gespeichert werden.');
+        setFollowUpError('Die Nachfassaktion konnte nicht gespeichert werden.');
         return;
       }
       setFollowUpDraft(null);
-      toast.success('Nachfassaktion gespeichert.');
+      showBanner({ variant: 'success', message: 'Nachfassaktion gespeichert.' });
       router.refresh();
     });
   }
@@ -325,10 +334,19 @@ export function CustomerRelationshipWorkspace({
     startTransition(async () => {
       const result = await transitionCustomerFollowUp(clientId, followUp.id, status);
       if (!result.success) {
-        toast.error('Die Nachfassaktion konnte nicht aktualisiert werden.');
+        showBanner({
+          variant: 'error',
+          message: 'Die Nachfassaktion konnte nicht aktualisiert werden.',
+        });
         return;
       }
-      toast.success(status === 'completed' ? 'Nachfassaktion erledigt.' : 'Nachfassaktion abgebrochen.');
+      showBanner({
+        variant: 'success',
+        message:
+          status === 'completed'
+            ? 'Nachfassaktion erledigt.'
+            : 'Nachfassaktion abgebrochen.',
+      });
       router.refresh();
     });
   }
@@ -542,14 +560,29 @@ export function CustomerRelationshipWorkspace({
         )}
       </section>
 
-      <Dialog open={followUpDraft !== null} onOpenChange={(open) => !open && setFollowUpDraft(null)}>
+      <Dialog
+        open={followUpDraft !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFollowUpDraft(null);
+            setFollowUpError(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{followUpDraft?.id ? 'Nachfassaktion bearbeiten' : 'Nachfassaktion anlegen'}</DialogTitle>
             <DialogDescription>Lege einen klaren nächsten Schritt mit Zuständigkeit und genauer Fälligkeit fest.</DialogDescription>
           </DialogHeader>
           {followUpDraft && (
-            <div className="space-y-4">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveFollowUp();
+              }}
+              noValidate
+              className="space-y-4"
+            >
               {followUpDraft.sourceLabel && <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {followUpDraft.sourceLabel}</p>}
               <div className="space-y-2">
                 <Label htmlFor="follow-up-title">Titel</Label>
@@ -557,27 +590,39 @@ export function CustomerRelationshipWorkspace({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="follow-up-owner">Zuständig</Label>
-                <Select value={followUpDraft.ownerUserId} onValueChange={(value) => setFollowUpDraft({ ...followUpDraft, ownerUserId: value })}>
-                  <SelectTrigger id="follow-up-owner"><SelectValue placeholder="Person wählen" /></SelectTrigger>
-                  <SelectContent>
-                    {bundle.followUpOwners.map((owner) => <SelectItem key={owner.userId} value={owner.userId}>{owner.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  id="follow-up-owner"
+                  options={bundle.followUpOwners.map((owner) => ({
+                    value: owner.userId,
+                    label: owner.name,
+                  }))}
+                  value={followUpDraft.ownerUserId}
+                  onChange={(value) => setFollowUpDraft({ ...followUpDraft, ownerUserId: value })}
+                  placeholder="Person wählen"
+                  searchPlaceholder="Person suchen..."
+                  emptyMessage="Keine Person gefunden"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="follow-up-due">Fällig am</Label>
-                <Input id="follow-up-due" type="datetime-local" value={followUpDraft.dueAt} onChange={(event) => setFollowUpDraft({ ...followUpDraft, dueAt: event.target.value })} />
+                <Label htmlFor="follow-up-due-date">Fällig am</Label>
+                <DateTimeField
+                  idPrefix="follow-up-due"
+                  value={followUpDraft.dueAt}
+                  onChange={(value) => setFollowUpDraft({ ...followUpDraft, dueAt: value })}
+                  dateAriaLabel="Fälligkeitsdatum"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="follow-up-note">Notiz</Label>
                 <Textarea id="follow-up-note" value={followUpDraft.note} onChange={(event) => setFollowUpDraft({ ...followUpDraft, note: event.target.value })} maxLength={2000} rows={4} />
               </div>
-            </div>
+              <ErrorText>{followUpError}</ErrorText>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { setFollowUpDraft(null); setFollowUpError(null); }}>Abbrechen</Button>
+                <Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button>
+              </DialogFooter>
+            </form>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFollowUpDraft(null)}>Abbrechen</Button>
-            <Button onClick={saveFollowUp} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -608,7 +653,10 @@ function CommunicationPreferencesSection({
   startTransition: React.TransitionStartFunction;
 }) {
   const settings = bundle.communicationSettings;
+  const { showBanner } = useBanner();
   const [settingsDraft, setSettingsDraft] = useState<CommunicationSettingsInput>({});
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [preferenceDraft, setPreferenceDraft] = useState<CommunicationPreferenceInput>({
     channel: 'phone',
     purpose: 'appointment_service',
@@ -623,6 +671,7 @@ function CommunicationPreferencesSection({
         state: 'unknown',
       });
     }
+    setPreferenceError(null);
     onPreferenceOpenChange(open);
   }
 
@@ -640,27 +689,29 @@ function CommunicationPreferencesSection({
   }
 
   function saveSettings() {
+    setSettingsError(null);
     startTransition(async () => {
       const result = await saveCustomerCommunicationSettings(clientId, settingsDraft);
       if (!result.success) {
-        toast.error('Die allgemeinen Kontaktvorgaben konnten nicht gespeichert werden.');
+        setSettingsError('Die allgemeinen Kontaktvorgaben konnten nicht gespeichert werden.');
         return;
       }
       onSettingsOpenChange(false);
-      toast.success('Kontaktvorgaben gespeichert.');
+      showBanner({ variant: 'success', message: 'Kontaktvorgaben gespeichert.' });
       onSaved();
     });
   }
 
   function savePreference() {
+    setPreferenceError(null);
     startTransition(async () => {
       const result = await saveCustomerCommunicationPreference(clientId, preferenceDraft);
       if (!result.success) {
-        toast.error('Die Kontaktpräferenz konnte nicht gespeichert werden.');
+        setPreferenceError('Die Kontaktpräferenz konnte nicht gespeichert werden.');
         return;
       }
       handlePreferenceOpenChange(false);
-      toast.success('Kontaktpräferenz gespeichert.');
+      showBanner({ variant: 'success', message: 'Kontaktpräferenz gespeichert.' });
       onSaved();
     });
   }
@@ -718,35 +769,106 @@ function CommunicationPreferencesSection({
       )}
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />Diese Angaben sind betriebliche Kontaktvorgaben und keine Aussage zur rechtlichen Zulässigkeit.</p>
 
-      <Dialog open={settingsOpen} onOpenChange={onSettingsOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <Dialog
+        open={settingsOpen}
+        onOpenChange={(open) => {
+          if (!open) setSettingsError(null);
+          onSettingsOpenChange(open);
+        }}
+      >
+        <DialogContent>
           <DialogHeader><DialogTitle>Allgemeine Kontaktvorgaben</DialogTitle><DialogDescription>Halte praktische Hinweise und ihre Quelle fest. Leere Felder bleiben unkonfiguriert.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="preferred-contact">Bevorzugter Ansprechpartner</Label><Select value={settingsDraft.preferredContactId ?? '__none__'} onValueChange={(value) => setSettingsDraft({ ...settingsDraft, preferredContactId: value === '__none__' ? undefined : value })}><SelectTrigger id="preferred-contact"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">Nicht festgelegt</SelectItem>{contacts.filter((contact) => contact.isActive).map((contact) => <SelectItem key={contact.id} value={contact.id}>{contact.name}</SelectItem>)}</SelectContent></Select></div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveSettings();
+            }}
+            noValidate
+            className="flex min-h-0 flex-1 flex-col"
+          >
+          <DialogBody className="space-y-4 py-1">
+            <div className="space-y-2"><Label htmlFor="preferred-contact">Bevorzugter Ansprechpartner</Label>
+              <SearchableSelect
+                id="preferred-contact"
+                options={contacts
+                  // The selected archived contact stays visible so editing
+                  // never shows a raw id or silently drops the selection.
+                  .filter(
+                    (contact) =>
+                      contact.isActive ||
+                      contact.id === settingsDraft.preferredContactId
+                  )
+                  .map((contact) => ({
+                    value: contact.id,
+                    label: `${contact.name}${contact.isActive ? '' : ' · archiviert'}`,
+                  }))}
+                value={settingsDraft.preferredContactId ?? ''}
+                onChange={(value) =>
+                  setSettingsDraft({ ...settingsDraft, preferredContactId: value || undefined })
+                }
+                placeholder="Nicht festgelegt"
+                searchPlaceholder="Ansprechpartner suchen..."
+                emptyMessage="Kein Ansprechpartner gefunden"
+                allowNone
+                noneLabel="Nicht festgelegt"
+              />
+            </div>
             <div className="space-y-2"><Label htmlFor="preferred-channel">Bevorzugter Kanal</Label><Select value={settingsDraft.preferredChannel ?? '__none__'} onValueChange={(value) => setSettingsDraft({ ...settingsDraft, preferredChannel: value === '__none__' ? undefined : value as CommunicationChannel })}><SelectTrigger id="preferred-channel"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">Nicht festgelegt</SelectItem>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="dnc-note">Nicht-kontaktieren-Hinweis</Label><Textarea id="dnc-note" value={settingsDraft.doNotContactInstruction ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, doNotContactInstruction: event.target.value })} rows={3} /></div>
             <div className="space-y-2"><Label htmlFor="contact-time">Geeignete Kontaktzeit</Label><Input id="contact-time" value={settingsDraft.contactTimeNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, contactTimeNote: event.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="language-note">Sprache</Label><Input id="language-note" value={settingsDraft.languageNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, languageNote: event.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="accessibility-note">Barrierefreiheit / Unterstützungsbedarf</Label><Textarea id="accessibility-note" value={settingsDraft.accessibilityNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, accessibilityNote: event.target.value })} rows={2} /></div>
             <div className="space-y-2"><Label htmlFor="settings-source">Quelle der Angaben</Label><Input id="settings-source" value={settingsDraft.sourceNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, sourceNote: event.target.value })} placeholder="z. B. Kundengespräch am 10.08.2026" /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => onSettingsOpenChange(false)}>Abbrechen</Button><Button onClick={saveSettings} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+            <ErrorText>{settingsError}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4"><Button type="button" variant="outline" onClick={() => { setSettingsError(null); onSettingsOpenChange(false); }}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={preferenceOpen} onOpenChange={handlePreferenceOpenChange}>
         <DialogContent>
           <DialogHeader><DialogTitle>Kontaktpräferenz festhalten</DialogTitle><DialogDescription>Die Vorgabe gilt für den gewählten Zweck und Kanal. Ansprechpartner-spezifische Angaben überschreiben den Kundenstandard.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="preference-contact">Gilt für</Label><Select value={preferenceDraft.contactId ?? '__customer__'} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, contactId: value === '__customer__' ? undefined : value })}><SelectTrigger id="preference-contact"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__customer__">Kunde (Standard)</SelectItem>{contacts.filter((contact) => contact.isActive).map((contact) => <SelectItem key={contact.id} value={contact.id}>{contact.name}</SelectItem>)}</SelectContent></Select></div>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              savePreference();
+            }}
+            noValidate
+            className="space-y-4"
+          >
+            <div className="space-y-2"><Label htmlFor="preference-contact">Gilt für</Label>
+              <SearchableSelect
+                id="preference-contact"
+                options={contacts
+                  .filter(
+                    (contact) =>
+                      contact.isActive || contact.id === preferenceDraft.contactId
+                  )
+                  .map((contact) => ({
+                    value: contact.id,
+                    label: `${contact.name}${contact.isActive ? '' : ' · archiviert'}`,
+                  }))}
+                value={preferenceDraft.contactId ?? ''}
+                onChange={(value) =>
+                  setPreferenceDraft({ ...preferenceDraft, contactId: value || undefined })
+                }
+                placeholder="Kunde (Standard)"
+                searchPlaceholder="Ansprechpartner suchen..."
+                emptyMessage="Kein Ansprechpartner gefunden"
+                allowNone
+                noneLabel="Kunde (Standard)"
+              />
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2"><Label htmlFor="preference-channel">Kanal</Label><Select value={preferenceDraft.channel} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, channel: value as CommunicationChannel })}><SelectTrigger id="preference-channel"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="preference-state">Status</Label><Select value={preferenceDraft.state} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, state: value as CommunicationPreferenceState })}><SelectTrigger id="preference-state"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(STATE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label htmlFor="preference-purpose">Zweck</Label><Select value={preferenceDraft.purpose} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, purpose: value as CommunicationPurpose })}><SelectTrigger id="preference-purpose"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(PURPOSE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label htmlFor="preference-source">Quelle der Angabe</Label><Input id="preference-source" value={preferenceDraft.sourceNote ?? ''} onChange={(event) => setPreferenceDraft({ ...preferenceDraft, sourceNote: event.target.value })} placeholder="z. B. ausdrückliche Angabe im Telefonat" /></div>
-          </div>
-          <DialogFooter><Button variant="outline" onClick={() => handlePreferenceOpenChange(false)}>Abbrechen</Button><Button onClick={savePreference} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+            <ErrorText>{preferenceError}</ErrorText>
+            <DialogFooter><Button type="button" variant="outline" onClick={() => handlePreferenceOpenChange(false)}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </section>

@@ -7,6 +7,7 @@ import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -24,6 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { DateTimeField } from '@/components/ui/date-time-field';
+import { ErrorText } from '@/components/ui/error-text';
+import { Separator } from '@/components/ui/separator';
+import { useBanner } from '@/components/ui/banner';
 import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/site-contact-fields';
 import {
@@ -72,6 +78,7 @@ interface CreateRequestDialogProps {
 
 export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [open, setOpen] = useState(false);
 
   const [summary, setSummary] = useState('');
@@ -192,6 +199,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
       }
 
       handleOpenChange(false);
+      showBanner({ variant: 'success', message: 'Anfrage wurde erfasst.' });
       router.push(`/anfragen/${result.request.id}`);
       router.refresh();
     } catch {
@@ -214,7 +222,7 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]"
+        className="sm:max-w-[520px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -224,8 +232,12 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
             Beschreibung ist Pflicht – alles andere kannst du später ergänzen.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label htmlFor="request-summary">Anliegen *</Label>
               <Input
@@ -237,11 +249,9 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                 aria-invalid={showSummaryError ? true : undefined}
                 autoFocus
               />
-              {showSummaryError && (
-                <p className="text-sm text-destructive">
-                  Bitte beschreibe kurz das Anliegen.
-                </p>
-              )}
+              <ErrorText>
+                {showSummaryError ? 'Bitte beschreibe kurz das Anliegen.' : null}
+              </ErrorText>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -286,24 +296,27 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="request-received-at">Eingangszeit</Label>
-              <Input
-                id="request-received-at"
-                type="datetime-local"
+              <Label htmlFor="request-received-at-date">Eingangszeit</Label>
+              <DateTimeField
+                idPrefix="request-received-at"
                 value={receivedAt}
-                onChange={(event) => setReceivedAt(event.target.value)}
-                aria-invalid={showReceivedAtError}
-                aria-describedby={
+                onChange={setReceivedAt}
+                disabled={isLoading}
+                dateAriaLabel="Eingangsdatum"
+                invalid={showReceivedAtError}
+                describedById={
                   showReceivedAtError ? 'request-received-at-error' : undefined
                 }
-                disabled={isLoading}
               />
-              {showReceivedAtError && (
-                <p id="request-received-at-error" className="text-xs text-destructive">
-                  {ERROR_MESSAGES.invalid_received_at}
-                </p>
-              )}
+              <ErrorText id="request-received-at-error" className="text-xs">
+                {showReceivedAtError ? ERROR_MESSAGES.invalid_received_at : null}
+              </ErrorText>
             </div>
+
+            <Separator />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Kunde
+            </p>
 
             <div className="grid gap-2">
               <Label htmlFor="request-client">Kunde</Label>
@@ -384,6 +397,11 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
               </div>
             )}
 
+            <Separator />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Weitere Angaben
+            </p>
+
             <div className="grid gap-2">
               <Label htmlFor="request-details">Details</Label>
               <Textarea
@@ -432,30 +450,26 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
 
             <div className="grid gap-2">
               <Label htmlFor="request-assignee">Zuständig</Label>
-              <Select
-                value={assignedTo || '__none__'}
-                onValueChange={(value) =>
-                  setAssignedTo(value === '__none__' ? '' : value)
-                }
+              <SearchableSelect
+                id="request-assignee"
+                options={assignees.map((assignee) => ({
+                  value: assignee.userId,
+                  label: assignee.name,
+                }))}
+                value={assignedTo}
+                onChange={setAssignedTo}
+                placeholder="Niemand zuständig"
+                searchPlaceholder="Mitarbeiter suchen..."
+                emptyMessage="Kein Mitarbeiter gefunden"
+                allowNone
+                noneLabel="Niemand zuständig"
                 disabled={isLoading}
-              >
-                <SelectTrigger id="request-assignee">
-                  <SelectValue placeholder="Niemand zuständig" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Niemand zuständig</SelectItem>
-                  {assignees.map((assignee) => (
-                    <SelectItem key={assignee.userId} value={assignee.userId}>
-                      {assignee.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          </div>
-          <DialogFooter>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4">
             <Button type="submit" disabled={isLoading || !summary.trim()}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Anfrage erfassen'}

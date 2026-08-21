@@ -1,0 +1,51 @@
+# Configuring Cloudflare so it actually blocks attack traffic
+
+Source: https://www.instagram.com/reel/DcRgRM2jjuv/
+Creator: @mattmurphyai
+Posted: 2026-08-20
+Topic: security-video-subs
+
+## Summary
+
+Your login endpoint received 14,000 requests last night. None of them were your users. Credential stuffing, scrapers, vulnerability scanners.
+
+## Transcript
+
+Your login endpoint received 14,000 requests last night, and none of them were your users.
+Credential stuffing bots hitting your login, 200 requests per minute, scrapers on your
+pricing page every 3 seconds, and automated scanners probing every route for potential
+vulnerabilities, all of it sailing right through Cloudflare, hitting your origin, consuming
+your compute, and spiking your bill.
+You have a security layer in front of your application, and it's doing nothing because
+your AI never configured it correctly.
+Happens to the best of us.
+Step one, rate limiting rules on authentication endpoints.
+Your login registration and password reset endpoints should never accept more than a
+defined number of requests per IP per minute, not at your application level, at the edge
+before the request ever reaches your server.
+So direct your AI to configure Cloudflare rate limiting rules that block or challenge
+any IP exceeding thresholds on authentication routes.
+That is definitely a win.
+Step two, bot management rules on high value pages.
+Your pricing page, your checkout flow, your API documentation.
+Bots hit these pages thousands of times every day.
+Cloudflare can identify automated traffic by behavior, fingerprint, and challenge or
+block it before it touches your origin.
+So direct your AI to configure bot management rules that protect high value routes from
+automated scraping and reconnaissance.
+And number three, custom WAF rules known attack patterns.
+SQL injection attempts and query strings, XSS payloads and form fields, path traversal
+and URLs.
+Cloudflare's WAF can catch these at the edge and drop the request before your application
+ever sees it.
+So direct your AI to deploy custom WAF rules that block the OWASP top 10 attack patterns
+at the Cloudflare edge.
+You're paying for a wall, configure it as a wall.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Direct your AI to configure Cloudflare rate limiting rules that block or challenge any IP exceeding thresholds on authentication routes.
+2. Direct your AI to configure bot management rules that protect high value routes from automated scraping and reconnaissance.
+3. Direct your AI to deploy custom WAF rules that block the OWASP top 10 attack patterns at the Cloudflare edge.

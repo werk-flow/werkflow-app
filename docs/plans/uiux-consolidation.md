@@ -38,9 +38,9 @@ The full canon is in the `werkflow-design` skill. The owner confirmed:
 
 | | |
 | --- | --- |
-| Done | Brief + two full inventories (2026-08-21); canon proposal verified against code and confirmed by owner; **S1** (canon: skill rewrite, this roadmap, ESLint warn rules, environment doc updates); **S2** (primitive gap-closing, full golden 93/93 on the frozen build) |
-| Next | **M1** — Anfragen + Kunden |
-| Then | M2 → M3 → M4 → M5 → final gate |
+| Done | Brief + two full inventories (2026-08-21); canon confirmed; **S1** (canon), **S2** (primitives, 93/93), **M1** (Anfragen + Kunden migration, 93/93) |
+| Next | **M2** — Auftraege + Aufgaben |
+| Then | M3 → M4 → M5 → final gate |
 
 ## Session plan
 
@@ -66,7 +66,7 @@ Everything migrations need, so M-sessions stay mechanical:
 
 Validation: statics → focused `@GG-00` smoke → CodeRabbit → one full golden run. Expected churn: low (additive), except `metadata-section` may touch detail-page steps.
 
-### M1 — Anfragen + Kunden
+### M1 — Anfragen + Kunden — **done 2026-08-21**
 
 - `create-request-dialog.tsx` / `edit-request-dialog.tsx`: Zuständig raw Select → `SearchableSelect`; `datetime-local` Eingangszeit → `DatePicker`+`TimeInput`; `DialogBody` layout with section grouping (13/12 fields — worst offenders); caller block behind quiet disclosure.
 - `convert-request-dialog.tsx`: native date/time inputs → registry; `DialogBody`.
@@ -229,3 +229,4 @@ All 16 UI/UX transcripts in `temporary-transcripts/ui-ux-video-subs/` were read 
 | 2026-08-21 | Canon proposal: brief verified against code (12+ spot checks, all confirmed), skeleton + long-form inventories completed (sections E/F), transcripts evaluated, owner confirmed all six rulings (transcripts folder kept) | done |
 | 2026-08-21 | **S1**: skill rewritten to carry the full canon; this document restructured into the living roadmap/ledger; ESLint warn-level bans added (`eslint.config.mjs`); environments/testing docs updated for Supabase Pro + Micro compute | done |
 | 2026-08-21 | **S2**: all planned primitives landed (see the S2 section; `job-detail-content.tsx`'s manual `enabled: !suspendRealtimeRefresh` patch intentionally left in place — M2 removes it). Validation: statics → focused `@GG-00` → CodeRabbit (1 minor finding, applied) → full golden **93/93** (25.8m, world `mt2suo7e`; details in `golden-gate-log.md`). **What M-sessions inherit:** (1) the open-dialog registration MUST stay inside the presence-gated primitive content (`<RegisterOpenDialog />`) — putting it in a wrapper body counts always-rendered closed dialogs (the sidebar org dialogs) as open and silently suspends Realtime refresh app-wide; the ladder caught exactly this. (2) Residual refresh race: an in-flight reconciliation can't be cancelled, so a refresh fired between two back-to-back dialogs can still land inside the second — the first full run lost `@P1-10`'s preference test to this class once (focused 6/6, rerun 93/93; classified per testing rule 10). Migrating sessions that see a mid-dialog reset should check this before hardening tests. (3) New harness steps available: `selectFromSearchable`, `toggleInSearchableMulti` (plus the pre-existing `typeIntoDatePicker`/`typeIntoTimeInput`). (4) Full-run duration baseline on Micro compute: ~26m. | done |
+| 2026-08-21 | **M1**: Anfragen + Kunden fully migrated (both request dialogs, convert dialog, SiteContactFields, relationship workspace, client-relations, create/edit client, all module toasts and the anfragen FeedbackBanner onto the global Banner/ErrorText; close-then-banner convention live). Validation: focused golden 33/33, `@AUDIT-W1-A2` 15/15, CodeRabbit 1 minor applied, full golden **93/93** (28.0m, world `mt2xakgc`; details in `golden-gate-log.md`). **What later sessions inherit:** (1) the Banner dismiss button's accessible name is „Hinweis schließen" — never reuse plain „Schließen" for it (a strict-mode collision with page action buttons cost one full run); (2) `selectFromSearchable`, `toggleInSearchableMulti`, `typeIntoDatePickerById`, `typeIntoDateTimeField` are the canonical steps for migrated controls — a2's inline locators are already converted, other audit specs are not; (3) SiteContactFields is searchable everywhere it renders, including the M2 job/project dialogs (their steps are already updated); (4) `DateTimeField` (`components/ui/date-time-field.tsx`) is the registry's datetime pair — the skill table references it; (5) deliberate scope notes: the create-request caller block already renders only when no customer is selected (no extra disclosure), the request-detail spinner is button-level and conforms. | done |

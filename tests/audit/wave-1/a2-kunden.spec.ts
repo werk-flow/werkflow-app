@@ -37,7 +37,9 @@ import {
   removeMemberFromDetail,
   restoreCustomerRelation,
   setCustomerCommunicationPreference,
+  selectFromSearchable,
   setRequestStatusFromDetail,
+  typeIntoDateTimeField,
   uploadDocumentOnJobPage,
   uploadDocumentOnRequestDetail,
   visibleText,
@@ -109,7 +111,7 @@ async function createTimelineFollowUp(
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`Quelle: ${sourceLabel}`);
   await dialog.locator('#follow-up-title').fill(title);
-  await dialog.locator('#follow-up-due').fill(dueAtLocal);
+  await typeIntoDateTimeField(dialog, 'follow-up-due', dueAtLocal);
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
   await expect(visibleText(page, title)).toBeVisible({ timeout: 15_000 });
@@ -202,11 +204,18 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await adminPage.getByPlaceholder('Kunde suchen...').fill(customer);
     await adminPage.getByRole('listbox').getByRole('button').filter({ hasText: customer }).click();
     await adminPage.locator('#job-contact').click();
-    await expect(adminPage.getByRole('option', { name: firstContact, exact: true })).toHaveCount(0);
-    await adminPage.keyboard.press('Escape');
+    const contactListbox = adminPage.getByRole('listbox');
+    await expect(contactListbox).toBeVisible();
+    await expect(
+      contactListbox.getByRole('button').filter({ hasText: firstContact })
+    ).toHaveCount(0);
+    // Toggle the popover closed via its trigger; Escape would close the dialog.
+    await adminPage.locator('#job-contact').click();
     await adminPage.locator('#job-site').click();
-    await expect(adminPage.getByRole('option').filter({ hasText: 'A2 Hauptstraße 25' })).toHaveCount(0);
-    await adminPage.keyboard.press('Escape');
+    await expect(
+      adminPage.getByRole('listbox').getByRole('button').filter({ hasText: 'A2 Hauptstraße 25' })
+    ).toHaveCount(0);
+    await adminPage.locator('#job-site').click();
     await adminPage.keyboard.press('Escape');
 
     await openCustomerDetail(adminPage, customer);
@@ -297,10 +306,8 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     const jobDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Auftrag bearbeiten' }),
     });
-    await jobDialog.locator('#edit-job-site').click();
-    await adminPage.getByRole('option').filter({ hasText: inheritedSite }).first().click();
-    await jobDialog.locator('#edit-job-contact').click();
-    await adminPage.getByRole('option', { name: inheritedContact, exact: true }).click();
+    await selectFromSearchable(adminPage, jobDialog.locator('#edit-job-site'), inheritedSite);
+    await selectFromSearchable(adminPage, jobDialog.locator('#edit-job-contact'), inheritedContact);
     await jobDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(jobDialog).toHaveCount(0, { timeout: 20_000 });
     const edited = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
@@ -571,8 +578,11 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(followUpRow).toContainText('Neu zuweisen');
     await followUpRow.getByRole('button', { name: `Nachfassaktion ${title} bearbeiten` }).click();
     const dialog = adminPage.getByRole('dialog');
-    await dialog.locator('#follow-up-owner').click();
-    await adminPage.getByRole('option', { name: fullName(world.users.buero), exact: true }).click();
+    await selectFromSearchable(
+      adminPage,
+      dialog.locator('#follow-up-owner'),
+      fullName(world.users.buero)
+    );
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
@@ -616,7 +626,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await bueroPage.goto('/anfragen');
     await bueroPage.getByRole('button', { name: 'Anfrage erfassen' }).click();
     const dialog = bueroPage.getByRole('dialog');
-    await expect(dialog.locator('#request-received-at')).toBeVisible();
+    await expect(dialog.locator('#request-received-at-date')).toBeVisible();
     await expectSelectOptions(bueroPage, dialog.locator('#request-category'), [
       'Notfall',
       'Störung / Reparatur',
@@ -640,9 +650,15 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       'Sonstiges',
     ]);
     await dialog.locator('#request-assignee').click();
-    await expect(bueroPage.getByRole('option', { name: 'Niemand zuständig' })).toBeVisible();
-    await expect(bueroPage.getByRole('option', { name: assignee, exact: true })).toBeVisible();
-    await bueroPage.getByRole('option', { name: 'Niemand zuständig' }).click();
+    const assigneeListbox = bueroPage.getByRole('listbox');
+    await expect(assigneeListbox).toBeVisible();
+    await expect(
+      assigneeListbox.getByRole('button').filter({ hasText: 'Niemand zuständig' })
+    ).toBeVisible();
+    await expect(
+      assigneeListbox.getByRole('button').filter({ hasText: assignee })
+    ).toBeVisible();
+    await assigneeListbox.getByRole('button').filter({ hasText: 'Niemand zuständig' }).click();
     await bueroPage.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
 
@@ -798,7 +814,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(dialog.locator('#convert-site')).toContainText(site);
     await expect(dialog.locator('#convert-contact')).toContainText(contact);
     await expect(dialog.locator('#convert-priority')).toContainText('Hoch');
-    await expect(dialog.locator('#convert-date')).toHaveValue('');
+    await expect(dialog.locator('#convert-date')).toContainText('Datum wählen');
     await expect(dialog.getByText('Es wird nichts automatisch terminiert.')).toBeVisible();
     await dialog.locator('#convert-title').fill(editedTitle);
     await dialog.locator('#convert-description').fill(editedDescription);

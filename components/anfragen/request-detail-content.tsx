@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,10 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import {
-  FeedbackBanner,
-  type FeedbackBannerMessage,
-} from '@/components/shared/feedback-banner';
+import { useBanner } from '@/components/ui/banner';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/site-contact-fields';
@@ -99,8 +96,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const router = useRouter();
   const { request } = data;
   const [isPending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<FeedbackBannerMessage | null>(null);
-  const feedbackIdRef = useRef(0);
+  const { showBanner } = useBanner();
   const [convertOpen, setConvertOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -117,8 +113,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
 
   function showFeedback(variant: 'success' | 'error', message: string) {
-    feedbackIdRef.current += 1;
-    setFeedback({ id: feedbackIdRef.current, variant, message });
+    showBanner({ variant, message });
   }
 
   function handleStatusToggle() {
@@ -185,8 +180,6 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4">
-      <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
-
       <div>
         <Button variant="ghost" size="sm" asChild className="-ml-2 mb-2">
           <Link href="/anfragen">

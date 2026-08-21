@@ -106,26 +106,14 @@ export async function createJob(
   }
 
   if (options.siteName) {
-    // The site select appears once the customer's sites finished loading.
+    // The site picker appears once the customer's sites finished loading.
     await expect(page.locator('#job-site')).toBeEnabled({ timeout: 15_000 });
-    await page.locator('#job-site').click();
-    const siteOption = page
-      .getByRole('option')
-      .filter({ hasText: options.siteName })
-      .first();
-    await expect(siteOption).toBeVisible({ timeout: 15_000 });
-    await siteOption.click();
+    await selectFromSearchable(page, page.locator('#job-site'), options.siteName);
   }
 
   if (options.contactName) {
     await expect(page.locator('#job-contact')).toBeEnabled({ timeout: 15_000 });
-    await page.locator('#job-contact').click();
-    const contactOption = page
-      .getByRole('option')
-      .filter({ hasText: options.contactName })
-      .first();
-    await expect(contactOption).toBeVisible({ timeout: 15_000 });
-    await contactOption.click();
+    await selectFromSearchable(page, page.locator('#job-contact'), options.contactName);
   }
 
   if (options.assignEmployeeName) {
@@ -202,17 +190,19 @@ export async function createProject(
   }
   if (options.siteName) {
     await expect(dialog.locator('#create-project-site')).toBeVisible({ timeout: 15_000 });
-    await dialog.locator('#create-project-site').click();
-    const siteOption = page.getByRole('option').filter({ hasText: options.siteName }).first();
-    await expect(siteOption).toBeVisible({ timeout: 15_000 });
-    await siteOption.click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#create-project-site'),
+      options.siteName
+    );
   }
   if (options.contactName) {
     await expect(dialog.locator('#create-project-contact')).toBeVisible({ timeout: 15_000 });
-    await dialog.locator('#create-project-contact').click();
-    const contactOption = page.getByRole('option').filter({ hasText: options.contactName }).first();
-    await expect(contactOption).toBeVisible({ timeout: 15_000 });
-    await contactOption.click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#create-project-contact'),
+      options.contactName
+    );
   }
   await dialog.getByRole('button', { name: 'Projekt erstellen', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -555,11 +545,10 @@ export async function createFollowUpOnCustomerDetail(
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Nachfassaktion anlegen' })).toBeVisible();
   await dialog.locator('#follow-up-title').fill(input.title);
-  await dialog.locator('#follow-up-due').fill(input.dueAtLocal);
+  await typeIntoDateTimeField(dialog, 'follow-up-due', input.dueAtLocal);
   if (input.note) await dialog.locator('#follow-up-note').fill(input.note);
   if (input.ownerName) {
-    await dialog.locator('#follow-up-owner').click();
-    await page.getByRole('option', { name: input.ownerName, exact: true }).click();
+    await selectFromSearchable(page, dialog.locator('#follow-up-owner'), input.ownerName);
   }
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -593,10 +582,11 @@ export async function configureCustomerCommunicationSettings(
   await page.getByRole('button', { name: 'Allgemein bearbeiten' }).click();
   const dialog = page.getByRole('dialog');
   if (input.preferredContactName) {
-    await dialog.locator('#preferred-contact').click();
-    await page
-      .getByRole('option', { name: input.preferredContactName, exact: true })
-      .click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#preferred-contact'),
+      input.preferredContactName
+    );
   }
   if (input.preferredChannel) {
     await dialog.locator('#preferred-channel').click();
@@ -648,8 +638,11 @@ export async function setCustomerCommunicationPreference(
   await page.getByRole('button', { name: 'Präferenz', exact: true }).click();
   const dialog = page.getByRole('dialog');
   if (input.contactName) {
-    await dialog.locator('#preference-contact').click();
-    await page.getByRole('option', { name: input.contactName, exact: true }).click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#preference-contact'),
+      input.contactName
+    );
   }
   await dialog.locator('#preference-channel').click();
   await page.getByRole('option', { name: input.channel, exact: true }).click();
@@ -704,8 +697,11 @@ export async function addSiteOnCustomerDetail(
   if (site.accessNotes) await page.locator('#site-access-notes').fill(site.accessNotes);
   if (site.notes) await page.locator('#site-notes').fill(site.notes);
   if (site.primaryContactName) {
-    await page.locator('#site-primary-contact').click();
-    await page.getByRole('option', { name: site.primaryContactName, exact: true }).click();
+    await selectFromSearchable(
+      page,
+      page.locator('#site-primary-contact'),
+      site.primaryContactName
+    );
   }
   if (site.isPrimary) {
     const checkbox = page.getByRole('checkbox', { name: 'Als Hauptstandort festlegen' });
@@ -836,7 +832,11 @@ export async function createRequestViaDialog(
     await page.getByRole('option', { name: options.urgencyLabel, exact: true }).click();
   }
   if (options.receivedAtLocal) {
-    await page.locator('#request-received-at').fill(options.receivedAtLocal);
+    await typeIntoDateTimeField(
+      page.getByRole('dialog'),
+      'request-received-at',
+      options.receivedAtLocal
+    );
   }
 
   if (options.clientName) {
@@ -853,13 +853,11 @@ export async function createRequestViaDialog(
 
   if (options.siteName) {
     await expect(page.locator('#request-site')).toBeVisible({ timeout: 15_000 });
-    await page.locator('#request-site').click();
-    await page.getByRole('option').filter({ hasText: options.siteName }).first().click();
+    await selectFromSearchable(page, page.locator('#request-site'), options.siteName);
   }
   if (options.contactName) {
     await expect(page.locator('#request-contact')).toBeVisible({ timeout: 15_000 });
-    await page.locator('#request-contact').click();
-    await page.getByRole('option').filter({ hasText: options.contactName }).first().click();
+    await selectFromSearchable(page, page.locator('#request-contact'), options.contactName);
   }
 
   if (options.callerName) {
@@ -882,8 +880,11 @@ export async function createRequestViaDialog(
     await page.getByRole('option', { name: options.sourceLabel, exact: true }).click();
   }
   if (options.assigneeName) {
-    await page.locator('#request-assignee').click();
-    await page.getByRole('option', { name: options.assigneeName, exact: true }).click();
+    await selectFromSearchable(
+      page,
+      page.locator('#request-assignee'),
+      options.assigneeName
+    );
   }
 
   // The submit button carries the same label as the header trigger; scope it
@@ -932,7 +933,11 @@ export async function convertRequestToJobViaDialog(
   }
 
   if (options?.plannedDate) {
-    await page.locator('#convert-date').fill(options.plannedDate);
+    await typeIntoDatePickerById(
+      page.getByRole('dialog'),
+      'convert-date',
+      options.plannedDate
+    );
   }
 
   // The job number is suggested asynchronously after the dialog opens;
@@ -1105,6 +1110,35 @@ export async function typeIntoDatePicker(
 
 // (TimeInput already has a shared helper: typeIntoTimeInput below, addressed
 // by element id. Reuse it for every migrated time field.)
+
+// DatePicker addressed by element id instead of accessible name — for the
+// DateTimeField composite and standalone pickers with known ids.
+export async function typeIntoDatePickerById(
+  scope: Locator,
+  id: string,
+  isoDate: string // 'YYYY-MM-DD'
+): Promise<void> {
+  const digits = `${isoDate.slice(8, 10)}${isoDate.slice(5, 7)}${isoDate.slice(0, 4)}`;
+  const group = scope.locator(`#${id}`);
+  await group.click();
+  await group.press('ArrowLeft');
+  await group.press('ArrowLeft');
+  await group.pressSequentially(digits, { delay: 50 });
+}
+
+// DateTimeField (DatePicker + TimeInput over one combined value). Accepts the
+// former datetime-local string format so migrated steps stay drop-in.
+export async function typeIntoDateTimeField(
+  scope: Locator,
+  idPrefix: string,
+  localValue: string // 'YYYY-MM-DDTHH:mm'
+): Promise<void> {
+  const [datePart, timePart] = localValue.split('T');
+  await typeIntoDatePickerById(scope, `${idPrefix}-date`, datePart);
+  if (timePart) {
+    await typeIntoTimeInput(scope, `${idPrefix}-time`, timePart.replace(':', ''));
+  }
+}
 
 // UI/UX consolidation shared steps: every SearchableSelect/-MultiSelect in the
 // app has the same anatomy (combobox trigger → search textbox → option buttons
@@ -1967,8 +2001,11 @@ export async function assignRequestAssigneeViaEditDialog(
   await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.locator('#edit-request-assignee').click();
-  await page.getByRole('option', { name: assigneeName, exact: true }).click();
+  await selectFromSearchable(
+    page,
+    dialog.locator('#edit-request-assignee'),
+    assigneeName
+  );
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, assigneeName);

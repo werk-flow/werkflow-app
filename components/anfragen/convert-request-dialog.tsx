@@ -7,6 +7,7 @@ import { ArrowRightLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -23,9 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { TimeInput } from '@/components/ui/time-input';
+import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/site-contact-fields';
+import { toLocalDateString } from '@/lib/utils';
 import { getNextJobNumber } from '@/lib/jobs/actions';
 import { getNextProjectNumber } from '@/lib/projects/actions';
 import {
@@ -76,6 +82,7 @@ export function ConvertRequestDialog({
   onOpenChange,
 }: ConvertRequestDialogProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [target, setTarget] = useState<ConversionTarget>('job');
   const [title, setTitle] = useState(request.summary);
   const [description, setDescription] = useState(request.details ?? '');
@@ -167,6 +174,10 @@ export function ConvertRequestDialog({
           return;
         }
         onOpenChange(false);
+        showBanner({
+          variant: 'success',
+          message: 'Anfrage wurde in einen Auftrag umgewandelt.',
+        });
         router.refresh();
       } else {
         const result = await convertRequestToProject(request.id, {
@@ -182,6 +193,10 @@ export function ConvertRequestDialog({
           return;
         }
         onOpenChange(false);
+        showBanner({
+          variant: 'success',
+          message: 'Anfrage wurde in ein Projekt umgewandelt.',
+        });
         router.refresh();
       }
     } catch {
@@ -194,7 +209,7 @@ export function ConvertRequestDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[520px]"
+        className="sm:max-w-[520px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -204,8 +219,8 @@ export function ConvertRequestDialog({
             Anfrage verknüpft. Eine Anfrage kann nur einmal umgewandelt werden.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <DialogBody className="grid gap-4 py-2">
             <Tabs
               value={target}
               onValueChange={(value) => setTarget(value as ConversionTarget)}
@@ -322,11 +337,21 @@ export function ConvertRequestDialog({
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="convert-date">Geplantes Datum</Label>
-                    <Input
+                    <DatePicker
                       id="convert-date"
-                      type="date"
-                      value={plannedDate}
-                      onChange={(e) => setPlannedDate(e.target.value)}
+                      ariaLabel="Geplantes Datum"
+                      value={
+                        plannedDate
+                          ? new Date(
+                              Number(plannedDate.slice(0, 4)),
+                              Number(plannedDate.slice(5, 7)) - 1,
+                              Number(plannedDate.slice(8, 10))
+                            )
+                          : undefined
+                      }
+                      onChange={(date) =>
+                        setPlannedDate(date ? toLocalDateString(date) : '')
+                      }
                       disabled={isLoading}
                     />
                   </div>
@@ -334,11 +359,10 @@ export function ConvertRequestDialog({
                 {plannedDate && (
                   <div className="grid gap-2">
                     <Label htmlFor="convert-time">Geplante Uhrzeit</Label>
-                    <Input
+                    <TimeInput
                       id="convert-time"
-                      type="time"
                       value={plannedTime}
-                      onChange={(e) => setPlannedTime(e.target.value)}
+                      onChange={setPlannedTime}
                       disabled={isLoading}
                     />
                   </div>
@@ -362,9 +386,9 @@ export function ConvertRequestDialog({
               />
             </div>
 
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          </div>
-          <DialogFooter>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4">
             <Button
               type="button"
               variant="outline"

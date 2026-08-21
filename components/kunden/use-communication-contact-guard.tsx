@@ -1,8 +1,8 @@
 'use client';
 
+import { useBanner } from '@/components/ui/banner';
 import { useState, useTransition } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -55,13 +55,14 @@ export function useCommunicationContactGuard({
 }: {
   clientId: string;
 }) {
+  const { showBanner } = useBanner();
   const [pendingContact, setPendingContact] = useState<PendingContact | null>(null);
   const [reason, setReason] = useState('');
   const [isPending, startTransition] = useTransition();
 
   function requestContact(input: Omit<PendingContact, 'warnings'>) {
     if (!isAllowedContactHref(input.channel, input.href)) {
-      toast.error('Der Kontaktlink ist ungültig.');
+      showBanner({ variant: 'error', message: 'Der Kontaktlink ist ungültig.' });
       return;
     }
     startTransition(async () => {
@@ -73,7 +74,7 @@ export function useCommunicationContactGuard({
         purpose: 'appointment_service',
       });
       if (!result.success) {
-        toast.error('Die Kontaktvorgaben konnten nicht geprüft werden.');
+        showBanner({ variant: 'error', message: 'Die Kontaktvorgaben konnten nicht geprüft werden.' });
         return;
       }
       if (result.data.warnings.length === 0) {
@@ -95,12 +96,12 @@ export function useCommunicationContactGuard({
         reason,
       });
       if (!result.success) {
-        toast.error('Die begründete Ausnahme konnte nicht dokumentiert werden.');
+        showBanner({ variant: 'error', message: 'Die begründete Ausnahme konnte nicht dokumentiert werden.' });
         return;
       }
       const href = pendingContact.href;
       if (!isAllowedContactHref(pendingContact.channel, href)) {
-        toast.error('Der Kontaktlink ist ungültig.');
+        showBanner({ variant: 'error', message: 'Der Kontaktlink ist ungültig.' });
         return;
       }
       setPendingContact(null);
