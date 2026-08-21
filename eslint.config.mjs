@@ -20,6 +20,56 @@ const eslintConfig = defineConfig([
     "tests/audit/.report/**",
     "tests/audit/.results/**",
   ]),
+  // UI/UX consolidation canon (docs/plans/uiux-consolidation.md): registry
+  // components own date/time/number entry, entity selection, and feedback.
+  // Severity is "warn" until the migration sessions clear the existing call
+  // sites; M5 escalates everything here to "error".
+  {
+    files: ["app/**/*.tsx", "components/**/*.tsx"],
+    ignores: ["components/ui/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector: 'JSXAttribute[name.name="type"][value.value="date"]',
+          message:
+            "Native date inputs are banned — use DatePicker (components/ui/date-picker). See the werkflow-design skill registry.",
+        },
+        {
+          selector: 'JSXAttribute[name.name="type"][value.value="datetime-local"]',
+          message:
+            "Native datetime inputs are banned — use DatePicker + TimeInput (components/ui). See the werkflow-design skill registry.",
+        },
+        {
+          selector: 'JSXAttribute[name.name="type"][value.value="time"]',
+          message:
+            "Native time inputs are banned — use TimeInput (components/ui/time-input). See the werkflow-design skill registry.",
+        },
+        {
+          selector: 'JSXAttribute[name.name="type"][value.value="number"]',
+          message:
+            "Raw number inputs are banned — use QuantityStepper, DurationHoursInput, or Input with inputMode=\"decimal\". See the werkflow-design skill registry.",
+        },
+        {
+          selector: 'JSXOpeningElement[name.name="select"]',
+          message:
+            "Native <select> is banned — use SearchableSelect or the shadcn Select per the werkflow-design skill registry.",
+        },
+      ],
+      "no-restricted-imports": [
+        "warn",
+        {
+          paths: [
+            {
+              name: "sonner",
+              message:
+                "Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

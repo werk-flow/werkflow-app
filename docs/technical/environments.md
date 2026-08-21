@@ -8,15 +8,13 @@ WerkFlow runs on two fully separated backend environments since 2026-08-18 (deci
 | --- | --- | --- |
 | Supabase project | `jbgaqpdjauzoocplgdsn` | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev") |
 | Supabase org | "WerkFlow" (`svxdwqapsmvfkchswonc`) | same org since 2026-08-20 (transfer verified: refs/keys unchanged) |
-| Region / compute | AWS eu-central-1, Postgres 17 | AWS eu-central-1 (same, deliberate), Postgres 17, free tier NANO |
+| Region / compute | AWS eu-central-1, Postgres 17 | AWS eu-central-1 (same, deliberate), Postgres 17, Micro compute since 2026-08-21 |
 | R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS: localhost only) |
 | Serves | Deployed app on Vercel, real customers | Local dev server, Playwright harness (Golden + audit) |
 | Edge functions | `send-invite-email`, `send-email-change-current-otp` | Same two, deployed from `supabase/functions/` |
 | Auth | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key) |
 
-Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "WerkFlow Dev" org was deleted after the transfer). Supabase bills per org plus per-project compute, so one Pro plan covers both: $25 plan + 2× $10 Micro − $10 credit ≈ **$35/month**. As of the transfer the org is **still on the free plan** — until the Pro upgrade happens, both projects share the free org's quotas (5 GB egress/month, the pool that already triggered a fair-use warning), dev keeps auto-pausing, and both stay on Nano compute.
-
-The dev project is on the free tier and **auto-pauses after roughly a week of inactivity**. Symptoms: local app/harness cannot connect, `db push` fails. Fix: restore the project in the Supabase dashboard, wait a minute, retry. Not a code bug.
+Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "WerkFlow Dev" org was deleted after the transfer). **The org is on the Pro plan since 2026-08-21**, so both projects run under Pro quotas. The same day the dev project's compute was raised from Nano to Micro (covered by the plan's compute credits, no additional cost per the owner). Practical effects: the free-tier auto-pause no longer applies to dev, the shared free egress cap is gone, and harness runs are faster than the Nano-era baselines recorded in [testing.md](testing.md) — re-baseline durations on the next full run before reading a slow run as a regression.
 
 **Auth/config parity:** project configuration (auth email templates, SMTP, rate limits) is not schema and is not covered by migrations or the decision-0003 object comparison. `bun scripts/sync-dev-auth-from-prod.ts` diffs the complete auth config of both projects and with `--apply` syncs the `mailer_*` fields prod → dev (this fixed the 2026-08-20 gap where dev sent confirmation links instead of the app's 6-digit OTP). Run the diff after any dashboard-side auth change on prod.
 

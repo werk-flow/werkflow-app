@@ -15,7 +15,7 @@ This is a **living implementation index**, not a substitute for feature specific
 
 > **Roadmap established:** 4 August 2026  
 > **Current phase:** Phase 1 — Complete Operational Core  
-> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); the UI/UX consolidation ([`uiux-consolidation.md`](./uiux-consolidation.md)) runs next, then `P1-13` under the per-slice audit model
+> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); the UI/UX consolidation ([`uiux-consolidation.md`](./uiux-consolidation.md)) is in progress (canon confirmed 2026-08-21), then `P1-13` under the per-slice audit model
 > **Formally accepted roadmap slices:** 13 of 56 (`P1-00` and `P1-00a` through `P1-54`)
 > **Phase 2 implementation:** Not authorized by this roadmap
 
@@ -30,7 +30,7 @@ They do not make later roadmap slices complete automatically. `P1-00` must first
 | Field | Current value |
 | --- | --- |
 | Active slice | None — the Wave 1 flow audit ([`wave-1-audit.md`](./wave-1-audit.md)) is COMPLETE: all sessions A1–A7 Rule-12 certified and the final gate F closed 2026-08-18 (full Golden 93/93 + full audit battery 74/74 + 119/119 catalog-ID proof) |
-| Next slice | `P1-13` (work templates) is `ready` — but the **UI/UX consolidation runs first** ([`uiux-consolidation.md`](./uiux-consolidation.md), owner decision 2026-08-21); `P1-13` starts after it closes, under the new per-slice audit model ([`wave-2-audit.md`](./wave-2-audit.md)) |
+| Next slice | `P1-13` (work templates) is `ready` — but the **UI/UX consolidation runs first** ([`uiux-consolidation.md`](./uiux-consolidation.md), owner decision 2026-08-21, in execution since the same day); `P1-13` starts after it closes, under the new per-slice audit model ([`wave-2-audit.md`](./wave-2-audit.md)) |
 | Other ready slices | `P1-13` |
 | Current implementation wave | Wave 1 complete with `P1-12` and audited; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
 | Latest completed golden gate | `AUDIT-W1` final gate: full Golden 93/93 (world `msy9a4vb`, 17.1m) + full audit battery 74/74 (world `msydek02`, 28.5m) on build `Fi1jZsuahgN7eLsjPFAvH`, 2026-08-18 (`docs/plans/golden-gate-log.md`) |
