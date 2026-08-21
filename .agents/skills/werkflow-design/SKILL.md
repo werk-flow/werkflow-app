@@ -63,7 +63,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Fixed enum, under ~10 options | shadcn `Select` | `components/ui/select` |
 | Date entry | `DatePicker` | `components/ui/date-picker` |
 | Time entry | `TimeInput` | `components/ui/time-input` |
-| Date + time | `DatePicker` + `TimeInput` pair | — |
+| Date + time | `DateTimeField` (a `DatePicker` + `TimeInput` pair over one `YYYY-MM-DDTHH:mm` value) | `components/ui/date-time-field` |
 | Duration in hours | `DurationHoursInput` | `components/ui/duration-hours-input` |
 | Quantity / count | `QuantityStepper` | `components/ui/quantity-stepper` |
 | Other numeric field | `Input` with `inputMode="decimal"` + the shared de-DE parser | `components/ui/input`, `lib/ui/search` |
