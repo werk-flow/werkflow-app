@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseUrl } from '@/lib/env/public';
 import { getSupabaseSecretKey } from '@/lib/env/server';
+import { fetchWithTimeout } from './fetch-with-timeout';
 
 let _adminClient: SupabaseClient | null = null;
 
@@ -21,6 +22,10 @@ export function createSupabaseAdminClient(): SupabaseClient {
     auth: {
       autoRefreshToken: false,
       persistSession: false
+    },
+    global: {
+      // A stalled request must reject instead of hanging the server action.
+      fetch: fetchWithTimeout
     }
   });
 
