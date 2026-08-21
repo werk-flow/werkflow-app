@@ -7,12 +7,16 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Separator } from '@/components/ui/separator';
+import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -128,14 +132,15 @@ export function EditJobDialog({
     string | null
   >(null);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
+  const [assignmentsLoadFailed, setAssignmentsLoadFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [showAutoParkDialog, setShowAutoParkDialog] = useState(false);
   const initializedJobIdRef = useRef<string | null>(null);
   const wasOpenRef = useRef(false);
   const router = useRouter();
+  const { showBanner } = useBanner();
 
   useEffect(() => {
     if (!open) {
@@ -163,20 +168,27 @@ export function EditJobDialog({
     setContactId(job.contactId ?? '');
     setError(null);
     setContentError(null);
-    setSuccess(false);
     setHasAttemptedSubmit(false);
     setAssignmentTeamSourceId(null);
     setConfirmedDateRemovalForWarning(false);
     setQualificationWarning(null);
 
     setIsLoadingAssignments(true);
-    getJobDetails(job.id).then((result) => {
-      if (result.success) {
-        const ids = result.job.assignments.map((a) => a.userId);
-        setSelectedEmployees(ids);
-      }
-      setIsLoadingAssignments(false);
-    });
+    setAssignmentsLoadFailed(false);
+    getJobDetails(job.id)
+      .then((result) => {
+        if (result.success) {
+          const ids = result.job.assignments.map((a) => a.userId);
+          setSelectedEmployees(ids);
+        } else {
+          setAssignmentsLoadFailed(true);
+        }
+        setIsLoadingAssignments(false);
+      })
+      .catch(() => {
+        setAssignmentsLoadFailed(true);
+        setIsLoadingAssignments(false);
+      });
   }, [open, job]);
 
   const submitChanges = async (
@@ -201,7 +213,6 @@ export function EditJobDialog({
     }
 
     setIsLoading(true);
-    setSuccess(false);
 
     try {
       const parsedEstimatedDuration = parseHoursInputToMinutes(estimatedHours);
@@ -275,8 +286,8 @@ export function EditJobDialog({
 
       setQualificationWarning(null);
       setConfirmedDateRemovalForWarning(false);
-      setSuccess(true);
       onOpenChange(false);
+      showBanner({ variant: 'success', message: 'Auftrag gespeichert.' });
       if (onSuccess) {
         await onSuccess({
           job: result.success ? result.job : job,
@@ -285,7 +296,6 @@ export function EditJobDialog({
       } else {
         router.refresh();
       }
-      setSuccess(false);
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     } finally {
@@ -299,7 +309,11 @@ export function EditJobDialog({
   };
 
   const showContentError = hasAttemptedSubmit && contentError;
-  const formDisabled = isLoading || success;
+  const formDisabled = isLoading;
+  // Submitting before the current assignments finished loading (or after the
+  // load failed) would save an empty assignment list and wipe the job's crew.
+  const submitDisabled =
+    formDisabled || isLoadingAssignments || assignmentsLoadFailed;
 
   const activeProjects = useMemo(
     () =>
@@ -407,15 +421,15 @@ export function EditJobDialog({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]"
+        className="sm:max-w-[500px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>Auftrag bearbeiten</DialogTitle>
           <DialogDescription>Ändere die Daten des Auftrags.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <DialogBody className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label htmlFor="edit-job-number">Auftragsnummer</Label>
               <Input
@@ -455,10 +469,13 @@ export function EditJobDialog({
                 disabled={formDisabled}
                 aria-invalid={showContentError ? true : undefined}
               />
-              {showContentError && (
-                <p className="text-sm text-destructive">{contentError}</p>
-              )}
+              <ErrorText>{showContentError ? contentError : null}</ErrorText>
             </div>
+
+            <Separator />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Zuordnung
+            </p>
 
             <div className="grid gap-2">
               <Label htmlFor="edit-job-client">Kunde</Label>
@@ -512,6 +529,11 @@ export function EditJobDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            <Separator />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Planung
+            </p>
 
             <div className="grid gap-2">
               <Label>Geplantes Datum</Label>
@@ -591,6 +613,11 @@ export function EditJobDialog({
                   Zuweisungen werden geladen...
                 </p>
               )}
+              <ErrorText className="text-xs">
+                {assignmentsLoadFailed
+                  ? 'Die aktuellen Zuweisungen konnten nicht geladen werden. Bitte schließe den Dialog und öffne ihn erneut.'
+                  : null}
+              </ErrorText>
             </div>
 
             <div className="grid gap-2">
@@ -616,17 +643,12 @@ export function EditJobDialog({
               </p>
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {success && (
-              <p className="text-sm text-green-600">
-                Auftrag erfolgreich aktualisiert!
-              </p>
-            )}
-          </div>
-          <DialogFooter>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4">
             <Button
               type="submit"
-              disabled={formDisabled}
+              disabled={submitDisabled}
             >
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Speichern'}

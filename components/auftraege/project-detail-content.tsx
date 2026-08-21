@@ -24,6 +24,7 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
@@ -198,6 +199,7 @@ export function ProjectDetailContent({
   originRequest,
 }: ProjectDetailContentProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [showCreateJob, setShowCreateJob] = useState(false);
@@ -477,8 +479,16 @@ export function ProjectDetailContent({
     startDeleteTransition(async () => {
       const result = await deleteProject(project.id);
       if (result.success) {
-        router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
+        // Hard navigation — see the deletion-stall note in kunden-detail-content.
+        window.location.assign(
+          `/auftraege?deleted_project=${encodeURIComponent(project.name)}`
+        );
+        return;
       }
+      showBanner({
+        variant: 'error',
+        message: 'Das Projekt konnte nicht gelöscht werden.',
+      });
     });
   };
 
@@ -489,7 +499,14 @@ export function ProjectDetailContent({
         : await updateProject(project.id, {
             statusOverride: status === 'auto' ? null : status,
           });
-    if (result.success) setLiveProject(result.project);
+    if (result.success) {
+      setLiveProject(result.project);
+      return;
+    }
+    showBanner({
+      variant: 'error',
+      message: 'Der Projektstatus konnte nicht geändert werden.',
+    });
   };
 
   const handleJobStatusChange = async (jobId: string, newStatus: JobStatus) => {
@@ -500,7 +517,12 @@ export function ProjectDetailContent({
       setLiveJobs((prev) =>
         prev.map((job) => (job.id === jobId ? result.job : job))
       );
+      return;
     }
+    showBanner({
+      variant: 'error',
+      message: 'Der Auftragsstatus konnte nicht geändert werden.',
+    });
   };
 
   const handleClientSave = async (clientId: string) => {
@@ -508,8 +530,16 @@ export function ProjectDetailContent({
       const result = await updateProject(project.id, {
         clientId,
       });
+      if (!result.success) {
+        // The dialog stays open on failure (no silent close-and-drop).
+        showBanner({
+          variant: 'error',
+          message: 'Der Kunde konnte nicht gespeichert werden.',
+        });
+        return;
+      }
       setShowClientDialog(false);
-      if (result.success) setLiveProject(result.project);
+      setLiveProject(result.project);
     });
   };
 

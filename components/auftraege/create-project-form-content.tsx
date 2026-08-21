@@ -4,6 +4,10 @@ import { useState, useMemo, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Separator } from '@/components/ui/separator';
+import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -69,7 +73,7 @@ export function CreateProjectFormContent({
     null
   );
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const { showBanner } = useBanner();
 
   useEffect(() => {
     if (!isActive) return;
@@ -149,7 +153,6 @@ export function CreateProjectFormContent({
     if (hasValidationError) return;
 
     setIsLoading(true);
-    setSuccess(false);
 
     try {
       const input: CreateProjectInput = {
@@ -185,6 +188,7 @@ export function CreateProjectFormContent({
         return;
       }
 
+      let failedLinkCount = 0;
       if (selectedJobIds.length > 0) {
         const linkResults = await Promise.allSettled(
           selectedJobIds.map((jobId) =>
@@ -196,12 +200,22 @@ export function CreateProjectFormContent({
             entry.status === 'rejected' ||
             (entry.status === 'fulfilled' && !entry.value.success)
         );
-        if (failed.length > 0) {
-          console.error('Some job links failed:', failed);
-        }
+        failedLinkCount = failed.length;
       }
 
-      setSuccess(true);
+      // Partially failed job links must stay visible (no-silent-failure rule);
+      // the project itself is created at this point.
+      showBanner(
+        failedLinkCount > 0
+          ? {
+              variant: 'error',
+              message:
+                failedLinkCount === 1
+                  ? 'Projekt erstellt, aber eine Auftragszuordnung konnte nicht gespeichert werden. Bitte prüfe die Auftragsliste.'
+                  : `Projekt erstellt, aber ${failedLinkCount} Auftragszuordnungen konnten nicht gespeichert werden. Bitte prüfe die Auftragsliste.`,
+            }
+          : { variant: 'success', message: 'Projekt erfolgreich erstellt!' }
+      );
       resetForm();
       await onSuccess?.({
         project: result.project,
@@ -216,11 +230,11 @@ export function CreateProjectFormContent({
 
   const showContentError = hasAttemptedSubmit && contentError;
   const showProjectNumberError = hasAttemptedSubmit && projectNumberError;
-  const formDisabled = isLoading || success;
+  const formDisabled = isLoading;
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
-      <div className="grid gap-4 py-4">
+    <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+      <DialogBody className="grid gap-4 py-2">
         <div className="grid gap-2">
           <Label htmlFor="create-project-number">Projektnummer *</Label>
           <Input
@@ -234,9 +248,7 @@ export function CreateProjectFormContent({
             disabled={formDisabled}
             aria-invalid={showProjectNumberError ? true : undefined}
           />
-          {showProjectNumberError && (
-            <p className="text-sm text-destructive">{projectNumberError}</p>
-          )}
+          <ErrorText>{showProjectNumberError ? projectNumberError : null}</ErrorText>
         </div>
 
         <div className="grid gap-2">
@@ -267,9 +279,7 @@ export function CreateProjectFormContent({
             disabled={formDisabled}
             aria-invalid={showContentError ? true : undefined}
           />
-          {showContentError && (
-            <p className="text-sm text-destructive">{contentError}</p>
-          )}
+          <ErrorText>{showContentError ? contentError : null}</ErrorText>
         </div>
 
         <div className="grid gap-2">
@@ -294,6 +304,11 @@ export function CreateProjectFormContent({
           disabled={formDisabled}
           idPrefix="create-project"
         />
+
+        <Separator />
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Planung
+        </p>
 
         <div className="grid gap-2">
           <Label>Geplanter Beginn</Label>
@@ -330,18 +345,15 @@ export function CreateProjectFormContent({
           )}
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {success && (
-          <p className="text-sm text-green-600">Projekt erfolgreich erstellt!</p>
-        )}
-      </div>
+        <ErrorText>{error}</ErrorText>
+      </DialogBody>
 
-      <div className="flex justify-end">
+      <DialogFooter className="pt-4">
         <Button type="submit" disabled={formDisabled}>
           {isLoading && <Loader2 className="size-4 animate-spin" />}
           {isLoading ? 'Wird erstellt...' : 'Projekt erstellen'}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }

@@ -4,6 +4,10 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Separator } from '@/components/ui/separator';
+import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -139,7 +143,7 @@ export function CreateJobFormContent({
   const [contentError, setContentError] = useState<string | null>(null);
   const [jobNumberError, setJobNumberError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const { showBanner } = useBanner();
 
   useEffect(() => {
     const previousInitialJobNumber = previousInitialJobNumberRef.current;
@@ -241,7 +245,6 @@ export function CreateJobFormContent({
     if (hasValidationError) return;
 
     setIsLoading(true);
-    setSuccess(false);
 
     try {
       const durationMinutes = parseHoursInputToMinutes(estimatedHours);
@@ -297,7 +300,7 @@ export function CreateJobFormContent({
       }
 
       setQualificationWarning(null);
-      setSuccess(true);
+      showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
       await onSuccess?.({
         job: result.job,
         assignedUserIds: selectedEmployees,
@@ -316,7 +319,7 @@ export function CreateJobFormContent({
 
   const showContentError = hasAttemptedSubmit && contentError;
   const showJobNumberError = hasAttemptedSubmit && jobNumberError;
-  const formDisabled = isLoading || success;
+  const formDisabled = isLoading;
   const projectSelectionDisabled = formDisabled || isLoadingProjectDefaults;
   const siteContactDisabled = projectSelectionDisabled || projectDefaultsLoadFailed;
   const submitDisabled = formDisabled || isLoadingProjectDefaults || projectDefaultsLoadFailed;
@@ -439,8 +442,8 @@ export function CreateJobFormContent({
 
   return (
     <>
-    <form onSubmit={handleSubmit} noValidate>
-      <div className="grid gap-4 py-4">
+    <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+      <DialogBody className="grid gap-4 py-2">
         <div className="grid gap-2">
           <Label htmlFor="job-number">Auftragsnummer *</Label>
           <Input
@@ -454,9 +457,7 @@ export function CreateJobFormContent({
             disabled={formDisabled}
             aria-invalid={showJobNumberError ? true : undefined}
           />
-          {showJobNumberError && (
-            <p className="text-sm text-destructive">{jobNumberError}</p>
-          )}
+          <ErrorText>{showJobNumberError ? jobNumberError : null}</ErrorText>
         </div>
 
         <div className="grid gap-2">
@@ -487,10 +488,13 @@ export function CreateJobFormContent({
             disabled={formDisabled}
             aria-invalid={showContentError ? true : undefined}
           />
-          {showContentError && (
-            <p className="text-sm text-destructive">{contentError}</p>
-          )}
+          <ErrorText>{showContentError ? contentError : null}</ErrorText>
         </div>
+
+        <Separator />
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Zuordnung
+        </p>
 
         <div className="grid gap-2">
           <Label htmlFor="job-client">Kunde</Label>
@@ -545,6 +549,11 @@ export function CreateJobFormContent({
             </SelectContent>
           </Select>
         </div>
+
+        <Separator />
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Planung
+        </p>
 
         <div className="grid gap-2">
           <Label>Geplantes Datum</Label>
@@ -640,19 +649,14 @@ export function CreateJobFormContent({
           </p>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {success && (
-          <p className="text-sm text-green-600">
-            Auftrag erfolgreich erstellt!
-          </p>
-        )}
-      </div>
-      <div className="flex justify-end">
+        <ErrorText>{error}</ErrorText>
+      </DialogBody>
+      <DialogFooter className="pt-4">
         <Button type="submit" disabled={submitDisabled}>
           {isLoading && <Loader2 className="size-4 animate-spin" />}
           {isLoading ? 'Wird erstellt...' : 'Auftrag erstellen'}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
     <QualificationWarningDialog
       evaluation={qualificationWarning}

@@ -1,0 +1,57 @@
+# Scoping agent permissions and auditing every tool call
+
+Source: https://www.instagram.com/reel/Db8WTQLke0j/
+Creator: @mattmurphyai
+Posted: 2026-08-12
+Topic: security-video-subs
+
+## Summary
+
+An AI agent breached a company's production database this week. The human supervising it clicked approve.
+
+## Transcript
+
+An AI agent breached a company's production database this last week, and the human supervising
+it clicked approve.
+This happened during a government evaluation of AI tools.
+This is not a hypothetical.
+This was not a lab exercise.
+This was production AI agent accessing government systems it was never authorized to touch.
+And the human reviewer, the human in the loop that's responsible for catching it, waved
+it right on through.
+So here's what that means for how you're going to direct AI agents as you move forward.
+Step one, a human without the right tools is not a guardrail at all.
+They're just a bottleneck with no teeth.
+You cannot review hundreds of agent outputs every day and catch every single dangerous
+action by trying to read them.
+You're going to miss things.
+Everyone would.
+The skill set is not watch everything, read everything.
+The skill set is knowing what tools you put in front of that agent so the dangerous commands
+never reach it in the first place.
+Scoped credentials, network egress controls, automated gates that reject operations that
+are outside the defined boundaries of the agent.
+Those tools catch what your eyes never will.
+Step two, logged tools, calls are non-negotiable.
+Every action your agent takes needs to be fully recorded.
+What it accessed, what it changed, what it called, and when.
+If you cannot produce that log, you have no way to know what your agent did when you weren't
+looking.
+So direct your AI to instrument every tool call with an append-only audit trail.
+When something goes wrong, and my last name's Murphy, I know it will, that log is the difference
+between a diagnosis and a guess, and you want to know.
+So step three, run a structured audit against every build before it ships.
+Not a personal review of full system audit.
+Same one we offer.
+Entry audits on the way in, exit audits on the way out.
+It's consistent, it's repeatable, it's not dependent on your attention span at 2 a.m.
+when something's failing.
+The human in the loop is only as good as the tools that they are using.
+So direct your AI to build those tools, then direct the agents how to operate them safely.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Instrument every tool call with an append-only audit trail.
+2. Build those tools, then direct the agents how to operate them safely.

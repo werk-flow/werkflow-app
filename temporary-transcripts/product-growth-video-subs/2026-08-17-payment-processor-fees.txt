@@ -1,0 +1,45 @@
+# What a payment processor actually costs you
+
+Source: https://www.instagram.com/reel/DcJx3MyDnHE/
+Creator: @mattmurphyai
+Posted: 2026-08-17
+Topic: product-growth-video-subs
+
+## Summary
+
+You have paid your payment processor $30,000.
+
+## Transcript
+
+over the last six months you've paid your payment processor $30,000 it's
+processed zero dollars for you so six months of monthly minimums with your
+payment processor with zero customers zero transactions in zero revenue your
+infrastructure is running but your business is not and the meter is still
+ticking every startup hits this wall trust me here's how you break through
+it without burning cash you do not have step one separate what you need to
+demonstrate from what you need to operate build the integration layer
+sandbox the transaction flow demo the complete experience for a customer start
+selling before you turn on the expensive production rail your early customers do
+not need a live payment rail on day one they'll pay you if there's value they
+need to see that the system works I would much rather explain to an early
+customer that a feature activates during or after onboarding rather than burn 5k
+a month for six months waiting for someone to start using it step to
+negotiate the hell out of a partner agreement come on now their first offer
+is not their last offer ask for a 60 to 90 day ramp waived minimums usage based
+pricing pilot pricing or minimums that kick in after the first customers go
+live most providers have a startup program they do not advertise so ask
+the worst thing they can say is no the best they can say is save you six
+months worth of cash flow that's a win and step three architect every third
+party behind the abstraction layer do not marry any of your vendors if volume
+arrives and another provider has better economics you want to be able to swap
+the rail not rebuild your whole product so direct your AI to build an
+integration architecture where the third-party service is a module you can
+replace without touching the rest of your system delay fixed costs until the
+market earns them validate sell activate and scale in that exact order and that
+is a win
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Build an integration architecture where the third-party service is a module you can replace without touching the rest of your system delay fixed costs until the market earns them validate sell activate and scale in that exact order and that is a win

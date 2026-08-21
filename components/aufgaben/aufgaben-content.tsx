@@ -14,9 +14,9 @@ import {
   ParkingSquare,
   Send,
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
@@ -117,6 +117,7 @@ function certificationNotificationText(
 }
 
 export function AufgabenContent() {
+  const { showBanner } = useBanner();
   const [overview, setOverview] = useState<AttentionOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -204,11 +205,11 @@ export function AufgabenContent() {
         stateVersion: notification.stateVersion,
       });
       if (!result.success) {
-        toast.error(MARK_READ_ERROR);
+        showBanner({ variant: 'error', message: MARK_READ_ERROR });
       }
     } catch (error) {
       console.error('Error marking notification read:', error);
-      toast.error(MARK_READ_ERROR);
+      showBanner({ variant: 'error', message: MARK_READ_ERROR });
     } finally {
       setBusyKey(null);
     }
@@ -222,11 +223,11 @@ export function AufgabenContent() {
     try {
       const result = await markAllAttentionNotificationsRead();
       if (!result.success) {
-        toast.error(MARK_ALL_READ_ERROR);
+        showBanner({ variant: 'error', message: MARK_ALL_READ_ERROR });
       }
     } catch (error) {
       console.error('Error marking all notifications read:', error);
-      toast.error(MARK_ALL_READ_ERROR);
+      showBanner({ variant: 'error', message: MARK_ALL_READ_ERROR });
     } finally {
       setBusyKey(null);
     }

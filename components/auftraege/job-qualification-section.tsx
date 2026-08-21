@@ -2,19 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Award, Loader2, X } from 'lucide-react';
-import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import {
   getJobQualificationDetail,
@@ -32,6 +26,7 @@ export function JobQualificationSection({
   jobId: string;
   canEdit: boolean;
 }) {
+  const { showBanner } = useBanner();
   const [detail, setDetail] = useState<JobQualificationDetail | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
@@ -119,13 +114,13 @@ export function JobQualificationSection({
         requirements,
       });
       if (!result.success) {
-        toast.error('Die Anforderungen konnten nicht gespeichert werden.');
+        showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });
         return false;
       }
       await load();
       return true;
     } catch {
-      toast.error('Die Anforderungen konnten nicht gespeichert werden.');
+      showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });
       return false;
     } finally {
       setIsSaving(false);
@@ -148,10 +143,23 @@ export function JobQualificationSection({
       {canEdit && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-56 flex-1 space-y-1.5">
-            <Label>Anforderung hinzufügen</Label>
-            <Select
+            <Label htmlFor="job-qualification-capability">Anforderung hinzufügen</Label>
+            <SearchableSelect
+              id="job-qualification-capability"
+              options={detail.capabilities
+                .filter(
+                  (capability) =>
+                    !detail.requirements.some(
+                      (requirement) =>
+                        requirement.capabilityId === capability.id
+                    )
+                )
+                .map((capability) => ({
+                  value: capability.id,
+                  label: capability.name,
+                }))}
               value={selectedCapabilityId}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 setSelectedCapabilityId(value);
                 const definition = detail.capabilities.find(
                   (capability) => capability.id === value
@@ -160,26 +168,10 @@ export function JobQualificationSection({
                   setRequireConfirmation(false);
                 }
               }}
-            >
-              <SelectTrigger aria-label="Qualifikationsanforderung auswählen">
-                <SelectValue placeholder="Begriff auswählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {detail.capabilities
-                  .filter(
-                    (capability) =>
-                      !detail.requirements.some(
-                        (requirement) =>
-                          requirement.capabilityId === capability.id
-                      )
-                  )
-                  .map((capability) => (
-                    <SelectItem key={capability.id} value={capability.id}>
-                      {capability.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+              placeholder="Begriff auswählen"
+              searchPlaceholder="Begriff suchen..."
+              emptyMessage="Kein Begriff gefunden"
+            />
           </div>
           {selectedDefinition?.kind === 'certification' && (
             <div className="flex h-9 items-center gap-2">

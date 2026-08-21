@@ -7,12 +7,16 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Separator } from '@/components/ui/separator';
+import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -78,10 +82,10 @@ export function EditProjectDialog({
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
   const initializedProjectIdRef = useRef<string | null>(null);
   const projectDetailsGenerationRef = useRef(0);
   const router = useRouter();
+  const { showBanner } = useBanner();
 
   const availableJobs = useMemo(() => {
     const base = jobs.filter(
@@ -141,7 +145,6 @@ export function EditProjectDialog({
     );
     setError(null);
     setContentError(null);
-    setSuccess(false);
     setHasAttemptedSubmit(false);
 
     const generation = ++projectDetailsGenerationRef.current;
@@ -189,7 +192,6 @@ export function EditProjectDialog({
     }
 
     setIsLoading(true);
-    setSuccess(false);
 
     try {
       const input: UpdateProjectInput = {
@@ -227,8 +229,9 @@ export function EditProjectDialog({
         (id) => !selectedJobIds.includes(id)
       );
 
+      let failedAssignmentCount = 0;
       if (toLink.length > 0 || toUnlink.length > 0) {
-        await Promise.allSettled([
+        const settled = await Promise.allSettled([
           ...toLink.map((jobId) =>
             updateJob(jobId, { projectId: project.id })
           ),
@@ -236,10 +239,25 @@ export function EditProjectDialog({
             updateJob(jobId, { projectId: '' })
           ),
         ]);
+        failedAssignmentCount = settled.filter(
+          (entry) => entry.status === 'rejected' || !entry.value.success
+        ).length;
       }
 
-      setSuccess(true);
       onOpenChange(false);
+      // A partially failed assignment sync must stay visible (no-silent-failure
+      // rule); the project itself is already saved at this point.
+      showBanner(
+        failedAssignmentCount > 0
+          ? {
+              variant: 'error',
+              message:
+                failedAssignmentCount === 1
+                  ? 'Projekt gespeichert, aber eine Auftragszuordnung konnte nicht aktualisiert werden. Bitte prüfe die Auftragsliste.'
+                  : `Projekt gespeichert, aber ${failedAssignmentCount} Auftragszuordnungen konnten nicht aktualisiert werden. Bitte prüfe die Auftragsliste.`,
+            }
+          : { variant: 'success', message: 'Projekt gespeichert.' }
+      );
       if (onSuccess) {
         await onSuccess({
           project: result.success ? result.project : project,
@@ -248,7 +266,6 @@ export function EditProjectDialog({
       } else {
         router.refresh();
       }
-      setSuccess(false);
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');
     } finally {
@@ -257,20 +274,20 @@ export function EditProjectDialog({
   };
 
   const showContentError = hasAttemptedSubmit && contentError;
-  const formDisabled = isLoading || success || isLoadingJobs;
+  const formDisabled = isLoading || isLoadingJobs;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]"
+        className="sm:max-w-[500px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
           <DialogTitle>Projekt bearbeiten</DialogTitle>
           <DialogDescription>Ändere die Daten des Projekts.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <DialogBody className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label htmlFor="edit-project-name">Titel</Label>
               <Input
@@ -310,9 +327,7 @@ export function EditProjectDialog({
                 disabled={formDisabled}
                 aria-invalid={showContentError ? true : undefined}
               />
-              {showContentError && (
-                <p className="text-sm text-destructive">{contentError}</p>
-              )}
+              <ErrorText>{showContentError ? contentError : null}</ErrorText>
             </div>
 
             <div className="grid gap-2">
@@ -335,6 +350,11 @@ export function EditProjectDialog({
               disabled={formDisabled}
               idPrefix="edit-project"
             />
+
+            <Separator />
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Planung
+            </p>
 
             <div className="grid gap-2">
               <Label>Geplanter Beginn</Label>
@@ -371,14 +391,9 @@ export function EditProjectDialog({
               )}
             </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {success && (
-              <p className="text-sm text-green-600">
-                Projekt erfolgreich aktualisiert!
-              </p>
-            )}
-          </div>
-          <DialogFooter>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
+          <DialogFooter className="pt-4">
             <Button
               type="submit"
               disabled={formDisabled}

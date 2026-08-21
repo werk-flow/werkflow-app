@@ -1,0 +1,60 @@
+# Why the feature-bloat SaaS model is dying
+
+Source: https://www.instagram.com/reel/Db5xi3yEg4w/
+Creator: @mattmurphyai
+Posted: 2026-08-11
+Topic: product-growth-video-subs
+
+## Summary
+
+The SaaS industry is built on feature bloat. That model is dying.
+
+## Transcript
+
+The entire SaaS industry is built on feature bloat, you know it, and that model is dead.
+Every major platform tries to solve every problem for every customer.
+You know what I'm talking about, Salesforce, HubSpot, ServiceNow, thousands of features,
+all general purpose.
+Nothing niche, nothing built for your specific industry, nothing designed for exactly how
+your specific business operates.
+And that may have worked when building custom software cost customers millions.
+But it doesn't work that way anymore and here's why.
+Step 1.
+An AI directed engineer can build the 50 features you actually use for a fraction of what you're
+paying to rent the thousand that you're not.
+The economies have absolutely flipped.
+Building custom used to be the expensive option.
+Now renting in general is the expensive option.
+You're paying for 950 features that were built for someone else's business.
+Every month.
+Forever.
+And you don't own anything.
+And the platform keeps building more features you will never touch while raising your price
+every year to fund them.
+That's not a win.
+Step 2.
+When you build it, you own it.
+The data is yours, the customer records are yours, the roadmap is yours, nobody raises
+your prices.
+Nobody sunsets the features that you depend on, nobody sells your data to competitors.
+It becomes an asset to your balance sheet, not an expense on your P&L.
+It increases the valuation of your business when it's time to sell.
+And it cuts you out from competitors who are stuck on the same general platforms with no
+differentiation.
+They're dead too.
+And step 3.
+This is where every company is headed.
+Software creation is going in-house.
+Custom industry specific built for exactly how the business operates.
+Finished by engineers on a conveyor belt.
+Maintained by someone in-house who knows how to direct AI to keep it all running.
+That's not a prediction.
+That's already happening.
+I know it for a fact.
+The SaaS model gave you speed, but it also gave you dependency.
+The next era gives you asset ownership.
+I love it.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

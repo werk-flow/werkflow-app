@@ -1,0 +1,70 @@
+# Auditing features against who they are actually for
+
+Source: https://www.instagram.com/reel/Db3wYK6AZKx/
+Creator: @mattmurphyai
+Posted: 2026-08-10
+Topic: product-growth-video-subs
+
+## Summary
+
+Your AI builds features. It has never asked you who they are for.
+
+## Transcript
+
+Your AI builds features,
+but it's never asked who they're for.
+You said build a dashboard and it built a dashboard.
+You said add notifications and it added notifications.
+You said build analytics and it built analytics,
+but never once, not once did it ask
+whether a single customer requested any of that.
+So you're building in a vacuum high on dopamine
+and the solution is sitting across the table
+from any business owner you know.
+So step one, stop building for the sake of building.
+Go find a business owner, sit them down,
+ask them to show you every software package
+they use to run their business.
+They will show you 10 or 15 platforms
+with over a thousand features.
+So I promise you, this is what you're about to find.
+Across those platforms,
+they're using about 50 of those features combined.
+The other 950 features they're paying for,
+every single month, they're never gonna touch.
+Not because the features are bad,
+but because they were built for every business,
+not their business.
+And that's called feature bloat.
+And every business owner you talk to
+will tell you they hate their software because of it.
+Trust me.
+Step two, those 50 features are now your product.
+Not a concept, not a guess,
+a real scoped validated product
+built from actual usage data for that customer.
+You did not dream it up.
+You audited what is already being used
+and you built exactly that, nothing else.
+50 features that do what this customer needs
+every time perfectly.
+Fully custom, 100% owned and industry specific.
+If that isn't a win, what is?
+And step three, your AI will build unlimited features.
+That's not an advantage, that is a trap.
+The most valuable thing your AI can do right now
+is not build anything else new.
+It is to help you audit
+what real businesses are already using.
+So scope those 50 features that matter
+and build only those for a customer.
+That is how you go from a builder with an idea
+to a builder with a paying customer.
+Stop building features.
+Start building the features that matter
+for customers that will pay you.
+And that is a win, I promise.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

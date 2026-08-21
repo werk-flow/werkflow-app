@@ -535,6 +535,12 @@ export function EntryDetailsDialog({
   useEffect(() => {
     if (!open) return;
 
+    // Keyed on open only: Realtime-driven session refetches replace the
+    // snapshot props with equal content mid-dialog, and re-running this reset
+    // then wipes (and remounts) the edit draft under the user's typing — the
+    // refresh-interrupted-dialog defect class. handleStartEdit re-seeds the
+    // draft from the current snapshot when editing begins, so the snapshot
+    // values are deliberately read without being dependencies here.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the dialog intentionally resets the editable draft back to the incoming session snapshot
     setIsEditing(startInEditMode);
     setError(null);
@@ -548,16 +554,8 @@ export function EntryDetailsDialog({
     setEditedBlockDate(
       blockReferenceDate ? new Date(blockReferenceDate) : null
     );
-  }, [
-    blockReferenceDate,
-    clockInTimestamp,
-    clockOutTimestamp,
-    open,
-    sessionBreaks,
-    sessionBreakSignature,
-    startInEditMode,
-    isAutomaticBreakMode
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the keyed-on-open note above
+  }, [open]);
 
   const jobDetailUrl = resolvedJob?.jobNumber
     ? resolvedJob.projectNumber

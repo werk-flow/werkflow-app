@@ -1,0 +1,72 @@
+# Building developer products an agent can purchase on its own
+
+Source: https://www.instagram.com/reel/Dbymz5CE5ZP/
+Creator: @mattmurphyai
+Posted: 2026-08-08
+Topic: ai-engineering-video-subs
+
+## Summary
+
+If you are building for builders, your product needs to be something an agent can buy.
+
+## Transcript
+
+If you are building products for builders,
+your product needs to be something an agent can buy.
+Not something a person browses for,
+something an agent discovers, evaluates,
+and installs in their system without a human
+ever visiting your website.
+The way builders purchase tools is changing every minute
+and most product builders have not even caught up.
+Let's talk about it, part one.
+Builders are already using AI to find their tools.
+They're not Googling the best auth library in 2026
+and reading blog posts.
+They're prompting their AI assistant
+to find an auth solution, compare options,
+and recommend the one they need.
+Your product shows up or it doesn't.
+And what determines whether it shows up
+is not your landing page design
+or your testimonial carousel or what anybody else says.
+It's whether your product exists as structured data.
+That is an AI search tool can index, parse, and rank it.
+If your tool is not described in a format an agent can read,
+you are totally invisible
+to the fastest growing acquisition channel in software
+and you're selling software.
+Number two, if you build AI wrappers, skills, MCPs,
+developer tools of any kind,
+your product is not bought, it's integrated.
+A builder's agent queries for a capability,
+finds your tool, evaluates the documentation,
+checks the pricing, and adds it to their system.
+Right there, the entire transaction happens
+inside the development environment.
+No checkout page, no demo call, no sales funnel at all.
+So your product has to be packaged
+as something that can be discovered
+and installed by a machine not sold to a person.
+And number three, tokenized access
+is how agents are gonna buy.
+Not monthly subscriptions, not per seat pricing.
+Tokens per action, credits per query,
+metered value per outcome.
+An agent does not subscribe to your platform
+for $49 a month.
+It consumes your API based on what it needs,
+when it needs it.
+If your pricing model only works for human buyers
+on a billing page, you are building for a market
+that is shrinking while the market that is growing
+cannot transact with you at all.
+So your product page sells to humans, got it.
+But your API, your schema, and your token model
+sells to agents, which is the future.
+So build for the buyer that is coming,
+not the one that is leaving.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

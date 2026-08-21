@@ -3,7 +3,6 @@
 import { useState, useTransition, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'sonner';
 import {
   Building2,
   FolderOpen,
@@ -21,6 +20,7 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -246,6 +246,7 @@ export function JobDetailContent({
   originRequest,
 }: JobDetailContentProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [liveJob, setLiveJob] = useState(job);
   const { activeJobIds } = useActiveJobs();
   const displayTitle = getJobDisplayTitle(liveJob);
@@ -634,12 +635,13 @@ export function JobDetailContent({
       const result = await deleteJob(liveJob.id);
       if (result.success) {
         const deletedParam = `?deleted_job=${encodeURIComponent(displayTitle)}`;
+        // Hard navigation — see the deletion-stall note in kunden-detail-content.
         if (projectInfo?.projectNumber) {
-          router.push(
+          window.location.assign(
             `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
           );
         } else {
-          router.push(`/auftraege${deletedParam}`);
+          window.location.assign(`/auftraege${deletedParam}`);
         }
       } else {
         isDeletingRef.current = false;
@@ -695,7 +697,7 @@ export function JobDetailContent({
           setPendingAssignmentIds(nextIds);
           setQualificationWarning(result.evaluation);
         } else {
-          toast.error('Die Zuweisung konnte nicht gespeichert werden.');
+          showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
         }
         return;
       }
@@ -760,7 +762,7 @@ export function JobDetailContent({
       return;
     }
     if (!result.success) {
-      toast.error('Die Zuweisung konnte nicht gespeichert werden.');
+      showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
       return;
     }
     if (result.success) {
@@ -800,9 +802,10 @@ export function JobDetailContent({
         ) {
           setQualificationWarning(result.evaluation);
         } else {
-          toast.error(
-            'Die begründete Zuweisung konnte nicht gespeichert werden.'
-          );
+          showBanner({
+            variant: 'error',
+            message: 'Die begründete Zuweisung konnte nicht gespeichert werden.',
+          });
         }
         return;
       }
@@ -813,9 +816,10 @@ export function JobDetailContent({
       setAssignmentTeamSourceId(null);
       router.refresh();
     } catch {
-      toast.error(
-        'Die begründete Zuweisung konnte nicht gespeichert werden.'
-      );
+      showBanner({
+        variant: 'error',
+        message: 'Die begründete Zuweisung konnte nicht gespeichert werden.',
+      });
     } finally {
       setIsQualificationOverrideSaving(false);
     }
@@ -850,11 +854,16 @@ export function JobDetailContent({
     startProjectUpdateTransition(async () => {
       setSuspendRealtimeRefresh(true);
       const result = await updateJob(liveJob.id, { projectId });
-      setShowProjectDialog(false);
       if (!result.success && result.error !== 'no_changes') {
+        // The dialog stays open and the failure is visible (no silent close).
         setSuspendRealtimeRefresh(false);
+        showBanner({
+          variant: 'error',
+          message: 'Das Projekt konnte nicht gespeichert werden.',
+        });
         return;
       }
+      setShowProjectDialog(false);
 
       if (result.success) {
         applyLiveJobPatch({

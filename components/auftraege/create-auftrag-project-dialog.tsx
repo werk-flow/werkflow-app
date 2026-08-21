@@ -79,7 +79,7 @@ export function CreateAuftragProjectDialog({
         </DialogTrigger>
       )}
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[540px]"
+        className="sm:max-w-[540px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -90,7 +90,7 @@ export function CreateAuftragProjectDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="w-full">
             <TabsTrigger value="job" className="flex-1 gap-1.5">
               <Briefcase className="h-3.5 w-3.5" />
@@ -102,7 +102,7 @@ export function CreateAuftragProjectDialog({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="job">
+          <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
             <CreateJobFormContent
               clients={clients}
               members={members}
@@ -122,7 +122,7 @@ export function CreateAuftragProjectDialog({
             />
           </TabsContent>
 
-          <TabsContent value="project">
+          <TabsContent value="project" className="flex min-h-0 flex-1 flex-col">
             <CreateProjectFormContent
               clients={clients}
               jobs={jobs}

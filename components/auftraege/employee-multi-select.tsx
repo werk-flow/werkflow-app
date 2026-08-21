@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import {
   expandTeamForAssignment,
   getAssignmentTeamOptions,
@@ -42,6 +42,7 @@ export function EmployeeMultiSelect({
   onTeamExpansionPendingChange,
   disabled = false,
 }: EmployeeMultiSelectProps) {
+  const { showBanner } = useBanner();
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
   useEffect(() => {
@@ -98,7 +99,7 @@ export function EmployeeMultiSelect({
                     assessedForDate,
                   });
                   if (!result.success) {
-                    toast.error('Das Team konnte nicht übernommen werden.');
+                    showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
                     return;
                   }
                   onSelectionChange([
@@ -107,12 +108,13 @@ export function EmployeeMultiSelect({
                   onTeamApplied?.(result.teamSourceId);
                   if (result.skippedNames.length > 0) {
                     const verb = result.skippedNames.length === 1 ? 'wurde' : 'wurden';
-                    toast.info(
-                      `${result.skippedNames.join(', ')} ${verb} nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`
-                    );
+                    showBanner({
+                      variant: 'info',
+                      message: `${result.skippedNames.join(', ')} ${verb} nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`,
+                    });
                   }
                 } catch {
-                  toast.error('Das Team konnte nicht übernommen werden.');
+                  showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
                 } finally {
                   setPendingTeamId(null);
                   onTeamExpansionPendingChange?.(false);

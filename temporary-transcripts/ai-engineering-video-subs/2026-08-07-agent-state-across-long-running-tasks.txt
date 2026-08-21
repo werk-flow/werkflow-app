@@ -1,0 +1,59 @@
+# Keeping an agent coherent across long operations with a state file
+
+Source: https://www.instagram.com/reel/DbwB5V_EvJS/
+Creator: @mattmurphyai
+Posted: 2026-08-07
+Topic: ai-engineering-video-subs
+
+## Summary
+
+Your AI agent forgot what it was doing halfway through the job.
+
+## Transcript
+
+Did your AI agent forget what it was doing halfway through the job?
+It started strong.
+Step 1 was great.
+Step 5 was pretty solid.
+By Step 15, it was contradicting Step 3.
+And by Step 30, it had forgotten the project altogether.
+Well, that's not a bug folks.
+That is a context window limit.
+And every single builder using AI agents for complex work hits it every day.
+So here are three things you direct your AI to build so your agent stays coherent across
+long operations.
+Step 1, a structured context document that travels with every task.
+Your AI agent does not remember what it did 10 steps ago unless you tell it.
+So direct your AI to create a running project state file that updates after every step.
+What has been completed, what is in progress, what the constraints might be, and what decisions
+have been made.
+So when the agent starts a new step, it reads that state file first.
+And that file is the memory your agent does not have natively.
+So that's a win.
+Step 2, task decomposition before execution.
+A 30-step job should never run as one continuous conversation.
+So direct your AI to break complex work into discrete chunks of five to seven steps each.
+Each chunk gets its own session with the state file that passed in the start.
+So smaller scopes mean the agent never drifts far enough to contradict itself.
+The architecture of how you feed your work to your agent matters more than which model
+you're using.
+So figure it out.
+Step 3, a validation checkpoint between every chunk.
+Before the agent moves from chunk one to chunk two, something has to verify that output.
+And that something, that's you.
+So direct your AI to pause after each chunk and present a summary for you to review before
+proceeding.
+The builders who let agents run unsupervised for 30 steps, they know they're getting hallucinated
+garbage.
+The builders who check every live step before it goes to production get quality output.
+So your AI agent is powerful, but it's not persistent.
+Direct it in pieces, verify in between, that is orchestration, and that is the win.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Build so your agent stays coherent across long operations.
+2. Create a running project state file that updates after every step.
+3. Break complex work into discrete chunks of five to seven steps each.
+4. Pause after each chunk and present a summary for you to review before proceeding.

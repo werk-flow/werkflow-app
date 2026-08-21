@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, ParkingSquare } from 'lucide-react';
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -11,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 
 interface ParkConfirmationDialogProps {
   open: boolean;
@@ -105,7 +105,15 @@ export function ParkConfirmationDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
-          <Button onClick={handleConfirm} disabled={isLoading}>
+          <AlertDialogAction
+            onClick={(event) => {
+              // Keep the dialog open (with its loading state) until the async
+              // confirm resolves; handleConfirm closes it on completion.
+              event.preventDefault();
+              void handleConfirm();
+            }}
+            disabled={isLoading}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -117,7 +125,7 @@ export function ParkConfirmationDialog({
                 {confirmLabel}
               </>
             )}
-          </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

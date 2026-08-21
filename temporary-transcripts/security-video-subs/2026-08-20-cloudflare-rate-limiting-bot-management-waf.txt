@@ -46,6 +46,6 @@ You're paying for a wall, configure it as a wall.
 
 Source: reconstructed from the directives spoken in the video.
 
-1. Direct your AI to configure Cloudflare rate limiting rules that block or challenge any IP exceeding thresholds on authentication routes.
-2. Direct your AI to configure bot management rules that protect high value routes from automated scraping and reconnaissance.
-3. Direct your AI to deploy custom WAF rules that block the OWASP top 10 attack patterns at the Cloudflare edge.
+1. Configure Cloudflare rate limiting rules that block or challenge any IP exceeding thresholds on authentication routes.
+2. Configure bot management rules that protect high value routes from automated scraping and reconnaissance.
+3. Deploy custom WAF rules that block the OWASP top 10 attack patterns at the Cloudflare edge.

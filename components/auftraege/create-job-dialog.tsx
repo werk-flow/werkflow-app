@@ -53,7 +53,7 @@ export function CreateJobDialog({ clients, members, projects = [], defaultProjec
         </DialogTrigger>
       )}
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[500px]"
+        className="sm:max-w-[500px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>

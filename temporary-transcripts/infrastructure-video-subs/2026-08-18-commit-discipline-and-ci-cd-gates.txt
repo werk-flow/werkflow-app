@@ -1,0 +1,45 @@
+# Commit discipline and CI gates when the AI pushes 47 files at once
+
+Source: https://www.instagram.com/reel/DcLzI-pFJlM/
+Creator: @mattmurphyai
+Posted: 2026-08-18
+Topic: infrastructure-video-subs
+
+## Summary
+
+Your AI pushed 47 files to production in one commit.
+
+## Transcript
+
+your AI pushed 47 files to production in one commit and one of them broke your
+payment flow but you cannot figure out which one it was so all 47 files
+changed no pull requests no review no test just straight to main so payments
+stopped processing at 6 p.m. on Friday and you are staring at 47 file changes
+trying to figure out which one killed your revenue all while your customers
+are filing chargebacks that's not a win and this is why DevOps doesn't ship on
+Fridays so this is what happens when your AI treats github like a filing
+cabinet instead of an engineering system here's what your AI should have
+configured in github from day one step one branch protection on main nobody
+pushes directly to production nobody not you not your AI not anyone every change
+goes through a planned pull request the PR is where you review what changed why
+it changed and whether it breaks anything in your system so direct your
+AI to lock your main branch so direct pushes are totally rejected and all
+changes require a PR with at least one approval that's a win step two
+automated checks that run before any merge your CI pipeline should run your
+test suite your linter your build verification and your security scan on
+every pull request before it's allowed to merge if any check fails the merge is
+blocked the one file that broke your payment flow would have been caught
+before it ever touched production if you had this in place so your AI knows how
+to configure github actions for all of this and that's a win use it right step
+three small scoped commits that you can trace and reverse 47 files in one commit
+totally untraceable one change per PR means when something breaks you know
+exactly which change caused it and you roll back that one change in seconds
+instead of spending a Friday night reading 47 different files your code
+deserves a gate between your keyboard and your customers trust me so direct
+your AI to build that gate and that's a win
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Lock your main branch so direct pushes are totally rejected and all changes require a PR with at least one approval

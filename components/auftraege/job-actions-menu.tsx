@@ -32,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { useBanner } from '@/components/ui/banner';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
@@ -80,6 +81,7 @@ export function JobActionsMenu({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
 
   const handleStatusChange = async (newStatus: JobStatus) => {
     if (isChangingStatus) return;
@@ -89,38 +91,59 @@ export function JobActionsMenu({
     }
     setIsChangingStatus(true);
 
-    const result = await updateJobStatus(job.id, newStatus);
+    try {
+      const result = await updateJobStatus(job.id, newStatus);
 
-    if (result.success) {
-      if (onJobUpdated) {
-        await onJobUpdated({
-          job: result.job,
-        });
+      if (result.success) {
+        if (onJobUpdated) {
+          await onJobUpdated({
+            job: result.job,
+          });
+        } else {
+          router.refresh();
+        }
       } else {
-        router.refresh();
+        showBanner({
+          variant: 'error',
+          message: 'Der Status konnte nicht geändert werden.',
+        });
       }
-    } else {
-      console.error('Status change failed:', result.error);
+    } catch {
+      showBanner({
+        variant: 'error',
+        message: 'Der Status konnte nicht geändert werden.',
+      });
+    } finally {
+      setIsChangingStatus(false);
     }
-
-    setIsChangingStatus(false);
   };
 
   const handleParkConfirm = async () => {
     setIsChangingStatus(true);
-    const result = await updateJobStatus(job.id, 'geparkt');
-    if (result.success) {
-      if (onJobUpdated) {
-        await onJobUpdated({
-          job: result.job,
-        });
+    try {
+      const result = await updateJobStatus(job.id, 'geparkt');
+      if (result.success) {
+        if (onJobUpdated) {
+          await onJobUpdated({
+            job: result.job,
+          });
+        } else {
+          router.refresh();
+        }
       } else {
-        router.refresh();
+        showBanner({
+          variant: 'error',
+          message: 'Der Auftrag konnte nicht geparkt werden.',
+        });
       }
-    } else {
-      console.error('Park failed:', result.error);
+    } catch {
+      showBanner({
+        variant: 'error',
+        message: 'Der Auftrag konnte nicht geparkt werden.',
+      });
+    } finally {
+      setIsChangingStatus(false);
     }
-    setIsChangingStatus(false);
   };
 
   const handleDelete = async () => {

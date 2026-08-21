@@ -283,7 +283,7 @@ export function CalendarEntryDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-[540px]"
+        className="sm:max-w-[540px]"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
@@ -294,7 +294,7 @@ export function CalendarEntryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={handleActiveTabChange}>
+        <Tabs value={activeTab} onValueChange={handleActiveTabChange} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="w-full">
             {isAdminOrManager && (
               <TabsTrigger value="planning" className="flex-1 gap-1.5">
@@ -333,7 +333,7 @@ export function CalendarEntryDialog({
             </div>
           )}
 
-          <TabsContent value="job">
+          <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
             <CreateJobFormContent
               clients={dialogData?.clients ?? []}
               members={jobMembers}

@@ -2521,12 +2521,11 @@ export async function addJobCapabilityRequirement(
   await expect(
     page.getByRole('heading', { name: 'Qualifikationsabdeckung' })
   ).toBeVisible({ timeout: 15_000 });
-  await page
-    .getByRole('combobox', { name: 'Qualifikationsanforderung auswählen' })
-    .click();
-  await page
-    .getByRole('option', { name: options.capabilityName, exact: true })
-    .click();
+  await selectFromSearchable(
+    page,
+    page.locator('#job-qualification-capability'),
+    options.capabilityName
+  );
   if (options.requireConfirmation) {
     await page.locator('#job-require-confirmation').click();
   }

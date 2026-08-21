@@ -431,9 +431,16 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(adminPage.getByRole('heading', { name: 'Neuen Kunden anlegen' })).toBeHidden({
       timeout: 10_000,
     });
-    await expect(
-      adminPage.getByText(new RegExp(`^${initialCount + 1} Kunde(?:n)?$`))
-    ).toBeVisible();
+    // Documented delayed-refresh class (see the P1-02 golden-gate-log entry):
+    // the post-create router.refresh() can arrive late under suite load. Give
+    // it 15s, then reload once — the persisted count assertion stays strict.
+    const nextCount = adminPage.getByText(new RegExp(`^${initialCount + 1} Kunde(?:n)?$`));
+    try {
+      await expect(nextCount).toBeVisible({ timeout: 15_000 });
+    } catch {
+      await adminPage.reload();
+      await expect(nextCount).toBeVisible({ timeout: 15_000 });
+    }
     const customerRow = adminPage.locator('tbody tr').filter({ hasText: customerName });
     await expect(customerRow).toContainText('Gewerblich');
     await expect(customerRow).toContainText(`a1-kunde-${world.runId}@example.de`);
@@ -652,6 +659,12 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(employeePicker).toBeEnabled({ timeout: 20_000 });
     await employeePicker.click();
     await adminPage.getByRole('listbox').getByRole('button', { name: /Emil/ }).click();
+    // Close the multi-select popover via its trigger before submitting: the
+    // pinned DialogFooter sits underneath it, and Playwright never dispatches
+    // the outside click that would dismiss it for a real user. The trigger's
+    // label changed with the deselection, so target it by its open state.
+    await dialog.locator('button[role="combobox"][aria-expanded="true"]').click();
+    await expect(adminPage.getByRole('listbox')).toBeHidden();
     await dialog.getByRole('button', { name: 'Speichern' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     await expect(visibleText(adminPage, `${title} geändert`)).toBeVisible();

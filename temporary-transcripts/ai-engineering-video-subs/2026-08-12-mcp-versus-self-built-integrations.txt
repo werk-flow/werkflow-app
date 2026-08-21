@@ -1,0 +1,42 @@
+# Why MCP may be a dead end for agent integrations
+
+Source: https://www.instagram.com/reel/Db856-FiqP7/
+Creator: @mattmurphyai
+Posted: 2026-08-12
+Topic: ai-engineering-video-subs
+
+## Summary
+
+MCP is a dead end. Your agent can build its own integrations now.
+
+## Transcript
+
+Your MCPs are COOKED. Your agent can build its own integrations now.
+Six months ago, MCPs were definitely necessary. The models were not capable enough to access
+APIs directly in most cases. They needed wrappers. They needed connectors. They needed pre-built
+bridges to talk to external services. That was a real limitation and MCPs definitely
+solved it back then. That limitation no longer exists. Here's what changed and why it
+matters for how you're going to build going forward.
+Step 1. Your agent can call APIs directly. It can read documentation, authenticate, construct
+requests and handle responses on the fly. It does not need pre-built wrapper to talk
+to Stripe anymore. It does not need an MCP to query a database and it does not need a
+connector to access third-party services. It can build the integration in a moment for
+the exact task and move on. Loading a stack of pre-built MCPs is like handing a chef a
+box of frozen meals when they have a full kitchen to work with.
+Step 2. Every MCP you keep loaded is consuming context for no reason at all. Your agent evaluates
+every connected tool every time it processes a request. 10 MCPs loaded means 10 tools your
+agent considers before it even starts working. Most of them are irrelevant to the current
+task. They are not helping. They are competing for attention in a finite context window.
+So strip them out, get rid of them. Let your agent access what it needs when it needs it
+instead of carrying a toolbox full of tools it will never use on this job.
+And Step 3. The builders who are still stacking MCPs are optimizing for a world that no longer
+exists. The models have outgrown the wrappers. In just six months, the platforms matured
+past the need for pre-built bridges. If you're still loading every connector you can find,
+you're building for January's AI with August's AI. Direct your agent to build integrations
+on demand right now. It's faster, cleaner, and it keeps your context window focused on
+the work that matters the most. MCP solved a real problem. That problem is
+gone. So let your agent cook.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

@@ -33,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { useBanner } from '@/components/ui/banner';
 import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
 import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
@@ -73,6 +74,7 @@ export function ProjectActionsMenu({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
 
   const handleStatusOverride = async (newStatus: ProjectStatus | null) => {
     if (newStatus === 'geparkt') {
@@ -82,34 +84,55 @@ export function ProjectActionsMenu({
     if (isChangingStatus) return;
     setIsChangingStatus(true);
 
-    const result = await updateProject(project.id, { statusOverride: newStatus });
+    try {
+      const result = await updateProject(project.id, { statusOverride: newStatus });
 
-    if (result.success) {
-      if (onProjectUpdated) {
-        await onProjectUpdated({ project: result.project });
+      if (result.success) {
+        if (onProjectUpdated) {
+          await onProjectUpdated({ project: result.project });
+        } else {
+          router.refresh();
+        }
       } else {
-        router.refresh();
+        showBanner({
+          variant: 'error',
+          message: 'Der Status konnte nicht geändert werden.',
+        });
       }
-    } else {
-      console.error('Status override failed:', result.error);
+    } catch {
+      showBanner({
+        variant: 'error',
+        message: 'Der Status konnte nicht geändert werden.',
+      });
+    } finally {
+      setIsChangingStatus(false);
     }
-
-    setIsChangingStatus(false);
   };
 
   const handleParkConfirm = async () => {
     setIsChangingStatus(true);
-    const result = await parkProject(project.id);
-    if (result.success) {
-      if (onProjectUpdated) {
-        await onProjectUpdated({ project: result.project });
+    try {
+      const result = await parkProject(project.id);
+      if (result.success) {
+        if (onProjectUpdated) {
+          await onProjectUpdated({ project: result.project });
+        } else {
+          router.refresh();
+        }
       } else {
-        router.refresh();
+        showBanner({
+          variant: 'error',
+          message: 'Das Projekt konnte nicht geparkt werden.',
+        });
       }
-    } else {
-      console.error('Park project failed:', result.error);
+    } catch {
+      showBanner({
+        variant: 'error',
+        message: 'Das Projekt konnte nicht geparkt werden.',
+      });
+    } finally {
+      setIsChangingStatus(false);
     }
-    setIsChangingStatus(false);
   };
 
   const handleDelete = async () => {

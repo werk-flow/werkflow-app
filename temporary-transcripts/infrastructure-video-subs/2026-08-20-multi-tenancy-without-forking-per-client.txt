@@ -1,0 +1,52 @@
+# Serving every client from one codebase instead of forking per tenant
+
+Source: https://www.instagram.com/reel/DcQ8u02Cj1A/
+Creator: @mattmurphyai
+Posted: 2026-08-20
+Topic: infrastructure-video-subs
+
+## Summary
+
+Every time a new client signs up, your developer forks the entire repository.
+
+## Transcript
+
+Every time a new client signs up for your multi-tenant system you fork the
+entire repository. New branch, new deployment, new set of environmental
+variables. Client number four wanted dashboard in dark mode. Client number
+seven wanted to export CSV's instead of PDF's and client number 11 wants to skip
+onboarding entirely. So the AI copied the code base and started customizing. But
+now you have 11 versions of your product and you cannot remember which
+client runs which branch. So that's no longer a product that's actually 11
+products wearing the exact same name. Here's how you're gonna direct your AI
+to serve all of those clients without forking your product for each and
+everyone. Step one, feature flag scoped per tenant. A feature flag is not a
+global on-off switch. It's a per tenant configuration. Client number seven gets
+those CSV exports. Client four gets dark mode and everyone else gets the default.
+One code base evaluates the tenant context and renders the right
+experience. So direct your AI to implement tenant scoped feature flags
+where every configurable behavior is controlled by tenant ID not by code
+branches. That's a win. Step two, tenant configuration inheritance with override
+layers. So start with a base configuration every tenant shares. Layer
+tenant specific overrides on top of that. Client 11 overrides the onboarding flow.
+Everyone else inherits the default. So when you update the base every tenant
+gets the update unless they have an explicit override. So direct your AI to
+build a configuration system with base defaults and per tenant overrides that
+merge at runtime. That's a win. And step three, tenant aware routing at the
+application boundary. The application must know which tenant is making the
+request before it touches any logic. Subdomain, header, jot claim. That identity
+drives which configuration loads, which features will activate, which branding
+will render. So direct your AI to implement tenant resolution middleware
+that identifies the tenant on every single request. And then it injects the
+tenant context before any business logic executes. One code base, eleven clients,
+zero forks. So direct your AI to build it that way from day one.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Serve all of those clients without forking your product for each and everyone.
+2. Implement tenant scoped feature flags where every configurable behavior is controlled by tenant ID not by code branches.
+3. Build a configuration system with base defaults and per tenant overrides that merge at runtime.
+4. Implement tenant resolution middleware that identifies the tenant on every single request.
+5. Build it that way from day one.

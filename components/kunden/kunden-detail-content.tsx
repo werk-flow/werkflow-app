@@ -139,7 +139,13 @@ export function KundenDetailContent({
     try {
       const result = await deleteClient(client.id);
       if (result.success) {
-        router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
+        // Hard navigation: the soft router.push after this server action
+        // intermittently never commits (deletion-stall defect, evidenced
+        // 2026-08-21 — DELETE 204 while the URL never changed). Leaving a
+        // permanently deleted record's page loses no state worth keeping.
+        window.location.assign(
+          `/kunden?deleted_client=${encodeURIComponent(client.name)}`
+        );
         return;
       }
 

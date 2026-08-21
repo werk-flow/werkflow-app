@@ -1,0 +1,52 @@
+# Backups, RPO and RTO after losing fourteen hours of data
+
+Source: https://www.instagram.com/reel/DcEoX9xCZ8Q/
+Creator: @mattmurphyai
+Posted: 2026-08-15
+Topic: database-video-subs
+
+## Summary
+
+Your database just lost 14 hours of customer data.
+
+## Transcript
+
+Your database just lost 14 hours of customer data.
+Your last backup, for midnight.
+Everything users did today, every transaction, every upload, every message, every account
+change, gone.
+Because your AI set up nightly backups but your database failed at 2pm in the afternoon.
+So nightly backups are not disaster recovery, they are a 24 hour gamble on nothing going
+wrong between those two snapshots.
+So here's what the real database disaster recovery looks like.
+One point in time recovery, not nightly snapshots, continuous right ahead log archiving that
+lets you restore your database to any second, not just midnight.
+So if your database crashes at 2.47pm, your restore comes back at 2.46.
+You lose one minute of data instead of 14 hours.
+Your AI knows how to configure WAL archiving, Superbase supports PITR on paid plans and
+every major provider offers it.
+Your AI never turned it on because nightly felt like enough.
+Step two, a tested restoration runbook.
+Not a backup that exists, a backup that has been restored.
+When was the last time you actually restored from a backup into a working database?
+If the answer is never, your backup is a hope, not a plan.
+Connect your AI to schedule a quarterly restoration test, at a minimum.
+Spin up clean environment, restore into it, verify the data is intact and the application
+runs.
+Document the steps, time it.
+Your recovery time is not theoretical, it's always measured, every time, that's a win.
+And step three, a defined RTO and RPO.
+Recovery time objective is how long your business can survive with the database down.
+Recovery point objective is how much data can you afford to lose?
+If you do not know these numbers, your AI cannot build a recovery plan that meets them.
+So direct your AI to define both based on your business requirements, not your infrastructure
+defaults.
+Your backup is not your recovery plan.
+Your tested, timed, documented recovery plan is your recovery plan.
+Get out there and make one.
+
+## Orchestration prompt
+
+Source: reconstructed from the directives spoken in the video.
+
+1. Define both based on your business requirements, not your infrastructure defaults.

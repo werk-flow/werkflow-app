@@ -26,6 +26,7 @@ import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skel
 import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
 import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
 import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
+import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   AttentionCountProvider,
@@ -443,6 +444,7 @@ function OrgSwitchOverlay() {
 
   const currentSkeleton = useMemo(() => {
     if (pathname.startsWith('/mitarbeiter')) return <MitarbeiterPageSkeleton />;
+    if (pathname.startsWith('/aufgaben')) return <AufgabenPageSkeleton />;
     if (pathname.startsWith('/dashboard')) return <DashboardPageSkeleton />;
     if (pathname.startsWith('/kalender')) return <KalenderPageSkeleton />;
     if (pathname.startsWith('/zeiterfassung')) return <ZeiterfassungPageSkeleton />;
