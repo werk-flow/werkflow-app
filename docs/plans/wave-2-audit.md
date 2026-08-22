@@ -29,6 +29,18 @@ Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five 
 | P1-14 | +75 … +79 |
 | (assign the next block when a slice enters `in_progress`) | … |
 
+## Per-slice validation ladder (what actually runs at each Wave 2 acceptance)
+
+The full Wave 1 battery does NOT rerun at every slice — the full Golden suite is the every-slice regression net, the audit batteries are exhaustive flow evidence. Per slice, in this order (testing rules 8–10 govern reruns and the freeze):
+
+1. **Statics:** `tsc --noEmit`, lint, `bun run test:unit`.
+2. **Focused, iterating:** the slice's own audit spec (`--grep @AUDIT-W2-P1-XX`) and the slice's golden spec/gate tag until green.
+3. **Affected Wave 1 audit tags:** if the slice materially changed a surface a Wave 1 session owns (e.g. anything under `/kalender` → `@AUDIT-W1-A6`/`A7`; job/checklist surfaces → `@AUDIT-W1-A1`), run those focused tags. Name the chosen tags and the reasoning in the acceptance evidence; "none affected" is a claim that needs a sentence, not silence.
+4. **CodeRabbit review** with fixes, then re-freeze (statics + focused greens).
+5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run** (currently 93). Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
+
+The full multi-wave audit batteries run at the **wave-end certification gate only** (below) — that is where cross-wave flow regressions get their exhaustive sweep. Never run two Playwright batteries concurrently (shared world artifacts).
+
 ## Wave-end certification gate
 
 After the wave's last slice is accepted: fresh production build, then sequentially (never concurrently) the **full golden suite** and the **full `@AUDIT-W2` battery**, both green in one recorded pair; plus the mechanical set-equality check that the wave's catalog IDs equal the union of the ledger rows below, `0 partial; 0 unmapped`. Record the gate in `docs/plans/golden-gate-log.md` as `AUDIT-W2`. Because every slice already certified its own coverage, this gate is confirmation, not discovery — budget a day, not weeks.

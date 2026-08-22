@@ -15,7 +15,7 @@ This is a **living implementation index**, not a substitute for feature specific
 
 > **Roadmap established:** 4 August 2026  
 > **Current phase:** Phase 1 — Complete Operational Core  
-> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); the UI/UX consolidation ([`uiux-consolidation.md`](./uiux-consolidation.md)) is in progress (canon confirmed 2026-08-21), then `P1-13` under the per-slice audit model
+> **Current checkpoint:** `P1-00` through `P1-12` accepted `complete` and Wave-1-audited (final gate `AUDIT-W1` closed 2026-08-18); the UI/UX consolidation is **complete** (closed 2026-08-22 at its own final gate — full Golden 93/93 + full Wave-1 battery 74/74 on one frozen build; [`uiux-consolidation.md`](./uiux-consolidation.md) is a closed ledger); `P1-13` is `ready` under the per-slice audit model
 > **Formally accepted roadmap slices:** 13 of 56 (`P1-00` and `P1-00a` through `P1-54`)
 > **Phase 2 implementation:** Not authorized by this roadmap
 
@@ -29,13 +29,13 @@ They do not make later roadmap slices complete automatically. `P1-00` must first
 
 | Field | Current value |
 | --- | --- |
-| Active slice | None — the Wave 1 flow audit ([`wave-1-audit.md`](./wave-1-audit.md)) is COMPLETE: all sessions A1–A7 Rule-12 certified and the final gate F closed 2026-08-18 (full Golden 93/93 + full audit battery 74/74 + 119/119 catalog-ID proof) |
-| Next slice | `P1-13` (work templates) is `ready` — but the **UI/UX consolidation runs first** ([`uiux-consolidation.md`](./uiux-consolidation.md), owner decision 2026-08-21, in execution since the same day); `P1-13` starts after it closes, under the new per-slice audit model ([`wave-2-audit.md`](./wave-2-audit.md)) |
-| Other ready slices | `P1-13` |
-| Current implementation wave | Wave 1 complete with `P1-12` and audited; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
-| Latest completed golden gate | `AUDIT-W1` final gate: full Golden 93/93 (world `msy9a4vb`, 17.1m) + full audit battery 74/74 (world `msydek02`, 28.5m) on build `Fi1jZsuahgN7eLsjPFAvH`, 2026-08-18 (`docs/plans/golden-gate-log.md`) |
+| Active slice | None — the UI/UX consolidation closed 2026-08-22 at its own final gate (full Golden 93/93, world `mt4aelz1` + full Wave-1 battery 74/74 on one frozen build; ledger: [`uiux-consolidation.md`](./uiux-consolidation.md)); no next slice has been started |
+| Next slice | `P1-13` (work templates) is `ready` and may start, under the per-slice audit model ([`wave-2-audit.md`](./wave-2-audit.md)) and the UI canon (`werkflow-design` skill) |
+| Other ready slices | None (`P1-14` waits on `P1-13`) |
+| Current implementation wave | Wave 1 complete with `P1-12`, audited, and UI/UX-consolidated; Wave 2 — Work execution, service, time, and people lifecycle begins with `P1-13` |
+| Latest completed golden gate | UI/UX consolidation final gate: full Golden 93/93 (world `mt4aelz1`, 29.5m) + full Wave-1 battery 74/74 (58.3m) on one frozen build, 2026-08-22 (`docs/plans/golden-gate-log.md`) |
 | Known execution blocker | None |
-| Last roadmap review | 18 August 2026 |
+| Last roadmap review | 23 August 2026 |
 
 Agents must update this table whenever a slice enters `in_progress`, `verification`, `complete`, or `decision_blocked`.
 
@@ -124,6 +124,18 @@ These are deliberate warnings for future agents and the product owner, recorded 
 1. **Process-to-progress ratio.** 56 slices with full exit evidence is realistically a multi-year effort for a small team. The discipline exists to prevent an incoherent product, not to become the product. For low-risk slices (no schema migration, no permission change, no money/time/stock semantics), lighter evidence is acceptable — say so explicitly in the slice record instead of silently skipping items. When a slice consistently costs more in ceremony than in implementation, propose splitting or trimming it rather than abandoning the protocol.
 2. **Wave 4 is the risk concentration.** Invoices, controlled number ranges, XRechnung/ZUGFeRD profiles, GoBD-adjacent retention claims, and DATEV handoffs cannot be validated from documentation or competitor behavior. Budget for qualified German tax/legal/accounting review **before** accepting `P1-39`–`P1-43`, and treat its absence as a `decision_blocked` condition, not a footnote.
 3. **Golden-gate rerun cost compounds.** By Wave 3 and later, "rerun all materially affected earlier gates" grows expensive. Sampled or partially automated reruns are acceptable when the gate log records what was rerun, what was skipped, and why. An unrecorded skip is the only wrong option.
+
+## External Resources And Cost Gates
+
+Recorded 2026-08-23 so external dependencies never surprise a wave mid-flight. Baseline running costs today: Supabase Pro org (~$35/month with both projects on Micro), Cloudflare R2 (within the free tier for years at current volumes), Resend (free tier; invite/auth mail volume is tiny), Vercel. Per wave:
+
+- **Wave 2 (`P1-13`–`P1-24`): deliberately zero new external resources.** Every slice is internal product depth. Two look-alikes that are NOT external here: `P1-15` "signatures" means captured signature evidence (drawn/uploaded, versioned) — qualified electronic signature providers are an explicit later decision gate, never an implied dependency; `P1-23` "payroll-ready export" means versioned export FILES an accountant/payroll tool can consume — no DATEV or payroll API connection (that is `P1-43` file handoff and `P1-50` connectors).
+- **Wave 3:** first real external touchpoints, still file-first and free of per-use fees: `P1-25` imports wholesaler catalog/price data (DATANORM files require the customer's own wholesaler accounts — an onboarding prerequisite, not a WerkFlow cost); `P1-34` scopes DATANORM/IDS/UGL/Open Masterdata/SHK Connect acceptance (open trade standards; live wholesaler API access again rides customer accounts). Budget acquisition effort for test fixtures/sample files, not money.
+- **Wave 4:** `P1-40` XRechnung/ZUGFeRD validation (open validators, e.g. the KoSIT tooling — free, but plan validation fixtures); `P1-42` bank data via file import (CSV/camt) by default — live bank aggregation APIs (finAPI-class, real monthly cost) are a decision gate, not assumed; `P1-43` stays accountant-ready file export.
+- **Wave 5:** the paid-service concentration. `P1-44` OCR/thumbnails is the first Railway worker (decision 0001; Railway ~$5+/month plus compute, OCR itself open-source first); `P1-46` outbound messaging means real Resend volume (likely a paid tier, ~$20/month class) and SMS only via a paid provider — SMS is a decision gate with per-message cost; `P1-49` mobile app means Apple/Google developer accounts ($99/year + $25 once); `P1-50` connectors (DATEV, calendars, wholesalers) each carry their own account/partner-access decision.
+- **Wave 6:** nothing new.
+
+Rule: a slice that would introduce an external account, API, or per-use cost not listed here is `decision_blocked` until the owner approves the resource explicitly.
 
 ## Mandatory Execution Protocol
 
@@ -622,6 +634,7 @@ Keep newest entries first. Link commits, pull requests, implementation plans, de
 
 | Date | Slice / gate | Change | Owner / evidence |
 | --- | --- | --- | --- |
+| 2026-08-23 | UI/UX consolidation | Recorded **complete** (the executing sessions closed the ledger 2026-08-22; this entry reconciles the roadmap). Sessions S1–S2 and M1–M5 delivered the full canon: the `werkflow-design` skill now carries the component registry, interaction canon, feedback vocabulary, loading canon, and Realtime-dialog rule; new primitives (`Banner`/`useBanner`, `ErrorText`, `DialogBody`, `DateTimeField`, `SelectWithCreate`, promoted `QuantityStepper`, open-dialog Realtime suspension in the dialog primitives); every inventoried violation migrated or recorded as a deliberate deviation; sonner removed; ESLint canon bans at error severity; all silent failures and unreachable-success branches fixed; three product defects fixed along the way (deletion-stall navigation, entry-details draft wipe, nested-dialog submit propagation). Final gate: full Golden 93/93 (world `mt4aelz1`) + full Wave-1 battery 74/74 on one frozen build. `P1-13` may start | Owner-directed sessions per [`uiux-consolidation.md`](./uiux-consolidation.md); gate log 2026-08-21/22 |
 | 2026-08-21 | Process | Two owner decisions recorded before Wave 2 starts. (1) **Per-slice audit model:** slices propose their complete user-flow list (German bullets, provisional `P1-XX-FNN` IDs) in the pre-implementation report, ship a rule-12 audit spec in `tests/audit/wave-N/` at acceptance, and close their ledger rows in [`wave-2-audit.md`](./wave-2-audit.md); wave ends shrink to certification gates (protocol step 5a and the new acceptance items above; testing rules 12–13; audit config/scripts widened to all waves). Wave 1's R1 reconciliation is the recorded cost of the old wave-end model. (2) **UI/UX consolidation precedes `P1-13`:** the app-wide component/feedback/form-convention cleanup runs first, in its own sessions per [`uiux-consolidation.md`](./uiux-consolidation.md), because every Wave 2 slice is picker-heavy and would compound today's inconsistencies. | Product-owner instruction in this session |
 | 2026-08-18 | Infrastructure | Dev/prod environment split ([decision 0003](../decisions/0003-dev-prod-environment-split.md)): local dev and the entire test harness moved to the dedicated dev Supabase project `mbkkzuqjbdvzelqvuzcn` + `werkflow-documents-dev`; the full prod migration history (120 files, MD5-verified) plus four idempotent baseline repair migrations materialized in `supabase/migrations/` with a zero-discrepancy fidelity proof; schema changes are now committed migration files applied dev-first, prod-second. Acceptance on dev: statics clean, 188/188 unit, GG-00 13/13, full Golden 93/93, audit A7 9/9, `LEFTOVER_SWEEP=0`; prod untouched. See `docs/technical/environments.md` | Owner-directed session; published to `origin/partner-preview` |
 | 2026-08-16 | Wave 1 audit | Strengthened catalog completeness before A5: all 119 catalog bullets now have stable flow IDs; testing rule 12 and the audit protocol require many-to-many set equality plus whole-bullet assertion-body evidence, with no partial/unmapped flow and no manual substitution without an owner-approved named exception. Reconciliation session R1 now precedes A5 and retroactively certifies A1–A4's 88 owned flow IDs; A5 and later sessions remain blocked until R1 closes. | Product-owner instruction in this session |
