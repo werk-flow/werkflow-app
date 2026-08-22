@@ -17,26 +17,23 @@ import {
 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import { QuantityStepper } from '@/components/inventar/quantity-stepper';
+import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import {
   createJobMaterialLine,
   createProjectMaterialLine,
@@ -290,6 +287,7 @@ export function JobMaterialsSection({
   totals = [],
 }: JobMaterialsSectionProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [dialog, setDialog] = useState<MaterialDialogState | null>(null);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -435,6 +433,15 @@ export function JobMaterialsSection({
       }
 
       setDialog(null);
+      showBanner({
+        variant: 'success',
+        message:
+          dialog.mode === 'take'
+            ? 'Die Entnahme wurde gebucht.'
+            : dialog.mode === 'return'
+              ? 'Das Material wurde zurückgelegt.'
+              : 'Die Materialplanung wurde gespeichert.',
+      });
       router.refresh();
     });
   }
@@ -447,6 +454,10 @@ export function JobMaterialsSection({
         setSectionError(getActionErrorMessage(result.error, 'edit'));
         return;
       }
+      showBanner({
+        variant: 'success',
+        message: 'Die Materialposition wurde entfernt.',
+      });
       router.refresh();
     });
   }
@@ -599,7 +610,7 @@ export function JobMaterialsSection({
         </div>
       )}
 
-      {sectionError && <p className="mt-3 text-sm text-destructive">{sectionError}</p>}
+      <ErrorText className="mt-3">{sectionError}</ErrorText>
 
       <MaterialSelectionDialog
         dialog={dialog}
@@ -855,13 +866,21 @@ function MaterialSelectionDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && setDialog(null)}>
-      <DialogContent className="max-h-[92vh] overflow-auto sm:max-w-4xl">
+      <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave();
+          }}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+        <DialogBody className="grid gap-5 py-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
           {canChangeItem ? (
             <div className="space-y-3">
               <div className="relative">
@@ -869,6 +888,10 @@ function MaterialSelectionDialog({
                 <Input
                   value={currentDialog.search}
                   onChange={(event) => patchDialog({ search: event.target.value })}
+                  onKeyDown={(event) => {
+                    // Enter while searching must never book the movement.
+                    if (event.key === 'Enter') event.preventDefault();
+                  }}
                   className="pl-9"
                   aria-label="Artikel suchen"
                   placeholder="Artikel, SKU, Barcode, Lager, Lieferant suchen..."
@@ -986,31 +1009,26 @@ function MaterialSelectionDialog({
                           />
                         </Field>
                         <Field label="Lager" htmlFor={`${fieldIdPrefix}-location`}>
-                          <Select
-                            value={row.locationId || NO_LOCATION_VALUE}
-                            onValueChange={(value) =>
-                              updateRow(row.key, {
-                                locationId:
-                                  value === NO_LOCATION_VALUE ? '' : value,
-                              })
+                          <SearchableSelect
+                            id={`${fieldIdPrefix}-location`}
+                            options={locationOptions.map((location) => ({
+                              value: location.id,
+                              label: location.label,
+                            }))}
+                            value={row.locationId}
+                            onChange={(value) =>
+                              updateRow(row.key, { locationId: value })
                             }
-                          >
-                            <SelectTrigger id={`${fieldIdPrefix}-location`}>
-                              <SelectValue placeholder="Lager wählen" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(mode === 'plan' || mode === 'edit') && (
-                                <SelectItem value={NO_LOCATION_VALUE}>
-                                  Nicht festgelegt
-                                </SelectItem>
-                              )}
-                              {locationOptions.map((location) => (
-                                <SelectItem key={location.id} value={location.id}>
-                                  {location.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={
+                              mode === 'plan' || mode === 'edit'
+                                ? 'Nicht festgelegt'
+                                : 'Lager wählen'
+                            }
+                            searchPlaceholder="Lager suchen …"
+                            emptyMessage="Kein Lager gefunden"
+                            allowNone={mode === 'plan' || mode === 'edit'}
+                            noneLabel="Nicht festgelegt"
+                          />
                         </Field>
                         <Field label="Notiz" htmlFor={`${fieldIdPrefix}-notes`}>
                           <Textarea
@@ -1046,18 +1064,21 @@ function MaterialSelectionDialog({
               </div>
             )}
           </div>
-        </div>
 
-        {currentDialog.error && (
-          <p className="text-sm text-destructive">{currentDialog.error}</p>
-        )}
+          <ErrorText className="lg:col-span-2">{currentDialog.error}</ErrorText>
+        </DialogBody>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDialog(null)} disabled={isSaving}>
+        <DialogFooter className="pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setDialog(null)}
+            disabled={isSaving}
+          >
             Abbrechen
           </Button>
           <Button
-            onClick={onSave}
+            type="submit"
             disabled={isSaving || currentDialog.rows.length === 0}
           >
             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -1068,6 +1089,7 @@ function MaterialSelectionDialog({
                 : 'Speichern'}
           </Button>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

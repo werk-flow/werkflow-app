@@ -8,11 +8,11 @@ import {
   Square,
   Loader2,
   X,
-  AlertCircle,
   Briefcase,
   ArrowLeftRight,
   ExternalLink,
 } from 'lucide-react';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
@@ -33,12 +33,7 @@ export function ClockFAB() {
     endBreak,
     switchJob,
   } = useClockState();
-  const [banner, setBanner] = useState<null | {
-    title: string;
-    message: string;
-  }>(null);
-  const [isBannerExiting, setIsBannerExiting] = useState(false);
-  const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { showBanner } = useBanner();
 
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'clock_in' | 'switch' | 'resume'>(
@@ -55,14 +50,6 @@ export function ClockFAB() {
   const breakMode = activeClockState?.breakMode ?? 'manual';
   const activeJobId = activeClockState?.activeJobId ?? null;
   const activeJobInfo = activeClockState?.activeJobInfo ?? null;
-
-  const dismissBanner = useCallback(() => {
-    setIsBannerExiting(true);
-    setTimeout(() => {
-      setIsBannerExiting(false);
-      setBanner(null);
-    }, 150);
-  }, []);
 
   useEffect(() => {
     if (!showJobPopover) return;
@@ -107,67 +94,115 @@ export function ClockFAB() {
             // P1-08: never block a recovered person, but surface the
             // contradiction visibly so the report gets its end date.
             if (result.notice === 'sickness_reported_today') {
-              setBanner({
-                title: 'Für heute liegt eine Krankmeldung vor',
+              showBanner({
+                variant: 'info',
                 message:
-                  'Du bist eingestempelt. Bitte prüfe deine Krankmeldung und trage das Enddatum nach, wenn du wieder arbeitest.'
+                  'Für heute liegt eine Krankmeldung vor: Du bist eingestempelt. Bitte prüfe deine Krankmeldung und trage das Enddatum nach, wenn du wieder arbeitest.',
+                autoDismissMs: 8000,
               });
-              if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-              bannerTimerRef.current = setTimeout(dismissBanner, 8000);
             }
           } else if (
             result.error === 'working_in_other_org' &&
             'otherOrgName' in result &&
             typeof result.otherOrgName === 'string'
           ) {
-            setBanner({
-              title: 'Bereits in anderer Organisation eingestempelt',
-              message: `Du bist aktuell in „${result.otherOrgName}" eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+            showBanner({
+              variant: 'error',
+              message: `Bereits in anderer Organisation eingestempelt: Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`,
             });
-            if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-            bannerTimerRef.current = setTimeout(dismissBanner, 6000);
             setShowJobPicker(false);
           } else if (result.error === 'on_approved_vacation') {
-            setBanner({
-              title: 'Heute ist Urlaub genehmigt',
+            showBanner({
+              variant: 'error',
               message:
-                'Für heute ist ein ganztägiger Urlaub genehmigt, deshalb ist Einstempeln nicht möglich. Falls du doch arbeitest, kann eine verantwortliche Person den Urlaub stornieren.'
+                'Heute ist Urlaub genehmigt: Einstempeln ist deshalb nicht möglich. Falls du doch arbeitest, kann eine verantwortliche Person den Urlaub stornieren.',
             });
-            if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-            bannerTimerRef.current = setTimeout(dismissBanner, 8000);
             setShowJobPicker(false);
+          } else {
+            showBanner({
+              variant: 'error',
+              message:
+                'Das Einstempeln hat nicht funktioniert. Bitte versuche es erneut.',
+            });
           }
         } catch (err) {
           console.error('Error clocking in:', err);
+          showBanner({
+            variant: 'error',
+            message:
+              'Das Einstempeln hat nicht funktioniert. Bitte versuche es erneut.',
+          });
         }
       } else if (pickerMode === 'switch') {
         try {
           const result = await switchJob(jobId);
           if (result.success) {
             setShowJobPicker(false);
+          } else {
+            showBanner({
+              variant: 'error',
+              message:
+                'Der Auftragswechsel hat nicht funktioniert. Bitte versuche es erneut.',
+            });
           }
         } catch (err) {
           console.error('Error switching job:', err);
+          showBanner({
+            variant: 'error',
+            message:
+              'Der Auftragswechsel hat nicht funktioniert. Bitte versuche es erneut.',
+          });
         }
       } else {
         try {
           const result = await endBreak(jobId);
           if (result.success) {
             setShowJobPicker(false);
+          } else {
+            showBanner({
+              variant: 'error',
+              message:
+                'Die Pause konnte nicht beendet werden. Bitte versuche es erneut.',
+            });
           }
         } catch (err) {
           console.error('Error ending break:', err);
+          showBanner({
+            variant: 'error',
+            message:
+              'Die Pause konnte nicht beendet werden. Bitte versuche es erneut.',
+          });
         }
       }
     },
-    [activeOrgId, pickerMode, dismissBanner, clockIn, endBreak, switchJob]
+    [activeOrgId, pickerMode, showBanner, clockIn, endBreak, switchJob]
   );
 
   const handleClockOut = useCallback(() => {
     if (!activeOrgId) return;
 
-    void clockOut();
-  }, [activeOrgId, clockOut]);
+    // The result must never be discarded: a failed clock-out means the person
+    // silently keeps accruing time.
+    void (async () => {
+      try {
+        const result = await clockOut();
+        if (!result.success) {
+          showBanner({
+            variant: 'error',
+            message:
+              'Das Ausstempeln hat nicht funktioniert. Bitte versuche es erneut.',
+          });
+        }
+      } catch (err) {
+        console.error('Error clocking out:', err);
+        showBanner({
+          variant: 'error',
+          message:
+            'Das Ausstempeln hat nicht funktioniert. Bitte versuche es erneut.',
+        });
+      }
+    })();
+  }, [activeOrgId, clockOut, showBanner]);
 
   const handleFABClick = useCallback(() => {
     if (isClockedIn) {
@@ -185,8 +220,26 @@ export function ClockFAB() {
       return;
     }
 
-    void startBreak();
-  }, [isClockedIn, isOnBreak, openJobPicker, startBreak]);
+    void (async () => {
+      try {
+        const result = await startBreak();
+        if (!result.success) {
+          showBanner({
+            variant: 'error',
+            message:
+              'Die Pause konnte nicht gestartet werden. Bitte versuche es erneut.',
+          });
+        }
+      } catch (err) {
+        console.error('Error starting break:', err);
+        showBanner({
+          variant: 'error',
+          message:
+            'Die Pause konnte nicht gestartet werden. Bitte versuche es erneut.',
+        });
+      }
+    })();
+  }, [isClockedIn, isOnBreak, openJobPicker, startBreak, showBanner]);
 
   if (!activeOrgId || !activeOrg) {
     return null;
@@ -208,35 +261,6 @@ export function ClockFAB() {
 
   return (
     <>
-      {banner && (
-        <div
-          className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4"
-        >
-          <div
-            role="alert"
-            className={cn(
-              'pointer-events-auto flex w-full max-w-lg items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 transition-all duration-200 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50',
-              isBannerExiting
-                ? '-translate-y-1 opacity-0'
-                : 'translate-y-0 opacity-100'
-            )}
-          >
-            <AlertCircle className="size-5 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold">{banner.title}</p>
-              <p className="mt-0.5 text-sm">{banner.message}</p>
-            </div>
-            <button
-              onClick={dismissBanner}
-              className="shrink-0 rounded-md p-1 hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
-              aria-label="Banner schließen"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       <JobPickerModal
         open={showJobPicker}
         onClose={() => setShowJobPicker(false)}

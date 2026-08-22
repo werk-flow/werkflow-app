@@ -252,14 +252,18 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
   await page.goto('/dashboard');
   // The clock control is a floating action button named via its title attribute.
   await page.locator('button[title="Einstempeln"]').click();
-  await expect(page.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
 
   if (jobTitle) {
-    await page.getByRole('button').filter({ hasText: jobTitle }).first().click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#job-picker-job'),
+      jobTitle
+    );
   }
 
-  // The modal's confirm button also says "Einstempeln" but has no title attr.
-  await page.locator('button:not([title])', { hasText: 'Einstempeln' }).click();
+  await dialog.getByRole('button', { name: 'Einstempeln', exact: true }).click();
   await expect(page.locator('button[title="Ausstempeln"]')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -277,17 +281,17 @@ export async function startClockBreak(page: Page): Promise<void> {
 
 export async function endClockBreak(page: Page, jobTitle?: string): Promise<void> {
   await page.locator('button[title="Arbeit fortsetzen"]').click();
-  await expect(page.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeVisible();
   if (jobTitle) {
-    await page
-      .getByRole('button')
-      .filter({ hasText: jobTitle, visible: true })
-      .first()
-      .click();
-  } else {
-    await page.getByRole('button', { name: 'Ohne Auftrag' }).click();
+    await selectFromSearchable(
+      page,
+      dialog.locator('#job-picker-job'),
+      jobTitle
+    );
   }
-  await page.getByRole('button', { name: 'Fortsetzen', exact: true }).click();
+  // Without a job the picker keeps its default „Ohne Auftrag" selection.
+  await dialog.getByRole('button', { name: 'Fortsetzen', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeHidden({
     timeout: 15_000,
   });
@@ -298,11 +302,10 @@ export async function endClockBreak(page: Page, jobTitle?: string): Promise<void
 
 export async function switchClockJob(page: Page, jobTitle: string): Promise<void> {
   await page.locator('button[title="Auftrag wechseln"]').click();
-  await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeVisible();
-  await page.getByRole('button').filter({ hasText: jobTitle }).first().click();
-  await page
-    .getByRole('button', { name: 'Wechseln', exact: true })
-    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Auftrag wechseln' })).toBeVisible();
+  await selectFromSearchable(page, dialog.locator('#job-picker-job'), jobTitle);
+  await dialog.getByRole('button', { name: 'Wechseln', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeHidden({
     timeout: 15_000,
   });
@@ -362,9 +365,23 @@ export async function createInventoryItem(
       .fill(String(options.initialQuantity ?? 0));
   }
   if (options.supplierName) {
+    // SelectWithCreate: the action row opens a quick-create dialog that stages
+    // the new supplier name; the supplier row is created on item save.
     await dialog.locator('#inventory-item-supplier').click();
-    await page.getByRole('option', { name: 'Neuer Lieferant' }).click();
-    await dialog.locator('#inventory-item-supplier-name').fill(options.supplierName);
+    await page
+      .getByRole('listbox')
+      .getByRole('button', { name: 'Neuen Lieferanten anlegen' })
+      .click();
+    const supplierDialog = page
+      .getByRole('dialog')
+      .filter({
+        has: page.getByRole('heading', { name: 'Neuen Lieferanten anlegen' }),
+      });
+    await supplierDialog
+      .locator('#inventory-new-supplier-name')
+      .fill(options.supplierName);
+    await supplierDialog.getByRole('button', { name: 'Übernehmen' }).click();
+    await expect(supplierDialog).toHaveCount(0, { timeout: 10_000 });
   }
   await dialog.getByRole('button', { name: 'Speichern' }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -1362,9 +1379,12 @@ export async function createOwnManualTimeEntry(
   await typeIntoTimeInput(dialog, 'clockInTime', options.clockInDigits);
   await typeIntoTimeInput(dialog, 'clockOutTime', options.clockOutDigits);
   await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  // Close-then-banner: the dialog closes immediately and the global banner
+  // confirms the save (M5).
   await expect(
-    dialog.getByText(/Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/)
+    page.getByText(/Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/)
   ).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function openTimeApprovals(page: Page): Promise<void> {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   MoreVertical,
   Trash2,
@@ -97,7 +96,6 @@ export function KundenDetailContent({
   currentUserId,
   relationshipBundle,
 }: KundenDetailContentProps) {
-  const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const isDeletingRef = useRef(false);

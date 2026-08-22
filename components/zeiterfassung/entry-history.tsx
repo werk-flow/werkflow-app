@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
   SelectContent,
@@ -198,19 +199,20 @@ export function EntryHistory({
             <label className="text-sm font-medium text-muted-foreground">
               Mitarbeiter
             </label>
-            <Select value={memberFilter} onValueChange={setMemberFilter}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle Mitarbeiter</SelectItem>
-                {members.map((member) => (
-                  <SelectItem key={member.user_id} value={member.user_id}>
-                    {getMemberDisplayName(member)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              ariaLabel="Nach Mitarbeiter filtern"
+              options={[
+                { value: 'all', label: 'Alle Mitarbeiter' },
+                ...members.map((member) => ({
+                  value: member.user_id,
+                  label: getMemberDisplayName(member),
+                })),
+              ]}
+              value={memberFilter}
+              onChange={setMemberFilter}
+              searchPlaceholder="Mitarbeiter suchen …"
+              emptyMessage="Kein Mitarbeiter gefunden"
+            />
           </div>
         )}
         <div className="flex-1 min-w-[140px] space-y-1">

@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Loader2, Palmtree, Undo2, X } from 'lucide-react';
-import { toast } from 'sonner';
-
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -117,13 +116,11 @@ export function VacationApprovals() {
     void refetch();
   });
 
-  // Errors are additionally raised as a toast: the follow-up refetch (or a
-  // concurrent refresh) may remove the card the user acted on, and the
-  // explanation must survive that.
+  // One failure, one surface: the section-level error survives the follow-up
+  // refetch even when the acted-on card disappears (the section deliberately
+  // stays mounted while an actionError is set).
   const reportActionError = useCallback((error: string, fallback: string) => {
-    const message = DECISION_ERROR_MESSAGES[error] ?? fallback;
-    setActionError(message);
-    toast.error(message);
+    setActionError(DECISION_ERROR_MESSAGES[error] ?? fallback);
   }, []);
 
   const handleApprove = async (item: ApproverVacationRequest) => {
@@ -227,11 +224,7 @@ export function VacationApprovals() {
         Urlaubsanträge
       </h3>
 
-      {actionError && (
-        <p role="alert" className="px-1 text-sm text-destructive">
-          {actionError}
-        </p>
-      )}
+      <ErrorText className="px-1">{actionError}</ErrorText>
 
       {pending.map((item) => (
         <Card key={item.request.id} data-vacation-request={item.request.id}>
@@ -415,11 +408,7 @@ function ReasonDialog({
                 disabled={isBusy}
               />
             </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             <Button

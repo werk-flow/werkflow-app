@@ -86,6 +86,8 @@ Rules the registry components already encode — don't re-implement them per cal
 
 Every non-destructive create/edit dialog renders a real `<form onSubmit={...}>`; the primary button is `type="submit"`. Enter submits — that is the whole convention, no manual `onKeyDown` Enter shims. Textareas keep Enter for newlines natively. Validate at the point of action: field-level problems render `ErrorText` under the field (with `aria-invalid` on the input), submit-level failures render `ErrorText` next to the submit button.
 
+A nested dialog form (e.g. a quick-create dialog opened from a select inside another dialog's form) must call `event.stopPropagation()` in its `onSubmit`: React synthetic submit events bubble through portals along the React tree and would otherwise submit the surrounding form too.
+
 ### Destructive confirmations
 
 Always `AlertDialog` with `AlertDialogCancel` and `AlertDialogAction` — never a plain `Button` in the footer, never a `<form>` inside, so Enter can never confirm destruction. Wording template: the title names object and verb ("Auftrag „X" löschen?"), the body states the consequence in one sentence, the action button names the outcome ("Endgültig löschen"), destructive styling only when the action is irreversible, "Abbrechen" always present.

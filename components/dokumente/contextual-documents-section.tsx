@@ -51,10 +51,7 @@ import {
   type OrganizationDocument,
   type ProjectJobDocumentGroup,
 } from '@/lib/documents/types';
-import {
-  FeedbackBanner,
-  type FeedbackBannerMessage,
-} from '@/components/shared/feedback-banner';
+import { useBanner } from '@/components/ui/banner';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { cn } from '@/lib/utils';
 import { AttachDocumentDialog } from './attach-document-dialog';
@@ -256,10 +253,9 @@ export function ContextualDocumentsSection({
 }: ContextualDocumentsSectionProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const feedbackIdRef = useRef(0);
   const uploadItemIdRef = useRef(0);
   const [isPending, startTransition] = useTransition();
-  const [feedback, setFeedback] = useState<FeedbackBannerMessage | null>(null);
+  const { showBanner } = useBanner();
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [linkDialogDocument, setLinkDialogDocument] = useState<OrganizationDocument | null>(
     null
@@ -285,8 +281,7 @@ export function ContextualDocumentsSection({
   });
 
   function showFeedback(variant: 'success' | 'error', message: string) {
-    feedbackIdRef.current += 1;
-    setFeedback({ id: feedbackIdRef.current, variant, message });
+    showBanner({ variant, message });
   }
 
   function handleUpload(files: FileList | null) {
@@ -453,7 +448,6 @@ export function ContextualDocumentsSection({
       onDragLeave={() => setIsDragActive(false)}
       onDrop={handleDrop}
     >
-      <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

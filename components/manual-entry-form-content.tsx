@@ -1,13 +1,10 @@
 'use client';
 
-import { useState, useTransition, useEffect, useMemo, useRef } from 'react';
-import {
-  Loader2,
-  Clock,
-  AlertCircle,
-  X
-} from 'lucide-react';
+import { useState, useTransition, useEffect, useMemo } from 'react';
+import { Loader2, Clock } from 'lucide-react';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
 import {
@@ -98,13 +95,7 @@ export function ManualEntryFormContent({
     entryMode === 'clock_in' || entryMode === 'both';
 
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [otherOrgBanner, setOtherOrgBanner] = useState<null | {
-    title: string;
-    message: string;
-  }>(null);
-  const [isBannerExiting, setIsBannerExiting] = useState(false);
-  const bannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { showBanner } = useBanner();
 
   useEffect(() => {
     if (!prefetchedMembers) return;
@@ -209,8 +200,6 @@ export function ManualEntryFormContent({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setSuccessMessage(null);
-    setOtherOrgBanner(null);
 
     if (!activeOrgId) {
       setError('Keine Organisation ausgewählt.');
@@ -284,15 +273,13 @@ export function ManualEntryFormContent({
 
         if (result.success) {
           const isPendingResult = result.entries.some((e) => e.status === 'pending');
-          setSuccessMessage(
-            isPendingResult
+          showBanner({
+            variant: 'success',
+            message: isPendingResult
               ? 'Antrag wurde zur Genehmigung eingereicht.'
-              : 'Eintrag erfolgreich erstellt!'
-          );
+              : 'Eintrag erfolgreich erstellt!',
+          });
           await onSuccess?.(result.entries);
-          setTimeout(() => {
-            setSuccessMessage(null);
-          }, 1500);
         } else {
           if (
             result.error === 'working_in_other_org' &&
@@ -304,20 +291,12 @@ export function ManualEntryFormContent({
               ? 'Bereits in anderer Organisation eingestempelt'
               : 'Mitarbeiter ist bereits in anderer Organisation eingestempelt';
             const message = isSelf
-              ? `Du bist aktuell in „${result.otherOrgName}" eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
-              : `Der ausgewählte Mitarbeiter ist aktuell in „${result.otherOrgName}" eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
+              ? `Du bist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte stemple dort zuerst aus, bevor du hier startest.`
+              : `Der ausgewählte Mitarbeiter ist aktuell in „${result.otherOrgName}“ eingestempelt. Bitte zuerst dort ausstempeln, bevor hier eine offene Arbeitszeit gestartet wird.`;
 
-            setOtherOrgBanner({ title, message });
-            setError(message);
-
-            if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
-            bannerTimerRef.current = setTimeout(() => {
-              setIsBannerExiting(true);
-              setTimeout(() => {
-                setIsBannerExiting(false);
-                setOtherOrgBanner(null);
-              }, 150);
-            }, 6000);
+            // One failure, one surface: the inline error carries the full
+            // explanation (the earlier extra top banner double-reported it).
+            setError(`${title}: ${message}`);
           } else {
             setError(getErrorMessage(result.error));
           }
@@ -359,35 +338,6 @@ export function ManualEntryFormContent({
 
   return (
     <>
-      {otherOrgBanner && (
-        <div
-          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-lg ${
-            isBannerExiting ? 'animate-out' : 'animate-in'
-          }`}
-        >
-          <div className="flex items-center gap-3 rounded-lg bg-red-50 p-4 text-red-800 shadow-lg ring-1 ring-red-200/50 dark:bg-red-950 dark:text-red-200 dark:ring-red-800/50">
-            <AlertCircle className="size-5 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold">{otherOrgBanner.title}</p>
-              <p className="mt-0.5 text-sm">{otherOrgBanner.message}</p>
-            </div>
-            <button
-              onClick={() => {
-                setIsBannerExiting(true);
-                setTimeout(() => {
-                  setIsBannerExiting(false);
-                  setOtherOrgBanner(null);
-                }, 150);
-              }}
-              className="shrink-0 rounded-md p-1 hover:bg-red-100 dark:hover:bg-red-900 transition-colors"
-              aria-label="Banner schließen"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       <form onSubmit={handleSubmit} className="space-y-4">
         {!lockEntryMode && (
           <div className="space-y-2">
@@ -489,16 +439,7 @@ export function ManualEntryFormContent({
           )}
         </div>
 
-        {error && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-        {successMessage && (
-          <div className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-600 dark:text-green-400">
-            {successMessage}
-          </div>
-        )}
+        <ErrorText>{error}</ErrorText>
 
         {isOwnBueroEntry ? (
           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">

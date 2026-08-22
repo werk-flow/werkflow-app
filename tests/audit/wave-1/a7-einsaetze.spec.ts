@@ -497,10 +497,11 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       .filter({ hasText: world.inventory.itemName })
       .click();
     await materialDialog.locator('input[id$="-quantity"]').fill('2');
-    await materialDialog.locator('button[id$="-location"]').click();
-    await adminPage
-      .getByRole('option', { name: world.inventory.locationName })
-      .click();
+    await selectFromSearchable(
+      adminPage,
+      materialDialog.locator('button[id$="-location"]'),
+      world.inventory.locationName
+    );
     await materialDialog.getByRole('button', { name: 'Speichern' }).click();
     await expect(materialDialog).toHaveCount(0, { timeout: 20_000 });
 

@@ -22,14 +22,14 @@ const eslintConfig = defineConfig([
   ]),
   // UI/UX consolidation canon (docs/plans/uiux-consolidation.md): registry
   // components own date/time/number entry, entity selection, and feedback.
-  // Severity is "warn" until the migration sessions clear the existing call
-  // sites; M5 escalates everything here to "error".
+  // The migration sessions cleared every call site; since M5 these are hard
+  // errors so new violations cannot land.
   {
     files: ["app/**/*.tsx", "components/**/*.tsx"],
     ignores: ["components/ui/**"],
     rules: {
       "no-restricted-syntax": [
-        "warn",
+        "error",
         {
           selector: 'JSXAttribute[name.name="type"][value.value="date"]',
           message:
@@ -57,7 +57,7 @@ const eslintConfig = defineConfig([
         },
       ],
       "no-restricted-imports": [
-        "warn",
+        "error",
         {
           paths: [
             {

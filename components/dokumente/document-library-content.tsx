@@ -102,10 +102,7 @@ import {
   type OrganizationDocument,
 } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
-import {
-  FeedbackBanner,
-  type FeedbackBannerMessage,
-} from '@/components/shared/feedback-banner';
+import { useBanner } from '@/components/ui/banner';
 import { DokumenteTabContentSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
@@ -174,12 +171,6 @@ type ConfirmDialogState = {
   confirmLabel: string;
   onConfirm: () => void;
 } | null;
-
-type DocumentOperationBannerState = {
-  id: number;
-  status: 'loading' | 'success' | 'error';
-  message: string;
-};
 
 type BrowserFileSystemEntry = {
   isFile: boolean;
@@ -823,35 +814,6 @@ function MoveDestinationDialog({
   );
 }
 
-function DocumentOperationBanner({
-  operation,
-}: {
-  operation: DocumentOperationBannerState | null;
-}) {
-  if (!operation) return null;
-
-  return (
-    <div
-      className={cn(
-        'fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-lg',
-        'animate-banner-in'
-      )}
-    >
-      <div className="overflow-hidden rounded-lg bg-orange-50 p-4 text-orange-900 shadow-lg ring-1 ring-orange-200/50 dark:bg-orange-950 dark:text-orange-100 dark:ring-orange-800/50">
-        <div className="flex items-center gap-3">
-          <Loader2 className="size-5 shrink-0 animate-spin" />
-          <p className="flex-1 text-sm font-medium">{operation.message}</p>
-        </div>
-        {operation.status === 'loading' && (
-          <div className="mt-3 h-1 overflow-hidden rounded-full bg-orange-200/70 dark:bg-orange-900">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function DocumentLibraryContent({
   view,
   searchQuery: initialSearchQuery,
@@ -875,18 +837,11 @@ export function DocumentLibraryContent({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const feedbackIdRef = useRef(0);
-  const operationBannerIdRef = useRef(0);
-  const operationBannerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
   const uploadItemIdRef = useRef(0);
   const suppressNextSelectionClearRef = useRef(false);
   const [isPending, startTransition] = useTransition();
   const [isNavigationPending, startNavigationTransition] = useTransition();
-  const [feedback, setFeedback] = useState<FeedbackBannerMessage | null>(null);
-  const [operationBanner, setOperationBanner] =
-    useState<DocumentOperationBannerState | null>(null);
+  const { showBanner } = useBanner();
   const [isMoveCopySubmitting, setIsMoveCopySubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -974,14 +929,6 @@ export function DocumentLibraryContent({
     return () => window.clearTimeout(timeoutId);
   }, [pendingNavigation]);
 
-  useEffect(() => {
-    return () => {
-      if (operationBannerTimeoutRef.current) {
-        clearTimeout(operationBannerTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const selectedDocuments = useMemo(
     () => documents.filter((document) => selectedDocumentIds.has(document.id)),
     [documents, selectedDocumentIds]
@@ -1026,33 +973,19 @@ export function DocumentLibraryContent({
   }, [renameDialog]);
 
   function showFeedback(variant: 'success' | 'error', message: string) {
-    feedbackIdRef.current += 1;
-    setFeedback({ id: feedbackIdRef.current, variant, message });
+    showBanner({ variant, message });
   }
 
+  // Long-running operations run through the global banner's progress variant;
+  // the follow-up success/error banner simply replaces it in the single slot.
   function showOperationBanner(
-    status: DocumentOperationBannerState['status'],
-    message: string,
-    options: { autoDismiss?: boolean } = {}
+    status: 'loading' | 'success' | 'error',
+    message: string
   ) {
-    if (operationBannerTimeoutRef.current) {
-      clearTimeout(operationBannerTimeoutRef.current);
-      operationBannerTimeoutRef.current = null;
-    }
-
-    operationBannerIdRef.current += 1;
-    setOperationBanner({
-      id: operationBannerIdRef.current,
-      status,
+    showBanner({
+      variant: status === 'loading' ? 'progress' : status,
       message,
     });
-
-    if (options.autoDismiss) {
-      operationBannerTimeoutRef.current = setTimeout(() => {
-        setOperationBanner(null);
-        operationBannerTimeoutRef.current = null;
-      }, 2600);
-    }
   }
 
   function targetContainsSelectedFolder(
@@ -1180,7 +1113,6 @@ export function DocumentLibraryContent({
       if (failedCount > 0) {
         const failedItemLabel =
           failedCount === 1 ? '1 Eintrag' : `${failedCount} Einträge`;
-        setOperationBanner(null);
         showFeedback(
           'error',
           `${failedItemLabel} ${failedCount === 1 ? 'konnte' : 'konnten'} nicht ${actionLabel} werden.`
@@ -1191,7 +1123,6 @@ export function DocumentLibraryContent({
       onSuccess();
       clearSelection();
       refreshDocuments();
-      setOperationBanner(null);
       showFeedback(
         'success',
         itemCount === 1
@@ -1200,7 +1131,6 @@ export function DocumentLibraryContent({
       );
     } catch (error) {
       console.error('Failed to run document move/copy operation:', error);
-      setOperationBanner(null);
       showFeedback(
         'error',
         mode === 'copy'
@@ -2156,8 +2086,6 @@ export function DocumentLibraryContent({
         </p>
       )}
 
-      <FeedbackBanner feedback={feedback} onDismiss={() => setFeedback(null)} />
-      <DocumentOperationBanner operation={operationBanner} />
 
       <div className="space-y-3 rounded-lg border bg-card p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -2739,31 +2667,34 @@ export function DocumentLibraryContent({
               Vergib einen klaren Namen, damit das Dokument später leicht gefunden wird.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            ref={renameInputRef}
-            value={renameValue}
-            onChange={(event) => setRenameValue(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                handleRenameConfirm();
-              }
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleRenameConfirm();
             }}
-            placeholder="Name"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRenameDialog(null)}
-            >
-              Abbrechen
-            </Button>
-            <Button type="button" onClick={handleRenameConfirm} disabled={isPending}>
-              Umbenennen
-            </Button>
-          </DialogFooter>
+            noValidate
+            className="space-y-4"
+          >
+            <Input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(event) => setRenameValue(event.target.value)}
+              placeholder="Name"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenameDialog(null)}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                Umbenennen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -2808,23 +2739,32 @@ export function DocumentLibraryContent({
               Lege einen neuen Ordner im aktuellen Bereich an.
             </DialogDescription>
           </DialogHeader>
-          <Input
-            value={folderName}
-            onChange={(event) => setFolderName(event.target.value)}
-            placeholder="Ordnername"
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setFolderDialogOpen(false)}
-            >
-              Abbrechen
-            </Button>
-            <Button type="button" onClick={handleCreateFolder} disabled={isPending}>
-              Erstellen
-            </Button>
-          </DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleCreateFolder();
+            }}
+            noValidate
+            className="space-y-4"
+          >
+            <Input
+              value={folderName}
+              onChange={(event) => setFolderName(event.target.value)}
+              placeholder="Ordnername"
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFolderDialogOpen(false)}
+              >
+                Abbrechen
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                Erstellen
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -2908,23 +2848,34 @@ export function DocumentLibraryContent({
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Kategorie
                   </p>
-                  <select
-                    value={detailsDialog.category}
-                    onChange={(event) =>
-                      handleUpdateCategory(
-                        detailsDialog,
-                        event.target.value as DocumentCategory
-                      )
-                    }
-                    className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
-                    disabled={isPending || isTrashView}
-                  >
-                    {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-1">
+                    <Select
+                      value={detailsDialog.category}
+                      onValueChange={(value) =>
+                        handleUpdateCategory(
+                          detailsDialog,
+                          value as DocumentCategory
+                        )
+                      }
+                      disabled={isPending || isTrashView}
+                    >
+                      <SelectTrigger
+                        className="w-full"
+                        aria-label="Kategorie der Datei"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(DOCUMENT_CATEGORY_LABELS).map(
+                          ([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          )
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

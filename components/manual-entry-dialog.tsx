@@ -73,7 +73,8 @@ export function ManualEntryDialog({
           lockEntryMode={lockEntryMode}
           onSuccess={async (entries) => {
             await onSuccess?.(entries);
-            setTimeout(() => setOpen(false), 1500);
+            // Close-then-banner: the form shows the success banner.
+            setOpen(false);
           }}
         />
       </DialogContent>
