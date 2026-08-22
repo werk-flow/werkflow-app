@@ -136,6 +136,19 @@ export function translateSupabasePasswordError(error: unknown): string {
     return 'Das Passwort muss mindestens eine Zahl enthalten.';
   }
 
+  // Leaked-password protection (HaveIBeenPwned) rejection. GoTrue phrases it
+  // like "Password is known to be weak and easy to guess, please choose a
+  // different one" — this branch must run before the generic weak branch.
+  if (
+    normalized.includes('easy to guess') ||
+    normalized.includes('known to be weak') ||
+    normalized.includes('pwned') ||
+    normalized.includes('data breach') ||
+    normalized.includes('compromised')
+  ) {
+    return 'Dieses Passwort ist aus Datenlecks bekannt und daher unsicher. Bitte wähle ein anderes Passwort.';
+  }
+
   if (
     normalized.includes('password') &&
     (normalized.includes('weak') ||
