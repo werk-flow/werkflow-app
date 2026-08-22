@@ -71,7 +71,7 @@ Server code that uses the admin client must validate the authenticated user firs
 
 Since 2026-08-18 WerkFlow runs two Supabase projects (decision [0003](../decisions/0003-dev-prod-environment-split.md)): production `jbgaqpdjauzoocplgdsn` and the dedicated dev project `mbkkzuqjbdvzelqvuzcn`, which serves `.env.local` and the test harness. The committed migration history in `supabase/migrations/` is the schema workflow: every change is a migration file applied dev-first, prod-second, and `lib/supabase/database.types.ts` is generated from dev. Live Supabase inspection remains the source of truth for platform state; see [environments.md](environments.md).
 
-Supabase Auth's leaked-password-protection advisory is an acknowledged Free Plan limitation: the feature is available only on Pro and above, so this specific advisory may remain open until the planned Supabase upgrade and should then be enabled and re-evaluated. Continue to inspect and disposition every other Supabase Security and Performance Advisor finding normally.
+The historical Free-Plan exception for the leaked-password advisory is resolved: since the Pro upgrade (2026-08-21), leaked-password protection (HaveIBeenPwned check) is ENABLED on both projects (2026-08-23), together with a server-side minimum password length of 8 (matching the app's own validation) and SSL enforcement on direct database connections. There is no standing advisor exception anymore — inspect and disposition every Supabase Security and Performance Advisor finding normally, on both projects. The full auth/security configuration posture lives in [environments.md](environments.md).
 
 ## Authentication And Organization Context
 
