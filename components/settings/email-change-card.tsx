@@ -28,7 +28,7 @@ import {
 } from '@/lib/settings/email-change.types';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Button } from '@/components/ui/button';
 import {
@@ -259,7 +259,7 @@ function OtpCodeInput({
 export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
   const router = useRouter();
   const { profile, refreshProfile } = useUserProfile();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [wizardState, setWizardState] = useState(initialState);
   const [completionState, setCompletionState] = useState<CompletionState | null>(

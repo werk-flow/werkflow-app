@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { NewPasswordFieldsForm } from '@/components/password/new-password-fields-form';
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Button } from '@/components/ui/button';
 import {
@@ -132,7 +132,7 @@ function PasswordStepIndicator({
 
 export function PasswordChangeCard() {
   const { profile } = useUserProfile();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const verificationClient = useMemo(
     () => createSupabaseTransientBrowserClient(),

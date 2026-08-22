@@ -11,12 +11,15 @@ import {
   Trash2,
 } from 'lucide-react';
 
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -109,6 +112,7 @@ export function WorkScheduleSection({
   canEdit,
 }: WorkScheduleSectionProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
   const [deleteTarget, setDeleteTarget] = useState<WorkSchedule | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -141,6 +145,10 @@ export function WorkScheduleSection({
     setIsDeleting(false);
     if (result.success) {
       setDeleteTarget(null);
+      showBanner({
+        variant: 'success',
+        message: 'Der Wochenplan wurde gelöscht.',
+      });
       router.refresh();
     } else {
       setDeleteError(
@@ -301,11 +309,7 @@ export function WorkScheduleSection({
               festgehalten.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {deleteError && (
-            <p role="alert" className="text-sm text-destructive">
-              {deleteError}
-            </p>
-          )}
+          <ErrorText>{deleteError}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
@@ -357,6 +361,7 @@ function ScheduleDialog({
   const [note, setNote] = useState<string>(schedule?.note ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
 
   const parsedDayMinutes: (number | null)[] = dayHours.map((value) => {
     const trimmed = value.trim().replace(',', '.');
@@ -392,6 +397,10 @@ function ScheduleDialog({
     setIsSaving(false);
 
     if (result.success) {
+      showBanner({
+        variant: 'success',
+        message: 'Der Wochenplan wurde gespeichert.',
+      });
       onClose(true);
     } else {
       setError(
@@ -413,8 +422,12 @@ function ScheduleDialog({
             damals gültige Version.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="schedule-valid-from">Gültig ab</Label>
               <DatePicker
@@ -470,12 +483,8 @@ function ScheduleDialog({
                 disabled={isSaving}
               />
             </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"

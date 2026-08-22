@@ -1,14 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Building2, PlusCircle, UserPlus } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
+import { useState } from 'react';
+import { PlusCircle, UserPlus } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import { useOrganization } from './organization-context';
 import { useSidebar } from '@/components/sidebar/app-shell';
@@ -27,61 +21,32 @@ export function OrganizationSwitcher() {
   const { setIsOpen: setSidebarOpen } = useSidebar();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  const [shouldBlurOnClose, setShouldBlurOnClose] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const hasAdminMembership = memberships.some((membership) => membership.role === 'admin');
 
-  const handleValueChange = async (value: string) => {
-    if (value === activeOrgId) {
-      triggerRef.current?.blur();
-      return;
-    }
-
-    // Mark that we should blur when the dropdown closes
-    setShouldBlurOnClose(true);
+  const handleChange = async (value: string) => {
+    if (!value || value === activeOrgId) return;
     // Collapse the sidebar on mobile after switching orgs
     setSidebarOpen(false);
     await setActiveOrg(value);
   };
 
-  const handleOpenChange = (open: boolean) => {
-    // When dropdown closes and we switched orgs, blur the trigger
-    if (!open && shouldBlurOnClose) {
-      // Small delay to ensure Radix has finished refocusing
-      setTimeout(() => {
-        triggerRef.current?.blur();
-        setShouldBlurOnClose(false);
-      }, 0);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-2">
-      <Select
-        value={activeOrgId ?? undefined}
-        onValueChange={handleValueChange}
-        onOpenChange={handleOpenChange}
+      <SearchableSelect
+        id="organization-switcher"
+        ariaLabel="Organisation wählen"
+        options={memberships.map((org) => ({
+          value: org.orgId,
+          label: org.name,
+          description: getRoleLabel(org.role),
+        }))}
+        value={activeOrgId ?? ''}
+        onChange={(value) => void handleChange(value)}
+        placeholder="Organisation wählen"
+        searchPlaceholder="Organisation suchen …"
+        emptyMessage="Keine Organisation gefunden"
         disabled={isLoading || isSwitchingOrg || memberships.length === 0}
-      >
-        <SelectTrigger ref={triggerRef} className="w-full h-12 px-4">
-          <div className="flex items-center gap-3 truncate">
-            <Building2 className="size-5 shrink-0 text-muted-foreground" />
-            <SelectValue placeholder="Organisation wählen" />
-          </div>
-        </SelectTrigger>
-        <SelectContent>
-          {memberships.map((org) => (
-            <SelectItem key={org.orgId} value={org.orgId}>
-              <div className="flex flex-col items-start">
-                <span className="font-medium">{org.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {getRoleLabel(org.role)}
-                </span>
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      />
 
       {/* Admin users create organizations; they do not join via org code */}
       {hasAdminMembership && (

@@ -1270,11 +1270,13 @@ export async function createResponsibilityDelegationViaSettings(
   );
   await expect(delegatorTrigger).toBeVisible({ timeout: 15_000 });
   if (!(await delegatorTrigger.textContent())?.includes(options.delegatorName)) {
-    await delegatorTrigger.click();
-    await page.getByRole('option', { name: options.delegatorName }).click();
+    await selectFromSearchable(page, delegatorTrigger, options.delegatorName);
   }
-  await dialog.locator(`#${options.responsibility}-substitute`).click();
-  await page.getByRole('option', { name: options.substituteName }).click();
+  await selectFromSearchable(
+    page,
+    dialog.locator(`#${options.responsibility}-substitute`),
+    options.substituteName
+  );
   await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
   await typeIntoDatePicker(dialog, 'Gültig bis', options.validUntilDigits);
   await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
@@ -1696,8 +1698,11 @@ export async function setHolidayRegionViaSettings(
   regionLabel: string
 ): Promise<void> {
   await page.goto('/einstellungen/zeiterfassung');
-  await page.locator('#holiday-region').click();
-  await page.getByRole('option', { name: regionLabel, exact: true }).click();
+  await selectFromSearchable(
+    page,
+    page.locator('#holiday-region'),
+    regionLabel
+  );
   await page
     .getByRole('button', { name: 'Feiertagskalender speichern' })
     .click();
@@ -2342,20 +2347,21 @@ export async function addTeamMemberViaManagement(
       .first();
     if (await memberRow.isVisible().catch(() => false)) return;
 
-    await card
-      .getByRole('combobox', {
+    await selectFromSearchable(
+      page,
+      card.getByRole('combobox', {
         name: `Mitglied zu ${options.teamName} hinzufügen`,
-      })
-      .click();
-    await page
-      .getByRole('option')
-      .filter({ hasText: options.employeeName })
-      .first()
-      .click();
+      }),
+      options.employeeName
+    );
     if (options.validFrom) {
-      await card
-        .getByLabel(`Teamzugehörigkeit zu ${options.teamName} gültig ab`)
-        .fill(options.validFrom);
+      // ISO date → DDMMYYYY segment digits for the DatePicker group.
+      const digits = `${options.validFrom.slice(8, 10)}${options.validFrom.slice(5, 7)}${options.validFrom.slice(0, 4)}`;
+      await typeIntoDatePicker(
+        card,
+        `Teamzugehörigkeit zu ${options.teamName} gültig ab`,
+        digits
+      );
     }
     await card.getByRole('button', { name: 'Hinzufügen' }).click();
     if (
@@ -2418,29 +2424,37 @@ export async function assignCapabilityViaManagement(
 ): Promise<void> {
   await page.goto('/mitarbeiter');
   await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Mitarbeiter für Qualifikation' }).click();
-  await page
-    .getByRole('option')
-    .filter({ hasText: options.employeeName })
-    .first()
-    .click();
-  await page.getByRole('combobox', { name: 'Qualifikation auswählen' }).click();
-  await page
-    .getByRole('option')
-    .filter({ hasText: options.capabilityName })
-    .first()
-    .click();
-  await page.locator('#qualification-valid-from').fill(options.validFrom);
+  await selectFromSearchable(
+    page,
+    page.getByRole('combobox', { name: 'Mitarbeiter für Qualifikation' }),
+    options.employeeName
+  );
+  await selectFromSearchable(
+    page,
+    page.getByRole('combobox', { name: 'Qualifikation auswählen' }),
+    options.capabilityName
+  );
+  await typeIntoDatePickerById(
+    page.locator('body'),
+    'qualification-valid-from',
+    options.validFrom
+  );
   if (options.validUntil) {
-    await page.locator('#qualification-valid-until').fill(options.validUntil);
+    await typeIntoDatePickerById(
+      page.locator('body'),
+      'qualification-valid-until',
+      options.validUntil
+    );
   }
   if (options.issuer !== undefined) {
     await page.locator('#qualification-issuer').fill(options.issuer);
   }
   if (options.renewalDueDate) {
-    await page
-      .locator('#qualification-renewal-date')
-      .fill(options.renewalDueDate);
+    await typeIntoDatePickerById(
+      page.locator('body'),
+      'qualification-renewal-date',
+      options.renewalDueDate
+    );
   }
   if (options.evidence) {
     await page.getByRole('combobox', { name: 'Nachweisstatus' }).click();
@@ -2480,8 +2494,16 @@ export async function renewCapabilityViaManagement(
     .filter({ hasText: options.employeeName })
     .filter({ hasText: options.capabilityName });
   await row.getByRole('button', { name: 'Erneuern' }).click();
-  await page.locator('#qualification-valid-from').fill(options.validFrom);
-  await page.locator('#qualification-valid-until').fill(options.validUntil);
+  await typeIntoDatePickerById(
+    page.locator('body'),
+    'qualification-valid-from',
+    options.validFrom
+  );
+  await typeIntoDatePickerById(
+    page.locator('body'),
+    'qualification-valid-until',
+    options.validUntil
+  );
   await page.getByRole('button', { name: 'Erneuerung speichern' }).click();
   await expect(
     page

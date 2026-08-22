@@ -610,7 +610,12 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       employeeRecord.id
     );
     let [baseTarget] = resolveDailyTargets([requestDate], context);
-    if (baseTarget.targetMinutes <= 0) {
+    // The run day must actually CONSUME vacation, not just carry a target:
+    // on weekends the labeled default source yields a positive target that
+    // deliberately costs no vacation day (doesDateConsumeVacation), so a
+    // target-only guard is weekday-blind — the first Saturday A4 run proved
+    // it with an honest empty approved-days snapshot.
+    if (!doesDateConsumeVacation(requestDate, context)) {
       halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
       await openMemberDetailFromList(adminPage, employeeName);
       await addWorkScheduleViaDialog(adminPage, {
@@ -620,6 +625,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       });
       context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
       [baseTarget] = resolveDailyTargets([requestDate], context);
+      expect(doesDateConsumeVacation(requestDate, context)).toBe(true);
     }
     const dateDigits = toDatePickerDigits(requestDate);
     const rangeText = formatGermanDate(requestDate);

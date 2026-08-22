@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider'
+import { useBanner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -51,7 +51,7 @@ export function AuftraegeColumnSettingsForm({
   organizationName,
 }: AuftraegeColumnSettingsFormProps) {
   const router = useRouter()
-  const { showBanner } = useSettingsBanner()
+  const { showBanner } = useBanner()
   const [isSaving, setIsSaving] = useState(false)
 
   const form = useForm<AuftraegeColumnPreferencesValues>({

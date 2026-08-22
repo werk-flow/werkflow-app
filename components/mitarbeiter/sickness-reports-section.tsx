@@ -15,14 +15,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
+import { useBanner } from '@/components/ui/banner';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,9 +148,7 @@ export function SicknessReportsSection({ recordId }: { recordId: string }) {
       {isLoading ? (
         <Skeleton className="h-16 w-full" />
       ) : loadFailed && !reports ? (
-        <p role="alert" className="text-sm text-destructive">
-          Die Krankmeldungen konnten nicht geladen werden.
-        </p>
+        <ErrorText>Die Krankmeldungen konnten nicht geladen werden.</ErrorText>
       ) : sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Keine Krankmeldungen erfasst.
@@ -277,6 +278,7 @@ function RecordSicknessDialog({
   onClose: (saved: boolean) => void;
 }) {
   const todayIso = toLocalDateString(new Date());
+  const { showBanner } = useBanner();
   const [absenceType, setAbsenceType] =
     useState<SicknessAbsenceType>('krankheit');
   const [startDate, setStartDate] = useState<string>(todayIso);
@@ -315,6 +317,10 @@ function RecordSicknessDialog({
         evidenceRequired,
       });
       if (result.success) {
+        showBanner({
+          variant: 'success',
+          message: 'Die Krankmeldung wurde erfasst.',
+        });
         if (result.vacationOverlap) {
           // Saved; the hint must be acknowledged, never raced by a timer.
           setOverlapHint(true);
@@ -348,8 +354,12 @@ function RecordSicknessDialog({
             Krankheitsdetails erfasst.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="record-sickness-type">Art</Label>
               <Select
@@ -469,12 +479,8 @@ function RecordSicknessDialog({
               </p>
             )}
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             {overlapHint ? (
               <Button type="button" onClick={() => onClose(true)}>
@@ -514,6 +520,7 @@ function ManagerEndDialog({
   onClose: (saved: boolean) => void;
 }) {
   const todayIso = toLocalDateString(new Date());
+  const { showBanner } = useBanner();
   const [endDate, setEndDate] = useState<string>(
     report.endDate ?? (todayIso >= report.startDate ? todayIso : report.startDate)
   );
@@ -533,6 +540,10 @@ function ManagerEndDialog({
     try {
       const result = await endSicknessReport({ reportId: report.id, endDate });
       if (result.success) {
+        showBanner({
+          variant: 'success',
+          message: 'Das Enddatum wurde gespeichert.',
+        });
         onClose(true);
       } else {
         setError(
@@ -557,8 +568,12 @@ function ManagerEndDialog({
             Krankmeldung vom {formatSicknessRange(report)}.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="manager-sickness-end">Letzter Tag</Label>
               <DatePicker
@@ -571,12 +586,8 @@ function ManagerEndDialog({
                 disabled={isSaving}
               />
             </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"
@@ -604,6 +615,7 @@ function CorrectSicknessDialog({
   report: SicknessReport;
   onClose: (saved: boolean) => void;
 }) {
+  const { showBanner } = useBanner();
   const [absenceType, setAbsenceType] = useState<SicknessAbsenceType>(
     report.absenceType
   );
@@ -644,6 +656,10 @@ function CorrectSicknessDialog({
         reason: reason.trim(),
       });
       if (result.success) {
+        showBanner({
+          variant: 'success',
+          message: 'Die Krankmeldung wurde korrigiert.',
+        });
         onClose(true);
       } else {
         setError(
@@ -668,8 +684,12 @@ function CorrectSicknessDialog({
             Jede Korrektur bleibt im Verlauf nachvollziehbar.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="correct-sickness-type">Art</Label>
               <Select
@@ -775,12 +795,8 @@ function CorrectSicknessDialog({
               />
             </div>
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"
@@ -813,6 +829,7 @@ function EvidenceDialog({
   report: SicknessReport;
   onClose: (saved: boolean) => void;
 }) {
+  const { showBanner } = useBanner();
   const [evidenceRequired, setEvidenceRequired] = useState(
     report.evidenceRequired
   );
@@ -838,6 +855,10 @@ function EvidenceDialog({
           : 'not_required',
       });
       if (result.success) {
+        showBanner({
+          variant: 'success',
+          message: 'Der Nachweis-Status wurde gespeichert.',
+        });
         onClose(true);
       } else {
         setError(
@@ -863,8 +884,12 @@ function EvidenceDialog({
             vermerkt nur den Status – Dateien werden hier nicht gespeichert.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="flex items-center gap-2">
               <Checkbox
                 id="evidence-required"
@@ -896,12 +921,8 @@ function EvidenceDialog({
               </div>
             )}
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"
@@ -929,6 +950,7 @@ function ManagerCancelDialog({
   report: SicknessReport;
   onClose: (saved: boolean) => void;
 }) {
+  const { showBanner } = useBanner();
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -948,6 +970,10 @@ function ManagerCancelDialog({
         reason: reason.trim(),
       });
       if (result.success) {
+        showBanner({
+          variant: 'success',
+          message: 'Die Krankmeldung wurde storniert.',
+        });
         onClose(true);
       } else {
         setError(
@@ -973,8 +999,12 @@ function ManagerCancelDialog({
             und zählt nicht mehr als Abwesenheit.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="cancel-sickness-reason">Grund</Label>
               <Textarea
@@ -986,12 +1016,8 @@ function ManagerCancelDialog({
                 disabled={isSaving}
               />
             </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="button"

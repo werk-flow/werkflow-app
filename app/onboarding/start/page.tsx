@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteAccountButton } from '@/components/onboarding/delete-account-button';
-import { OnboardingOrgDeletedBanner } from '@/components/onboarding/org-deleted-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 
 export const metadata: Metadata = {
   title: 'Onboarding - WerkFlow'
@@ -21,7 +21,10 @@ export default function OnboardingStartPage() {
   return (
     <div className="w-full max-w-2xl space-y-8">
       <Suspense fallback={null}>
-        <OnboardingOrgDeletedBanner />
+        <UrlFlashBanner
+          paramKey="org_deleted"
+          messageTemplate="Die Organisation wurde erfolgreich gelöscht."
+        />
       </Suspense>
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">

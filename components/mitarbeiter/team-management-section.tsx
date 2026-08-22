@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useMemo, useState, useTransition } from 'react';
-import { Loader2, Plus, Users, X } from 'lucide-react';
+import { Plus, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -16,16 +16,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { DatePicker } from '@/components/ui/date-picker';
+import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   addTeamMembership,
   createTeam,
@@ -35,7 +31,14 @@ import {
 } from '@/lib/qualifications/actions';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
+import { toLocalDateString } from '@/lib/utils';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+
+function isoToLocalDate(value: string): Date | undefined {
+  if (!value) return undefined;
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
 
 type TeamManagementSectionProps = Pick<
   QualificationWorkspace,
@@ -48,12 +51,16 @@ export function TeamManagementSection({
   employees,
 }: TeamManagementSectionProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingTeamName, setEditingTeamName] = useState('');
   const [teamToDissolve, setTeamToDissolve] = useState<Team | null>(null);
+  const [dissolveError, setDissolveError] = useState<string | null>(null);
+  const [addErrorByTeam, setAddErrorByTeam] = useState<Record<string, string>>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [selectedEmployeeByTeam, setSelectedEmployeeByTeam] = useState<
     Record<string, string>
@@ -94,10 +101,11 @@ export function TeamManagementSection({
 
   const handleCreate = async () => {
     setPendingAction('create');
+    setCreateError(null);
     try {
       const result = await createTeam({ name, description });
       if (!result.success) {
-        toast.error(
+        setCreateError(
           result.error === 'duplicate_name'
             ? 'Ein aktives Team mit diesem Namen besteht bereits.'
             : 'Das Team konnte nicht angelegt werden.'
@@ -106,9 +114,10 @@ export function TeamManagementSection({
       }
       setName('');
       setDescription('');
+      showBanner({ variant: 'success', message: 'Das Team wurde angelegt.' });
       refresh();
     } catch {
-      toast.error('Das Team konnte nicht angelegt werden.');
+      setCreateError('Das Team konnte nicht angelegt werden.');
     } finally {
       setPendingAction(null);
     }
@@ -129,14 +138,24 @@ export function TeamManagementSection({
         description: team.description,
       });
       if (!result.success) {
-        toast.error('Der Teamname konnte nicht geändert werden.');
+        showBanner({
+          variant: 'error',
+          message: 'Der Teamname konnte nicht geändert werden.',
+        });
         return;
       }
       setEditingTeamId(null);
       setEditingTeamName('');
+      showBanner({
+        variant: 'success',
+        message: 'Der Teamname wurde geändert.',
+      });
       refresh();
     } catch {
-      toast.error('Der Teamname konnte nicht geändert werden.');
+      showBanner({
+        variant: 'error',
+        message: 'Der Teamname konnte nicht geändert werden.',
+      });
     } finally {
       setPendingAction(null);
     }
@@ -187,6 +206,9 @@ export function TeamManagementSection({
             <Plus className="size-4" />
             Team anlegen
           </Button>
+          <div className="md:col-span-3">
+            <ErrorText>{createError}</ErrorText>
+          </div>
         </Card>
       </section>
 
@@ -318,16 +340,25 @@ export function TeamManagementSection({
                                   validUntil: today,
                                 });
                                 if (!result.success) {
-                                  toast.error(
-                                    'Die Teamzugehörigkeit konnte nicht beendet werden.'
-                                  );
+                                  showBanner({
+                                    variant: 'error',
+                                    message:
+                                      'Die Teamzugehörigkeit konnte nicht beendet werden.',
+                                  });
                                   return;
                                 }
+                                showBanner({
+                                  variant: 'success',
+                                  message:
+                                    'Die Teamzugehörigkeit wurde zum Tagesende beendet.',
+                                });
                                 refresh();
                               } catch {
-                                toast.error(
-                                  'Die Teamzugehörigkeit konnte nicht beendet werden.'
-                                );
+                                showBanner({
+                                  variant: 'error',
+                                  message:
+                                    'Die Teamzugehörigkeit konnte nicht beendet werden.',
+                                });
                               } finally {
                                 setPendingAction(null);
                               }
@@ -341,70 +372,61 @@ export function TeamManagementSection({
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <Select
+                    <SearchableSelect
+                      ariaLabel={'Mitglied zu ' + team.name + ' hinzufügen'}
+                      options={availableEmployees.map((employee) => ({
+                        value: employee.employeeRecordId,
+                        label: `${employee.displayName}${!employee.userId ? ' (ohne Zugang)' : ''}`,
+                      }))}
                       value={selectedEmployeeByTeam[team.id] ?? ''}
-                      onValueChange={(value) =>
+                      onChange={(value) =>
                         setSelectedEmployeeByTeam((current) => ({
                           ...current,
                           [team.id]: value,
                         }))
                       }
-                    >
-                      <SelectTrigger
-                        aria-label={'Mitglied zu ' + team.name + ' hinzufügen'}
-                      >
-                        <SelectValue placeholder="Mitarbeiter auswählen" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableEmployees.map((employee) => (
-                          <SelectItem
-                            key={employee.employeeRecordId}
-                            value={employee.employeeRecordId}
-                          >
-                            {employee.displayName}
-                            {!employee.userId ? ' (ohne Zugang)' : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Mitarbeiter auswählen"
+                      searchPlaceholder="Mitarbeiter suchen …"
+                      emptyMessage="Kein Mitarbeiter gefunden"
+                    />
                     <div className="space-y-1.5">
                       <Label htmlFor={`team-${team.id}-valid-from`}>Gültig ab</Label>
-                      <Input
+                      <DatePicker
                         id={`team-${team.id}-valid-from`}
-                        type="date"
-                        value={
+                        ariaLabel={`Teamzugehörigkeit zu ${team.name} gültig ab`}
+                        value={isoToLocalDate(
                           membershipWindowByTeam[team.id]?.validFrom ?? today
-                        }
-                        onChange={(event) =>
+                        )}
+                        onChange={(date) =>
                           setMembershipWindowByTeam((current) => ({
                             ...current,
                             [team.id]: {
-                              validFrom: event.target.value,
+                              validFrom: date ? toLocalDateString(date) : '',
                               validUntil: current[team.id]?.validUntil ?? '',
                             },
                           }))
                         }
-                        aria-label={`Teamzugehörigkeit zu ${team.name} gültig ab`}
                       />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor={`team-${team.id}-valid-until`}>
                         Gültig bis (optional)
                       </Label>
-                      <Input
+                      <DatePicker
                         id={`team-${team.id}-valid-until`}
-                        type="date"
-                        value={membershipWindowByTeam[team.id]?.validUntil ?? ''}
-                        onChange={(event) =>
+                        ariaLabel={`Teamzugehörigkeit zu ${team.name} gültig bis`}
+                        value={isoToLocalDate(
+                          membershipWindowByTeam[team.id]?.validUntil ?? ''
+                        )}
+                        onChange={(date) =>
                           setMembershipWindowByTeam((current) => ({
                             ...current,
                             [team.id]: {
                               validFrom: current[team.id]?.validFrom ?? today,
-                              validUntil: event.target.value,
+                              validUntil: date ? toLocalDateString(date) : '',
                             },
                           }))
                         }
-                        aria-label={`Teamzugehörigkeit zu ${team.name} gültig bis`}
                       />
                     </div>
                     <Button
@@ -419,8 +441,16 @@ export function TeamManagementSection({
                         const membershipWindow = membershipWindowByTeam[team.id];
                         const validFrom = membershipWindow?.validFrom ?? today;
                         const validUntil = membershipWindow?.validUntil || null;
+                        const setAddError = (message: string | null) =>
+                          setAddErrorByTeam((current) => {
+                            const next = { ...current };
+                            if (message) next[team.id] = message;
+                            else delete next[team.id];
+                            return next;
+                          });
+                        setAddError(null);
                         if (validUntil && validUntil < validFrom) {
-                          toast.error(
+                          setAddError(
                             '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
                           );
                           return;
@@ -434,7 +464,7 @@ export function TeamManagementSection({
                             validUntil,
                           });
                           if (!result.success) {
-                            toast.error(
+                            setAddError(
                               result.error === 'overlap'
                                 ? 'Diese Teamzugehörigkeit besteht bereits.'
                                 : 'Das Teammitglied konnte nicht hinzugefügt werden.'
@@ -449,9 +479,15 @@ export function TeamManagementSection({
                             ...current,
                             [team.id]: { validFrom: today, validUntil: '' },
                           }));
+                          showBanner({
+                            variant: 'success',
+                            message: 'Das Teammitglied wurde hinzugefügt.',
+                          });
                           refresh();
                         } catch {
-                          toast.error('Das Teammitglied konnte nicht hinzugefügt werden.');
+                          setAddError(
+                            'Das Teammitglied konnte nicht hinzugefügt werden.'
+                          );
                         } finally {
                           setPendingAction(null);
                         }
@@ -459,6 +495,9 @@ export function TeamManagementSection({
                     >
                       Hinzufügen
                     </Button>
+                    <div className="sm:col-span-2">
+                      <ErrorText>{addErrorByTeam[team.id]}</ErrorText>
+                    </div>
                   </div>
                 </Card>
               );
@@ -483,15 +522,14 @@ export function TeamManagementSection({
         </section>
       )}
 
-      {isPending && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Ansicht wird aktualisiert…
-        </p>
-      )}
       <AlertDialog
         open={Boolean(teamToDissolve)}
-        onOpenChange={(open) => !open && setTeamToDissolve(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTeamToDissolve(null);
+            setDissolveError(null);
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -501,6 +539,7 @@ export function TeamManagementSection({
               aber nicht mehr für neue Planungen zur Auswahl.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <ErrorText>{dissolveError}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
@@ -510,16 +549,21 @@ export function TeamManagementSection({
                 event.preventDefault();
                 const team = teamToDissolve;
                 if (!team) return;
+                setDissolveError(null);
                 setPendingAction(`dissolve:${team.id}`);
                 void dissolveTeam({ teamId: team.id }).then((result) => {
                   if (!result.success) {
-                    toast.error('Das Team konnte nicht aufgelöst werden.');
+                    setDissolveError('Das Team konnte nicht aufgelöst werden.');
                     return;
                   }
                   setTeamToDissolve(null);
+                  showBanner({
+                    variant: 'success',
+                    message: 'Das Team wurde aufgelöst.',
+                  });
                   refresh();
                 }).catch(() => {
-                  toast.error('Das Team konnte nicht aufgelöst werden.');
+                  setDissolveError('Das Team konnte nicht aufgelöst werden.');
                 }).finally(() => {
                   setPendingAction(null);
                 });

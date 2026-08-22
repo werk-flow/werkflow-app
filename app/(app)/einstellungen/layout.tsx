@@ -1,11 +1,16 @@
+import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { SettingsShell } from '@/components/settings/settings-shell';
+import { EinstellungenContentSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 
-export default async function SettingsLayout({
+// The membership check streams behind Suspense so the settings shell (header
+// and section nav) renders immediately instead of blocking every settings
+// page — including the fully static ones — on the organization lookup.
+async function SettingsAccessGuard({
   children,
 }: {
   children: React.ReactNode;
@@ -38,5 +43,19 @@ export default async function SettingsLayout({
     redirect('/dashboard');
   }
 
-  return <SettingsShell>{children}</SettingsShell>;
+  return <>{children}</>;
+}
+
+export default function SettingsLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SettingsShell>
+      <Suspense fallback={<EinstellungenContentSkeleton />}>
+        <SettingsAccessGuard>{children}</SettingsAccessGuard>
+      </Suspense>
+    </SettingsShell>
+  );
 }

@@ -4,10 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getCachedUser, getCachedMemberCount } from '@/lib/data/cached';
-import { JoinedBanner } from '@/components/dashboard/joined-banner';
-import { CreatedOrgBanner } from '@/components/dashboard/created-org-banner';
-import { AlreadyMemberBanner } from '@/components/dashboard/already-member-banner';
-import { OrgDeletedBanner } from '@/components/dashboard/org-deleted-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 import { OrgInfoCard } from '@/components/dashboard/org-info-card';
 import { DashboardContentSkeleton } from '@/components/loading-states/dashboard-content-skeleton';
 
@@ -36,19 +33,32 @@ export default async function DashboardPage() {
       </header>
 
       <Suspense fallback={null}>
-        <JoinedBanner />
+        <UrlFlashBanner
+          paramKey="joined"
+          messageTemplate="Du wurdest erfolgreich zu dieser Organisation hinzugefügt."
+        />
       </Suspense>
 
       <Suspense fallback={null}>
-        <CreatedOrgBanner />
+        <UrlFlashBanner
+          paramKey="created"
+          messageTemplate="Organisation erstellt — Du bist jetzt Admin."
+        />
       </Suspense>
 
       <Suspense fallback={null}>
-        <AlreadyMemberBanner />
+        <UrlFlashBanner
+          paramKey="already_member"
+          messageTemplate="Du bist bereits Teil dieser Organisation."
+          variant="info"
+        />
       </Suspense>
 
       <Suspense fallback={null}>
-        <OrgDeletedBanner />
+        <UrlFlashBanner
+          paramKey="org_deleted"
+          messageTemplate="Die Organisation wurde erfolgreich gelöscht."
+        />
       </Suspense>
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">

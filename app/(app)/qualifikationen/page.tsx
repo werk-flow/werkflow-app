@@ -1,14 +1,28 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { OwnQualificationOverview } from '@/components/mitarbeiter/own-qualification-overview';
+import { ErrorText } from '@/components/ui/error-text';
+import { QualifikationenContentSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
 import { getCachedUser } from '@/lib/data/cached';
 import { getOwnQualificationProfile } from '@/lib/qualifications/actions';
 
-export default async function QualificationsPage() {
+// The profile fetch streams behind Suspense so the page frame renders
+// immediately instead of blocking on the full qualification profile.
+async function QualificationsData() {
   const { data: { user } } = await getCachedUser();
   if (!user) redirect('/login');
 
   const result = await getOwnQualificationProfile();
 
+  if (!result.success) {
+    return (
+      <ErrorText>Deine Qualifikationen konnten nicht geladen werden.</ErrorText>
+    );
+  }
+  return <OwnQualificationOverview profile={result.data} />;
+}
+
+export default function QualificationsPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="shrink-0 border-b bg-background px-4 py-3 sm:px-6 sm:py-4">
@@ -18,13 +32,9 @@ export default async function QualificationsPage() {
         </p>
       </header>
       <main className="flex-1 overflow-auto p-4 sm:p-6">
-        {result.success ? (
-          <OwnQualificationOverview profile={result.data} />
-        ) : (
-          <p role="alert" className="text-sm text-destructive">
-            Deine Qualifikationen konnten nicht geladen werden.
-          </p>
-        )}
+        <Suspense fallback={<QualifikationenContentSkeleton />}>
+          <QualificationsData />
+        </Suspense>
       </main>
     </div>
   );

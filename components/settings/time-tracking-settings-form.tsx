@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider'
+import { useBanner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -62,7 +62,7 @@ export function TimeTrackingSettingsForm({
   role,
 }: TimeTrackingSettingsFormProps) {
   const router = useRouter()
-  const { showBanner } = useSettingsBanner()
+  const { showBanner } = useBanner()
   const [isSaving, setIsSaving] = useState(false)
   const canEdit = role === 'admin'
   const {
@@ -186,14 +186,15 @@ export function TimeTrackingSettingsForm({
                         <Input
                           name={field.name}
                           ref={field.ref}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
-                          min={1}
-                          max={1440}
                           onBlur={field.onBlur}
                           value={typeof field.value === 'number' ? field.value : ''}
                           onChange={(event) =>
-                            field.onChange(Number(event.target.value || 0))
+                            field.onChange(
+                              Number(event.target.value.replace(/[^0-9]/g, '') || 0)
+                            )
                           }
                         />
                       </FormControl>
@@ -216,14 +217,15 @@ export function TimeTrackingSettingsForm({
                         <Input
                           name={field.name}
                           ref={field.ref}
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           disabled={!canEdit || isSaving || selectedBreakMode !== 'automatic'}
-                          min={0}
-                          max={1440}
                           onBlur={field.onBlur}
                           value={typeof field.value === 'number' ? field.value : ''}
                           onChange={(event) =>
-                            field.onChange(Number(event.target.value || 0))
+                            field.onChange(
+                              Number(event.target.value.replace(/[^0-9]/g, '') || 0)
+                            )
                           }
                         />
                       </FormControl>

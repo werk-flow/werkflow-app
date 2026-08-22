@@ -1,14 +1,18 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import { Award, Loader2, Plus } from 'lucide-react';
+import { Award, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
+import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -31,6 +35,14 @@ import {
   type EvidenceState,
   type QualificationWorkspace,
 } from '@/lib/qualifications/types';
+import { parseDecimalInput } from '@/lib/ui/decimal';
+import { toLocalDateString } from '@/lib/utils';
+
+function isoToLocalDate(value: string): Date | undefined {
+  if (!value) return undefined;
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
 
 export function QualificationManagementSection({
   capabilities,
@@ -47,10 +59,12 @@ export function QualificationManagementSection({
   | 'isAdmin'
 >) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { showBanner } = useBanner();
+  const [, startTransition] = useTransition();
   const [kind, setKind] = useState<CapabilityKind>('skill');
   const [definitionName, setDefinitionName] = useState('');
   const [warningDays, setWarningDays] = useState('30');
+  const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [employeeRecordId, setEmployeeRecordId] = useState('');
   const [capabilityId, setCapabilityId] = useState('');
   const [validFrom, setValidFrom] = useState(getBusinessTodayIso());
@@ -63,6 +77,7 @@ export function QualificationManagementSection({
     useState<EvidenceState>('not_required');
   const [supersedesId, setSupersedesId] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [grantError, setGrantError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const definitionById = useMemo(
@@ -82,6 +97,23 @@ export function QualificationManagementSection({
   const selectedDefinition = definitionById.get(capabilityId) ?? null;
   const isRecordIdentityLocked = Boolean(editingRecordId || supersedesId);
 
+  const employeeOptions = useMemo(
+    () =>
+      employees.map((employee) => ({
+        value: employee.employeeRecordId,
+        label: employee.displayName,
+      })),
+    [employees]
+  );
+  const capabilityOptions = useMemo(
+    () =>
+      activeCapabilities.map((capability) => ({
+        value: capability.id,
+        label: `${capability.name} · ${getCapabilityKindLabel(capability.kind)}`,
+      })),
+    [activeCapabilities]
+  );
+
   const refresh = () => startTransition(() => router.refresh());
 
   const resetGrantForm = () => {
@@ -96,6 +128,7 @@ export function QualificationManagementSection({
     setEvidenceState('not_required');
     setSupersedesId(null);
     setEditingRecordId(null);
+    setGrantError(null);
   };
 
   return (
@@ -108,7 +141,7 @@ export function QualificationManagementSection({
             WerkFlow liefert keine rechtliche Bewertung.
           </p>
         </div>
-        <Card className="grid gap-3 p-4 md:grid-cols-[180px_1fr_150px_auto]">
+        <Card className="grid gap-3 p-4 md:grid-cols-[180px_1fr_180px_auto]">
           <div className="space-y-1.5">
             <Label htmlFor="capability-kind">Art</Label>
             <Select
@@ -138,13 +171,11 @@ export function QualificationManagementSection({
             <Label htmlFor="capability-warning-days">
               Hinweis vorher (Tage)
             </Label>
-            <Input
+            <QuantityStepper
               id="capability-warning-days"
-              type="number"
               min={0}
-              max={365}
               value={kind === 'skill' ? '0' : warningDays}
-              onChange={(event) => setWarningDays(event.target.value)}
+              onChange={setWarningDays}
               disabled={kind === 'skill'}
             />
           </div>
@@ -152,14 +183,17 @@ export function QualificationManagementSection({
             className="self-end"
             disabled={!definitionName.trim() || pendingAction !== null}
             onClick={async () => {
+              setDefinitionError(null);
               const expiryWarningDays =
-                kind === 'certification' ? Number(warningDays) : 0;
+                kind === 'certification' ? parseDecimalInput(warningDays) : 0;
               if (
                 !Number.isInteger(expiryWarningDays) ||
                 expiryWarningDays < 0 ||
                 expiryWarningDays > 365
               ) {
-                toast.error('Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.');
+                setDefinitionError(
+                  'Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.'
+                );
                 return;
               }
               setPendingAction('create-definition');
@@ -170,7 +204,7 @@ export function QualificationManagementSection({
                   expiryWarningDays,
                 });
                 if (!result.success) {
-                  toast.error(
+                  setDefinitionError(
                     result.error === 'duplicate_name'
                       ? 'Dieser Begriff ist bereits vorhanden.'
                       : 'Der Begriff konnte nicht angelegt werden.'
@@ -178,9 +212,13 @@ export function QualificationManagementSection({
                   return;
                 }
                 setDefinitionName('');
+                showBanner({
+                  variant: 'success',
+                  message: 'Der Begriff wurde angelegt.',
+                });
                 refresh();
               } catch {
-                toast.error('Der Begriff konnte nicht angelegt werden.');
+                setDefinitionError('Der Begriff konnte nicht angelegt werden.');
               } finally {
                 setPendingAction(null);
               }
@@ -189,6 +227,9 @@ export function QualificationManagementSection({
             <Plus className="size-4" />
             Anlegen
           </Button>
+          <div className="md:col-span-4">
+            <ErrorText>{definitionError}</ErrorText>
+          </div>
         </Card>
 
         <div className="divide-y rounded-lg border">
@@ -226,12 +267,22 @@ export function QualificationManagementSection({
                         capability.id
                       );
                       if (!result.success) {
-                        toast.error('Der Begriff konnte nicht archiviert werden.');
+                        showBanner({
+                          variant: 'error',
+                          message: 'Der Begriff konnte nicht archiviert werden.',
+                        });
                         return;
                       }
+                      showBanner({
+                        variant: 'success',
+                        message: 'Der Begriff wurde archiviert.',
+                      });
                       refresh();
                     } catch {
-                      toast.error('Der Begriff konnte nicht archiviert werden.');
+                      showBanner({
+                        variant: 'error',
+                        message: 'Der Begriff konnte nicht archiviert werden.',
+                      });
                     } finally {
                       setPendingAction(null);
                     }
@@ -256,73 +307,56 @@ export function QualificationManagementSection({
         <Card className="grid gap-3 p-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="qualification-employee">Mitarbeiter</Label>
-            <Select
+            <SearchableSelect
+              id="qualification-employee"
+              ariaLabel="Mitarbeiter für Qualifikation"
+              options={employeeOptions}
               value={employeeRecordId}
-              onValueChange={setEmployeeRecordId}
+              onChange={setEmployeeRecordId}
               disabled={isRecordIdentityLocked}
-            >
-              <SelectTrigger
-                id="qualification-employee"
-                aria-label="Mitarbeiter für Qualifikation"
-              >
-                <SelectValue placeholder="Mitarbeiter auswählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((employee) => (
-                  <SelectItem
-                    key={employee.employeeRecordId}
-                    value={employee.employeeRecordId}
-                  >
-                    {employee.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Mitarbeiter auswählen"
+              searchPlaceholder="Mitarbeiter suchen …"
+              emptyMessage="Kein Mitarbeiter gefunden"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="qualification-capability">
               Fähigkeit oder Zertifizierung
             </Label>
-            <Select
+            <SearchableSelect
+              id="qualification-capability"
+              ariaLabel="Qualifikation auswählen"
+              options={capabilityOptions}
               value={capabilityId}
-              onValueChange={setCapabilityId}
+              onChange={setCapabilityId}
               disabled={isRecordIdentityLocked}
-            >
-              <SelectTrigger
-                id="qualification-capability"
-                aria-label="Qualifikation auswählen"
-              >
-                <SelectValue placeholder="Begriff auswählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {activeCapabilities.map((capability) => (
-                  <SelectItem key={capability.id} value={capability.id}>
-                    {capability.name} · {getCapabilityKindLabel(capability.kind)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Begriff auswählen"
+              searchPlaceholder="Begriff suchen …"
+              emptyMessage="Kein Begriff gefunden"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="qualification-valid-from">Gültig ab</Label>
-            <Input
+            <DatePicker
               id="qualification-valid-from"
-              type="date"
-              value={validFrom}
-              onChange={(event) => setValidFrom(event.target.value)}
-              aria-label="Qualifikation gültig ab"
+              ariaLabel="Qualifikation gültig ab"
+              value={isoToLocalDate(validFrom)}
+              onChange={(date) =>
+                setValidFrom(date ? toLocalDateString(date) : '')
+              }
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="qualification-valid-until">
               Gültig bis (optional)
             </Label>
-            <Input
+            <DatePicker
               id="qualification-valid-until"
-              type="date"
-              value={validUntil}
-              onChange={(event) => setValidUntil(event.target.value)}
-              aria-label="Qualifikation gültig bis"
+              ariaLabel="Qualifikation gültig bis"
+              value={isoToLocalDate(validUntil)}
+              onChange={(date) =>
+                setValidUntil(date ? toLocalDateString(date) : '')
+              }
             />
           </div>
           {selectedDefinition?.kind === 'certification' && (
@@ -339,12 +373,13 @@ export function QualificationManagementSection({
                 <Label htmlFor="qualification-renewal-date">
                   Erneuerung vorgesehen (optional)
                 </Label>
-                <Input
+                <DatePicker
                   id="qualification-renewal-date"
-                  type="date"
-                  value={renewalDueDate}
-                  onChange={(event) => setRenewalDueDate(event.target.value)}
-                  aria-label="Erneuerung vorgesehen"
+                  ariaLabel="Erneuerung vorgesehen"
+                  value={isoToLocalDate(renewalDueDate)}
+                  onChange={(date) =>
+                    setRenewalDueDate(date ? toLocalDateString(date) : '')
+                  }
                 />
               </div>
               <div className="space-y-1.5">
@@ -399,6 +434,9 @@ export function QualificationManagementSection({
               Erneuerung eines bestehenden Zertifizierungseintrags.
             </p>
           )}
+          <div className="md:col-span-2">
+            <ErrorText>{grantError}</ErrorText>
+          </div>
           <div className="flex justify-end gap-2 md:col-span-2">
             {isRecordIdentityLocked && (
               <Button variant="ghost" onClick={resetGrantForm}>
@@ -413,10 +451,9 @@ export function QualificationManagementSection({
                 pendingAction !== null
               }
               onClick={async () => {
+                setGrantError(null);
                 if (validUntil && validUntil < validFrom) {
-                  toast.error(
-                    '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
-                  );
+                  setGrantError('„Gültig bis“ darf nicht vor „Gültig ab“ liegen.');
                   return;
                 }
                 const sharedInput = {
@@ -444,7 +481,7 @@ export function QualificationManagementSection({
                         supersedesId,
                       });
                   if (!result.success) {
-                    toast.error(
+                    setGrantError(
                       result.error === 'overlap'
                         ? 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.'
                         : 'Der Eintrag konnte nicht gespeichert werden.'
@@ -452,9 +489,13 @@ export function QualificationManagementSection({
                     return;
                   }
                   resetGrantForm();
+                  showBanner({
+                    variant: 'success',
+                    message: 'Der Eintrag wurde gespeichert.',
+                  });
                   refresh();
                 } catch {
-                  toast.error('Der Eintrag konnte nicht gespeichert werden.');
+                  setGrantError('Der Eintrag konnte nicht gespeichert werden.');
                 } finally {
                   setPendingAction(null);
                 }
@@ -536,6 +577,7 @@ export function QualificationManagementSection({
                           setOperationalNote(record.operationalNote ?? '');
                           setSupersedesId(null);
                           setEditingRecordId(record.id);
+                          setGrantError(null);
                         }}
                       >
                         Bearbeiten
@@ -563,16 +605,24 @@ export function QualificationManagementSection({
                                   operationalNote: record.operationalNote,
                                 });
                                 if (!result.success) {
-                                  toast.error(
-                                    'Die Bestätigung konnte nicht geändert werden.'
-                                  );
+                                  showBanner({
+                                    variant: 'error',
+                                    message:
+                                      'Die Bestätigung konnte nicht geändert werden.',
+                                  });
                                   return;
                                 }
+                                showBanner({
+                                  variant: 'success',
+                                  message: 'Die Bestätigung wurde geändert.',
+                                });
                                 refresh();
                               } catch {
-                                toast.error(
-                                  'Die Bestätigung konnte nicht geändert werden.'
-                                );
+                                showBanner({
+                                  variant: 'error',
+                                  message:
+                                    'Die Bestätigung konnte nicht geändert werden.',
+                                });
                               } finally {
                                 setPendingAction(null);
                               }
@@ -598,6 +648,7 @@ export function QualificationManagementSection({
                             setEvidenceState('pending');
                             setSupersedesId(record.id);
                             setEditingRecordId(null);
+                            setGrantError(null);
                           }}
                         >
                           Erneuern
@@ -630,26 +681,28 @@ export function QualificationManagementSection({
             try {
               const result = await setApprenticeWarningEnabled(enabled);
               if (!result.success) {
-                toast.error('Die Einstellung konnte nicht gespeichert werden.');
+                showBanner({
+                  variant: 'error',
+                  message: 'Die Einstellung konnte nicht gespeichert werden.',
+                });
                 return;
               }
-              toast.success('Einstellung gespeichert.');
+              showBanner({
+                variant: 'success',
+                message: 'Einstellung gespeichert.',
+              });
               refresh();
             } catch {
-              toast.error('Die Einstellung konnte nicht gespeichert werden.');
+              showBanner({
+                variant: 'error',
+                message: 'Die Einstellung konnte nicht gespeichert werden.',
+              });
             } finally {
               setPendingAction(null);
             }
           }}
         />
       </section>
-
-      {isPending && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Ansicht wird aktualisiert…
-        </p>
-      )}
     </div>
   );
 }

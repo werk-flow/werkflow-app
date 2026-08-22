@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -63,7 +63,7 @@ export function OrganizationSettingsForm({
   initialOrganization,
 }: OrganizationSettingsFormProps) {
   const router = useRouter();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const [isSaving, setIsSaving] = useState(false);
   const canEdit = initialOrganization.role === 'admin';
 

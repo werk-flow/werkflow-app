@@ -11,7 +11,7 @@ import {
   removeProfileAvatar,
   updateProfileAvatar,
 } from '@/lib/settings/actions';
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import {
   PROFILE_AVATAR_ALLOWED_MIME_TYPES,
   PROFILE_AVATAR_BUCKET,
@@ -98,7 +98,7 @@ export function ProfileAvatarSection() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const { profile, refreshProfile } = useUserProfile();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [cropSource, setCropSource] = useState<string | null>(null);

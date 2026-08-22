@@ -11,7 +11,7 @@ import {
   profileSettingsSchema,
 } from '@/lib/settings/schemas';
 import { ProfileAvatarSection } from '@/components/settings/profile-avatar-section';
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,7 +35,7 @@ import { Input } from '@/components/ui/input';
 export function ProfileSettingsForm() {
   const router = useRouter();
   const { profile, refreshProfile } = useUserProfile();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<ProfileSettingsValues>({

@@ -35,8 +35,10 @@ import {
   openMemberDetailFromList,
   plannedCalendarEvent,
   rejectVacationRequestFor,
+  selectFromSearchable,
   setApprenticeWarningViaManagement,
   showPlanningMonth,
+  typeIntoDatePicker,
   visibleText,
 } from '../../golden/support/steps';
 
@@ -503,17 +505,18 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       .getByTestId('team-card')
       .filter({ hasText: teamName });
     await expect(teamCard).toBeVisible({ timeout: 15_000 });
-    await teamCard
-      .getByRole('combobox', { name: `Mitglied zu ${teamName} hinzufügen` })
-      .click();
-    await adminPage
-      .getByRole('option')
-      .filter({ hasText: bueroName })
-      .first()
-      .click();
-    await teamCard
-      .getByLabel(`Teamzugehörigkeit zu ${teamName} gültig ab`)
-      .fill(futureFromIso);
+    await selectFromSearchable(
+      adminPage,
+      teamCard.getByRole('combobox', {
+        name: `Mitglied zu ${teamName} hinzufügen`,
+      }),
+      bueroName
+    );
+    await typeIntoDatePicker(
+      teamCard,
+      `Teamzugehörigkeit zu ${teamName} gültig ab`,
+      `${futureFromIso.slice(8, 10)}${futureFromIso.slice(5, 7)}${futureFromIso.slice(0, 4)}`
+    );
     await teamCard.getByRole('button', { name: 'Hinzufügen' }).click();
     const bueroRecord = await getEmployeeRecordStateByUser(
       world.orgId,
@@ -660,6 +663,13 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     bueroPage,
     world,
   }) => {
+    // Longest single journey in the battery (6 catalog creations, 5 person
+    // records, attention checks, a job with 5 requirements, and the reasoned
+    // assignment). The M4 registry inputs type dates as segments instead of
+    // one fill, which pushed the honest end-to-end cost past the 180 s
+    // default; the flow itself was verified progressing to its final
+    // assertions when the budget ran out.
+    test.slow();
     const todayIso = berlinTodayIso();
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const plannedDateIso = shiftIsoDate(todayIso, 43);

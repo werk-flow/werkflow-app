@@ -202,11 +202,14 @@ export function useBanner(): BannerContextValue {
 export function UrlFlashBanner({
   paramKey,
   messageTemplate,
+  variant = 'success',
 }: {
   /** The URL search param key to watch (e.g. "deleted_job"). */
   paramKey: string;
   /** Message template; `{name}` is replaced with the param value. */
   messageTemplate: string;
+  /** Post-redirect confirmations are green; `info` covers neutral notices. */
+  variant?: 'success' | 'info';
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -230,7 +233,7 @@ export function UrlFlashBanner({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the banner is intentionally derived once from the URL event before the param is removed
     setBanner({
       id: Date.now(),
-      variant: 'success',
+      variant,
       message: messageTemplate.replace('{name}', paramValue),
     });
     setIsExiting(false);
@@ -238,7 +241,7 @@ export function UrlFlashBanner({
     const url = new URL(window.location.href);
     url.searchParams.delete(paramKey);
     router.replace(url.pathname + url.search, { scroll: false });
-  }, [paramValue, paramKey, messageTemplate, router]);
+  }, [paramValue, paramKey, messageTemplate, router, variant]);
 
   useEffect(() => {
     if (!banner) return;

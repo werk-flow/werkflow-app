@@ -4,9 +4,11 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarClock, Loader2, ShieldCheck } from 'lucide-react';
 
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider';
+import { useBanner } from '@/components/ui/banner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Card,
   CardContent,
@@ -373,7 +375,7 @@ function DelegationList({
   canEdit: boolean;
 }) {
   const router = useRouter();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const [endingId, setEndingId] = useState<string | null>(null);
 
   const handleEnd = async (delegationId: string) => {
@@ -461,7 +463,7 @@ function ConfigurationDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const current = data.effective[responsibility];
   const baseHolderIds = useMemo(
     () =>
@@ -712,7 +714,7 @@ function DelegationDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const { showBanner } = useSettingsBanner();
+  const { showBanner } = useBanner();
   const baseHolders = data.effective[responsibility].holders.filter(
     (holder) => holder.source.kind !== 'delegation'
   );
@@ -724,6 +726,7 @@ function DelegationDialog({
   const [validUntil, setValidUntil] = useState(data.businessDate);
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const hasInvalidDateRange = validUntil < validFrom;
   const canSave =
     Boolean(delegatorId) && Boolean(substituteId) && !hasInvalidDateRange;
@@ -734,15 +737,18 @@ function DelegationDialog({
     setValidFrom(data.businessDate);
     setValidUntil(data.businessDate);
     setNote('');
+    setSaveError(null);
   };
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) reset();
     onOpenChange(nextOpen);
   };
 
-  const handleSave = async () => {
-    if (hasInvalidDateRange) return;
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (hasInvalidDateRange || isSaving) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
       const result = await createResponsibilityDelegation({
         responsibility,
@@ -753,10 +759,7 @@ function DelegationDialog({
         note,
       });
       if (!result.success) {
-        showBanner({
-          message: ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed,
-          variant: 'error',
-        });
+        setSaveError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.save_failed);
         return;
       }
       handleOpenChange(false);
@@ -764,7 +767,7 @@ function DelegationDialog({
       showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
     } catch (error) {
       console.error('Unexpected error creating responsibility delegation:', error);
-      showBanner({ message: ERROR_MESSAGES.save_failed, variant: 'error' });
+      setSaveError(ERROR_MESSAGES.save_failed);
     } finally {
       setIsSaving(false);
     }
@@ -780,38 +783,38 @@ function DelegationDialog({
             erhält sie nur im gewählten Zeitraum.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor={`${responsibility}-delegator`}>Verantwortliche Person</Label>
-            <Select value={delegatorId} onValueChange={setDelegatorId}>
-              <SelectTrigger id={`${responsibility}-delegator`}>
-                <SelectValue placeholder="Person wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {baseHolders.map((holder) => (
-                  <SelectItem key={holder.employeeRecordId} value={holder.employeeRecordId}>
-                    {personName(data.people, holder.employeeRecordId)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              id={`${responsibility}-delegator`}
+              options={baseHolders.map((holder) => ({
+                value: holder.employeeRecordId,
+                label: personName(data.people, holder.employeeRecordId),
+              }))}
+              value={delegatorId}
+              onChange={setDelegatorId}
+              placeholder="Person wählen"
+              searchPlaceholder="Person suchen …"
+              emptyMessage="Keine Person gefunden"
+            />
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor={`${responsibility}-substitute`}>Vertretung</Label>
-            <Select value={substituteId} onValueChange={setSubstituteId}>
-              <SelectTrigger id={`${responsibility}-substitute`}>
-                <SelectValue placeholder="Vertretung wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {data.people
-                  .filter((person) => person.employeeRecordId !== delegatorId)
-                  .map((person) => (
-                    <SelectItem key={person.employeeRecordId} value={person.employeeRecordId}>
-                      {formatResponsibilityPersonName(person)}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              id={`${responsibility}-substitute`}
+              options={data.people
+                .filter((person) => person.employeeRecordId !== delegatorId)
+                .map((person) => ({
+                  value: person.employeeRecordId,
+                  label: formatResponsibilityPersonName(person),
+                }))}
+              value={substituteId}
+              onChange={setSubstituteId}
+              placeholder="Vertretung wählen"
+              searchPlaceholder="Person suchen …"
+              emptyMessage="Keine Person gefunden"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor={`${responsibility}-valid-from`}>Gültig ab</Label>
@@ -853,25 +856,22 @@ function DelegationDialog({
               </p>
             </div>
           ) : null}
-          {hasInvalidDateRange ? (
-            <p role="alert" className="text-sm text-destructive sm:col-span-2">
-              Das Enddatum darf nicht vor dem Startdatum liegen.
-            </p>
-          ) : null}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-            Abbrechen
-          </Button>
-          <Button
-            type="button"
-            disabled={isSaving || !canSave}
-            onClick={() => void handleSave()}
-          >
-            {isSaving && <Loader2 className="animate-spin" />}
-            Vertretung speichern
-          </Button>
-        </DialogFooter>
+          <ErrorText className="sm:col-span-2">
+            {hasInvalidDateRange
+              ? 'Das Enddatum darf nicht vor dem Startdatum liegen.'
+              : null}
+          </ErrorText>
+          <ErrorText className="sm:col-span-2">{saveError}</ErrorText>
+          <DialogFooter className="sm:col-span-2">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={isSaving || !canSave}>
+              {isSaving && <Loader2 className="animate-spin" />}
+              Vertretung speichern
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

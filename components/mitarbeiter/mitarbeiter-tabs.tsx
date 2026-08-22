@@ -10,11 +10,13 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
+import { useBanner } from '@/components/ui/banner';
+import { ErrorText } from '@/components/ui/error-text';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
-import { RoleChangeBanner, type RoleChangeInfo } from './role-change-banner';
+import { getRoleLabel } from '@/lib/roles';
 import { QuickStats } from './quick-stats';
 import { PersonnelRecordsSection } from './personnel-records-section';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
@@ -111,10 +113,7 @@ export function MitarbeiterTabs({
     setPrevInviteCount(initialInvites.length);
   }, [initialInvites]);
 
-  // Track role change info for banner
-  const [roleChangeInfo, setRoleChangeInfo] = useState<RoleChangeInfo | null>(
-    null
-  );
+  const { showBanner } = useBanner();
 
   // Handle manual refresh
   const handleRefresh = useCallback(() => {
@@ -170,16 +169,15 @@ export function MitarbeiterTabs({
         )
       );
 
-      // Show the success banner
-      setRoleChangeInfo({ firstName, lastName, newRole });
+      const displayName =
+        `${firstName} ${lastName}`.trim() || 'Mitglied';
+      showBanner({
+        variant: 'success',
+        message: `Die Rolle von ${displayName} wurde erfolgreich zu ${getRoleLabel(newRole)} geändert.`,
+      });
     },
-    []
+    [showBanner]
   );
-
-  // Dismiss banner callback
-  const handleBannerDismiss = useCallback(() => {
-    setRoleChangeInfo(null);
-  }, []);
 
   // Count pending invites for the badge
   const pendingCount = invites.filter(
@@ -188,10 +186,6 @@ export function MitarbeiterTabs({
 
   return (
     <>
-      <RoleChangeBanner
-        roleChangeInfo={roleChangeInfo}
-        onDismiss={handleBannerDismiss}
-      />
       <QuickStats
         organizationId={organizationId}
         totalMembers={members.length}
@@ -267,9 +261,7 @@ export function MitarbeiterTabs({
               employees={qualificationWorkspace.employees}
             />
           ) : (
-            <p role="alert" className="text-sm text-destructive">
-              Die Teams konnten nicht geladen werden.
-            </p>
+            <ErrorText>Die Teams konnten nicht geladen werden.</ErrorText>
           )}
         </TabsContent>
         <TabsContent value="qualifications" className="mt-4">
@@ -286,9 +278,7 @@ export function MitarbeiterTabs({
               isAdmin={qualificationWorkspace.isAdmin}
             />
           ) : (
-            <p role="alert" className="text-sm text-destructive">
-              Die Qualifikationen konnten nicht geladen werden.
-            </p>
+            <ErrorText>Die Qualifikationen konnten nicht geladen werden.</ErrorText>
           )}
         </TabsContent>
       </Tabs>

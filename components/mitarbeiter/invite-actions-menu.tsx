@@ -21,6 +21,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { useBanner } from '@/components/ui/banner';
+import { ErrorText } from '@/components/ui/error-text';
 import { cancelInvite } from '@/lib/invites/cancel-action';
 import { deleteInvite } from '@/lib/invites/delete-action';
 
@@ -38,6 +40,7 @@ export function InviteActionsMenu({
   isExpired,
 }: InviteActionsMenuProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [isLoading, setIsLoading] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -61,6 +64,10 @@ export function InviteActionsMenu({
 
     if (result.success) {
       setShowCancelDialog(false);
+      showBanner({
+        variant: 'success',
+        message: 'Die Einladung wurde storniert.',
+      });
       router.refresh();
     } else {
       setError(result.error || 'Fehler beim Stornieren der Einladung.');
@@ -77,6 +84,10 @@ export function InviteActionsMenu({
 
     if (result.success) {
       setShowDeleteDialog(false);
+      showBanner({
+        variant: 'success',
+        message: 'Die Einladung wurde gelöscht.',
+      });
       router.refresh();
     } else {
       setError(result.error || 'Fehler beim Löschen der Einladung.');
@@ -131,7 +142,13 @@ export function InviteActionsMenu({
       </DropdownMenu>
 
       {/* Cancel Confirmation Dialog */}
-      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <AlertDialog
+        open={showCancelDialog}
+        onOpenChange={(open) => {
+          setShowCancelDialog(open);
+          if (!open) setError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Einladung stornieren?</AlertDialogTitle>
@@ -142,13 +159,18 @@ export function InviteActionsMenu({
               verwendet werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLoading}>
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleCancel}
+              // Keep the dialog open until the server confirms; a failure
+              // must stay visible at the point of action.
+              onClick={(event) => {
+                event.preventDefault();
+                void handleCancel();
+              }}
               disabled={isLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -166,7 +188,13 @@ export function InviteActionsMenu({
       </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) setError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Einladung löschen?</AlertDialogTitle>
@@ -177,13 +205,16 @@ export function InviteActionsMenu({
               werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLoading}>
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDelete();
+              }}
               disabled={isLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

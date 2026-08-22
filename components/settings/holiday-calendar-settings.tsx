@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 
-import { useSettingsBanner } from '@/components/settings/settings-banner-provider'
+import { useBanner } from '@/components/ui/banner'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -17,13 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   addClosureDay,
   removeClosureDay,
@@ -78,7 +72,7 @@ export function HolidayCalendarSettings({
   role,
 }: HolidayCalendarSettingsProps) {
   const router = useRouter()
-  const { showBanner } = useSettingsBanner()
+  const { showBanner } = useBanner()
 
   const canEditRegion = role === 'admin'
   const canEditClosureDays = role === 'admin' || role === 'buero'
@@ -192,25 +186,22 @@ export function HolidayCalendarSettings({
         <CardContent className="space-y-3 pb-6">
           <div className="grid gap-2 sm:max-w-sm">
             <Label htmlFor="holiday-region">Bundesland</Label>
-            <Select
+            <SearchableSelect
+              id="holiday-region"
               disabled={!canEditRegion || isSavingRegion}
+              options={[
+                { value: NO_REGION_VALUE, label: 'Kein Feiertagskalender' },
+                ...HOLIDAY_REGIONS.map((region) => ({
+                  value: region,
+                  label: HOLIDAY_REGION_LABELS[region],
+                })),
+              ]}
               value={selectedRegion}
-              onValueChange={setSelectedRegion}
-            >
-              <SelectTrigger id="holiday-region">
-                <SelectValue placeholder="Bitte wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_REGION_VALUE}>
-                  Kein Feiertagskalender
-                </SelectItem>
-                {HOLIDAY_REGIONS.map((region) => (
-                  <SelectItem key={region} value={region}>
-                    {HOLIDAY_REGION_LABELS[region]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={setSelectedRegion}
+              placeholder="Bitte wählen"
+              searchPlaceholder="Bundesland suchen …"
+              emptyMessage="Kein Bundesland gefunden"
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht

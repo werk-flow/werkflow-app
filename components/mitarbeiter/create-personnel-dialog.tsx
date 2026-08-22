@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, UserRoundPlus } from 'lucide-react';
 
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,6 +38,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export function CreatePersonnelDialog() {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [open, setOpen] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -108,6 +112,10 @@ export function CreatePersonnelDialog() {
     if (result.success) {
       setOpen(false);
       resetForm();
+      showBanner({
+        variant: 'success',
+        message: 'Die Personalakte wurde angelegt.',
+      });
       router.push(`/mitarbeiter/${result.recordId}`);
     } else {
       setError(
@@ -136,8 +144,12 @@ export function CreatePersonnelDialog() {
             kann später über eine Einladung verknüpft werden.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="grid gap-4 py-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <DialogBody className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="personnel-first-name">Vorname</Label>
@@ -193,12 +205,8 @@ export function CreatePersonnelDialog() {
                 disabled={isSaving}
               />
             </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
-          </div>
+            <ErrorText>{error}</ErrorText>
+          </DialogBody>
           <DialogFooter>
             <Button
               type="submit"

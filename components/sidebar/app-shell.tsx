@@ -27,6 +27,9 @@ import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-pag
 import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
 import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
 import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-skeleton';
+import { AnfragenPageSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
+import { QualifikationenPageSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
+import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   AttentionCountProvider,
@@ -451,6 +454,13 @@ function OrgSwitchOverlay() {
     if (pathname.startsWith('/kunden')) return <KundenPageSkeleton />;
     if (pathname.startsWith('/auftraege')) return <AuftraegePageSkeleton />;
     if (pathname.startsWith('/dokumente')) return <DokumentePageSkeleton />;
+    if (pathname.startsWith('/anfragen')) return <AnfragenPageSkeleton />;
+    if (pathname.startsWith('/qualifikationen')) {
+      return <QualifikationenPageSkeleton />;
+    }
+    if (pathname.startsWith('/einstellungen')) {
+      return <EinstellungenPageSkeleton />;
+    }
     if (pathname === '/inventar' || pathname.startsWith('/inventar/')) {
       return <InventarPageSkeleton />;
     }

@@ -17,6 +17,12 @@ interface SearchableSelectBaseProps {
   searchPlaceholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
+  /**
+   * Accessible name for the trigger. Without it the trigger is announced by
+   * its visible value/placeholder — set it when several identical selects
+   * render on one page (e.g. one per card) or a Label cannot target the id.
+   */
+  ariaLabel?: string;
   action?: {
     label: string;
     icon?: React.ReactNode;
@@ -157,6 +163,7 @@ export function SearchableSelect({
   searchPlaceholder = 'Suchen...',
   emptyMessage = 'Keine Ergebnisse',
   disabled = false,
+  ariaLabel,
   allowNone = false,
   noneLabel = 'Keine Auswahl',
   action,
@@ -213,6 +220,7 @@ export function SearchableSelect({
           ref={triggerRef}
           type="button"
           role="combobox"
+          aria-label={ariaLabel}
           aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"
@@ -392,6 +400,7 @@ export function SearchableMultiSelect({
   searchPlaceholder = 'Suchen...',
   emptyMessage = 'Keine Ergebnisse',
   disabled = false,
+  ariaLabel,
   action,
   renderOption,
   allowNone = false,
@@ -458,6 +467,7 @@ export function SearchableMultiSelect({
           ref={triggerRef}
           type="button"
           role="combobox"
+          aria-label={ariaLabel}
           aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"

@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import { SettingsBannerProvider } from '@/components/settings/settings-banner-provider';
 import {
   Select,
   SelectContent,
@@ -47,91 +46,89 @@ export function SettingsShell({ children }: SettingsShellProps) {
     isOrganizationSection && currentSection.adminOnlyWrites && !isAdmin;
 
   return (
-    <SettingsBannerProvider>
-      <div className="flex h-full flex-col overflow-hidden bg-background">
-        <header className="sticky top-0 z-10 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="flex flex-col gap-4 px-4 py-4 sm:px-6">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">
-                Einstellungen
-              </p>
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <h1 className="text-2xl font-semibold tracking-tight">
-                    {currentSection?.label ?? 'Einstellungen'}
-                  </h1>
-                  <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-                    {currentSection?.description}
-                  </p>
-                </div>
-
-                {currentSection ? (
-                  <div className="text-sm text-muted-foreground lg:text-right">
-                    <p>
-                      {currentSection.scope === 'user'
-                        ? 'Persönliche Einstellungen'
-                        : `Gilt für ${activeOrg?.name ?? 'die aktive Organisation'}`}
-                    </p>
-                    {isReadOnlyForCurrentSection ? (
-                      <p className="text-amber-600 dark:text-amber-400">
-                        Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
+    <div className="flex h-full flex-col overflow-hidden bg-background">
+      <header className="sticky top-0 z-10 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="flex flex-col gap-4 px-4 py-4 sm:px-6">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-muted-foreground">
+              Einstellungen
+            </p>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {currentSection?.label ?? 'Einstellungen'}
+                </h1>
+                <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
+                  {currentSection?.description}
+                </p>
               </div>
-            </div>
 
-            <div className="md:hidden">
-              <Select
-                value={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
-                onValueChange={(value) => router.push(getSettingsHref(value))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Bereich wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {accountSections.map((section) => (
-                    <SelectItem key={section.slug} value={section.slug}>
-                      {section.label}
-                    </SelectItem>
-                  ))}
-                  {organizationSections.map((section) => (
-                    <SelectItem key={section.slug} value={section.slug}>
-                      {section.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {currentSection ? (
+                <div className="text-sm text-muted-foreground lg:text-right">
+                  <p>
+                    {currentSection.scope === 'user'
+                      ? 'Persönliche Einstellungen'
+                      : `Gilt für ${activeOrg?.name ?? 'die aktive Organisation'}`}
+                  </p>
+                  {isReadOnlyForCurrentSection ? (
+                    <p className="text-amber-600 dark:text-amber-400">
+                      Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </div>
-        </header>
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <aside className="hidden w-72 shrink-0 border-r bg-card/40 md:block">
-            <div className="h-full overflow-y-auto p-4">
-              <SettingsNavGroup
-                label={GROUP_LABELS.account}
-                currentSlug={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
-                slugs={accountSections.map((section) => section.slug)}
-              />
-              <Separator className="my-4" />
-              <SettingsNavGroup
-                label={GROUP_LABELS.organization}
-                currentSlug={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
-                slugs={organizationSections.map((section) => section.slug)}
-              />
-            </div>
-          </aside>
+          <div className="md:hidden">
+            <Select
+              value={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
+              onValueChange={(value) => router.push(getSettingsHref(value))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Bereich wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                {accountSections.map((section) => (
+                  <SelectItem key={section.slug} value={section.slug}>
+                    {section.label}
+                  </SelectItem>
+                ))}
+                {organizationSections.map((section) => (
+                  <SelectItem key={section.slug} value={section.slug}>
+                    {section.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6">
-              {children}
-            </div>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside className="hidden w-72 shrink-0 border-r bg-card/40 md:block">
+          <div className="h-full overflow-y-auto p-4">
+            <SettingsNavGroup
+              label={GROUP_LABELS.account}
+              currentSlug={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
+              slugs={accountSections.map((section) => section.slug)}
+            />
+            <Separator className="my-4" />
+            <SettingsNavGroup
+              label={GROUP_LABELS.organization}
+              currentSlug={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
+              slugs={organizationSections.map((section) => section.slug)}
+            />
+          </div>
+        </aside>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6">
+            {children}
           </div>
         </div>
       </div>
-    </SettingsBannerProvider>
+    </div>
   );
 }
 
