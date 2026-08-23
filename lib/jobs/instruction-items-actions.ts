@@ -545,28 +545,24 @@ export async function toggleJobInstructionItemCompletion(
   if (!context.success) return context;
 
   const nextCompleted = input.isCompleted ?? !context.item.is_completed;
-  const timestamp = new Date().toISOString();
+  const { error } = await context.admin.rpc('set_instruction_item_completion', {
+    p_organization_id: context.orgId,
+    p_actor_id: context.userId,
+    p_instruction_item_id: context.item.id,
+    p_expected_version: context.item.completion_version,
+    p_is_completed: nextCompleted,
+  });
 
-  const { data: row, error } = await context.admin
-    .from('job_instruction_items')
-    .update({
-      is_completed: nextCompleted,
-      last_status_changed_by: context.userId,
-      last_status_changed_at: timestamp,
-      updated_at: timestamp,
-    })
-    .eq('id', context.item.id)
-    .select('*')
-    .single();
-
-  if (error || !row) {
+  if (error) {
     console.error('Failed to toggle instruction item completion:', error);
-    return { success: false, error: 'toggle_failed' };
+    const known = ['instruction_predecessor_incomplete', 'instruction_item_stale_version']
+      .find((code) => error.message.includes(code));
+    return { success: false, error: known ?? 'toggle_failed' };
   }
 
   revalidateInstructionItemPaths(context.orgId);
 
-  const item = await getHydratedInstructionItemById(context.admin, row.id);
+  const item = await getHydratedInstructionItemById(context.admin, context.item.id);
   if (!item) {
     return { success: false, error: 'item_not_found' };
   }

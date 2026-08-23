@@ -1,6 +1,7 @@
 import type { Database } from '@/lib/supabase/database.types';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { ClientContact, ClientSite } from '@/lib/clients/types';
+import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 
 // ============================================
 // Database Row / Insert / Update Aliases
@@ -40,6 +41,7 @@ export type ClientType = Database['public']['Enums']['client_type'];
 export type JobStatus = Database['public']['Enums']['job_status'];
 export type JobPriority = Database['public']['Enums']['job_priority'];
 export type ProjectStatus = Database['public']['Enums']['project_status'];
+export type WorkExecutionState = Database['public']['Enums']['work_execution_state'];
 export type OrgRole = Database['public']['Enums']['org_role'];
 
 // ============================================
@@ -68,6 +70,9 @@ export type Project = {
   description: string | null;
   projectNumber: string | null;
   statusOverride: ProjectStatus | null;
+  executionStateOverride: WorkExecutionState | null;
+  executionVersion: number;
+  executionOverrideReason: string | null;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   siteId: string | null;
@@ -86,6 +91,8 @@ export type Job = {
   title: string;
   description: string | null;
   status: JobStatus;
+  executionState: WorkExecutionState | null;
+  executionVersion: number;
   priority: JobPriority;
   plannedDate: string | null;
   plannedTime: string | null;
@@ -130,6 +137,7 @@ export type JobInstructionItem = {
   content: string;
   sortOrder: number;
   isCompleted: boolean;
+  completionVersion: number;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -205,6 +213,7 @@ export type CalendarJob = {
   endDateExclusive?: string | null;
   isException?: boolean;
   version?: number;
+  executionVersion?: number;
   /** Planning occurrence status; skipped/cancelled render muted + read-only. */
   occurrenceStatus?: 'scheduled' | 'skipped' | 'cancelled';
   assignedEmployeeRecordIds?: string[];
@@ -356,6 +365,9 @@ export function toProject(row: ProjectRow): Project {
     description: row.description,
     projectNumber: row.project_number,
     statusOverride: row.status_override,
+    executionStateOverride: row.execution_state_override,
+    executionVersion: row.execution_version,
+    executionOverrideReason: row.execution_override_reason,
     plannedStartDate: row.planned_start_date,
     plannedEndDate: row.planned_end_date,
     siteId: row.site_id,
@@ -392,6 +404,8 @@ export function toJob(row: JobRow): Job {
     title: row.title,
     description: row.description,
     status: row.status,
+    executionState: row.execution_state,
+    executionVersion: row.execution_version,
     priority: row.priority,
     plannedDate: row.planned_date,
     plannedTime: normalizeJobPlannedTime(row.planned_time),
@@ -454,6 +468,7 @@ export function toJobInstructionItem(
     content: row.content,
     sortOrder: row.sort_order,
     isCompleted: row.is_completed,
+    completionVersion: row.completion_version,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -499,13 +514,11 @@ export type UnifiedListEntry =
   | { type: 'standalone-job'; job: Job }
   | { type: 'project'; project: ProjectWithDetails; childJobs: Job[] };
 
-export type UnifiedStatus = 'offen' | 'in_bearbeitung' | 'abgeschlossen' | 'geparkt';
+export type UnifiedStatus = WorkExecutionState | 'parked';
 
 export const UNIFIED_STATUS_LABELS: Record<UnifiedStatus, string> = {
-  offen: 'Offen',
-  in_bearbeitung: 'In Bearbeitung',
-  abgeschlossen: 'Abgeschlossen',
-  geparkt: 'Geparkt',
+  ...WORK_EXECUTION_LABELS,
+  parked: 'Geparkt',
 };
 
 // ============================================
@@ -646,12 +659,14 @@ export function calculateTrafficLightFromCounts(
 /**
  * Map a Job's status to the abstract unified status used for filtering.
  */
-export function getJobUnifiedStatus(job: Pick<Job, 'status'>): UnifiedStatus {
+export function getJobUnifiedStatus(job: Pick<Job, 'status' | 'executionState'>): UnifiedStatus {
+  if (job.status === 'geparkt') return 'parked';
+  if (job.executionState) return job.executionState;
   switch (job.status) {
-    case 'nicht_bearbeitet': return 'offen';
-    case 'in_bearbeitung': return 'in_bearbeitung';
-    case 'fertig': return 'abgeschlossen';
-    case 'geparkt': return 'geparkt';
+    case 'nicht_bearbeitet': return 'not_started';
+    case 'in_bearbeitung': return 'in_progress';
+    case 'fertig': return 'execution_complete';
+    default: throw new Error(`Unexpected job status: ${String(job.status)}`);
   }
 }
 
@@ -659,12 +674,15 @@ export function getJobUnifiedStatus(job: Pick<Job, 'status'>): UnifiedStatus {
  * Map a ProjectWithDetails' effective status to the abstract unified status.
  */
 export function getProjectUnifiedStatus(project: ProjectWithDetails): UnifiedStatus {
+  if (project.statusOverride === 'geparkt') return 'parked';
+  if (project.executionStateOverride) return project.executionStateOverride;
   const effective = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
   switch (effective) {
-    case 'nicht_begonnen': return 'offen';
-    case 'in_bearbeitung': return 'in_bearbeitung';
-    case 'abgeschlossen': return 'abgeschlossen';
-    case 'geparkt': return 'geparkt';
+    case 'nicht_begonnen': return 'not_started';
+    case 'in_bearbeitung': return 'in_progress';
+    case 'abgeschlossen': return 'execution_complete';
+    case 'geparkt': return 'parked';
+    default: throw new Error(`Unexpected project status: ${String(effective)}`);
   }
 }
 
@@ -751,23 +769,13 @@ export function buildUnifiedList(
 // ============================================
 
 function isArchivedEntry(entry: UnifiedListEntry): boolean {
-  if (entry.type === 'standalone-job') {
-    return entry.job.status === 'fertig';
-  }
-  const effective =
-    entry.project.statusOverride ??
-    getEffectiveProjectStatusFromCounts(entry.project);
-  return effective === 'abgeschlossen';
+  return ['execution_complete', 'handed_over', 'cancelled'].includes(
+    getEntryUnifiedStatus(entry)
+  );
 }
 
 function isParkedEntry(entry: UnifiedListEntry): boolean {
-  if (entry.type === 'standalone-job') {
-    return entry.job.status === 'geparkt';
-  }
-  const effective =
-    entry.project.statusOverride ??
-    getEffectiveProjectStatusFromCounts(entry.project);
-  return effective === 'geparkt';
+  return getEntryUnifiedStatus(entry) === 'parked';
 }
 
 export function splitActiveAndArchived(

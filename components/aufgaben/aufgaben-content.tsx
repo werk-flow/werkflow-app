@@ -188,7 +188,7 @@ export function AufgabenContent() {
   useRealtimeEvent('planning_dispatches', scheduleRefetch);
   useRealtimeEvent('planning_dispatch_recipients', scheduleRefetch);
   useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefetch);
-  useRealtimeEvent('job_parking_contexts', scheduleRefetch);
+  useRealtimeEvent('work_blockers', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
@@ -275,7 +275,7 @@ export function AufgabenContent() {
     (task) => task.sourceType === 'dispatch_challenge_open'
   );
   const parkingReviewTasks = overview.tasks.filter(
-    (task) => task.sourceType === 'job_parking_review'
+    (task) => task.sourceType === 'work_blocker_review'
   );
   const unreadCount = overview.notifications.filter(
     (notification) => notification.unread
@@ -331,7 +331,7 @@ export function AufgabenContent() {
         {parkingReviewTasks.length > 0 && (
           <TaskGroup
             icon={<ParkingSquare className="size-4" />}
-            title="Parkplatz-Wiedervorlagen"
+            title="Wiedervorlagen"
             testId="attention-parking-review-tasks"
           >
             {parkingReviewTasks.map((task) => (
@@ -658,16 +658,16 @@ function TaskRow({ task }: { task: AttentionTask }) {
     );
   }
 
-  if (task.sourceType === 'job_parking_review') {
+  if (task.sourceType === 'work_blocker_review') {
     return (
       <TaskLink
-        href={task.jobNumber ? `/auftraege/${task.jobNumber}` : '/kalender'}
-        ariaLabel={`Wiedervorlage für geparkten Auftrag ${task.jobTitle} öffnen`}
+        href={task.targetHref}
+        ariaLabel={`Wiedervorlage für ${task.targetLabel} öffnen`}
         sourceId={task.sourceId}
       >
-        <p className="truncate text-sm font-medium">{task.jobTitle}</p>
+        <p className="truncate text-sm font-medium">{task.targetLabel}</p>
         <p className="text-xs text-muted-foreground tabular-nums">
-          Wiedervorlage {formatDate(task.nextReviewDate)}
+          {task.blockerKind === 'parking' ? 'Parkplatz' : 'Blocker'} · Wiedervorlage {formatDate(task.nextReviewDate)}
           {task.responsibleName ? ` · Zuständig: ${task.responsibleName}` : ''}
         </p>
       </TaskLink>

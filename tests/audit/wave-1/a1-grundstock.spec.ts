@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { resolve } from 'node:path';
 
 import { expect, test } from '../../golden/support/fixtures';
@@ -44,6 +44,23 @@ import { confirmTestUserEmail } from '../../golden/support/seed';
 
 test.describe.configure({ mode: 'serial' });
 
+async function toggleInstructionItem(
+  page: Page,
+  button: Locator,
+  isCompleted: boolean
+): Promise<void> {
+  const mutationFinished = page.waitForResponse((response) => {
+    const body = response.request().postData();
+    return (
+      response.request().method() === 'POST' &&
+      body?.includes('"itemId"') === true &&
+      body.includes(`"isCompleted":${isCompleted}`)
+    );
+  });
+  await button.click();
+  await mutationFinished;
+}
+
 function berlinDateAtOffset(offsetDays: number): string {
   const formatter = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Europe/Berlin',
@@ -65,16 +82,32 @@ function detailActionsButton(page: Page) {
 }
 
 async function setJobStatus(page: Page, status: string): Promise<void> {
-  const details = page.getByRole('heading', { name: 'Details' }).locator('..');
-  const statusRow = details.getByText('Status', { exact: true }).locator('..');
-  await statusRow.getByRole('button', { name: 'Status bearbeiten' }).click();
-  await statusRow.getByRole('combobox').click();
-  await page.getByRole('option', { name: status, exact: true }).click();
-  await statusRow.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(statusRow.getByRole('button', { name: 'Status bearbeiten' })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(statusRow).toContainText(status);
+  const card = page.getByTestId('work-lifecycle-card');
+  const transition = async (label: string) => {
+    await card.getByRole('button', { name: label, exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  };
+  if (status === 'In Bearbeitung') {
+    await transition('In Ausführung');
+  } else if (status === 'Fertig') {
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    const startButton = card.getByRole('button', { name: 'In Ausführung', exact: true });
+    const canStart = await startButton
+      .waitFor({ state: 'visible', timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (canStart) {
+      await transition('In Ausführung');
+    }
+    await transition('Ausführung abgeschlossen');
+  } else {
+    throw new Error(`A1 lifecycle helper does not support status "${status}".`);
+  }
+  await expect(
+    page.getByRole('heading', { name: 'Details' }).locator('..')
+  ).toContainText(status);
 }
 
 async function confirmPlanningWarning(
@@ -542,12 +575,14 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await createDialog.locator('#job-title').fill(jobTitle);
     await createDialog.locator('#job-description').fill('Vollständige Auftragsbeschreibung');
     await createDialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-    await adminPage.getByPlaceholder('Kunde suchen...').fill(renamedCustomerName);
-    await adminPage
+    const customerSearch = adminPage.getByPlaceholder('Kunde suchen...');
+    await customerSearch.fill(renamedCustomerName);
+    const customerOption = adminPage
       .getByRole('listbox')
       .getByRole('button')
-      .filter({ hasText: renamedCustomerName })
-      .click();
+      .filter({ hasText: renamedCustomerName });
+    await expect(customerOption).toBeVisible({ timeout: 10_000 });
+    await customerOption.click();
     await createDialog.locator('#job-priority').click();
     await adminPage.getByRole('option', { name: 'Hoch', exact: true }).click();
     await typeIntoDatePicker(createDialog, 'Datum', plannedDate.split('-').reverse().join(''));
@@ -601,17 +636,23 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(visibleText(adminPage, 'In Bearbeitung')).toBeVisible();
     await expect(adminPage.getByTitle(/Im Zeitplan|Leicht verzögert|Stark verzögert/).first()).toBeVisible();
 
-    const statusRow = adminPage.getByText('Status', { exact: true }).locator('..');
-    await statusRow.getByRole('button', { name: 'Status bearbeiten' }).click();
-    await statusRow.getByRole('combobox').click();
-    await adminPage.getByRole('option', { name: 'Abgeschlossen', exact: true }).click();
-    await statusRow.getByRole('button', { name: 'Speichern', exact: true }).click();
-    await expect(statusRow).toContainText('Abgeschlossen');
-    await statusRow.getByRole('button', { name: 'Status bearbeiten' }).click();
-    await statusRow.getByRole('combobox').click();
-    await adminPage.getByRole('option', { name: 'Automatisch (aus Aufträgen)' }).click();
-    await statusRow.getByRole('button', { name: 'Speichern', exact: true }).click();
-    await expect(statusRow).toContainText('In Bearbeitung');
+    const projectLifecycle = adminPage.getByTestId('work-lifecycle-card');
+    await projectLifecycle.getByRole('button', { name: 'Storniert', exact: true }).click();
+    let lifecycleDialog = adminPage.getByRole('dialog');
+    await lifecycleDialog
+      .locator('#work-transition-reason')
+      .fill('Projektstatus im Grundstock bewusst übersteuert.');
+    await lifecycleDialog.getByRole('button', { name: 'Änderung speichern' }).click();
+    await expect(lifecycleDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(projectLifecycle.getByText('Storniert', { exact: true })).toBeVisible();
+    await projectLifecycle.getByRole('button', { name: 'Automatisch ableiten' }).click();
+    lifecycleDialog = adminPage.getByRole('dialog');
+    await lifecycleDialog
+      .locator('#work-reason')
+      .fill('Projekt folgt wieder den Aufträgen.');
+    await lifecycleDialog.getByRole('button', { name: 'Automatisch ableiten' }).click();
+    await expect(lifecycleDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(projectLifecycle.getByText('In Ausführung', { exact: true })).toBeVisible();
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${jobNumber}`);
     await setJobStatus(adminPage, 'Fertig');
@@ -712,7 +753,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(adminPage.locator('tbody tr').filter({ hasText: jobNumber })).toHaveCount(0);
   });
 
-  test('A1-15/A1-16: Entplanen parkt und Projektparken bewahrt fertige Kinder', async ({
+  test('A1-15/A1-16: Entplanen bleibt Planung und Projektparken bewahrt fertige Kinder', async ({
     adminPage,
     world,
   }) => {
@@ -735,16 +776,23 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       projectNumber,
       plannedDateDigits,
     });
-    await adminPage.goto(`/auftraege/${finishedNumber}`);
+    await adminPage.goto(
+      `/auftraege/projekt/${projectNumber}/${finishedNumber}`
+    );
     await setJobStatus(adminPage, 'Fertig');
     await expect(visibleText(adminPage, 'Fertig')).toBeVisible();
 
-    await adminPage.goto(`/auftraege/${unfinishedNumber}`);
+    await adminPage.goto(
+      `/auftraege/projekt/${projectNumber}/${unfinishedNumber}`
+    );
     await adminPage.getByRole('button', { name: 'Geplantes Datum bearbeiten' }).click();
     await adminPage.getByRole('button', { name: 'Leeren' }).click();
     await adminPage.getByRole('button', { name: 'Speichern', exact: true }).click();
     await adminPage.getByRole('alertdialog').getByRole('button', { name: 'Datum entfernen' }).click();
-    await expect(visibleText(adminPage, 'Geparkt')).toBeVisible({ timeout: 20_000 });
+    await expect(
+      adminPage.getByTestId('work-lifecycle-card').getByText('Nicht geplant', { exact: true })
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(visibleText(adminPage, 'Geparkt')).toHaveCount(0);
     await adminPage.getByRole('button', { name: 'Geplantes Datum bearbeiten' }).click();
     await typeIntoDatePicker(adminPage.locator('body'), 'Datum', plannedDateDigits);
     await adminPage.getByRole('button', { name: 'Speichern', exact: true }).click();
@@ -752,20 +800,34 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     await expect(adminPage.getByText(/50\s*%/).filter({ visible: true }).first()).toBeVisible();
-    await detailActionsButton(adminPage).click();
-    const overrideTrigger = adminPage.getByRole('menuitem', {
-      name: 'Status überschreiben',
-    });
-    await overrideTrigger.focus();
-    await overrideTrigger.press('ArrowRight');
-    const parkedOption = adminPage.getByRole('menuitem', { name: 'Geparkt', exact: true });
-    await expect(parkedOption).toBeVisible();
-    await parkedOption.focus();
-    await parkedOption.press('Enter');
+    const projectLifecycle = adminPage.getByTestId('work-lifecycle-card');
+    await projectLifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
+    const parkDialog = adminPage.getByRole('dialog');
+    await parkDialog.locator('#work-blocker-reason').click();
+    await adminPage.getByRole('option', { name: 'Kapazität', exact: true }).click();
+    await parkDialog
+      .locator('#work-blocker-details')
+      .fill('Projekt wird bis zur neuen Kapazitätsplanung geparkt.');
+    await selectFromSearchable(
+      adminPage,
+      parkDialog.locator('#work-blocker-owner'),
+      world.users.admin.firstName
+    );
+    await typeIntoDatePicker(
+      parkDialog,
+      'Wiedervorlage',
+      berlinDateAtOffset(7).split('-').reverse().join('')
+    );
+    await parkDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(parkDialog).toHaveCount(0, { timeout: 20_000 });
     await expect(visibleText(adminPage, 'Geparkt')).toBeVisible({ timeout: 20_000 });
-    await adminPage.goto(`/auftraege/${unfinishedNumber}`);
+    await adminPage.goto(
+      `/auftraege/projekt/${projectNumber}/${unfinishedNumber}`
+    );
     await expect(visibleText(adminPage, 'Geparkt')).toBeVisible();
-    await adminPage.goto(`/auftraege/${finishedNumber}`);
+    await adminPage.goto(
+      `/auftraege/projekt/${projectNumber}/${finishedNumber}`
+    );
     await expect(visibleText(adminPage, 'Fertig')).toBeVisible();
     await expect(visibleText(adminPage, 'Abschlussdatum')).toBeVisible();
   });
@@ -810,16 +872,12 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(secondInstruction.locator('xpath=../../..')).not.toHaveClass(/opacity-80/, {
       timeout: 15_000,
     });
-    const reorderFinished = adminPage.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        new URL(response.url()).pathname === `/auftraege/${checklistJobNumber}`
-    );
-    await secondInstruction
+    const moveSecondInstructionUp = secondInstruction
       .locator('xpath=../../..')
-      .getByRole('button', { name: 'Punkt nach oben verschieben' })
-      .click();
-    await reorderFinished;
+      .getByRole('button', { name: 'Punkt nach oben verschieben' });
+    await moveSecondInstructionUp.click();
+    await expect(moveSecondInstructionUp).toBeDisabled();
+    await expect(moveSecondInstructionUp).toBeEnabled({ timeout: 20_000 });
     await adminPage.reload();
     await expect(
       adminPage.getByRole('textbox', { name: 'Arbeitsanweisungs-Punkt bearbeiten' }).first()
@@ -829,14 +887,40 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     ).toHaveValue('Anlage druckprüfen');
 
     await employeePage.goto(`/auftraege/${checklistJobNumber}`);
-    await employeePage
+    const ventileInstruction = employeePage
       .getByText('Ventile beschriften', { exact: true })
-      .locator('xpath=../../..')
-      .getByRole('button', { name: 'Punkt als erledigt markieren' })
-      .click();
+      .locator('xpath=../../..');
+    await toggleInstructionItem(
+      employeePage,
+      ventileInstruction.getByRole('button', { name: 'Punkt als erledigt markieren' }),
+      true
+    );
     await expect(visibleText(employeePage, 'Zuletzt erledigt von Emil')).toBeVisible();
-    await employeePage.getByRole('button', { name: 'Punkt als offen markieren' }).click();
+    await toggleInstructionItem(
+      employeePage,
+      ventileInstruction.getByRole('button', { name: 'Punkt als offen markieren' }),
+      false
+    );
     await expect(visibleText(employeePage, 'Zuletzt offen von Emil')).toBeVisible();
+    await toggleInstructionItem(
+      employeePage,
+      ventileInstruction.getByRole('button', { name: 'Punkt als erledigt markieren' }),
+      true
+    );
+    await expect(
+      ventileInstruction.getByRole('button', { name: 'Punkt als offen markieren' })
+    ).toBeVisible({ timeout: 20_000 });
+    const pressureTestInstruction = employeePage
+      .getByText('Anlage druckprüfen', { exact: true })
+      .locator('xpath=../../..');
+    await toggleInstructionItem(
+      employeePage,
+      pressureTestInstruction.getByRole('button', { name: 'Punkt als erledigt markieren' }),
+      true
+    );
+    await expect(
+      pressureTestInstruction.getByRole('button', { name: 'Punkt als offen markieren' })
+    ).toBeVisible({ timeout: 20_000 });
 
     await adminPage.reload();
     await setJobStatus(adminPage, 'Fertig');
@@ -874,10 +958,32 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       assignEmployeeName: 'Emil',
       plannedDateDigits: berlinDateAtOffset(21).split('-').reverse().join(''),
     });
+    const parkingJobNumber = `A1-PARK-LIST-${world.runId}`;
     await createJob(adminPage, {
-      jobNumber: `A1-PARK-LIST-${world.runId}`,
+      jobNumber: parkingJobNumber,
       title: `A1 Parkplatzliste ${world.runId}`,
     });
+    await adminPage.goto(`/auftraege/${parkingJobNumber}`);
+    const parkingLifecycle = adminPage.getByTestId('work-lifecycle-card');
+    await parkingLifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
+    const parkingDialog = adminPage.getByRole('dialog');
+    await parkingDialog.locator('#work-blocker-reason').click();
+    await adminPage.getByRole('option', { name: 'Kapazität', exact: true }).click();
+    await parkingDialog
+      .locator('#work-blocker-details')
+      .fill('Auftrag bleibt bis zur nächsten Kapazitätsprüfung im Parkplatz.');
+    await selectFromSearchable(
+      adminPage,
+      parkingDialog.locator('#work-blocker-owner'),
+      world.users.admin.firstName
+    );
+    await typeIntoDatePicker(
+      parkingDialog,
+      'Wiedervorlage',
+      berlinDateAtOffset(7).split('-').reverse().join('')
+    );
+    await parkingDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
     const archiveJobNumber = `A1-ARCHIV-${world.runId}`;
     await createJob(adminPage, {
       jobNumber: archiveJobNumber,
@@ -1164,13 +1270,30 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       { steps: 15 }
     );
     await adminPage.mouse.up();
-    await expect(visibleText(adminPage, 'Auftrag wurde geparkt.')).toBeVisible({ timeout: 20_000 });
     const parkingContextDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Parkplatz-Kontext' }),
     });
     await expect(parkingContextDialog).toBeVisible({ timeout: 20_000 });
-    await parkingContextDialog.getByRole('button', { name: 'Ohne Kontext lassen' }).click();
+    await parkingContextDialog.locator('#parking-reason').click();
+    await adminPage.getByRole('option', { name: 'Kapazität', exact: true }).click();
+    await parkingContextDialog
+      .locator('#parking-note')
+      .fill('A1 Auftrag wird bis zur neuen Kapazitätsplanung geparkt.');
+    await selectFromSearchable(
+      adminPage,
+      parkingContextDialog.locator('#parking-responsible'),
+      world.users.admin.firstName
+    );
+    await typeIntoDatePicker(
+      parkingContextDialog,
+      'Wiedervorlagedatum',
+      berlinDateAtOffset(7).split('-').reverse().join('')
+    );
+    await parkingContextDialog
+      .getByRole('button', { name: 'Kontext speichern' })
+      .click();
     await expect(parkingContextDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(visibleText(adminPage, 'Auftrag wurde geparkt.')).toBeVisible({ timeout: 20_000 });
     await parkplatzButton.click();
     const parkedPill = adminPage.locator('[data-parkplatz-pill]').filter({ hasText: title });
     await expect(parkedPill).toBeVisible();
@@ -1904,7 +2027,12 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       mimeType: 'text/plain',
       buffer: Buffer.from('A1 document Realtime'),
     });
-    await expect(bueroPage.getByRole('dialog')).toHaveCount(0, { timeout: 60_000 });
+    const uploadDialog = bueroPage.getByRole('dialog').filter({
+      has: bueroPage.getByRole('heading', { name: 'Dateien hochladen' }),
+    });
+    await expect(uploadDialog).toBeVisible({ timeout: 15_000 });
+    await expect(uploadDialog).toHaveCount(0, { timeout: 60_000 });
+    await expect(visibleText(bueroPage, liveFileName)).toBeVisible({ timeout: 15_000 });
     // The admin channel can still be subscribing when the INSERT fires right
     // after navigation (missed-delivery class); the sanctioned one-reload
     // fallback keeps the persisted-row assertion strict while GG-00's
@@ -2120,7 +2248,9 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     expect((await getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId)).quantityOnHand).toBe(world.inventory.initialQuantity);
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    const plannedLine = employeePage.locator('div.rounded-md.border').filter({ hasText: world.inventory.itemName }).first();
+    const plannedLine = employeePage
+      .getByText(world.inventory.itemName, { exact: true })
+      .locator('xpath=ancestor::div[contains(@class, "rounded-md") and contains(@class, "border")][1]');
     await plannedLine.getByRole('button', { name: 'Entnahme buchen' }).click();
     dialog = employeePage.getByRole('dialog').filter({
       has: employeePage.getByRole('heading', { name: 'Entnahme buchen' }),
@@ -2134,9 +2264,8 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await dialog.getByRole('button', { name: 'Entnahme buchen' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     const worldMaterialLine = employeePage
-      .locator('div.rounded-md.border')
-      .filter({ hasText: world.inventory.itemName })
-      .first();
+      .getByText(world.inventory.itemName, { exact: true })
+      .locator('xpath=ancestor::div[contains(@class, "rounded-md") and contains(@class, "border")][1]');
     await worldMaterialLine.getByRole('button', { name: 'Zurücklegen' }).click();
     dialog = employeePage.getByRole('dialog').filter({
       has: employeePage.getByRole('heading', { name: 'Material zurücklegen' }),

@@ -208,8 +208,8 @@ async function fillInternalPlanningDraft(
       .getByRole('combobox')
       .filter({ hasText: 'Mitarbeiter zuweisen' })
       .click();
-    await dialog.getByPlaceholder(/Mitarbeiter suchen/).fill(options.assignEmployeeName);
-    await dialog
+    await page.getByPlaceholder(/Mitarbeiter suchen/).fill(options.assignEmployeeName);
+    await page
       .getByRole('listbox')
       .getByRole('button')
       .filter({ hasText: options.assignEmployeeName })
@@ -1072,8 +1072,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       .getByRole('combobox')
       .filter({ hasText: '1 Mitarbeiter' })
       .click();
-    await editDialog.getByPlaceholder(/Mitarbeiter suchen/).fill('Nora');
-    const noLoginOption = editDialog
+    await adminPage.getByPlaceholder(/Mitarbeiter suchen/).fill('Nora');
+    const noLoginOption = adminPage
       .getByRole('listbox')
       .getByRole('button')
       .filter({ hasText: noLoginName })

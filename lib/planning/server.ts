@@ -79,7 +79,7 @@ async function loadPlanningQualificationEvaluations(input: {
 }): Promise<AssignmentEvaluation[] | null> {
   const employeeRecordIds = [
     ...new Set(
-      input.assessments.flatMap((assessment) => assessment.employeeRecordIds)
+      input.assessments.flatMap((assessment) => assessment.employeeRecordIds),
     ),
   ];
   if (employeeRecordIds.length === 0) return [];
@@ -89,37 +89,41 @@ async function loadPlanningQualificationEvaluations(input: {
     .at(-1);
   if (!latestDate) return [];
 
-  const [requirementsResult, settingsResult, employeesResult, conditionsResult] =
-    await Promise.all([
-      input.jobId
-        ? input.admin
-            .from('job_capability_requirements')
-            .select('id, capability_id, require_confirmation')
-            .eq('organization_id', input.orgId)
-            .eq('job_id', input.jobId)
-            .order('created_at')
-            .limit(101)
-        : Promise.resolve({ data: [], error: null }),
-      input.admin
-        .from('organization_qualification_settings')
-        .select('apprentice_warning_enabled')
-        .eq('organization_id', input.orgId)
-        .maybeSingle(),
-      input.admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', input.orgId)
-        .in('id', employeeRecordIds)
-        .limit(201),
-      input.admin
-        .from('employment_conditions')
-        .select('employee_record_id, employment_type, valid_from')
-        .eq('organization_id', input.orgId)
-        .in('employee_record_id', employeeRecordIds)
-        .lte('valid_from', latestDate)
-        .order('valid_from', { ascending: false })
-        .limit(5001),
-    ]);
+  const [
+    requirementsResult,
+    settingsResult,
+    employeesResult,
+    conditionsResult,
+  ] = await Promise.all([
+    input.jobId
+      ? input.admin
+          .from('job_capability_requirements')
+          .select('id, capability_id, require_confirmation')
+          .eq('organization_id', input.orgId)
+          .eq('job_id', input.jobId)
+          .order('created_at')
+          .limit(101)
+      : Promise.resolve({ data: [], error: null }),
+    input.admin
+      .from('organization_qualification_settings')
+      .select('apprentice_warning_enabled')
+      .eq('organization_id', input.orgId)
+      .maybeSingle(),
+    input.admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name')
+      .eq('organization_id', input.orgId)
+      .in('id', employeeRecordIds)
+      .limit(201),
+    input.admin
+      .from('employment_conditions')
+      .select('employee_record_id, employment_type, valid_from')
+      .eq('organization_id', input.orgId)
+      .in('employee_record_id', employeeRecordIds)
+      .lte('valid_from', latestDate)
+      .order('valid_from', { ascending: false })
+      .limit(5001),
+  ]);
   if (
     requirementsResult.error ||
     settingsResult.error ||
@@ -134,18 +138,20 @@ async function loadPlanningQualificationEvaluations(input: {
   const capabilityIds = [
     ...new Set(
       (requirementsResult.data ?? []).map(
-        (requirement) => requirement.capability_id
-      )
+        (requirement) => requirement.capability_id,
+      ),
     ),
   ];
   const userIds = (employeesResult.data ?? []).flatMap((employee) =>
-    employee.user_id ? [employee.user_id] : []
+    employee.user_id ? [employee.user_id] : [],
   );
   const [definitionsResult, recordsResult, profilesResult] = await Promise.all([
     capabilityIds.length
       ? input.admin
           .from('organization_capabilities')
-          .select('id, organization_id, kind, name, description, default_expiry_warning_days, retired_at')
+          .select(
+            'id, organization_id, kind, name, description, default_expiry_warning_days, retired_at',
+          )
           .eq('organization_id', input.orgId)
           .in('id', capabilityIds)
           .is('retired_at', null)
@@ -154,7 +160,9 @@ async function loadPlanningQualificationEvaluations(input: {
     capabilityIds.length
       ? input.admin
           .from('employee_capabilities')
-          .select('id, employee_record_id, capability_id, capability_kind, valid_from, valid_until, issuer, renewal_due_date, confirmation_status, evidence_state, operational_note, supersedes_id, superseded_at')
+          .select(
+            'id, employee_record_id, capability_id, capability_kind, valid_from, valid_until, issuer, renewal_due_date, confirmation_status, evidence_state, operational_note, supersedes_id, superseded_at',
+          )
           .eq('organization_id', input.orgId)
           .in('employee_record_id', employeeRecordIds)
           .in('capability_id', capabilityIds)
@@ -181,7 +189,7 @@ async function loadPlanningQualificationEvaluations(input: {
     (definitionsResult.data ?? []).map((definition) => [
       definition.id,
       toCapabilityDefinition(definition),
-    ])
+    ]),
   );
   const requirements: JobCapabilityRequirement[] = (
     requirementsResult.data ?? []
@@ -200,14 +208,15 @@ async function loadPlanningQualificationEvaluations(input: {
       : [];
   });
   const capabilityRecords = (recordsResult.data ?? []).map(
-    toEmployeeCapability
+    toEmployeeCapability,
   );
   const capabilityRecordsByEmployee = new Map<
     string,
     EmployeeCapabilityRecord[]
   >();
   for (const record of capabilityRecords) {
-    const records = capabilityRecordsByEmployee.get(record.employeeRecordId) ?? [];
+    const records =
+      capabilityRecordsByEmployee.get(record.employeeRecordId) ?? [];
     records.push(record);
     capabilityRecordsByEmployee.set(record.employeeRecordId, records);
   }
@@ -216,7 +225,8 @@ async function loadPlanningQualificationEvaluations(input: {
     Array<{ validFrom: string; employmentType: EmploymentType }>
   >();
   for (const condition of conditionsResult.data ?? []) {
-    const conditions = conditionsByEmployee.get(condition.employee_record_id) ?? [];
+    const conditions =
+      conditionsByEmployee.get(condition.employee_record_id) ?? [];
     conditions.push({
       validFrom: condition.valid_from,
       employmentType: condition.employment_type as EmploymentType,
@@ -227,20 +237,22 @@ async function loadPlanningQualificationEvaluations(input: {
     (profilesResult.data ?? []).map((profile) => [
       profile.id,
       [profile.first_name, profile.last_name].filter(Boolean).join(' '),
-    ])
+    ]),
   );
   const employees = new Map(
-    (employeesResult.data ?? []).map((employee) => [employee.id, employee])
+    (employeesResult.data ?? []).map((employee) => [employee.id, employee]),
   );
 
   return input.assessments.map((assessment) => {
-    const candidates: AssignmentCandidate[] = assessment.employeeRecordIds.flatMap(
-      (employeeRecordId) => {
+    const candidates: AssignmentCandidate[] =
+      assessment.employeeRecordIds.flatMap((employeeRecordId) => {
         const employee = employees.get(employeeRecordId);
         if (!employee) return [];
         const condition = (conditionsByEmployee.get(employeeRecordId) ?? [])
           .filter((entry) => entry.validFrom <= assessment.localDate)
-          .sort((left, right) => right.validFrom.localeCompare(left.validFrom))[0];
+          .sort((left, right) =>
+            right.validFrom.localeCompare(left.validFrom),
+          )[0];
         const recordName = [employee.first_name, employee.last_name]
           .filter(Boolean)
           .join(' ');
@@ -257,8 +269,7 @@ async function loadPlanningQualificationEvaluations(input: {
               capabilityRecordsByEmployee.get(employeeRecordId) ?? [],
           },
         ];
-      }
-    );
+      });
     return resolveAssignmentEvaluation({
       jobId: input.jobId,
       assessedForDate: assessment.localDate,
@@ -270,9 +281,7 @@ async function loadPlanningQualificationEvaluations(input: {
   });
 }
 
-export async function loadPlanningOptions(
-  orgId: string
-): Promise<{
+export async function loadPlanningOptions(orgId: string): Promise<{
   employees: PlanningEmployeeOption[];
   jobs: PlanningJobOption[];
   teams: PlanningTeamOption[];
@@ -304,7 +313,7 @@ export async function loadPlanningOptions(
   if (employeeResult.error || jobResult.error || teamResult.error) {
     console.error(
       'Failed to load planning options:',
-      employeeResult.error ?? jobResult.error ?? teamResult.error
+      employeeResult.error ?? jobResult.error ?? teamResult.error,
     );
     return null;
   }
@@ -319,14 +328,14 @@ export async function loadPlanningOptions(
   const projectIds = [
     ...new Set(
       (jobResult.data ?? []).flatMap((job) =>
-        job.project_id ? [job.project_id] : []
-      )
+        job.project_id ? [job.project_id] : [],
+      ),
     ),
   ];
   // Linked records keep the profile as the authoritative name (P1-03); the
   // record's own name fields are only set for non-login personnel.
   const employeeUserIds = (employeeResult.data ?? []).flatMap((employee) =>
-    employee.user_id ? [employee.user_id] : []
+    employee.user_id ? [employee.user_id] : [],
   );
   const [projectResult, profileResult] = await Promise.all([
     projectIds.length
@@ -350,10 +359,10 @@ export async function loadPlanningOptions(
     return null;
   }
   const projectNames = new Map(
-    (projectResult.data ?? []).map((project) => [project.id, project.name])
+    (projectResult.data ?? []).map((project) => [project.id, project.name]),
   );
   const profileById = new Map(
-    (profileResult.data ?? []).map((profile) => [profile.id, profile])
+    (profileResult.data ?? []).map((profile) => [profile.id, profile]),
   );
 
   return {
@@ -382,7 +391,7 @@ export async function loadPlanningOptions(
       title: job.title.trim() || job.description?.trim() || '—',
       jobNumber: job.job_number,
       projectName: job.project_id
-        ? projectNames.get(job.project_id) ?? null
+        ? (projectNames.get(job.project_id) ?? null)
         : null,
     })),
     teams: teamResult.data ?? [],
@@ -436,12 +445,12 @@ export async function expandPlanningTeamsForDates(input: {
         .filter(
           (membership) =>
             membership.valid_from <= localDate &&
-            (!membership.valid_until || localDate <= membership.valid_until)
+            (!membership.valid_until || localDate <= membership.valid_until),
         )
         .map((membership) => ({
           employeeRecordId: membership.employee_record_id,
           teamSourceId: membership.team_id,
-        }))
+        })),
     );
   }
   return result;
@@ -450,16 +459,19 @@ export async function expandPlanningTeamsForDates(input: {
 function enumerateOccurrenceAllocations(
   occurrence: MaterializedOccurrence,
   employeeRecordIds: string[],
-  targetByEmployeeDate: Map<string, ReturnType<typeof resolveDailyTarget>>
+  targetByEmployeeDate: Map<string, ReturnType<typeof resolveDailyTarget>>,
 ): Array<{ employeeRecordId: string; localDate: string; minutes: number }> {
-  if (occurrence.timeKind === 'timed' && occurrence.startAt && occurrence.endAt) {
+  if (
+    occurrence.timeKind === 'timed' &&
+    occurrence.startAt &&
+    occurrence.endAt
+  ) {
     const startAt = occurrence.startAt;
     const endAt = occurrence.endAt;
     return employeeRecordIds.flatMap((employeeRecordId) =>
-      splitTimedIntervalByBerlinDate(
-        new Date(startAt),
-        new Date(endAt)
-      ).map((allocation) => ({ employeeRecordId, ...allocation }))
+      splitTimedIntervalByBerlinDate(new Date(startAt), new Date(endAt)).map(
+        (allocation) => ({ employeeRecordId, ...allocation }),
+      ),
     );
   }
   if (!occurrence.startDate || !occurrence.endDateExclusive) return [];
@@ -499,31 +511,35 @@ export async function assessPlanningOccurrences(input: {
   excludeOccurrenceIds?: string[];
 }): Promise<PlanningAssessment | null> {
   const assignmentsFor = (
-    occurrence: MaterializedOccurrence
+    occurrence: MaterializedOccurrence,
   ): PlanningAssignmentDraft[] => [
     ...new Map(
       (input.assignmentsByOriginalStartLocal
-        ? input.assignmentsByOriginalStartLocal.get(
-            occurrence.originalStartLocal
-          ) ?? []
+        ? (input.assignmentsByOriginalStartLocal.get(
+            occurrence.originalStartLocal,
+          ) ?? [])
         : input.assignments
-      ).map((assignment) => [assignment.employeeRecordId, assignment])
+      ).map((assignment) => [assignment.employeeRecordId, assignment]),
     ).values(),
   ];
   const employeeRecordIds = [
     ...new Set(
       input.occurrences.flatMap((occurrence) =>
         assignmentsFor(occurrence).map(
-          (assignment) => assignment.employeeRecordId
-        )
-      )
+          (assignment) => assignment.employeeRecordId,
+        ),
+      ),
     ),
   ];
   const occurrenceDates = input.occurrences.flatMap((occurrence) => {
-    if (occurrence.timeKind === 'timed' && occurrence.startAt && occurrence.endAt) {
+    if (
+      occurrence.timeKind === 'timed' &&
+      occurrence.startAt &&
+      occurrence.endAt
+    ) {
       return splitTimedIntervalByBerlinDate(
         new Date(occurrence.startAt),
-        new Date(occurrence.endAt)
+        new Date(occurrence.endAt),
       ).map((allocation) => allocation.localDate);
     }
     if (!occurrence.startDate || !occurrence.endDateExclusive) return [];
@@ -543,7 +559,7 @@ export async function assessPlanningOccurrences(input: {
     const qualificationSnapshot = { evaluations: [] };
     const capacityFingerprint = await fingerprintSnapshot(capacitySnapshot);
     const qualificationFingerprint = await fingerprintSnapshot(
-      qualificationSnapshot
+      qualificationSnapshot,
     );
     return {
       conflicts: [],
@@ -562,7 +578,7 @@ export async function assessPlanningOccurrences(input: {
   const windowEnd = uniqueDates.at(-1) ?? windowStart;
   const windowStartInstant = resolveBerlinWallTime(`${windowStart}T00:00`);
   const windowEndInstant = resolveBerlinWallTime(
-    `${addLocalDays(windowEnd, 1)}T00:00`
+    `${addLocalDays(windowEnd, 1)}T00:00`,
   );
   if (!windowStartInstant || !windowEndInstant) return null;
   const admin = createSupabaseAdminClient();
@@ -604,11 +620,13 @@ export async function assessPlanningOccurrences(input: {
       .gte('end_date', windowStart),
     admin
       .from('planning_occurrences')
-      .select('id, time_kind, start_at, end_at, start_date, end_date_exclusive, status')
+      .select(
+        'id, time_kind, start_at, end_at, start_date, end_date_exclusive, status',
+      )
       .eq('organization_id', input.orgId)
       .eq('status', 'scheduled')
       .or(
-        `and(start_at.lt.${windowEndInstant.instant.toISOString()},end_at.gt.${windowStartInstant.instant.toISOString()}),and(start_date.lte.${windowEnd},end_date_exclusive.gt.${windowStart})`
+        `and(start_at.lt.${windowEndInstant.instant.toISOString()},end_at.gt.${windowStartInstant.instant.toISOString()}),and(start_date.lte.${windowEnd},end_date_exclusive.gt.${windowStart})`,
       )
       .limit(5001),
   ]);
@@ -624,7 +642,10 @@ export async function assessPlanningOccurrences(input: {
     return null;
   }
 
-  const schedulesByRecord = new Map<string, ReturnType<typeof toWorkSchedule>[]>();
+  const schedulesByRecord = new Map<
+    string,
+    ReturnType<typeof toWorkSchedule>[]
+  >();
   for (const row of schedulesResult.data ?? []) {
     const schedule = toWorkSchedule(row);
     const schedules = schedulesByRecord.get(schedule.employeeRecordId) ?? [];
@@ -659,7 +680,7 @@ export async function assessPlanningOccurrences(input: {
             ...(vacationSpans.get(employeeRecordId) ?? []),
             ...(sicknessSpans.get(employeeRecordId) ?? []),
           ],
-        })
+        }),
       );
     }
   }
@@ -669,10 +690,10 @@ export async function assessPlanningOccurrences(input: {
     ...(input.excludeOccurrenceIds ?? []),
   ]);
   const existingOccurrences = (existingOccurrenceResult.data ?? []).filter(
-    (occurrence) => !excludedOccurrenceIds.has(occurrence.id)
+    (occurrence) => !excludedOccurrenceIds.has(occurrence.id),
   );
   const existingOccurrenceIds = existingOccurrences.map(
-    (occurrence) => occurrence.id
+    (occurrence) => occurrence.id,
   );
   const existingAssignmentsResult = existingOccurrenceIds.length
     ? await admin
@@ -691,7 +712,8 @@ export async function assessPlanningOccurrences(input: {
   }
   const assignmentRecordsByOccurrence = new Map<string, string[]>();
   for (const assignment of existingAssignmentsResult.data ?? []) {
-    const records = assignmentRecordsByOccurrence.get(assignment.occurrence_id) ?? [];
+    const records =
+      assignmentRecordsByOccurrence.get(assignment.occurrence_id) ?? [];
     records.push(assignment.employee_record_id);
     assignmentRecordsByOccurrence.set(assignment.occurrence_id, records);
   }
@@ -723,7 +745,7 @@ export async function assessPlanningOccurrences(input: {
     ) {
       for (const assignment of assignmentsFor(occurrence)) {
         proposedAllDayEmployeeDates.add(
-          `${assignment.employeeRecordId}:${date}`
+          `${assignment.employeeRecordId}:${date}`,
         );
       }
     }
@@ -734,15 +756,22 @@ export async function assessPlanningOccurrences(input: {
   >();
   for (const existing of existingOccurrences) {
     const records = assignmentRecordsByOccurrence.get(existing.id) ?? [];
-    if (existing.time_kind === 'timed' && existing.start_at && existing.end_at) {
+    if (
+      existing.time_kind === 'timed' &&
+      existing.start_at &&
+      existing.end_at
+    ) {
       const allocations = splitTimedIntervalByBerlinDate(
         new Date(existing.start_at),
-        new Date(existing.end_at)
+        new Date(existing.end_at),
       );
       for (const employeeRecordId of records) {
         for (const allocation of allocations) {
           const key = `${employeeRecordId}:${allocation.localDate}`;
-          existingMinutes.set(key, (existingMinutes.get(key) ?? 0) + allocation.minutes);
+          existingMinutes.set(
+            key,
+            (existingMinutes.get(key) ?? 0) + allocation.minutes,
+          );
           if (proposedAllDayEmployeeDates.has(key)) {
             overlaps.set(key, (overlaps.get(key) ?? 0) + allocation.minutes);
           }
@@ -755,18 +784,22 @@ export async function assessPlanningOccurrences(input: {
         existingTimedByEmployee.set(employeeRecordId, intervals);
       }
     } else if (existing.start_date && existing.end_date_exclusive) {
-      for (let date = existing.start_date; date < existing.end_date_exclusive; date = addLocalDays(date, 1)) {
+      for (
+        let date = existing.start_date;
+        date < existing.end_date_exclusive;
+        date = addLocalDays(date, 1)
+      ) {
         for (const employeeRecordId of records) {
           const key = `${employeeRecordId}:${date}`;
           existingMinutes.set(
             key,
             (existingMinutes.get(key) ?? 0) +
-              (targetByEmployeeDate.get(key)?.targetMinutes ?? 480)
+              (targetByEmployeeDate.get(key)?.targetMinutes ?? 480),
           );
           overlaps.set(
             key,
             (overlaps.get(key) ?? 0) +
-              Math.max(1, targetByEmployeeDate.get(key)?.targetMinutes ?? 480)
+              Math.max(1, targetByEmployeeDate.get(key)?.targetMinutes ?? 480),
           );
         }
       }
@@ -782,7 +815,7 @@ export async function assessPlanningOccurrences(input: {
     let activeProposals: Array<{ start: number; end: number }> = [];
     for (const existing of existingIntervals) {
       activeProposals = activeProposals.filter(
-        (proposed) => proposed.end > existing.start
+        (proposed) => proposed.end > existing.start,
       );
       while (
         proposedCursor < proposedIntervals.length &&
@@ -797,7 +830,7 @@ export async function assessPlanningOccurrences(input: {
         const overlapEnd = new Date(Math.min(existing.end, proposed.end));
         for (const allocation of splitTimedIntervalByBerlinDate(
           overlapStart,
-          overlapEnd
+          overlapEnd,
         )) {
           const key = `${employeeRecordId}:${allocation.localDate}`;
           overlaps.set(key, (overlaps.get(key) ?? 0) + allocation.minutes);
@@ -812,16 +845,15 @@ export async function assessPlanningOccurrences(input: {
     enumerateOccurrenceAllocations(
       occurrence,
       assignmentsFor(occurrence).map(
-        (assignment) => assignment.employeeRecordId
+        (assignment) => assignment.employeeRecordId,
       ),
-      targetByEmployeeDate
-    )
+      targetByEmployeeDate,
+    ),
   );
   const proposedKeys = new Set(
     proposed.map(
-      (allocation) =>
-        `${allocation.employeeRecordId}:${allocation.localDate}`
-    )
+      (allocation) => `${allocation.employeeRecordId}:${allocation.localDate}`,
+    ),
   );
   for (const employeeRecordId of employeeRecordIds) {
     for (const date of uniqueDates) {
@@ -833,7 +865,7 @@ export async function assessPlanningOccurrences(input: {
         (request) =>
           request.employee_record_id === employeeRecordId &&
           request.start_date <= date &&
-          date <= request.end_date
+          date <= request.end_date,
       );
       if (target.source === 'default') {
         missingConfigurationConflicts.push({
@@ -841,7 +873,8 @@ export async function assessPlanningOccurrences(input: {
           severity: 'warning',
           employeeRecordId,
           localDate: date,
-          message: 'Für diese Person gilt nur der gekennzeichnete Standardwert, weil kein Arbeitszeitmodell hinterlegt ist.',
+          message:
+            'Für diese Person gilt nur der gekennzeichnete Standardwert, weil kein Arbeitszeitmodell hinterlegt ist.',
           details: { fallbackMinutes: target.baseTargetMinutes },
         });
       }
@@ -849,22 +882,27 @@ export async function assessPlanningOccurrences(input: {
         employeeRecordId,
         localDate: date,
         targetMinutes:
-          target.isHoliday || target.isClosureDay ? 0 : target.baseTargetMinutes,
+          target.isHoliday || target.isClosureDay
+            ? 0
+            : target.baseTargetMinutes,
         targetSource: target.isClosureDay
           ? 'closure'
           : target.isHoliday
             ? 'holiday'
             : target.source,
-        approvedAbsenceMinutes: Math.max(0, target.baseTargetMinutes - target.targetMinutes),
+        approvedAbsenceMinutes: Math.max(
+          0,
+          target.baseTargetMinutes - target.targetMinutes,
+        ),
         pendingAbsenceMinutes: pending.reduce(
           (minutes, request) =>
             Math.max(
               minutes,
               request.day_portion === 'full'
                 ? target.baseTargetMinutes
-                : Math.round(target.baseTargetMinutes / 2)
+                : Math.round(target.baseTargetMinutes / 2),
             ),
-          0
+          0,
         ),
         existingPlannedMinutes: existingMinutes.get(key) ?? 0,
         overlapMinutes: overlaps.get(key) ?? 0,
@@ -880,14 +918,16 @@ export async function assessPlanningOccurrences(input: {
     jobId: input.jobId,
     assessments: input.occurrences.flatMap((occurrence) => {
       const employeeIds = assignmentsFor(occurrence).map(
-        (assignment) => assignment.employeeRecordId
+        (assignment) => assignment.employeeRecordId,
       );
       if (!employeeIds.length) return [];
       const localDates =
-        occurrence.timeKind === 'timed' && occurrence.startAt && occurrence.endAt
+        occurrence.timeKind === 'timed' &&
+        occurrence.startAt &&
+        occurrence.endAt
           ? splitTimedIntervalByBerlinDate(
               new Date(occurrence.startAt),
-              new Date(occurrence.endAt)
+              new Date(occurrence.endAt),
             ).map((allocation) => allocation.localDate)
           : occurrence.startDate && occurrence.endDateExclusive
             ? (() => {
@@ -916,7 +956,8 @@ export async function assessPlanningOccurrences(input: {
       severity: 'warning',
       employeeRecordId: null,
       localDate: evaluation.assessedForDate,
-      message: 'Die Qualifikationsanforderungen des Auftrags sind nicht vollständig abgedeckt.',
+      message:
+        'Die Qualifikationsanforderungen des Auftrags sind nicht vollständig abgedeckt.',
       details: { fingerprint: evaluation.fingerprint },
     }));
   const capacitySnapshot = {
@@ -926,7 +967,7 @@ export async function assessPlanningOccurrences(input: {
   const qualificationSnapshot = { evaluations };
   const capacityFingerprint = await fingerprintSnapshot(capacitySnapshot);
   const qualificationFingerprint = await fingerprintSnapshot(
-    qualificationSnapshot
+    qualificationSnapshot,
   );
   // Warnings must explain the affected person, not only the date. The name is
   // attached AFTER fingerprinting so snapshots and fingerprints stay
@@ -934,7 +975,7 @@ export async function assessPlanningOccurrences(input: {
   // Member-linked records carry their names on the profile, so resolution
   // follows the same precedence as the planning pickers.
   const conflictUserIds = (recordsResult.data ?? []).flatMap((record) =>
-    record.user_id ? [record.user_id as string] : []
+    record.user_id ? [record.user_id as string] : [],
   );
   const conflictProfilesResult = conflictUserIds.length
     ? await admin
@@ -948,7 +989,7 @@ export async function assessPlanningOccurrences(input: {
     (conflictProfilesResult.data ?? []).map((profile) => [
       profile.id as string,
       [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim(),
-    ])
+    ]),
   );
   const nameByRecordId = new Map(
     (recordsResult.data ?? []).map((record) => {
@@ -960,17 +1001,17 @@ export async function assessPlanningOccurrences(input: {
         .join(' ')
         .trim();
       return [record.id as string, profileName || recordName || null];
-    })
+    }),
   );
   const withEmployeeName = (conflict: PlanningConflict): PlanningConflict => ({
     ...conflict,
     employeeName: conflict.employeeRecordId
-      ? nameByRecordId.get(conflict.employeeRecordId) ?? null
+      ? (nameByRecordId.get(conflict.employeeRecordId) ?? null)
       : null,
   });
   return {
     conflicts: [...capacity.conflicts, ...qualificationConflicts].map(
-      withEmployeeName
+      withEmployeeName,
     ),
     assessmentFingerprint: await fingerprintSnapshot({
       capacityFingerprint,
@@ -988,9 +1029,10 @@ async function loadCalendarAssignments(input: {
   orgId: string;
   occurrenceIds: string[];
   employeeRecordId?: string;
-}): Promise<
-  Array<{ occurrence_id: string; employee_record_id: string }> | null
-> {
+}): Promise<Array<{
+  occurrence_id: string;
+  employee_record_id: string;
+}> | null> {
   const results = await Promise.all(
     Array.from(
       { length: Math.ceil(input.occurrenceIds.length / 100) },
@@ -1001,15 +1043,15 @@ async function loadCalendarAssignments(input: {
           .eq('organization_id', input.orgId)
           .in(
             'occurrence_id',
-            input.occurrenceIds.slice(index * 100, index * 100 + 100)
+            input.occurrenceIds.slice(index * 100, index * 100 + 100),
           )
           .limit(10_001);
         if (input.employeeRecordId) {
           query = query.eq('employee_record_id', input.employeeRecordId);
         }
         return query;
-      }
-    )
+      },
+    ),
   );
   if (results.some((result) => result.error)) return null;
   const assignments = results.flatMap((result) => result.data ?? []);
@@ -1029,13 +1071,15 @@ export async function loadPlanningCalendarEntries(input: {
   if (!fromInstant || !toInstant) return null;
   const query = admin
     .from('planning_occurrences')
-    .select('id, series_id, series_lineage_id, job_id, entry_kind, internal_type, time_kind, status, is_exception, title, description, location, start_at, end_at, start_date, end_date_exclusive, version')
+    .select(
+      'id, series_id, series_lineage_id, job_id, entry_kind, internal_type, time_kind, status, is_exception, title, description, location, start_at, end_at, start_date, end_date_exclusive, version',
+    )
     .eq('organization_id', input.orgId)
     // Skipped/cancelled occurrences stay traceably visible in the calendar
     // (P1-11-F03); overlap/capacity checks keep their own scheduled-only query.
     .in('status', ['scheduled', 'skipped', 'cancelled'])
     .or(
-      `and(start_at.lt.${toInstant.instant.toISOString()},end_at.gt.${fromInstant.instant.toISOString()}),and(start_date.lte.${input.to},end_date_exclusive.gt.${input.from})`
+      `and(start_at.lt.${toInstant.instant.toISOString()},end_at.gt.${fromInstant.instant.toISOString()}),and(start_date.lte.${input.to},end_date_exclusive.gt.${input.from})`,
     )
     .order('start_at', { ascending: true, nullsFirst: false })
     .limit(2001);
@@ -1062,16 +1106,22 @@ export async function loadPlanningCalendarEntries(input: {
     });
     if (!ownAssignments) return null;
     const ownOccurrenceIds = new Set(
-      ownAssignments.map((assignment) => assignment.occurrence_id)
+      ownAssignments.map((assignment) => assignment.occurrence_id),
     );
     occurrences = windowOccurrences.filter((occurrence) =>
-      ownOccurrenceIds.has(occurrence.id)
+      ownOccurrenceIds.has(occurrence.id),
     );
     if (!occurrences.length) return [];
   }
 
   const occurrenceIds = occurrences.map((occurrence) => occurrence.id);
-  const jobIds = [...new Set(occurrences.flatMap((occurrence) => occurrence.job_id ? [occurrence.job_id] : []))];
+  const jobIds = [
+    ...new Set(
+      occurrences.flatMap((occurrence) =>
+        occurrence.job_id ? [occurrence.job_id] : [],
+      ),
+    ),
+  ];
   const [assignments, jobResult] = await Promise.all([
     loadCalendarAssignments({
       admin,
@@ -1081,13 +1131,23 @@ export async function loadPlanningCalendarEntries(input: {
     jobIds.length
       ? admin
           .from('jobs')
-          .select('id, title, description, job_number, status, priority, location, client_id, project_id')
+          .select(
+            'id, title, description, job_number, status, priority, location, client_id, project_id, execution_version',
+          )
           .eq('organization_id', input.orgId)
           .in('id', jobIds)
       : { data: [], error: null },
   ]);
-  if (!assignments || jobResult.error) return null;
-  const employeeRecordIds = [...new Set(assignments.map((assignment) => assignment.employee_record_id))];
+  if (!assignments || jobResult.error) {
+    console.error(
+      'Failed to load planning calendar job context:',
+      jobResult.error,
+    );
+    return null;
+  }
+  const employeeRecordIds = [
+    ...new Set(assignments.map((assignment) => assignment.employee_record_id)),
+  ];
   const employeeResult = employeeRecordIds.length
     ? await admin
         .from('employee_records')
@@ -1095,8 +1155,16 @@ export async function loadPlanningCalendarEntries(input: {
         .eq('organization_id', input.orgId)
         .in('id', employeeRecordIds)
     : { data: [], error: null };
-  if (employeeResult.error) return null;
-  const userIdByRecord = new Map((employeeResult.data ?? []).map((record) => [record.id, record.user_id]));
+  if (employeeResult.error) {
+    console.error(
+      'Failed to load planning calendar employee context:',
+      employeeResult.error,
+    );
+    return null;
+  }
+  const userIdByRecord = new Map(
+    (employeeResult.data ?? []).map((record) => [record.id, record.user_id]),
+  );
   const assignmentsByOccurrence = new Map<string, string[]>();
   for (const assignment of assignments) {
     const list = assignmentsByOccurrence.get(assignment.occurrence_id) ?? [];
@@ -1104,8 +1172,20 @@ export async function loadPlanningCalendarEntries(input: {
     assignmentsByOccurrence.set(assignment.occurrence_id, list);
   }
   const jobs = new Map((jobResult.data ?? []).map((job) => [job.id, job]));
-  const clientIds = [...new Set((jobResult.data ?? []).flatMap((job) => job.client_id ? [job.client_id] : []))];
-  const projectIds = [...new Set((jobResult.data ?? []).flatMap((job) => job.project_id ? [job.project_id] : []))];
+  const clientIds = [
+    ...new Set(
+      (jobResult.data ?? []).flatMap((job) =>
+        job.client_id ? [job.client_id] : [],
+      ),
+    ),
+  ];
+  const projectIds = [
+    ...new Set(
+      (jobResult.data ?? []).flatMap((job) =>
+        job.project_id ? [job.project_id] : [],
+      ),
+    ),
+  ];
   const [clientResult, projectResult] = await Promise.all([
     clientIds.length
       ? admin
@@ -1123,8 +1203,12 @@ export async function loadPlanningCalendarEntries(input: {
       : { data: [], error: null },
   ]);
   if (clientResult.error || projectResult.error) return null;
-  const clients = new Map((clientResult.data ?? []).map((client) => [client.id, client]));
-  const projects = new Map((projectResult.data ?? []).map((project) => [project.id, project]));
+  const clients = new Map(
+    (clientResult.data ?? []).map((client) => [client.id, client]),
+  );
+  const projects = new Map(
+    (projectResult.data ?? []).map((project) => [project.id, project]),
+  );
 
   return occurrences.flatMap((occurrence) => {
     const job = occurrence.job_id ? jobs.get(occurrence.job_id) : null;
@@ -1135,47 +1219,53 @@ export async function loadPlanningCalendarEntries(input: {
     const startLocal = occurrence.start_at
       ? formatBerlinLocalDateTime(occurrence.start_at)
       : null;
-    return [{
-      id: occurrence.id,
-      occurrenceId: occurrence.id,
-      jobId: occurrence.job_id,
-      seriesId: occurrence.series_id,
-      seriesLineageId: occurrence.series_lineage_id,
-      entryKind: occurrence.entry_kind,
-      internalType: occurrence.internal_type,
-      timeKind: occurrence.time_kind,
-      status: occurrence.status,
-      version: occurrence.version,
-      isException: occurrence.is_exception,
-      title:
-        job?.title.trim() || job?.description?.trim() || occurrence.title || '—',
-      description: occurrence.description,
-      location: occurrence.location ?? job?.location ?? null,
-      plannedDate: startLocal?.slice(0, 10) ?? occurrence.start_date,
-      plannedTime: startLocal?.slice(11, 16) ?? null,
-      startAt: occurrence.start_at,
-      endDateExclusive: occurrence.end_date_exclusive,
-      endAt: occurrence.end_at,
-      estimatedDurationMinutes:
-        occurrence.start_at && occurrence.end_at
-          ? Math.round(
-              (new Date(occurrence.end_at).getTime() -
-                new Date(occurrence.start_at).getTime()) /
-                60_000
-            )
-          : null,
-      assignedEmployeeRecordIds: records,
-      assignedUserIds: records.flatMap((recordId) => {
-        const userId = userIdByRecord.get(recordId);
-        return userId ? [userId] : [];
-      }),
-      jobNumber: job?.job_number ?? null,
-      jobStatus: job?.status ?? null,
-      priority: job?.priority ?? null,
-      clientName: client?.name ?? null,
-      clientAddress: client?.address ?? null,
-      projectName: project?.name ?? null,
-      projectNumber: project?.project_number ?? null,
-    }];
+    return [
+      {
+        id: occurrence.id,
+        occurrenceId: occurrence.id,
+        jobId: occurrence.job_id,
+        seriesId: occurrence.series_id,
+        seriesLineageId: occurrence.series_lineage_id,
+        entryKind: occurrence.entry_kind,
+        internalType: occurrence.internal_type,
+        timeKind: occurrence.time_kind,
+        status: occurrence.status,
+        version: occurrence.version,
+        isException: occurrence.is_exception,
+        title:
+          job?.title.trim() ||
+          job?.description?.trim() ||
+          occurrence.title ||
+          '—',
+        description: occurrence.description,
+        location: occurrence.location ?? job?.location ?? null,
+        plannedDate: startLocal?.slice(0, 10) ?? occurrence.start_date,
+        plannedTime: startLocal?.slice(11, 16) ?? null,
+        startAt: occurrence.start_at,
+        endDateExclusive: occurrence.end_date_exclusive,
+        endAt: occurrence.end_at,
+        estimatedDurationMinutes:
+          occurrence.start_at && occurrence.end_at
+            ? Math.round(
+                (new Date(occurrence.end_at).getTime() -
+                  new Date(occurrence.start_at).getTime()) /
+                  60_000,
+              )
+            : null,
+        assignedEmployeeRecordIds: records,
+        assignedUserIds: records.flatMap((recordId) => {
+          const userId = userIdByRecord.get(recordId);
+          return userId ? [userId] : [];
+        }),
+        jobNumber: job?.job_number ?? null,
+        jobStatus: job?.status ?? null,
+        jobExecutionVersion: job?.execution_version ?? 0,
+        priority: job?.priority ?? null,
+        clientName: client?.name ?? null,
+        clientAddress: client?.address ?? null,
+        projectName: project?.name ?? null,
+        projectNumber: project?.project_number ?? null,
+      },
+    ];
   });
 }

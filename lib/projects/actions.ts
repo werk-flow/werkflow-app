@@ -6,7 +6,6 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import {
   type Project,
-  type ProjectStatus,
   type ProjectWithDetails,
   type DerivedProjectStatus,
   type CreateProjectResult,
@@ -39,9 +38,9 @@ export type CreateProjectInput = {
   templateVersionId?: string;
 };
 
-export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'templateVersionId'>> & {
-  statusOverride?: ProjectStatus | null;
-};
+export type UpdateProjectInput = Partial<
+  Omit<CreateProjectInput, 'templateVersionId'>
+>;
 
 // ============================================
 // Result Types
@@ -59,7 +58,7 @@ export type ProjectDetailsResult = {
 // ============================================
 
 export async function createProject(
-  input: CreateProjectInput
+  input: CreateProjectInput,
 ): Promise<CreateProjectResult> {
   try {
     const auth = await authenticateAndAuthorize();
@@ -112,7 +111,7 @@ export async function createProject(
       orgId,
       input.clientId || null,
       input.siteId || null,
-      input.contactId || null
+      input.contactId || null,
     );
     if (!siteContactCheck.success) {
       return siteContactCheck;
@@ -149,18 +148,28 @@ export async function createProject(
           templateVersionId: input.templateVersionId,
           projectId: data.id,
           idempotencyKey: `create-project-${data.id}-${input.templateVersionId}`,
-        }
+        },
       );
       if (templateError) {
-        console.error('Failed to apply work template while creating project:', templateError);
-        const { error: rollbackError } = await admin.from('projects').delete().eq('id', data.id).eq('organization_id', orgId);
+        console.error(
+          'Failed to apply work template while creating project:',
+          templateError,
+        );
+        const { error: rollbackError } = await admin
+          .from('projects')
+          .delete()
+          .eq('id', data.id)
+          .eq('organization_id', orgId);
         if (rollbackError) return { success: false, error: 'rollback_failed' };
-        const knownCode = [
-          'work_template_version_unavailable',
-          'work_template_reference_unavailable',
-        ].find((code) => templateError.message.includes(code)) ??
-          (['work_template_material_reference_unavailable', 'work_template_capability_reference_unavailable']
-            .some((code) => templateError.message.includes(code))
+        const knownCode =
+          [
+            'work_template_version_unavailable',
+            'work_template_reference_unavailable',
+          ].find((code) => templateError.message.includes(code)) ??
+          ([
+            'work_template_material_reference_unavailable',
+            'work_template_capability_reference_unavailable',
+          ].some((code) => templateError.message.includes(code))
             ? 'work_template_reference_unavailable'
             : undefined);
         return { success: false, error: knownCode ?? 'template_apply_failed' };
@@ -176,10 +185,9 @@ export async function createProject(
     return { success: false, error: 'unexpected_error' };
   }
 }
-
 export async function updateProject(
   projectId: string,
-  input: UpdateProjectInput
+  input: UpdateProjectInput,
 ): Promise<UpdateProjectResult> {
   try {
     const auth = await authenticateAndAuthorize();
@@ -207,8 +215,8 @@ export async function updateProject(
       input.name !== undefined ? input.name.trim() : existing.name.trim();
     const resultingDescription =
       input.description !== undefined
-        ? input.description?.trim() ?? ''
-        : existing.description?.trim() ?? '';
+        ? (input.description?.trim() ?? '')
+        : (existing.description?.trim() ?? '');
 
     if (!resultingName && !resultingDescription) {
       return { success: false, error: 'name_or_description_required' };
@@ -242,7 +250,9 @@ export async function updateProject(
     }
 
     const resultingClientId =
-      input.clientId !== undefined ? input.clientId || null : existing.client_id;
+      input.clientId !== undefined
+        ? input.clientId || null
+        : existing.client_id;
     const clientChanged = resultingClientId !== existing.client_id;
 
     // A customer change invalidates the previous customer's site/contact.
@@ -269,7 +279,7 @@ export async function updateProject(
         orgId,
         resultingClientId,
         resultingSiteId,
-        resultingContactId
+        resultingContactId,
       );
       if (!siteContactCheck.success) {
         return siteContactCheck;
@@ -292,8 +302,6 @@ export async function updateProject(
       updateData.planned_start_date = input.plannedStartDate || null;
     if (input.plannedEndDate !== undefined)
       updateData.planned_end_date = input.plannedEndDate || null;
-    if (input.statusOverride !== undefined)
-      updateData.status_override = input.statusOverride;
 
     if (Object.keys(updateData).length === 0) {
       return { success: false, error: 'no_changes' };
@@ -312,10 +320,7 @@ export async function updateProject(
       return { success: false, error: 'update_failed' };
     }
 
-    if (
-      input.clientId !== undefined &&
-      input.clientId !== existing.client_id
-    ) {
+    if (input.clientId !== undefined && input.clientId !== existing.client_id) {
       // The customer change also invalidates each job's site/contact, which
       // belonged to the previous customer.
       const { error: syncJobsError } = await admin
@@ -346,9 +351,8 @@ export async function updateProject(
     return { success: false, error: 'unexpected_error' };
   }
 }
-
 export async function deleteProject(
-  projectId: string
+  projectId: string,
 ): Promise<DeleteProjectResult> {
   try {
     const auth = await authenticateAndAuthorize();
@@ -392,7 +396,6 @@ export async function deleteProject(
     return { success: false, error: 'unexpected_error' };
   }
 }
-
 export async function getOrgProjects(): Promise<
   | { success: true; projects: ProjectWithDetails[] }
   | { success: false; error: string }
@@ -452,7 +455,7 @@ export async function getOrgProjects(): Promise<
         ...new Set(
           (jobs ?? [])
             .map((j) => j.project_id)
-            .filter((id): id is string => id !== null)
+            .filter((id): id is string => id !== null),
         ),
       ];
 
@@ -507,7 +510,7 @@ export async function getOrgProjects(): Promise<
       ...new Set(
         projectRows
           .map((p) => p.client_id)
-          .filter((id): id is string => id !== null)
+          .filter((id): id is string => id !== null),
       ),
     ];
 
@@ -518,16 +521,19 @@ export async function getOrgProjects(): Promise<
         .select('*')
         .in('id', clientIds);
 
-      clientMap = new Map(
-        (clients ?? []).map((c) => [c.id, toClient(c)])
-      );
+      clientMap = new Map((clients ?? []).map((c) => [c.id, toClient(c)]));
     }
 
     const projects: ProjectWithDetails[] = projectRows.map((row) => {
-      const counts = jobCountMap.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
+      const counts = jobCountMap.get(row.id) ?? {
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        parked: 0,
+      };
       return {
         ...toProject(row),
-        client: row.client_id ? clientMap.get(row.client_id) ?? null : null,
+        client: row.client_id ? (clientMap.get(row.client_id) ?? null) : null,
         jobCount: counts.total,
         completedJobCount: counts.completed,
         inProgressJobCount: counts.inProgress,
@@ -543,7 +549,7 @@ export async function getOrgProjects(): Promise<
 }
 
 export async function getProjectDetails(
-  projectId: string
+  projectId: string,
 ): Promise<
   | { success: true; details: ProjectDetailsResult }
   | { success: false; error: string }
@@ -628,7 +634,7 @@ export async function getProjectDetails(
 }
 
 export async function getProjectByNumber(
-  projectNumber: string
+  projectNumber: string,
 ): Promise<
   | { success: true; details: ProjectDetailsResult }
   | { success: false; error: string }
@@ -733,72 +739,6 @@ export async function getNextProjectNumber(): Promise<
     return { success: true, projectNumber: data as string };
   } catch (error) {
     console.error('Unexpected error in getNextProjectNumber:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-/**
- * Park an entire project: sets statusOverride to 'geparkt' and
- * bulk-updates all child jobs to status='geparkt' with cleared dates.
- */
-export async function parkProject(
-  projectId: string
-): Promise<UpdateProjectResult> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: project, error: fetchError } = await admin
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError || !project) {
-      return { success: false, error: 'project_not_found' };
-    }
-
-    const { error: updateError } = await admin
-      .from('projects')
-      .update({ status_override: 'geparkt' })
-      .eq('id', projectId)
-      .eq('organization_id', orgId);
-
-    if (updateError) {
-      console.error('Error parking project:', updateError);
-      return { success: false, error: 'update_failed' };
-    }
-
-    const { error: jobsError } = await admin
-      .from('jobs')
-      .update({
-        status: 'geparkt',
-        planned_date: null,
-        planned_time: null,
-        actual_completion_date: null,
-      })
-      .eq('project_id', projectId)
-      .eq('organization_id', orgId)
-      .neq('status', 'fertig');
-
-    if (jobsError) {
-      console.error('Error parking project jobs:', jobsError);
-    }
-
-    updateTag(CACHE_TAGS.projects(orgId));
-    updateTag(CACHE_TAGS.jobs(orgId));
-
-    return { success: true, project: toProject({ ...project, status_override: 'geparkt' }) };
-  } catch (error) {
-    console.error('Unexpected error in parkProject:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }

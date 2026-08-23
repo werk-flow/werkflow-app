@@ -14,6 +14,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
+import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -54,6 +55,11 @@ async function NestedJobDetailData({
     result.success ? getJobMaterialLines(result.job.id) : null
   );
   const inventoryOptionsResultPromise = getInventoryPickerOptions();
+  const lifecycleResultPromise = jobResultPromise.then((result) =>
+    result.success
+      ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id })
+      : null
+  );
 
   const [
     projectResult,
@@ -64,6 +70,7 @@ async function NestedJobDetailData({
     documentsResult,
     materialLinesResult,
     inventoryOptionsResult,
+    lifecycleResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -77,6 +84,7 @@ async function NestedJobDetailData({
     documentsResultPromise,
     materialLinesResultPromise,
     inventoryOptionsResultPromise,
+    lifecycleResultPromise,
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -125,7 +133,6 @@ async function NestedJobDetailData({
     inventoryOptionsResult && inventoryOptionsResult.success
       ? inventoryOptionsResult.locations
       : [];
-
   if (job.project?.id !== project.id) {
     return (
       <RouteRedirect href="/auftraege">
@@ -152,6 +159,7 @@ async function NestedJobDetailData({
       inventoryItems={inventoryItems}
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
+      lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
     />
   );
 }

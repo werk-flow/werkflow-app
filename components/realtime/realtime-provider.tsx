@@ -58,7 +58,8 @@ export type RealtimeTable =
   | 'planning_dispatch_recipients'
   | 'planning_dispatch_acknowledgements'
   | 'planning_customer_commitments'
-  | 'job_parking_contexts'
+  | 'work_blockers'
+  | 'work_dependencies'
   | 'job_instruction_items'
   | 'job_instruction_item_evidence_requirements'
   | 'job_instruction_item_dependencies'
@@ -142,7 +143,8 @@ const TABLES: RealtimeTable[] = [
   'planning_dispatch_recipients',
   'planning_dispatch_acknowledgements',
   'planning_customer_commitments',
-  'job_parking_contexts',
+  'work_blockers',
+  'work_dependencies',
   'job_instruction_items',
   'job_instruction_item_evidence_requirements',
   'job_instruction_item_dependencies',
@@ -761,11 +763,22 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           {
             event: '*',
             schema: 'public',
-            table: 'job_parking_contexts',
+            table: 'work_blockers',
             filter: `organization_id=eq.${activeOrgId}`
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-            dispatch('job_parking_contexts', p)
+            dispatch('work_blockers', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'work_dependencies',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('work_dependencies', p)
         )
         .on(
           'postgres_changes',

@@ -48,7 +48,7 @@ Diese Abschnitte beschreiben, was die App bereits konnte, bevor der Phase-1-Fahr
 
 - `BASE-WORK-F01` — Büro/Admin: können Aufträge und Projekte anlegen, bearbeiten und löschen — mit Titel, Beschreibung, Nummer, Kunde, Priorität (niedrig/mittel/hoch), geplantem Datum und Uhrzeit, geschätzter Dauer, Ort und Status (nicht bearbeitet / in Bearbeitung / fertig / geparkt).
 - `BASE-WORK-F02` — Ein Auftrag kann eigenständig sein oder zu genau einem Projekt gehören; Projektaufträge erben den Projektkunden. Ein Projekt kann leer starten und später Aufträge erhalten.
-- `BASE-WORK-F03` — Büro/Admin: können Aufträge „parken". Ein Auftrag ohne geplantes Datum ist automatisch geparkt; wird einem Auftrag das Datum entzogen, wird er geparkt; wird ein geparkter Auftrag eingeplant, kehrt er in die offene Arbeit zurück. Geparkte Aufträge erscheinen auf der Aufträge-Seite und im Kalender jeweils im „Parkplatz" und tauchen nicht im Terminplan auf. Die zugewiesenen Mitarbeiter bleiben im geparkten Zustand erhalten, sehen den Auftrag aber nicht im Kalender.
+- `BASE-WORK-F03` — Büro/Admin: können Aufträge bewusst mit Grund, Verantwortlichkeit und Wiedervorlage „parken". Ein Auftrag ohne geplantes Datum bleibt dagegen ungeplante offene Arbeit; das Entfernen eines Termins parkt ihn nicht. Geparkte Aufträge erscheinen auf der Aufträge-Seite und im Kalender jeweils im „Parkplatz" und tauchen nicht im Terminplan auf. Die zugewiesenen Mitarbeiter bleiben im geparkten Zustand erhalten, sehen den Auftrag aber nicht im Kalender. Das Verlassen des Parkplatzes und eine neue Einplanung sind getrennte bewusste Schritte.
 - `BASE-WORK-F04` — Büro/Admin: können ein Projekt parken — dabei werden alle unfertigen Projektaufträge mitgeparkt und ihre Termine entfernt; bereits fertige Aufträge bleiben fertig.
 - `BASE-WORK-F05` — Büro/Admin: können einem Auftrag ein oder mehrere Mitglieder zuweisen oder sie entfernen. Handwerker sehen ausschließlich ihre zugewiesenen Aufträge.
 - `BASE-WORK-F06` — Büro/Admin: können am Auftrag eine sortierbare Checkliste (Arbeitsanweisungen) pflegen; zugewiesene Handwerker haken Punkte ab oder öffnen sie wieder — wer was wann zuletzt geändert hat, bleibt sichtbar.
@@ -214,10 +214,10 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 **Parkplatz mit Kontext:**
 
-- `P1-12-F08` — Büro/Admin: ergänzen an geparkten Aufträgen einen **Park-Kontext**: Grund (Warten auf Kunde / Warten auf Material / Warten auf Freigabe / Kapazität / Sonstiges) plus Notiz, eine verantwortliche Büro-Person und ein Wiedervorlage-Datum. Direkt nach dem Parken bietet die App das Ergänzen an.
+- `P1-12-F08` — Büro/Admin: parken Aufträge atomar mit dem gemeinsamen **Park-Kontext**: ein Grund aus dem P1-14-Blockervokabular plus Details, verantwortliche Person und Wiedervorlage-Datum. Beim Parken öffnet die App diesen Kontext vor dem Speichern; ein passiver geparkter Zustand ohne Verantwortlichkeit entsteht nicht mehr neu.
 - `P1-12-F09` — Alle geparkten Aufträge ohne erfassten Kontext (auch alle aus der Zeit davor) zeigen ehrlich **„Kontext fehlt (Altbestand)"** — nichts wird erfunden.
 - `P1-12-F10` — Verantwortliche: eine überfällige Wiedervorlage erscheint als Aufgabe auf `/aufgaben`.
-- `P1-12-F11` — Wird der Auftrag entparkt (eingeplant), wird der Kontext automatisch und nachvollziehbar entfernt.
+- `P1-12-F11` — Wird ein geparkter Auftrag eingeplant, wechselt ein bestehender Einsatz nachvollziehbar auf den Termin; Planung löst den Park-Kontext nicht stillschweigend. Entparken bleibt ein eigener, begründeter Schritt.
 - `P1-12-F12` — Büro/Admin: können einen geparkten Auftrag direkt aus dem Parkplatz heraus als Einsatz an die zugewiesenen Mitarbeiter senden.
 
 **Kundenzusagen:**
@@ -260,3 +260,69 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-13-F25` — Wurde ein referenziertes Material, Lager oder eine Fähigkeit stillgelegt, bricht die Anwendung vollständig ab, nennt die zu korrigierende Referenz und lässt Ziel und Wiederholungsversuch sauber bestehen.
 - `P1-13-F26` — Handwerker sehen keine Vorlagenverwaltung und können keine Vorlage erstellen, ändern, veröffentlichen, archivieren oder anwenden; ein direkter Routen- oder Aktionsaufruf wird abgewiesen und Organisationsgrenzen bleiben dicht.
 - `P1-13-F27` — Änderungen an Vorlagen und Anwendungen aktualisieren offene Manageransichten per Realtime; ein offener Dialog verliert keine Eingabe und erhält nach dem Schließen genau eine nachgeholte Aktualisierung.
+
+### `P1-14` — Arbeitsstand, Blocker, Voraussetzungen und Einsatzbereitschaft (2026-08-23)
+
+- `P1-14-F01` — Alle berechtigten Nutzer sehen am Auftrag den kanonischen Arbeitsstand getrennt von Planung, Einsatzbereitschaft, Blockern und Parkplatz; mehrere gleichzeitig wahre Fakten überschreiben einander nicht.
+- `P1-14-F02` — Alle berechtigten Nutzer sehen aus dem aktuellen Arbeitsstand, offenen Blockern und Voraussetzungen genau einen klaren nächsten Schritt.
+- `P1-14-F03` — Ein neuer Auftrag beginnt als „Nicht begonnen“; ein unangetasteter Altauftrag behält seine bisherige sichtbare Bedeutung und wird als Altbestand ohne erfundenen Verlauf gekennzeichnet.
+- `P1-14-F04` — Die Auftrags- und Projektliste zeigt die kanonischen Bezeichnungen und trennt aktive Arbeit, Parkplatz und abgeschlossene Arbeit weiterhin nachvollziehbar.
+- `P1-14-F05` — Büro/Admin filtern aktive Arbeit nach „Nicht begonnen“, „In Ausführung“ oder „Unterbrochen“; Suche, weitere Filter und Sortierung wirken weiter auf denselben Bestand.
+- `P1-14-F06` — Büro/Admin führen nur erlaubte Zustandswechsel aus; unzulässige Sprünge werden serverseitig abgewiesen und hinterlassen weder Teilstand noch Ereignis.
+- `P1-14-F07` — Ein zugewiesener Handwerker kann einen Auftrag starten, unterbrechen, fortsetzen oder als ausgeführt abschließen, aber nicht stornieren, übergeben, parken oder einen terminalen Stand wieder öffnen.
+- `P1-14-F08` — Büro/Admin können Arbeit stornieren und terminale Arbeit begründet wieder öffnen; „Storniert“ bleibt von Parkplatz und bloßer Terminverschiebung getrennt.
+- `P1-14-F09` — Wechsel, die eine Begründung verlangen, lassen sich ohne mindestens drei Zeichen nicht speichern; die Datenbank speichert Grund, Akteur und Zeitpunkt.
+- `P1-14-F10` — Zwei gleichzeitig geöffnete Ansichten können nicht dieselbe Version überschreiben: die zweite Änderung erhält einen konkreten Versionskonflikt und lädt anschließend den aktuellen Stand.
+- `P1-14-F11` — Eine Realtime-Änderung aktualisiert eine ruhende Detailansicht; während eines offenen Dialogs bleibt die Eingabe bestehen und eine sichtbare Aufforderung holt den aktuellen Stand nach.
+- `P1-14-F12` — Nach erfolgreicher Änderung schließt der Dialog, ein Banner bestätigt den Abschluss, und ein Neuladen zeigt den persistierten statt eines optimistischen Standes.
+- `P1-14-F13` — Büro/Admin erfassen mehrere gleichzeitige Blocker mit festem Grund, Details zum nächsten Schritt, verantwortlicher Person und Wiedervorlagedatum.
+- `P1-14-F14` — Ein zugewiesener Handwerker meldet am eigenen Auftrag einen Blocker nur für sich selbst mit Wiedervorlage am heutigen Berliner Geschäftstag; fremde Aufträge und Personen bleiben gesperrt.
+- `P1-14-F15` — Der Grund „Sonstiges“ verlangt erklärende Details; ungültige oder organisationsfremde Verantwortliche, fehlende Daten und falsche Zielkombinationen werden abgewiesen.
+- `P1-14-F16` — Offene Blocker machen „Nicht startbereit“ und „Offene Blocker klären“ sichtbar und verhindern den Start atomar, ohne den vorhandenen Ausführungsstand zu verbergen.
+- `P1-14-F17` — Die verantwortliche Person oder Büro/Admin löst einen Blocker mit Begründung; Version, Lösungsnotiz, Akteur und Zeitpunkt bleiben im unveränderlichen Verlauf.
+- `P1-14-F18` — Ein gelöster Blocker kann durch Büro/Admin begründet wieder geöffnet werden; die alte Lösung bleibt im Ereignisverlauf und eine veraltete Version wird nicht überschrieben.
+- `P1-14-F19` — Ein heute fälliger oder überfälliger offener Blocker erscheint einmal in der gemeinsamen Aufgaben-Pipeline mit Ziel-Link, Verantwortlichkeit und versionsstabiler Lesemarkierung.
+- `P1-14-F20` — Wird ein Blocker bearbeitet, gelöst oder wieder geöffnet, aktualisiert sich derselbe Aufmerksamkeitseintrag beziehungsweise verschwindet; es entsteht keine zweite Inbox oder gespeicherte Aufgabenkopie.
+- `P1-14-F21` — Büro/Admin parken einen Auftrag oder ein Projekt atomar mit Grund, Details, verantwortlicher Person und Wiedervorlage; ein Parkplatz-Blocker und die Planungslücke bleiben getrennte Fakten.
+- `P1-14-F22` — Beim Parken eines Projekts werden offene Unteraufträge in derselben Transaktion geparkt, ohne ihren Ausführungsstand zu ändern; ein Fehler rollt die gesamte Operation zurück.
+- `P1-14-F23` — Büro/Admin verlassen den Parkplatz mit Begründung; der Parkplatz-Blocker wird gelöst, aber ein neuer Termin bleibt ein eigener bewusster Planungsschritt.
+- `P1-14-F24` — Bestehende P1-12-Parkkontexte und ihre Ereignisse erscheinen im einen neuen Blockermodell; die alten operativen Tabellen und das alte Schreib-RPC bestehen nicht parallel fort.
+- `P1-14-F25` — Ein geparkter Altauftrag ohne Kontext bleibt ehrlich als „Kontext fehlt (Altbestand)“ sichtbar; die Migration erfindet weder Grund, Person, Wiedervorlage noch Ereignis.
+- `P1-14-F26` — Büro/Admin verknüpfen einen Auftrag oder ein Projekt mit einem vorausgehenden Auftrag, Projekt oder bestehenden Arbeits-/Checklistenpunkt derselben Organisation.
+- `P1-14-F27` — Büro/Admin deklarieren eine noch nicht strukturierte Freigabe, Lieferung, Einsatzort-Bedingung oder ein Fremdgewerk als benannte Voraussetzung, ohne ein P1-15-Artefakt vorzutäuschen.
+- `P1-14-F28` — Für jede Voraussetzung wählen Büro/Admin „Blockiert den Start“, „Blockiert den Abschluss“ oder „Nur Hinweis“; der Server erzwingt nur die gewählte Wirkung.
+- `P1-14-F29` — Eine offene Startvoraussetzung verhindert den Start atomar und erklärt die nächste Aktion; eine Warnung bleibt sichtbar, verhindert den Wechsel aber nicht.
+- `P1-14-F30` — Eine offene Abschlussvoraussetzung verhindert „Ausführung abgeschlossen“, solange keine begründete Manager-Ausnahme verwendet wird.
+- `P1-14-F31` — Eine verknüpfte Arbeitsvoraussetzung gilt aus ihrem kanonischen Vorgängerstand als erfüllt und wird bei dessen Wiederöffnung automatisch wieder offen, ohne die Deklaration umzuschreiben.
+- `P1-14-F32` — Die bestehenden P1-13-Punktvoraussetzungen sperren den Abschluss eines Nachfolgers, solange der Vorgänger offen ist; Wiederöffnen wirkt sofort über denselben Checklistenpunkt.
+- `P1-14-F33` — Selbstbezüge, Organisationssprünge und direkte oder mehrstufige Zyklen zwischen Aufträgen und Projekten werden serverseitig abgewiesen.
+- `P1-14-F34` — Eine Stornierung erfüllt eine Arbeitsvoraussetzung nicht stillschweigend; die betroffene Arbeit bleibt als offene Voraussetzung sichtbar und verlangt eine bewusste Änderung.
+- `P1-14-F35` — Büro/Admin markieren nur deklarierte Bedingungen begründet als erfüllt, offen oder erlassen; verknüpfte Arbeits- und Punktzustände bleiben aus ihrem Ursprung abgeleitet.
+- `P1-14-F36` — Büro/Admin entfernen eine Voraussetzung begründet; aktuelle Zeile, Version und unveränderlicher Ereignisverlauf zeigen, was wann beendet wurde.
+- `P1-14-F37` — Die Detailansicht verwendet dieselbe Einsatzbereitschaftsprojektion wie der Versand und zeigt Kapazität, Qualifikation, Einsatzort, Reise, Material und Werkzeug jeweils als erfüllt, prüfen oder nicht bewertet.
+- `P1-14-F38` — Fehlende Konfiguration, fehlender Einsatzort und nicht vorhandene belastbare Fakten bleiben ausdrücklich unbekannt oder nicht bewertet und werden nie als bereit dargestellt.
+- `P1-14-F39` — Ein Ladefehler der Einsatzbereitschaft erscheint als Fehler und lässt keine Dimension stillschweigend bestehen; ein späteres Neuladen bewertet aus den aktuellen Quellen neu.
+- `P1-14-F40` — Kein Materialbedarf bleibt ein wahrer neutraler Fakt; geplanter Bedarf heißt „nicht reserviert“, Fehlbestand warnt, und P1-14 erzeugt weder Reservierung noch Bestandsbewegung.
+- `P1-14-F41` — Werkzeug bleibt bis P1-32 „nicht bewertet“; P1-14 erfindet weder Verfügbarkeit noch Besitz oder Übergabe.
+- `P1-14-F42` — Die Live-Einsatzbereitschaft kann sich mit Planung, Qualifikation, Einsatzort oder Material ändern; ein Zustandsereignis speichert zusätzlich den genau verwendeten Prüfstand mit Fingerabdruck.
+- `P1-14-F43` — Erforderliche offene Arbeits-/Checklistenpunkte und wieder geöffnete Vorgänger verhindern den Abschluss der Ausführung serverseitig.
+- `P1-14-F44` — Eine laufende auftragsbezogene Zeiterfassung verhindert den Abschluss; das Beenden der Zeit ändert den Arbeitsstand nicht automatisch auf abgeschlossen.
+- `P1-14-F45` — Ein Projekt kann erst ausgeführt abgeschlossen werden, wenn seine nicht stornierten Unteraufträge abgeschlossen oder übergeben sind; leere Projekte bleiben ausdrücklich nicht begonnen.
+- `P1-14-F46` — Büro/Admin übersteuern eine prüfbare Abschlusslücke nur mit Grund; Ereignis, Version, Gate-Snapshot und Fingerabdruck machen die Ausnahme nachvollziehbar.
+- `P1-14-F47` — Noch nicht vorhandene Quellen für Messungen, Mängel, Material-Ist, Übergabenachweise, Unterschriften und Kundenpakete heißen „nicht prüfbar“ und gelten nie ohne bewusste Manager-Ausnahme als erfüllt.
+- `P1-14-F48` — „Ausführung abgeschlossen“ beendet die Feldarbeit; „Übergeben“ ist ein weiterer managergeführter, begründeter Schritt und bleibt von der tieferen P1-17-Übergabe getrennt.
+- `P1-14-F49` — Ein Projekt ohne explizite Übersteuerung leitet seinen sichtbaren Arbeitsstand aus den Unteraufträgen ab; gemischte Zustände werden deterministisch als laufende oder unterbrochene Arbeit zusammengefasst.
+- `P1-14-F50` — Büro/Admin setzen einen Projektstand nur mit Grund und Version; die Übersteuerung kaskadiert nicht in Unteraufträge und bleibt sichtbar vom automatisch abgeleiteten Stand getrennt.
+- `P1-14-F51` — Büro/Admin löschen eine Projektübersteuerung begründet; danach folgt das Projekt wieder den aktuellen Unteraufträgen und der Wechsel bleibt im Verlauf.
+- `P1-14-F52` — Ein Planungsvorkommen macht Arbeit „Geplant“, seine Verschiebung ändert nur Planung, und das Entfernen des letzten Vorkommens ändert weder Ausführung noch erzeugt es automatisch einen Parkplatz-Blocker.
+- `P1-14-F53` — Das erste Einstempeln oder Fortsetzen nach einer Pause auf einem zugewiesenen Auftrag wechselt „Nicht begonnen“ oder „Unterbrochen“ atomar zu „In Ausführung“ und protokolliert den automatischen Ursprung.
+- `P1-14-F54` — Einstempeln auf blockierte, stornierte, abgeschlossene oder übergebene Arbeit scheitert zusammen mit dem Zeiteintrag; es bleibt kein Zeit- oder Zustands-Teilstand.
+- `P1-14-F55` — Versand, Bestätigung, Herausforderung oder Stornierung einer Einsatzanweisung ändern weder Arbeitsstand noch Blocker; ihre Einsatzbereitschaft bleibt ein eigener Versand-Snapshot.
+- `P1-14-F56` — Eine Anfrageumwandlung erzeugt einen neuen Auftrag im Standardstand „Nicht begonnen“, aber keine erfundene Historie, Bereitschaft, Blocker, Voraussetzung oder Übergabe.
+- `P1-14-F57` — Jeder Zustandswechsel und jede Übersteuerung trägt Datenbankzeit, Akteur, vorherigen und neuen Stand, Versionspaar, erforderlichen Grund und den verwendeten Prüfstand; Ereignisse sind unveränderlich.
+- `P1-14-F58` — Aufträge oder Projekte mit Lebenszyklusverlauf lassen sich nicht hart löschen; normale bestehende Daten ohne Verlauf behalten ihren bisherigen Löschpfad.
+- `P1-14-F59` — Ohne Blocker oder zusätzliche Voraussetzungen zeigt die Detailansicht ruhige leere Zustände und bleibt für Organisationen nutzbar, die die neuen Funktionen nicht verwenden.
+- `P1-14-F60` — RLS und Serveraktionen lassen Manager nur Organisationsarbeit und Handwerker nur zugewiesene Aufträge beziehungsweise eigene Blocker sehen; fremde Organisationen sehen keine operativen oder historischen P1-14-Daten.
+- `P1-14-F61` — Änderungen an Arbeitsstand, Blockern, Voraussetzungen, Planung und Checkliste aktualisieren betroffene Detail-, Listen-, Kalender- und Aufgabenansichten über die bestehenden Cache-Tags und zentralen Realtime-Abonnements.
+- `P1-14-F62` — Ein Lebenszykluswechsel reserviert, entnimmt, verbraucht oder retourniert kein Material und erstellt oder verändert keinen Termin, Versand, Zeiteintrag, kein Dokument und keine Unterschrift.
+- `P1-14-F63` — P1-14 sendet keine Nachricht, erzeugt kein Kundenpaket und baut weder eine zweite Checkliste, Planung, Inbox noch einen konfigurierbaren Workflow; spätere Slices bleiben die Eigentümer dieser Funktionen.

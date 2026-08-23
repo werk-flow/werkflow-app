@@ -14,6 +14,7 @@ export interface SearchableSelectOption {
 
 interface SearchableSelectBaseProps {
   options: SearchableSelectOption[];
+  onSearchChange?: (search: string) => void;
   searchPlaceholder?: string;
   emptyMessage?: string;
   disabled?: boolean;
@@ -109,6 +110,7 @@ export function SearchableSelect({
   noneLabel = 'Keine Auswahl',
   action,
   renderOption,
+  onSearchChange,
   readOnly = false,
   readOnlyLabel,
 }: SearchableSelectProps) {
@@ -148,7 +150,13 @@ export function SearchableSelect({
   }
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) onSearchChange?.('');
+      }}
+    >
       <PopoverPrimitive.Trigger asChild>
         <button
           id={id}
@@ -199,13 +207,19 @@ export function SearchableSelect({
                 type="text"
                 placeholder={searchPlaceholder}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  onSearchChange?.(e.target.value);
+                }}
                 className="h-8 w-full rounded-md border bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground/70 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
               />
               {search && (
                 <button
                   type="button"
-                  onClick={() => setSearch('')}
+                  onClick={() => {
+                    setSearch('');
+                    onSearchChange?.('');
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3" />

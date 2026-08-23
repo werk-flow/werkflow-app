@@ -23,8 +23,9 @@ import {
   parkplatzCard,
   recordCommitmentForOccurrence,
   resolveDispatchChallengeInPanel,
-  setParkingContextFromParkplatz,
+  selectFromSearchable,
   startBatchRescheduleInPanel,
+  typeIntoDatePickerById,
 } from './support/steps';
 
 test.describe.configure({ mode: 'serial' });
@@ -41,11 +42,6 @@ function shiftIsoDate(dateIso: string, days: number): string {
   return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
     .toISOString()
     .slice(0, 10);
-}
-
-function toDatePickerDigits(dateIso: string): string {
-  const [year, month, day] = dateIso.split('-');
-  return `${day}${month}${year}`;
 }
 
 // P1-12 owns run-day+3 through run-day+10 at 06:00 Berlin (early times keep
@@ -86,21 +82,31 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       title,
     });
 
+    await adminPage.goto(`/auftraege/${parkJobNumber(world.runId)}`);
+    const lifecycle = adminPage.getByTestId('work-lifecycle-card');
+    await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
+    const parkingDialog = adminPage.getByRole('dialog');
+    await parkingDialog.locator('#work-blocker-reason').click();
+    await adminPage.getByRole('option', { name: 'Material', exact: true }).click();
+    await parkingDialog
+      .locator('#work-blocker-details')
+      .fill('Rückstau bis zur Lieferung.');
+    await selectFromSearchable(
+      adminPage,
+      parkingDialog.locator('#work-blocker-owner'),
+      world.users.admin.firstName,
+    );
+    await typeIntoDatePickerById(
+      parkingDialog,
+      'work-blocker-review',
+      REVIEW_DATE,
+    );
+    await parkingDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
+
     await openParkplatzPanel(adminPage);
     const card = parkplatzCard(adminPage, title);
     await expect(card).toBeVisible({ timeout: 20_000 });
-    // A freshly parked job without recorded intent shows the honest labeled
-    // exception — exactly what the 12 live legacy parked jobs will show.
-    await expect(
-      card.locator('[data-parking-context="missing"]')
-    ).toBeVisible();
-    await setParkingContextFromParkplatz(adminPage, {
-      jobTitle: title,
-      reasonLabel: 'Warten auf Material',
-      note: 'Rückstau bis zur Lieferung.',
-      responsibleName: world.users.admin.firstName,
-      reviewDigits: toDatePickerDigits(REVIEW_DATE),
-    });
     await expect(card.locator('[data-parking-context="set"]')).toBeVisible({
       timeout: 20_000,
     });
@@ -157,11 +163,11 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     expect(state.dispatches[0].currentRevisionNumber).toBe(2);
     expect(state.dispatches[0].eventTypes).toContain('target_scheduled');
 
-    // Scheduling unparked the job; the parking context cleared traceably
-    // instead of lingering as stale data.
+    // Planning and parking are independent P1-14 facts. Scheduling updates the
+    // dispatch target without silently resolving the parking blocker.
     const parking = await getParkingState(world.orgId, parkJobNumber(world.runId));
-    expect(parking.context).toBeNull();
-    expect(parking.eventTypes).toContain('unparked');
+    expect(parking.context?.reason).toBe('warten_auf_material');
+    expect(parking.eventTypes).not.toContain('unparked');
   });
 
   test('a scheduled dispatch is acknowledged and a material move invalidates it', async ({
@@ -433,7 +439,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     expect(employeeView.planning_dispatch_acknowledgements).toBeGreaterThan(0);
     expect(employeeView.planning_dispatch_events).toBe(0);
     expect(employeeView.planning_customer_commitments).toBe(0);
-    expect(employeeView.job_parking_contexts).toBe(0);
+    expect(employeeView.work_blockers).toBe(1);
     for (const count of Object.values(outsiderView)) expect(count).toBe(0);
 
     // Dispatch, acknowledgement, and commitments never created actual time.

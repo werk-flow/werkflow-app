@@ -372,13 +372,14 @@ async function openOccurrenceEditDialogByDate(
 }
 
 async function addAssigneeInEditDialog(
+  page: Page,
   dialog: Locator,
   searchText: string
 ): Promise<void> {
   await dialog.getByRole('combobox').filter({ hasText: /Mitarbeiter/ }).click();
-  await dialog.getByPlaceholder(/Mitarbeiter suchen/).fill(searchText);
-  await dialog
-    .getByRole('listbox')
+  await page.getByPlaceholder(/Mitarbeiter suchen/).fill(searchText);
+  await page
+      .getByRole('listbox')
     .getByRole('button')
     .filter({ hasText: searchText })
     .first()
@@ -686,8 +687,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       mainTitle,
       MAIN_DATE
     );
-    await addAssigneeInEditDialog(editDialog, brunoFirstName);
-    await addAssigneeInEditDialog(editDialog, `Nils ${noLoginLastName}`);
+    await addAssigneeInEditDialog(adminPage, editDialog, brunoFirstName);
+    await addAssigneeInEditDialog(adminPage, editDialog, `Nils ${noLoginLastName}`);
     await saveOccurrenceEditWithOverride(editDialog, OVERRIDE_REASON);
 
     const state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
@@ -850,7 +851,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(invalidatedCard).toContainText(newLocation);
   });
 
-  test('A7-T5: Parkplatz — ehrliches Altbestand-Label, Einsatz an die Zugewiesenen, manueller Storno und Neusenden mit geändertem Hinweis [P1-12-F04/P1-12-F06/P1-12-F09/P1-12-F12]', async ({
+  test('A7-T5: Parkplatz — bewusster Kontext, Einsatz an die Zugewiesenen, manueller Storno und Neusenden mit geändertem Hinweis [P1-12-F04/P1-12-F06/P1-12-F12/P1-14-F21]', async ({
     adminPage,
     employeePage,
     world,
@@ -863,13 +864,33 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       title: parkTitle,
       assignEmployeeName: world.users.employee.firstName,
     });
+    await adminPage.goto(`/auftraege/A7-PARK-${world.runId}`);
+    const lifecycle = adminPage.getByTestId('work-lifecycle-card');
+    await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
+    const parkingDialog = adminPage.getByRole('dialog');
+    await parkingDialog.locator('#work-blocker-reason').click();
+    await adminPage.getByRole('option', { name: 'Kapazität', exact: true }).click();
+    await parkingDialog
+      .locator('#work-blocker-details')
+      .fill('Einsatz wird aus dem Parkplatz heraus abgestimmt.');
+    await selectFromSearchable(
+      adminPage,
+      parkingDialog.locator('#work-blocker-owner'),
+      world.users.admin.firstName
+    );
+    await typeIntoDatePicker(
+      parkingDialog,
+      'Wiedervorlage',
+      toDatePickerDigits(shiftIsoDate(A7_TODAY_ISO, 2))
+    );
+    await parkingDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
 
     await openParkplatzPanel(adminPage);
     const card = parkplatzCard(adminPage, parkTitle);
     await expect(card).toBeVisible({ timeout: 20_000 });
-    // The honest legacy label is the visible text, not just a marker.
-    await expect(card.locator('[data-parking-context="missing"]')).toContainText(
-      'Kontext fehlt (Altbestand)'
+    await expect(card.locator('[data-parking-context="set"]')).toContainText(
+      'Kapazität'
     );
 
     // Dispatch to the ASSIGNED employees: the dialog preselects them.
@@ -960,7 +981,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     );
   });
 
-  test('A7-T6: Parken storniert aktive Einsätze sichtbar; die App bietet den Kontext direkt an — fünf Gründe; die überfällige Wiedervorlage wird Aufgabe [P1-12-F06/P1-12-F08/P1-12-F10]', async ({
+  test('A7-T6: Parken storniert aktive Einsätze sichtbar; der atomare Kontext nutzt das gemeinsame Grundvokabular; die fällige Wiedervorlage wird Aufgabe [P1-12-F06/P1-12-F08/P1-12-F10/P1-14-F19/P1-14-F21]', async ({
     adminPage,
     bueroPage,
     employeePage,
@@ -1013,24 +1034,26 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       { steps: 15 }
     );
     await adminPage.mouse.up();
-    await expect(
-      adminPage.getByText('Auftrag wurde geparkt.').first()
-    ).toBeVisible({ timeout: 20_000 });
-
-    // Right after parking the app OFFERS recording the context.
+    // Dragging opens the required atomic parking context before anything is
+    // persisted.
     const contextDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Parkplatz-Kontext' }),
     });
     await expect(contextDialog).toBeVisible({ timeout: 20_000 });
-    // Exactly the five catalog reasons are offered.
+    // The P1-14 canonical reason vocabulary is offered in one place.
     await contextDialog.locator('#parking-reason').click();
     const reasonOptions = adminPage.getByRole('option');
-    await expect(reasonOptions).toHaveCount(5);
+    await expect(reasonOptions).toHaveCount(10);
     for (const label of [
-      'Warten auf Kunde',
-      'Warten auf Material',
-      'Warten auf Freigabe',
-      'Keine Kapazität',
+      'Kunde',
+      'Material',
+      'Freigabe',
+      'Kapazität',
+      'Zugang zum Einsatzort',
+      'Abhängigkeit',
+      'Fremdgewerk',
+      'Sicherheit',
+      'Interne Klärung',
       'Sonstiges',
     ]) {
       await expect(
@@ -1038,7 +1061,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       ).toBeVisible();
     }
     await adminPage
-      .getByRole('option', { name: 'Warten auf Freigabe', exact: true })
+      .getByRole('option', { name: 'Freigabe', exact: true })
       .click();
     await contextDialog
       .locator('#parking-note')
@@ -1056,10 +1079,13 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     );
     await contextDialog.getByRole('button', { name: 'Kontext speichern' }).click();
     await expect(contextDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(
+      adminPage.getByText('Auftrag wurde geparkt.').first()
+    ).toBeVisible({ timeout: 20_000 });
 
     const parking = await getParkingState(world.orgId, schedNumber);
     expect(parking.context).not.toBeNull();
-    expect(parking.context!.reason).toBe('warten_auf_freigabe');
+    expect(parking.context!.reason).toBe('approval');
     expect(parking.context!.nextReviewDate).toBe(A7_TODAY_ISO);
     expect(parking.eventTypes).toContain('context_set');
 
@@ -1080,7 +1106,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     const reviewGroup = bueroPage.getByTestId('attention-parking-review-tasks');
     await expect(reviewGroup).toBeVisible({ timeout: 20_000 });
     const reviewTask = reviewGroup.getByRole('link', {
-      name: `Wiedervorlage für geparkten Auftrag ${schedTitle} öffnen`,
+      name: `Wiedervorlage für ${schedTitle} öffnen`,
       exact: true,
     });
     await expect(reviewTask).toBeVisible();

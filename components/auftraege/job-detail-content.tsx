@@ -27,9 +27,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -63,19 +60,19 @@ import {
   QualificationWarningDialog,
   useQualificationWarningConfirmation,
 } from './qualification-warning-dialog';
-import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { JobInstructionItemsCard } from './job-instruction-items-card';
 import { JobQualificationSection } from './job-qualification-section';
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import { JobDispatchSection } from './job-dispatch-section';
+import { WorkLifecycleCard, WorkLifecycleLoadError } from './work-lifecycle-card';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 
 import {
   updateJob,
-  updateJobStatus,
   deleteJob,
   updateJobAssignments,
   getAuftraegeDialogOptions,
@@ -227,6 +224,7 @@ interface JobDetailContentProps {
   inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
   currentUserId: string;
+  lifecycleSnapshot: WorkLifecycleSnapshot | null;
   // Set when this job was created by converting an Anfrage (P1-02).
   originRequest?: { label: string; href: string } | null;
 }
@@ -244,6 +242,7 @@ export function JobDetailContent({
   inventoryItems,
   inventoryLocations,
   currentUserId,
+  lifecycleSnapshot,
   originRequest,
 }: JobDetailContentProps) {
   const router = useRouter();
@@ -260,7 +259,6 @@ export function JobDetailContent({
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
-  const [showParkDialog, setShowParkDialog] = useState(false);
   const [unassigningUserId, setUnassigningUserId] = useState<string | null>(
     null
   );
@@ -656,24 +654,6 @@ export function JobDetailContent({
     });
   };
 
-  const handleStatusChange = async (newStatus: JobStatus) => {
-    if (newStatus === 'geparkt') {
-      setShowParkDialog(true);
-      return;
-    }
-    const result = await updateJobStatus(liveJob.id, newStatus);
-    if (result.success) {
-      applyLiveJobPatch(result.job);
-    }
-  };
-
-  const handleParkConfirm = async () => {
-    const result = await updateJobStatus(liveJob.id, 'geparkt');
-    if (result.success) {
-      applyLiveJobPatch(result.job);
-    }
-  };
-
   const handleAssignEmployees = () => {
     startAssignTransition(async () => {
       const newIds = assignSelectedIds.filter(
@@ -981,27 +961,6 @@ export function JobDetailContent({
           {JOB_STATUS_LABELS[liveJob.status]}
         </Badge>
       ),
-      editableConfig: isAdminOrManager
-        ? {
-            type: 'select',
-            currentValue: liveJob.status,
-            onSave: async (v) => {
-              if (v === 'geparkt') {
-                setShowParkDialog(true);
-                return;
-              }
-              const result = await updateJobStatus(liveJob.id, v as JobStatus);
-              if (!result.success) {
-                throw new Error('Failed to update status');
-              }
-              applyLiveJobPatch(result.job);
-            },
-            options: Object.entries(JOB_STATUS_LABELS).map(([value, label]) => ({
-              value,
-              label,
-            })),
-          }
-        : undefined,
     },
     {
       label: 'Priorität',
@@ -1048,11 +1007,11 @@ export function JobDetailContent({
                       {liveJob.jobNumber ? `${liveJob.jobNumber} – ` : ''}
                       {displayTitle}
                     </span>{' '}
-                    entfernst, wird der Auftrag automatisch geparkt.
+                    entfernst, bleibt der Arbeitsstand unverändert.
                   </p>
-                  <p className="font-medium text-destructive/80">
-                    Andere Metadaten wie Uhrzeit, Dauer und zugewiesene Mitarbeiter
-                    bleiben erhalten.
+                  <p className="font-medium text-muted-foreground">
+                    Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben
+                    ebenfalls unverändert.
                   </p>
                 </div>
               ),
@@ -1272,25 +1231,6 @@ export function JobDetailContent({
                   <Pencil className="mr-2 size-4" />
                   Bearbeiten
                 </DropdownMenuItem>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>Status ändern</DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {(
-                      Object.entries(JOB_STATUS_LABELS) as [
-                        JobStatus,
-                        string,
-                      ][]
-                    ).map(([value, label]) => (
-                      <DropdownMenuItem
-                        key={value}
-                        onClick={() => handleStatusChange(value)}
-                        disabled={liveJob.status === value}
-                      >
-                        {label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
@@ -1317,6 +1257,17 @@ export function JobDetailContent({
             </Link>
           </p>
         )}
+        <div className="mb-6">
+          {lifecycleSnapshot ? (
+            <WorkLifecycleCard
+              initialSnapshot={lifecycleSnapshot}
+              targetLabel={displayTitle}
+              isManager={isAdminOrManager}
+            />
+          ) : (
+            <WorkLifecycleLoadError />
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
           {/* Left Column: Metadata + Client + Employees */}
           <div className="space-y-6">
@@ -1873,14 +1824,6 @@ export function JobDetailContent({
         }}
       />
 
-      <ParkConfirmationDialog
-        open={showParkDialog}
-        onOpenChange={setShowParkDialog}
-        variant="job"
-        title={displayTitle}
-        identifier={liveJob.jobNumber ?? undefined}
-        onConfirm={handleParkConfirm}
-      />
       <QualificationWarningDialog
         evaluation={qualificationWarning}
         isSubmitting={isAssigning || isQualificationOverrideSaving}

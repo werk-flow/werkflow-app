@@ -135,6 +135,7 @@ export type PlanningCalendarEntry = {
   assignedUserIds: string[];
   jobNumber: string | null;
   jobStatus: Database['public']['Enums']['job_status'] | null;
+  jobExecutionVersion: number;
   priority: Database['public']['Enums']['job_priority'] | null;
   clientName: string | null;
   clientAddress: string | null;

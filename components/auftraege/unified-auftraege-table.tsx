@@ -45,6 +45,23 @@ import {
 import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
+import { WORK_EXECUTION_LABELS, type WorkExecutionState } from '@/lib/work-lifecycle/types';
+
+function getJobStatusLabel(job: Job): string {
+  return job.executionState
+    ? WORK_EXECUTION_LABELS[job.executionState]
+    : `${JOB_STATUS_LABELS[job.status]} · Altbestand`;
+}
+
+function getProjectStatusLabel(project: ProjectWithDetails): string {
+  if (project.executionStateOverride) {
+    return WORK_EXECUTION_LABELS[project.executionStateOverride];
+  }
+  if (project.statusOverride) {
+    return `${PROJECT_STATUS_LABELS[project.statusOverride]} · Altbestand`;
+  }
+  return `${PROJECT_STATUS_LABELS[getEffectiveProjectStatusFromCounts(project)]} · automatisch`;
+}
 
 function ActiveWorkIndicator() {
   return (
@@ -81,6 +98,30 @@ const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   abgeschlossen: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   geparkt: 'bg-brand-purple/15 text-brand-purple-dark dark:text-brand-purple-light',
 };
+
+const WORK_EXECUTION_CLASSES: Record<WorkExecutionState, string> = {
+  not_started: 'bg-secondary text-secondary-foreground',
+  in_progress: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  interrupted: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  execution_complete: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  handed_over: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+};
+
+function getJobStatusClass(job: Job): string {
+  return job.executionState
+    ? WORK_EXECUTION_CLASSES[job.executionState]
+    : JOB_STATUS_CLASSES[job.status];
+}
+
+function getProjectStatusClass(
+  project: ProjectWithDetails,
+  effectiveStatus: ProjectStatus,
+): string {
+  return project.executionStateOverride
+    ? WORK_EXECUTION_CLASSES[project.executionStateOverride]
+    : PROJECT_STATUS_CLASSES[effectiveStatus];
+}
 
 function TrafficLight({ status }: { status: 'green' | 'yellow' | 'red' }) {
   const base = 'size-2.5 rounded-full shrink-0 transition-colors';
@@ -344,8 +385,8 @@ function StandaloneJobRow({
       {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
       {isAuftraegeColumnVisible(visibleColumns, 'status') && (
         <TableCell>
-          <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
-            {JOB_STATUS_LABELS[job.status]}
+          <Badge variant="secondary" className={getJobStatusClass(job)}>
+            {getJobStatusLabel(job)}
           </Badge>
         </TableCell>
       )}
@@ -483,8 +524,12 @@ function ProjectRow({
         {isAuftraegeColumnVisible(visibleColumns, 'status') && (
           <TableCell>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className={cn('w-[105px] justify-center', PROJECT_STATUS_CLASSES[effectiveStatus])}>
-                {PROJECT_STATUS_LABELS[effectiveStatus]}
+              <Badge
+                variant="secondary"
+                className={cn('max-w-48 justify-center truncate', getProjectStatusClass(project, effectiveStatus))}
+                title={getProjectStatusLabel(project)}
+              >
+                {getProjectStatusLabel(project)}
               </Badge>
               <div className="flex items-center gap-1.5">
                 <Progress value={progress} className="h-1.5 w-12" />
@@ -558,8 +603,8 @@ function ProjectRow({
               )}
               {isAuftraegeColumnVisible(visibleColumns, 'status') && (
                 <TableCell>
-                  <Badge variant="secondary" className={JOB_STATUS_CLASSES[job.status]}>
-                    {JOB_STATUS_LABELS[job.status]}
+                  <Badge variant="secondary" className={getJobStatusClass(job)}>
+                    {getJobStatusLabel(job)}
                   </Badge>
                 </TableCell>
               )}
@@ -674,8 +719,8 @@ function JobCard({
         </div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
-            <Badge variant="secondary" className={cn('text-[10px]', JOB_STATUS_CLASSES[job.status])}>
-              {JOB_STATUS_LABELS[job.status]}
+            <Badge variant="secondary" className={cn('text-[10px]', getJobStatusClass(job))}>
+              {getJobStatusLabel(job)}
             </Badge>
             <Badge variant="secondary" className={cn('text-[10px]', PRIORITY_CLASSES[job.priority])}>
               {JOB_PRIORITY_LABELS[job.priority]}
@@ -807,8 +852,8 @@ function ProjectCard({
           </div>
           <div className="flex items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className={cn('text-[10px]', PROJECT_STATUS_CLASSES[effectiveStatus])}>
-                {PROJECT_STATUS_LABELS[effectiveStatus]}
+              <Badge variant="secondary" className={cn('text-[10px]', getProjectStatusClass(project, effectiveStatus))}>
+                {getProjectStatusLabel(project)}
               </Badge>
               <div className="flex items-center gap-1.5">
                 <Progress value={progress} className="h-1.5 w-12" />

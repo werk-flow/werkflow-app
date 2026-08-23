@@ -34,7 +34,6 @@ import type {
 import { loadAssignmentEvaluation } from '@/lib/qualifications/server';
 import type { Json } from '@/lib/supabase/database.types';
 import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
 import {
   toClientContact,
   toClientSite,
@@ -644,7 +643,7 @@ export async function createJob(
         job_number: jobNumber,
         title,
         description: description || null,
-        status: input.plannedDate ? 'nicht_bearbeitet' : 'geparkt',
+        status: 'nicht_bearbeitet',
         priority: input.priority ?? 'mittel',
         planned_date: input.plannedDate || null,
         planned_time: normalizeJobPlannedTime(input.plannedTime),
@@ -758,7 +757,7 @@ export async function updateJob(
     const { data: existing, error: fetchError } = await admin
       .from('jobs')
       .select(
-        'id, project_id, client_id, site_id, contact_id, status, title, description, planned_date'
+        'id, project_id, client_id, site_id, contact_id, status, execution_state, title, description, planned_date'
       )
       .eq('id', jobId)
       .eq('organization_id', orgId)
@@ -893,15 +892,15 @@ export async function updateJob(
     if (input.location !== undefined)
       updateData.location = input.location?.trim() || null;
 
-    if (input.plannedDate !== undefined) {
-      if (updateData.planned_date && updateData.planned_date !== null) {
-        if (existing.status === 'geparkt') {
-          updateData.status = 'nicht_bearbeitet';
-        }
-      } else {
-        // Auto-parking due to date removal preserves all other metadata.
-        updateData.status = 'geparkt';
-      }
+    if (
+      input.plannedDate !== undefined &&
+      updateData.planned_date &&
+      existing.status === 'geparkt' &&
+      existing.execution_state === null
+    ) {
+      // Legacy parked rows without a P1-14 blocker stay usable. New parking
+      // is resolved explicitly before planning and never follows the date.
+      updateData.status = 'nicht_bearbeitet';
     }
 
     const shouldAssessAssignments =
@@ -1068,74 +1067,6 @@ export async function deleteJob(jobId: string): Promise<DeleteJobResult> {
     return { success: true };
   } catch (error) {
     console.error('Unexpected error in deleteJob:', error);
-    return { success: false, error: 'unexpected_error' };
-  }
-}
-
-export async function updateJobStatus(
-  jobId: string,
-  newStatus: JobStatus
-): Promise<UpdateJobResult> {
-  try {
-    const auth = await authenticateAndAuthorize();
-    if (!auth.success) return auth;
-    const { orgId, isManagerOrAbove } = auth.context;
-
-    if (!isManagerOrAbove) {
-      return { success: false, error: 'not_authorized' };
-    }
-
-    const admin = createSupabaseAdminClient();
-
-    const { data: existing, error: fetchError } = await admin
-      .from('jobs')
-      .select('id, project_id')
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError || !existing) {
-      return { success: false, error: 'job_not_found' };
-    }
-
-    const updateData: Record<string, unknown> = { status: newStatus };
-
-    if (newStatus === 'fertig') {
-      updateData.actual_completion_date = getBusinessTodayIso();
-    }
-
-    if (newStatus === 'in_bearbeitung' || newStatus === 'nicht_bearbeitet') {
-      updateData.actual_completion_date = null;
-    }
-
-    if (newStatus === 'geparkt') {
-      updateData.planned_date = null;
-      updateData.planned_time = null;
-      updateData.actual_completion_date = null;
-    }
-
-    const { data, error } = await admin
-      .from('jobs')
-      .update(updateData)
-      .eq('id', jobId)
-      .eq('organization_id', orgId)
-      .select()
-      .single();
-
-    if (error || !data) {
-      console.error('Error updating job status:', error);
-      return { success: false, error: 'update_failed' };
-    }
-
-    updateTag(CACHE_TAGS.jobs(orgId));
-    revalidatePath('/auftraege', 'layout');
-    if (existing.project_id) {
-      updateTag(CACHE_TAGS.projects(orgId));
-    }
-
-    return { success: true, job: toJob(data) };
-  } catch (error) {
-    console.error('Unexpected error in updateJobStatus:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
@@ -2019,7 +1950,7 @@ export async function getJobsForCalendar(
 
     let query = admin
       .from('jobs')
-      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id')
+      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, execution_version')
       .eq('organization_id', orgId)
       .neq('status', 'geparkt')
       .not('planned_date', 'is', null);
@@ -2095,6 +2026,7 @@ export async function getJobsForCalendar(
         description: j.description
       }),
       status: j.status as JobStatus,
+      executionVersion: j.execution_version ?? 0,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,
       plannedTime: normalizeJobPlannedTime(j.planned_time),
@@ -2131,7 +2063,7 @@ export async function getParkedJobs(): Promise<
 
     let query = admin
       .from('jobs')
-      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at')
+      .select('id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at, execution_version')
       .eq('organization_id', orgId)
       .eq('status', 'geparkt')
       .order('updated_at', { ascending: true });
@@ -2204,6 +2136,7 @@ export async function getParkedJobs(): Promise<
         description: j.description
       }),
       status: j.status as JobStatus,
+      executionVersion: j.execution_version ?? 0,
       priority: j.priority as JobPriority,
       plannedDate: j.planned_date,
       plannedTime: normalizeJobPlannedTime(j.planned_time),

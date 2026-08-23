@@ -173,7 +173,7 @@ export function AttentionCountProvider({
   useRealtimeEvent('planning_dispatch_acknowledgements', () => {
     scheduleRefresh();
   });
-  useRealtimeEvent('job_parking_contexts', () => {
+  useRealtimeEvent('work_blockers', () => {
     scheduleRefresh();
   });
   useRealtimeEvent('attention_read_states', () => {

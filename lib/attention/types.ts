@@ -33,7 +33,10 @@ export type AttentionSourceType =
   | 'client_follow_up'
   | 'dispatch_acknowledgement'
   | 'dispatch_challenge_open'
-  | 'job_parking_review';
+  // Kept for persisted P1-12 read/event identities; new tasks use
+  // work_blocker_review after the P1-14 parking migration.
+  | 'job_parking_review'
+  | 'work_blocker_review';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -121,12 +124,13 @@ export type AttentionTask =
       acknowledgementId: string;
       stateVersion: string;
     }
-  // P1-12: a parked job whose next-review date is due.
+  // P1-14: an open blocker or parking record whose review date is due.
   | {
-      sourceType: 'job_parking_review';
+      sourceType: 'work_blocker_review';
       sourceId: string;
-      jobNumber: string | null;
-      jobTitle: string;
+      targetLabel: string;
+      targetHref: string;
+      blockerKind: 'blocker' | 'parking';
       nextReviewDate: string;
       responsibleName: string | null;
       stateVersion: string;

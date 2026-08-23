@@ -2563,6 +2563,54 @@ export type Database = {
           },
         ]
       }
+      job_instruction_item_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          instruction_item_id: string
+          organization_id: string
+          previous_version: number
+          resulting_version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          instruction_item_id: string
+          organization_id: string
+          previous_version: number
+          resulting_version: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          instruction_item_id?: string
+          organization_id?: string
+          previous_version?: number
+          resulting_version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_instruction_item_events_instruction_item_id_fkey"
+            columns: ["instruction_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_instruction_item_evidence_requirements: {
         Row: {
           created_at: string
@@ -2639,6 +2687,7 @@ export type Database = {
       }
       job_instruction_items: {
         Row: {
+          completion_version: number
           content: string
           created_at: string
           created_by: string
@@ -2659,6 +2708,7 @@ export type Database = {
           work_template_application_id: string | null
         }
         Insert: {
+          completion_version?: number
           content: string
           created_at?: string
           created_by: string
@@ -2679,6 +2729,7 @@ export type Database = {
           work_template_application_id?: string | null
         }
         Update: {
+          completion_version?: number
           content?: string
           created_at?: string
           created_by?: string
@@ -2873,115 +2924,6 @@ export type Database = {
           },
         ]
       }
-      job_parking_contexts: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          job_id: string
-          next_review_date: string | null
-          note: string | null
-          organization_id: string
-          reason: Database["public"]["Enums"]["job_parking_reason"]
-          responsible_employee_record_id: string | null
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          job_id: string
-          next_review_date?: string | null
-          note?: string | null
-          organization_id: string
-          reason: Database["public"]["Enums"]["job_parking_reason"]
-          responsible_employee_record_id?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          job_id?: string
-          next_review_date?: string | null
-          note?: string | null
-          organization_id?: string
-          reason?: Database["public"]["Enums"]["job_parking_reason"]
-          responsible_employee_record_id?: string | null
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "job_parking_contexts_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: true
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "job_parking_contexts_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "job_parking_contexts_responsible_employee_record_id_fkey"
-            columns: ["responsible_employee_record_id"]
-            isOneToOne: false
-            referencedRelation: "employee_records"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      job_parking_events: {
-        Row: {
-          after_state: Json | null
-          before_state: Json | null
-          created_at: string
-          created_by: string | null
-          event_type: string
-          id: string
-          job_id: string
-          organization_id: string
-        }
-        Insert: {
-          after_state?: Json | null
-          before_state?: Json | null
-          created_at?: string
-          created_by?: string | null
-          event_type: string
-          id?: string
-          job_id: string
-          organization_id: string
-        }
-        Update: {
-          after_state?: Json | null
-          before_state?: Json | null
-          created_at?: string
-          created_by?: string | null
-          event_type?: string
-          id?: string
-          job_id?: string
-          organization_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "job_parking_events_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "job_parking_events_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       job_qualification_assessments: {
         Row: {
           assessed_for_date: string
@@ -3061,6 +3003,10 @@ export type Database = {
           created_by: string
           description: string | null
           estimated_duration_minutes: number | null
+          execution_state:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version: number
           id: string
           job_number: string | null
           location: string | null
@@ -3083,6 +3029,10 @@ export type Database = {
           created_by: string
           description?: string | null
           estimated_duration_minutes?: number | null
+          execution_state?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version?: number
           id?: string
           job_number?: string | null
           location?: string | null
@@ -3105,6 +3055,10 @@ export type Database = {
           created_by?: string
           description?: string | null
           estimated_duration_minutes?: number | null
+          execution_state?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version?: number
           id?: string
           job_number?: string | null
           location?: string | null
@@ -4669,6 +4623,11 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          execution_override_reason: string | null
+          execution_state_override:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version: number
           id: string
           name: string
           organization_id: string
@@ -4685,6 +4644,11 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          execution_override_reason?: string | null
+          execution_state_override?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version?: number
           id?: string
           name: string
           organization_id: string
@@ -4701,6 +4665,11 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          execution_override_reason?: string | null
+          execution_state_override?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          execution_version?: number
           id?: string
           name?: string
           organization_id?: string
@@ -5287,6 +5256,421 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_blocker_events: {
+        Row: {
+          after_state: Json | null
+          before_state: Json | null
+          blocker_id: string
+          created_at: string
+          created_by: string | null
+          event_type: string
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          after_state?: Json | null
+          before_state?: Json | null
+          blocker_id: string
+          created_at?: string
+          created_by?: string | null
+          event_type: string
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          after_state?: Json | null
+          before_state?: Json | null
+          blocker_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_type?: string
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_blocker_events_blocker_id_fkey"
+            columns: ["blocker_id"]
+            isOneToOne: false
+            referencedRelation: "work_blockers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blocker_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_blockers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          details: string | null
+          id: string
+          instruction_item_id: string | null
+          is_legacy: boolean
+          job_id: string | null
+          kind: Database["public"]["Enums"]["work_blocker_kind"]
+          legacy_source: string | null
+          next_review_date: string | null
+          organization_id: string
+          parent_project_parking_blocker_id: string | null
+          project_id: string | null
+          reason: Database["public"]["Enums"]["work_blocker_reason"] | null
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          responsible_employee_record_id: string | null
+          state: Database["public"]["Enums"]["work_blocker_state"]
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
+          id?: string
+          instruction_item_id?: string | null
+          is_legacy?: boolean
+          job_id?: string | null
+          kind?: Database["public"]["Enums"]["work_blocker_kind"]
+          legacy_source?: string | null
+          next_review_date?: string | null
+          organization_id: string
+          parent_project_parking_blocker_id?: string | null
+          project_id?: string | null
+          reason?: Database["public"]["Enums"]["work_blocker_reason"] | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          responsible_employee_record_id?: string | null
+          state?: Database["public"]["Enums"]["work_blocker_state"]
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          details?: string | null
+          id?: string
+          instruction_item_id?: string | null
+          is_legacy?: boolean
+          job_id?: string | null
+          kind?: Database["public"]["Enums"]["work_blocker_kind"]
+          legacy_source?: string | null
+          next_review_date?: string | null
+          organization_id?: string
+          parent_project_parking_blocker_id?: string | null
+          project_id?: string | null
+          reason?: Database["public"]["Enums"]["work_blocker_reason"] | null
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          responsible_employee_record_id?: string | null
+          state?: Database["public"]["Enums"]["work_blocker_state"]
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_blockers_instruction_item_id_fkey"
+            columns: ["instruction_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blockers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blockers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blockers_parent_project_parking_blocker_id_fkey"
+            columns: ["parent_project_parking_blocker_id"]
+            isOneToOne: false
+            referencedRelation: "work_blockers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blockers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_blockers_responsible_employee_record_id_fkey"
+            columns: ["responsible_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_dependencies: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          declared_kind:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id: string | null
+          dependent_project_id: string | null
+          description: string | null
+          effect: Database["public"]["Enums"]["work_dependency_effect"]
+          id: string
+          manual_state:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id: string
+          predecessor_instruction_item_id: string | null
+          predecessor_job_id: string | null
+          predecessor_project_id: string | null
+          removed_at: string | null
+          removed_by: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          declared_kind?:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id?: string | null
+          dependent_project_id?: string | null
+          description?: string | null
+          effect: Database["public"]["Enums"]["work_dependency_effect"]
+          id?: string
+          manual_state?:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id: string
+          predecessor_instruction_item_id?: string | null
+          predecessor_job_id?: string | null
+          predecessor_project_id?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          declared_kind?:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id?: string | null
+          dependent_project_id?: string | null
+          description?: string | null
+          effect?: Database["public"]["Enums"]["work_dependency_effect"]
+          id?: string
+          manual_state?:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id?: string
+          predecessor_instruction_item_id?: string | null
+          predecessor_job_id?: string | null
+          predecessor_project_id?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_dependencies_dependent_job_id_fkey"
+            columns: ["dependent_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependencies_dependent_project_id_fkey"
+            columns: ["dependent_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependencies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependencies_predecessor_instruction_item_id_fkey"
+            columns: ["predecessor_instruction_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependencies_predecessor_job_id_fkey"
+            columns: ["predecessor_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependencies_predecessor_project_id_fkey"
+            columns: ["predecessor_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_dependency_events: {
+        Row: {
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          created_by: string | null
+          dependency_id: string
+          event_type: string
+          id: string
+          organization_id: string
+          reason: string | null
+        }
+        Insert: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          dependency_id: string
+          event_type: string
+          id?: string
+          organization_id: string
+          reason?: string | null
+        }
+        Update: {
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          created_by?: string | null
+          dependency_id?: string
+          event_type?: string
+          id?: string
+          organization_id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_dependency_events_dependency_id_fkey"
+            columns: ["dependency_id"]
+            isOneToOne: false
+            referencedRelation: "work_dependencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_dependency_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_execution_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event_payload: Json
+          event_type: string
+          from_state: Database["public"]["Enums"]["work_execution_state"] | null
+          gate_fingerprint: string
+          gate_snapshot: Json
+          id: string
+          job_id: string | null
+          organization_id: string
+          previous_version: number
+          project_id: string | null
+          reason: string | null
+          resulting_version: number
+          to_state: Database["public"]["Enums"]["work_execution_state"] | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type: string
+          from_state?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          gate_fingerprint: string
+          gate_snapshot?: Json
+          id?: string
+          job_id?: string | null
+          organization_id: string
+          previous_version: number
+          project_id?: string | null
+          reason?: string | null
+          resulting_version: number
+          to_state?: Database["public"]["Enums"]["work_execution_state"] | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event_payload?: Json
+          event_type?: string
+          from_state?:
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null
+          gate_fingerprint?: string
+          gate_snapshot?: Json
+          id?: string
+          job_id?: string | null
+          organization_id?: string
+          previous_version?: number
+          project_id?: string | null
+          reason?: string | null
+          resulting_version?: number
+          to_state?: Database["public"]["Enums"]["work_execution_state"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_execution_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_execution_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_execution_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -6049,6 +6433,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      clear_project_execution_override: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_project_id: string
+          p_reason: string
+        }
+        Returns: number
+      }
       create_client_follow_up: {
         Args: {
           p_actor_id: string
@@ -6230,6 +6624,15 @@ export type Database = {
       }
       get_user_admin_org_ids: { Args: { p_user_id: string }; Returns: string[] }
       get_user_org_ids: { Args: { p_user_id: string }; Returns: string[] }
+      get_work_lifecycle_snapshot: {
+        Args: {
+          p_actor_id: string
+          p_organization_id: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
+      }
       is_member_of_org: {
         Args: { p_org_id: string; p_user_id: string }
         Returns: boolean
@@ -6245,6 +6648,20 @@ export type Database = {
           p_readiness_snapshot?: Json
           p_recipient_employee_record_ids?: string[]
           p_request_id?: string
+        }
+        Returns: string
+      }
+      park_work_target: {
+        Args: {
+          p_actor_id: string
+          p_details: string
+          p_expected_execution_version: number
+          p_next_review_date: string
+          p_organization_id: string
+          p_reason: Database["public"]["Enums"]["work_blocker_reason"]
+          p_responsible_employee_record_id: string
+          p_target_id: string
+          p_target_type: string
         }
         Returns: string
       }
@@ -6317,6 +6734,16 @@ export type Database = {
           org_id: string
           org_name: string
         }[]
+      }
+      remove_work_dependency: {
+        Args: {
+          p_actor_id: string
+          p_dependency_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: number
       }
       renew_employee_capability: {
         Args: {
@@ -6494,17 +6921,55 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      set_job_parking_context: {
+      set_declared_work_dependency_state: {
         Args: {
           p_actor_id: string
-          p_job_id: string
-          p_next_review_date?: string
-          p_note?: string
+          p_dependency_id: string
+          p_expected_version: number
           p_organization_id: string
-          p_reason: Database["public"]["Enums"]["job_parking_reason"]
-          p_responsible_employee_record_id?: string
+          p_reason: string
+          p_state: Database["public"]["Enums"]["work_dependency_manual_state"]
         }
-        Returns: undefined
+        Returns: {
+          created_at: string
+          created_by: string | null
+          declared_kind:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id: string | null
+          dependent_project_id: string | null
+          description: string | null
+          effect: Database["public"]["Enums"]["work_dependency_effect"]
+          id: string
+          manual_state:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id: string
+          predecessor_instruction_item_id: string | null
+          predecessor_job_id: string | null
+          predecessor_project_id: string | null
+          removed_at: string | null
+          removed_by: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "work_dependencies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_instruction_item_completion: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_instruction_item_id: string
+          p_is_completed: boolean
+          p_organization_id: string
+        }
+        Returns: number
       }
       set_planning_occurrence_status: {
         Args: {
@@ -6514,6 +6979,21 @@ export type Database = {
           p_organization_id: string
           p_reason: string
           p_status: Database["public"]["Enums"]["planning_occurrence_status"]
+        }
+        Returns: number
+      }
+      set_work_blocker_state: {
+        Args: {
+          p_actor_id: string
+          p_blocker_id: string
+          p_details?: string
+          p_expected_version: number
+          p_next_review_date?: string
+          p_note: string
+          p_organization_id: string
+          p_reason?: Database["public"]["Enums"]["work_blocker_reason"]
+          p_responsible_employee_record_id?: string
+          p_state: Database["public"]["Enums"]["work_blocker_state"]
         }
         Returns: number
       }
@@ -6562,6 +7042,36 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      transition_work_execution: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_override_gates?: boolean
+          p_reason?: string
+          p_target_id: string
+          p_target_type: string
+          p_to_state: Database["public"]["Enums"]["work_execution_state"]
+        }
+        Returns: {
+          event_id: string
+          execution_state: Database["public"]["Enums"]["work_execution_state"]
+          execution_version: number
+          gate_fingerprint: string
+          gate_snapshot: Json
+        }[]
+      }
+      unpark_work_target: {
+        Args: {
+          p_actor_id: string
+          p_expected_blocker_version: number
+          p_organization_id: string
+          p_reason: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: number
       }
       update_client_follow_up: {
         Args: {
@@ -6645,6 +7155,72 @@ export type Database = {
         }
         Returns: number
       }
+      upsert_work_blocker: {
+        Args: {
+          p_actor_id: string
+          p_blocker_id: string
+          p_details: string
+          p_expected_version: number
+          p_instruction_item_id: string
+          p_job_id: string
+          p_kind: Database["public"]["Enums"]["work_blocker_kind"]
+          p_next_review_date: string
+          p_organization_id: string
+          p_project_id: string
+          p_reason: Database["public"]["Enums"]["work_blocker_reason"]
+          p_responsible_employee_record_id: string
+        }
+        Returns: {
+          blocker_id: string
+          blocker_version: number
+        }[]
+      }
+      upsert_work_dependency: {
+        Args: {
+          p_actor_id: string
+          p_declared_kind: Database["public"]["Enums"]["work_declared_dependency_kind"]
+          p_dependency_id: string
+          p_dependent_job_id: string
+          p_dependent_project_id: string
+          p_description: string
+          p_effect: Database["public"]["Enums"]["work_dependency_effect"]
+          p_expected_version: number
+          p_organization_id: string
+          p_predecessor_instruction_item_id: string
+          p_predecessor_job_id: string
+          p_predecessor_project_id: string
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          declared_kind:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id: string | null
+          dependent_project_id: string | null
+          description: string | null
+          effect: Database["public"]["Enums"]["work_dependency_effect"]
+          id: string
+          manual_state:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id: string
+          predecessor_instruction_item_id: string | null
+          predecessor_job_id: string | null
+          predecessor_project_id: string | null
+          removed_at: string | null
+          removed_by: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "work_dependencies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       withdraw_customer_commitment: {
         Args: {
           p_actor_id: string
@@ -6678,12 +7254,6 @@ export type Database = {
       dispatch_status: "active" | "cancelled"
       entry_change_type: "edit" | "delete"
       invite_status: "pending" | "accepted" | "expired" | "cancelled"
-      job_parking_reason:
-        | "warten_auf_kunde"
-        | "warten_auf_material"
-        | "warten_auf_freigabe"
-        | "kapazitaet"
-        | "sonstiges"
       job_priority: "niedrig" | "mittel" | "hoch"
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt"
       org_role: "admin" | "buero" | "employee"
@@ -6720,6 +7290,33 @@ export type Database = {
       subscription_status: "active" | "inactive" | "canceled" | "trialing"
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete"
       time_tracking_break_mode: "manual" | "automatic"
+      work_blocker_kind: "blocker" | "parking"
+      work_blocker_reason:
+        | "customer"
+        | "material"
+        | "approval"
+        | "capacity"
+        | "site_access"
+        | "dependency"
+        | "external_trade"
+        | "safety"
+        | "internal_clarification"
+        | "other"
+      work_blocker_state: "open" | "resolved"
+      work_declared_dependency_kind:
+        | "approval"
+        | "delivery"
+        | "site_condition"
+        | "external_trade"
+      work_dependency_effect: "blocks_start" | "blocks_completion" | "warning"
+      work_dependency_manual_state: "open" | "satisfied" | "waived"
+      work_execution_state:
+        | "not_started"
+        | "in_progress"
+        | "interrupted"
+        | "execution_complete"
+        | "handed_over"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -6872,13 +7469,6 @@ export const Constants = {
       dispatch_status: ["active", "cancelled"],
       entry_change_type: ["edit", "delete"],
       invite_status: ["pending", "accepted", "expired", "cancelled"],
-      job_parking_reason: [
-        "warten_auf_kunde",
-        "warten_auf_material",
-        "warten_auf_freigabe",
-        "kapazitaet",
-        "sonstiges",
-      ],
       job_priority: ["niedrig", "mittel", "hoch"],
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
       org_role: ["admin", "buero", "employee"],
@@ -6918,6 +7508,36 @@ export const Constants = {
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_tracking_break_mode: ["manual", "automatic"],
+      work_blocker_kind: ["blocker", "parking"],
+      work_blocker_reason: [
+        "customer",
+        "material",
+        "approval",
+        "capacity",
+        "site_access",
+        "dependency",
+        "external_trade",
+        "safety",
+        "internal_clarification",
+        "other",
+      ],
+      work_blocker_state: ["open", "resolved"],
+      work_declared_dependency_kind: [
+        "approval",
+        "delivery",
+        "site_condition",
+        "external_trade",
+      ],
+      work_dependency_effect: ["blocks_start", "blocks_completion", "warning"],
+      work_dependency_manual_state: ["open", "satisfied", "waived"],
+      work_execution_state: [
+        "not_started",
+        "in_progress",
+        "interrupted",
+        "execution_complete",
+        "handed_over",
+        "cancelled",
+      ],
     },
   },
 } as const

@@ -186,8 +186,11 @@ export function useRealtimeRouterRefresh({
   useRealtimeEvent('planning_customer_commitments', (event) => {
     if (tableSet.has('planning_customer_commitments')) scheduleRefresh(event);
   });
-  useRealtimeEvent('job_parking_contexts', (event) => {
-    if (tableSet.has('job_parking_contexts')) scheduleRefresh(event);
+  useRealtimeEvent('work_blockers', (event) => {
+    if (tableSet.has('work_blockers')) scheduleRefresh(event);
+  });
+  useRealtimeEvent('work_dependencies', (event) => {
+    if (tableSet.has('work_dependencies')) scheduleRefresh(event);
   });
   useRealtimeEvent('teams', (event) => {
     if (tableSet.has('teams')) scheduleRefresh(event);

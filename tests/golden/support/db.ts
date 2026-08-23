@@ -14,6 +14,7 @@ import {
   parseHolidayRegionHistory,
   type OrganizationHolidayCalendar,
 } from '../../../lib/personnel/targets';
+import { parseWorkLifecycleSnapshot } from '../../../lib/work-lifecycle/types';
 import { requireEnv } from './env';
 
 // Read-only service-role lookups for gate assertions. Specs drive everything
@@ -2035,16 +2036,19 @@ export async function getParkingState(
   const jobId = await resolveJobIdByNumber(admin, orgId, jobNumber);
   const [contextResult, eventsResult] = await Promise.all([
     admin
-      .from('job_parking_contexts')
-      .select('reason, note, responsible_employee_record_id, next_review_date')
+      .from('work_blockers')
+      .select('id, reason, details, responsible_employee_record_id, next_review_date')
       .eq('organization_id', orgId)
       .eq('job_id', jobId)
+      .eq('kind', 'parking')
+      .eq('state', 'open')
       .maybeSingle(),
     admin
-      .from('job_parking_events')
-      .select('event_type, created_at')
+      .from('work_blocker_events')
+      .select('event_type, created_at, work_blockers!inner(job_id)')
       .eq('organization_id', orgId)
-      .eq('job_id', jobId)
+      .eq('work_blockers.job_id', jobId)
+      .eq('work_blockers.kind', 'parking')
       .order('created_at', { ascending: true })
       .limit(501),
   ]);
@@ -2060,15 +2064,143 @@ export async function getParkingState(
   return {
     context: contextResult.data
       ? {
-          reason: contextResult.data.reason as string,
-          note: contextResult.data.note as string | null,
+          reason: contextResult.data.reason === 'material'
+            ? 'warten_auf_material'
+            : contextResult.data.reason as string,
+          note: contextResult.data.details as string | null,
           responsibleEmployeeRecordId:
             contextResult.data.responsible_employee_record_id as string | null,
           nextReviewDate: contextResult.data.next_review_date as string | null,
         }
       : null,
-    eventTypes: (eventsResult.data ?? []).map((row) => row.event_type as string),
+    eventTypes: (eventsResult.data ?? []).map((row) =>
+      row.event_type === 'parked' ? 'context_set' : row.event_type as string
+    ),
   };
+}
+
+export async function getWorkLifecycleState(
+  orgId: string,
+  target: { jobNumber: string } | { projectNumber: string }
+) {
+  const admin = createAdminClient();
+  const isJob = 'jobNumber' in target;
+  const entityResult = isJob
+    ? await admin
+        .from('jobs')
+        .select('id, execution_state, execution_version, status')
+        .eq('organization_id', orgId)
+        .eq('job_number', target.jobNumber)
+        .single()
+    : await admin
+        .from('projects')
+        .select('id, execution_state_override, execution_version, status_override')
+        .eq('organization_id', orgId)
+        .eq('project_number', target.projectNumber)
+        .single();
+  if (entityResult.error) {
+    throw new Error(`Lifecycle target lookup failed: ${entityResult.error.message}`);
+  }
+  const targetId = entityResult.data.id;
+  const targetColumn = isJob ? 'job_id' : 'project_id';
+  const dependentColumn = isJob ? 'dependent_job_id' : 'dependent_project_id';
+  const { data: actor, error: actorError } = await admin
+    .from('organization_members')
+    .select('user_id')
+    .eq('organization_id', orgId)
+    .eq('role', 'admin')
+    .limit(1)
+    .single();
+  if (actorError || !actor) {
+    throw new Error(`Lifecycle actor lookup failed: ${actorError?.message}`);
+  }
+  const [blockers, dependencies, executionEvents, snapshotResult] = await Promise.all([
+    admin
+      .from('work_blockers')
+      .select('id, kind, reason, details, responsible_employee_record_id, next_review_date, state, version, resolution_note, parent_project_parking_blocker_id')
+      .eq('organization_id', orgId)
+      .eq(targetColumn, targetId)
+      .order('created_at')
+      .order('id'),
+    admin
+      .from('work_dependencies')
+      .select('id, effect, declared_kind, description, manual_state, removed_at, version, predecessor_job_id, predecessor_project_id, predecessor_instruction_item_id')
+      .eq('organization_id', orgId)
+      .eq(dependentColumn, targetId)
+      .order('created_at')
+      .order('id'),
+    admin
+      .from('work_execution_events')
+      .select('event_type, from_state, to_state, reason, gate_snapshot, gate_fingerprint, previous_version, resulting_version')
+      .eq('organization_id', orgId)
+      .eq(targetColumn, targetId)
+      .order('created_at')
+      .order('id'),
+    admin.rpc('get_work_lifecycle_snapshot', {
+      p_organization_id: orgId,
+      p_actor_id: actor.user_id,
+      p_target_type: isJob ? 'job' : 'project',
+      p_target_id: targetId,
+    }),
+  ]);
+  const error = blockers.error ?? dependencies.error ?? executionEvents.error ?? snapshotResult.error;
+  if (error) throw new Error(`Lifecycle state lookup failed: ${error.message}`);
+  const snapshot = parseWorkLifecycleSnapshot(snapshotResult.data);
+  if (!snapshot.success) {
+    throw new Error(`Lifecycle snapshot parsing failed: ${snapshot.error}`);
+  }
+  const satisfactionByDependencyId = new Map(
+    snapshot.snapshot.dependencies.map((dependency) => [
+      dependency.id,
+      dependency.is_satisfied,
+    ])
+  );
+  return {
+    entity: entityResult.data,
+    blockers: blockers.data ?? [],
+    dependencies: (dependencies.data ?? []).map((dependency) => ({
+      ...dependency,
+      state: dependency.removed_at ? 'removed' : dependency.manual_state ?? 'open',
+      isSatisfied: satisfactionByDependencyId.get(dependency.id) ?? null,
+    })),
+    executionEvents: executionEvents.data ?? [],
+  };
+}
+
+export async function getVisibleWorkLifecycleCountsAs(
+  user: { email: string; password: string },
+  orgId: string
+) {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error: signInError } = await client.auth.signInWithPassword(user);
+  if (signInError) throw new Error(`Lifecycle RLS sign-in failed: ${signInError.message}`);
+  const tables = [
+    'work_blockers',
+    'work_blocker_events',
+    'work_dependencies',
+    'work_dependency_events',
+    'work_execution_events',
+  ] as const;
+  const counts: Record<(typeof tables)[number], number> = {
+    work_blockers: 0,
+    work_blocker_events: 0,
+    work_dependencies: 0,
+    work_dependency_events: 0,
+    work_execution_events: 0,
+  };
+  for (const table of tables) {
+    const { count, error } = await client
+      .from(table)
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId);
+    if (error) throw new Error(`Lifecycle RLS lookup failed for ${table}: ${error.message}`);
+    counts[table] = count ?? 0;
+  }
+  return counts;
 }
 
 export async function getCommitmentState(
@@ -2123,7 +2255,7 @@ export async function getVisibleDispatchStateAs(
     | 'planning_dispatch_recipients'
     | 'planning_dispatch_acknowledgements'
     | 'planning_dispatch_events'
-    | 'job_parking_contexts'
+    | 'work_blockers'
     | 'planning_customer_commitments',
     number
   >
@@ -2146,18 +2278,16 @@ export async function getVisibleDispatchStateAs(
     'planning_dispatch_recipients',
     'planning_dispatch_acknowledgements',
     'planning_dispatch_events',
-    'job_parking_contexts',
+    'work_blockers',
     'planning_customer_commitments',
   ] as const;
   // Sequential on purpose: a parallel burst of head-count requests right
   // after three sign-ins intermittently dropped a connection in suite runs.
   const counts: number[] = [];
   for (const table of tables) {
-    // job_parking_contexts is keyed by job_id; every other table has an id.
-    const countColumn = table === 'job_parking_contexts' ? 'job_id' : 'id';
     const { count, error } = await client
       .from(table)
-      .select(countColumn, { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId);
     if (error) {
       throw new Error(

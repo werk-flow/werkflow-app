@@ -13,6 +13,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
+import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -47,6 +48,11 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     result.success ? getJobMaterialLines(result.job.id) : null
   );
   const inventoryOptionsResultPromise = getInventoryPickerOptions();
+  const lifecycleResultPromise = jobResultPromise.then((result) =>
+    result.success
+      ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id })
+      : null
+  );
 
   const [
     result,
@@ -56,6 +62,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     documentsResult,
     materialLinesResult,
     inventoryOptionsResult,
+    lifecycleResult,
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
@@ -68,6 +75,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     documentsResultPromise,
     materialLinesResultPromise,
     inventoryOptionsResultPromise,
+    lifecycleResultPromise,
   ]);
 
   if (!result.success) {
@@ -115,7 +123,6 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     inventoryOptionsResult && inventoryOptionsResult.success
       ? inventoryOptionsResult.locations
       : [];
-
   if (job.project?.projectNumber) {
     redirect(
       `/auftraege/projekt/${encodeURIComponent(job.project.projectNumber)}/${encodeURIComponent(job.jobNumber!)}`
@@ -155,6 +162,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
             }
           : null
       }
+      lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
     />
   );
 }

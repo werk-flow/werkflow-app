@@ -32,12 +32,13 @@ import type { OrgMemberOption } from './employee-multi-select';
 import { cn } from '@/lib/utils';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
 
-type ActiveStatusFilter = 'alle' | 'offen' | 'in_bearbeitung';
+type ActiveStatusFilter = 'alle' | 'not_started' | 'in_progress' | 'interrupted';
 
 const ACTIVE_FILTER_OPTIONS: { value: ActiveStatusFilter; label: string }[] = [
   { value: 'alle', label: 'Alle' },
-  { value: 'offen', label: UNIFIED_STATUS_LABELS.offen },
-  { value: 'in_bearbeitung', label: UNIFIED_STATUS_LABELS.in_bearbeitung },
+  { value: 'not_started', label: UNIFIED_STATUS_LABELS.not_started },
+  { value: 'in_progress', label: UNIFIED_STATUS_LABELS.in_progress },
+  { value: 'interrupted', label: UNIFIED_STATUS_LABELS.interrupted },
 ];
 
 interface AuftraegeContentProps {

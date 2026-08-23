@@ -214,7 +214,6 @@ async function getClockJobInfo(
   options?: { includeRelations?: boolean; touchStatus?: boolean }
 ): Promise<import('./types').ClockJobInfo | null> {
   const includeRelations = options?.includeRelations ?? true;
-  const touchStatus = options?.touchStatus ?? false;
 
   const { data: job } = await admin
     .from('jobs')
@@ -224,13 +223,6 @@ async function getClockJobInfo(
 
   if (!job) {
     return null;
-  }
-
-  if (touchStatus && job.status === 'nicht_bearbeitet') {
-    await admin
-      .from('jobs')
-      .update({ status: 'in_bearbeitung' })
-      .eq('id', jobId);
   }
 
   if (!includeRelations) {

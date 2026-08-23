@@ -58,7 +58,7 @@ export function ParkConfirmationDialog({
       <>
         Wenn du das geplante Datum von{' '}
         <span className="font-medium text-foreground">{displayName}</span>{' '}
-        entfernst, wird der Auftrag automatisch geparkt.
+        entfernst, bleibt der Arbeitsstand unverändert.
       </>
     )
     : variant === 'job'
@@ -78,7 +78,7 @@ export function ParkConfirmationDialog({
       );
 
   const warningText = isAutoParkDateRemoval
-    ? 'Andere Metadaten wie Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben erhalten.'
+    ? 'Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben ebenfalls unverändert.'
     : variant === 'job'
       ? 'Das geplante Datum und die Uhrzeit werden entfernt.'
       : 'Alle geplanten Daten und Uhrzeiten der zugehörigen Aufträge werden entfernt.';

@@ -40,6 +40,7 @@ import {
   type JobParkingContext,
   type JobParkingReason,
 } from '@/lib/parking/types';
+import { parkWorkTarget } from '@/lib/work-lifecycle/actions';
 
 function toLocalIsoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -55,18 +56,22 @@ export function ParkingContextDialog({
   jobId,
   jobTitle,
   existingContext,
+  expectedExecutionVersion,
+  isAlreadyParked,
   onClose,
   onSaved,
 }: {
   jobId: string;
   jobTitle: string;
   existingContext: JobParkingContext | null;
+  expectedExecutionVersion: number;
+  isAlreadyParked: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { showBanner } = useBanner();
   const [reason, setReason] = useState<JobParkingReason>(
-    existingContext?.reason ?? 'sonstiges'
+    existingContext?.reason ?? 'other'
   );
   const [note, setNote] = useState(existingContext?.note ?? '');
   const [responsibleId, setResponsibleId] = useState<string>(
@@ -116,13 +121,23 @@ export function ParkingContextDialog({
     setIsSaving(true);
     setError(null);
     try {
-      const result = await setJobParkingContext({
-        jobId,
-        reason,
-        note: note.trim() || null,
-        responsibleEmployeeRecordId: responsibleId || null,
-        nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : null,
-      });
+      const result = existingContext
+        ? await setJobParkingContext({
+            jobId,
+            reason,
+            note: note.trim() || null,
+            responsibleEmployeeRecordId: responsibleId,
+            nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
+          })
+        : await parkWorkTarget({
+            targetType: 'job',
+            targetId: jobId,
+            expectedExecutionVersion,
+            reason,
+            details: note.trim() || undefined,
+            responsibleEmployeeRecordId: responsibleId,
+            nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
+          });
       if (!result.success) {
         setError(
           PARKING_ERROR_MESSAGES[result.error] ??
@@ -196,8 +211,6 @@ export function ParkingContextDialog({
               placeholder="Person auswählen"
               searchPlaceholder="Person suchen …"
               emptyMessage="Keine Person gefunden"
-              allowNone
-              noneLabel="Keine Person hinterlegen"
             />
             <ErrorText className="text-xs">
               {optionsError
@@ -208,7 +221,7 @@ export function ParkingContextDialog({
 
           <div className="space-y-2">
             <Label htmlFor="parking-review-date">
-              Wiedervorlage (optional)
+              Wiedervorlage
             </Label>
             <DatePicker
               id="parking-review-date"
@@ -223,9 +236,9 @@ export function ParkingContextDialog({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Ohne Kontext lassen
+              {isAlreadyParked ? 'Ohne Kontext lassen' : 'Abbrechen'}
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" disabled={isSaving || !responsibleId || !reviewDate}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               Kontext speichern
             </Button>

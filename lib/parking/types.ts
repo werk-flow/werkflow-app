@@ -1,19 +1,15 @@
 import type { Database } from '@/lib/supabase/database.types';
+import { WORK_BLOCKER_REASON_LABELS } from '@/lib/work-lifecycle/types';
 
-export type JobParkingReason = Database['public']['Enums']['job_parking_reason'];
+export type JobParkingReason = Database['public']['Enums']['work_blocker_reason'];
 
-// Bounded operational vocabulary for WHY work is parked. Deliberately small;
-// P1-14's mature blocker/readiness state machine may supersede it.
-export const PARKING_REASON_LABELS: Record<JobParkingReason, string> = {
-  warten_auf_kunde: 'Warten auf Kunde',
-  warten_auf_material: 'Warten auf Material',
-  warten_auf_freigabe: 'Warten auf Freigabe',
-  kapazitaet: 'Keine Kapazität',
-  sonstiges: 'Sonstiges',
-};
+export const PARKING_REASON_LABELS: Record<JobParkingReason, string> =
+  WORK_BLOCKER_REASON_LABELS;
 
 export type JobParkingContext = {
   jobId: string;
+  blockerId: string;
+  version: number;
   reason: JobParkingReason;
   note: string | null;
   responsibleEmployeeRecordId: string | null;
@@ -31,5 +27,7 @@ export const PARKING_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Keine Berechtigung für diese Aktion.',
   load_failed: 'Der Parkplatz-Kontext konnte nicht geladen werden.',
   update_failed: 'Der Parkplatz-Kontext konnte nicht gespeichert werden.',
+  stale_version:
+    'Der Parkplatz-Kontext wurde inzwischen geändert. Bitte lade ihn neu.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };

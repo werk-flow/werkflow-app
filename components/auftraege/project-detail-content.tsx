@@ -30,9 +30,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
@@ -60,12 +57,13 @@ import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
+import { WorkLifecycleCard, WorkLifecycleLoadError } from './work-lifecycle-card';
+import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 
-import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
+import { updateProject, deleteProject } from '@/lib/projects/actions';
 import {
   getAuftraegeDialogOptions,
   updateJob,
-  updateJobStatus,
 } from '@/lib/jobs/actions';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
@@ -184,6 +182,7 @@ interface ProjectDetailContentProps {
   materialSummary: ProjectMaterialSummary;
   inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
+  lifecycleSnapshot: WorkLifecycleSnapshot | null;
   // Set when this project was created by converting an Anfrage (P1-02).
   originRequest?: { label: string; href: string } | null;
 }
@@ -199,6 +198,7 @@ export function ProjectDetailContent({
   materialSummary,
   inventoryItems,
   inventoryLocations,
+  lifecycleSnapshot,
   originRequest,
 }: ProjectDetailContentProps) {
   const router = useRouter();
@@ -209,7 +209,6 @@ export function ProjectDetailContent({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showAssignJobsDialog, setShowAssignJobsDialog] = useState(false);
-  const [statusUpdatingJobId, setStatusUpdatingJobId] = useState<string | null>(null);
   const [isUpdatingClient, startClientUpdateTransition] = useTransition();
   const [isAssigningJobs, startAssignJobsTransition] = useTransition();
   const [dialogClients, setDialogClients] = useState(clients);
@@ -496,39 +495,6 @@ export function ProjectDetailContent({
     });
   };
 
-  const handleOverrideStatus = async (status: ProjectStatus | 'auto') => {
-    const result =
-      status === 'geparkt'
-        ? await parkProject(project.id)
-        : await updateProject(project.id, {
-            statusOverride: status === 'auto' ? null : status,
-          });
-    if (result.success) {
-      setLiveProject(result.project);
-      return;
-    }
-    showBanner({
-      variant: 'error',
-      message: 'Der Projektstatus konnte nicht geändert werden.',
-    });
-  };
-
-  const handleJobStatusChange = async (jobId: string, newStatus: JobStatus) => {
-    setStatusUpdatingJobId(jobId);
-    const result = await updateJobStatus(jobId, newStatus);
-    setStatusUpdatingJobId(null);
-    if (result.success) {
-      setLiveJobs((prev) =>
-        prev.map((job) => (job.id === jobId ? result.job : job))
-      );
-      return;
-    }
-    showBanner({
-      variant: 'error',
-      message: 'Der Auftragsstatus konnte nicht geändert werden.',
-    });
-  };
-
   const handleClientSave = async (clientId: string) => {
     startClientUpdateTransition(async () => {
       const result = await updateProject(project.id, {
@@ -641,22 +607,6 @@ export function ProjectDetailContent({
           {PROJECT_STATUS_LABELS[liveDerivedStatus.status]}
         </Badge>
       ),
-      editableConfig: isAdminOrManager
-        ? {
-            type: 'select' as const,
-            currentValue: liveProject.statusOverride ?? 'auto',
-            onSave: async (v: string) => {
-              await handleOverrideStatus(v as ProjectStatus | 'auto');
-            },
-            options: [
-              { value: 'auto', label: 'Automatisch (aus Aufträgen)' },
-              ...Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => ({
-                value,
-                label,
-              })),
-            ],
-          }
-        : undefined,
     },
     {
       label: 'Geplanter Beginn',
@@ -744,32 +694,6 @@ export function ProjectDetailContent({
                     <Pencil className="mr-2 size-4" />
                     Bearbeiten
                   </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      Status überschreiben
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem
-                        onClick={() => handleOverrideStatus('auto')}
-                      >
-                        Automatisch (aus Aufträgen)
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {(
-                        Object.entries(PROJECT_STATUS_LABELS) as [
-                          ProjectStatus,
-                          string,
-                        ][]
-                      ).map(([value, label]) => (
-                        <DropdownMenuItem
-                          key={value}
-                          onClick={() => handleOverrideStatus(value)}
-                        >
-                          {label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
@@ -797,6 +721,17 @@ export function ProjectDetailContent({
             </Link>
           </p>
         )}
+        <div className="mb-6">
+          {lifecycleSnapshot ? (
+            <WorkLifecycleCard
+              initialSnapshot={lifecycleSnapshot}
+              targetLabel={liveProject.name}
+              isManager={isAdminOrManager}
+            />
+          ) : (
+            <WorkLifecycleLoadError />
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
           {/* Left Column: Metadata + Client */}
           <div className="space-y-6">
@@ -898,9 +833,6 @@ export function ProjectDetailContent({
                       key={job.id}
                       job={job}
                       projectNumber={liveProject.projectNumber!}
-                      isAdminOrManager={isAdminOrManager}
-                      isUpdating={statusUpdatingJobId === job.id}
-                      onStatusChange={handleJobStatusChange}
                     />
                   ))}
                 </div>
@@ -1191,15 +1123,9 @@ function ActiveWorkIndicator() {
 function ChildJobRow({
   job,
   projectNumber,
-  isAdminOrManager,
-  isUpdating,
-  onStatusChange,
 }: {
   job: Job;
   projectNumber: string;
-  isAdminOrManager: boolean;
-  isUpdating: boolean;
-  onStatusChange: (jobId: string, status: JobStatus) => void;
 }) {
   const { activeJobIds } = useActiveJobs();
   const href = `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(job.jobNumber!)}`;
@@ -1242,47 +1168,6 @@ function ChildJobRow({
         </div>
       </div>
 
-      {isAdminOrManager && (
-        <div onClick={(e) => e.preventDefault()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {isUpdating ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <MoreVertical className="size-3.5" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Status ändern</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  {(
-                    Object.entries(JOB_STATUS_LABELS) as [JobStatus, string][]
-                  ).map(([value, label]) => (
-                    <DropdownMenuItem
-                      key={value}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStatusChange(job.id, value);
-                      }}
-                      disabled={job.status === value}
-                    >
-                      {label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
     </Link>
   );
 }

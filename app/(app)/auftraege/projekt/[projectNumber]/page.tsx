@@ -17,6 +17,7 @@ import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
+import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -58,8 +59,13 @@ async function ProjectDetailData({
   const inventoryOptionsResultPromise = isAdminOrManager
     ? getInventoryPickerOptions()
     : Promise.resolve(null);
+  const lifecycleResultPromise = projectResultPromise.then((result) =>
+    result.success
+      ? getWorkLifecycleSnapshot({ targetType: 'project', targetId: result.details.project.id })
+      : null
+  );
 
-  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult] = await Promise.all([
+  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult] = await Promise.all([
     projectResultPromise,
     admin
       .from('clients')
@@ -69,6 +75,7 @@ async function ProjectDetailData({
     documentsResultPromise,
     materialResultPromise,
     inventoryOptionsResultPromise,
+    lifecycleResultPromise,
   ]);
 
   if (!result.success) {
@@ -106,7 +113,6 @@ async function ProjectDetailData({
     inventoryOptionsResult && inventoryOptionsResult.success
       ? inventoryOptionsResult.locations
       : [];
-
   // Origin request (P1-02); the banner itself is manager-only in the component.
   const { data: originRequestRow } = isAdminOrManager
     ? await admin
@@ -148,6 +154,7 @@ async function ProjectDetailData({
               }
             : null
         }
+        lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       />
     </>
   );

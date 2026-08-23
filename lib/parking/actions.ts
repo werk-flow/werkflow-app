@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/database.types';
 import {
   PARKING_REASON_LABELS,
   type JobParkingContext,
@@ -27,8 +28,8 @@ const parkingContextSchema = z.object({
   jobId: z.string().uuid(),
   reason: z.enum(PARKING_REASONS),
   note: z.string().trim().max(1000).nullable(),
-  responsibleEmployeeRecordId: z.string().uuid().nullable(),
-  nextReviewDate: z.string().date().nullable(),
+  responsibleEmployeeRecordId: z.string().uuid(),
+  nextReviewDate: z.string().date(),
 });
 
 export type SetParkingContextInput = z.infer<typeof parkingContextSchema>;
@@ -44,29 +45,46 @@ export async function setJobParkingContext(
     return { success: false, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.rpc('set_job_parking_context', {
+  const { data: existing, error: existingError } = await admin
+    .from('work_blockers')
+    .select('id, version')
+    .eq('organization_id', auth.context.orgId)
+    .eq('job_id', parsed.data.jobId)
+    .eq('kind', 'parking')
+    .eq('state', 'open')
+    .maybeSingle();
+  if (existingError) {
+    console.error('Failed to load open parking blocker:', {
+      code: existingError.code ?? 'unknown',
+    });
+    return { success: false, error: 'load_failed' };
+  }
+  if (!existing) return { success: false, error: 'job_not_parked' };
+  const { error } = await admin.rpc('upsert_work_blocker', {
     p_organization_id: auth.context.orgId,
     p_actor_id: auth.context.userId,
+    p_blocker_id: existing.id,
+    p_expected_version: existing.version,
     p_job_id: parsed.data.jobId,
+    p_project_id: null,
+    p_instruction_item_id: null,
+    p_kind: 'parking',
     p_reason: parsed.data.reason,
-    p_note: parsed.data.note ?? undefined,
-    p_responsible_employee_record_id:
-      parsed.data.responsibleEmployeeRecordId ?? undefined,
-    p_next_review_date: parsed.data.nextReviewDate ?? undefined,
-  });
+    p_details: parsed.data.note,
+    p_responsible_employee_record_id: parsed.data.responsibleEmployeeRecordId,
+    p_next_review_date: parsed.data.nextReviewDate,
+  } as unknown as Database['public']['Functions']['upsert_work_blocker']['Args']);
   if (error) {
     console.error('Failed to set job parking context:', {
       code: error.code ?? 'unknown',
     });
     return {
       success: false,
-      error: error.message.includes('job_not_parked')
-        ? 'job_not_parked'
-        : error.message.includes('responsible_not_manager')
-          ? 'responsible_not_manager'
-          : error.message.includes('job_not_found')
-            ? 'job_not_found'
-            : 'update_failed',
+      error: error.message.includes('work_blocker_owner_invalid')
+        ? 'responsible_not_manager'
+        : error.message.includes('work_blocker_stale_version')
+          ? 'stale_version'
+          : 'update_failed',
     };
   }
   revalidatePath('/kalender');
@@ -149,11 +167,14 @@ export async function getJobParkingContexts(): Promise<
   }
   const admin = createSupabaseAdminClient();
   const { data: rows, error } = await admin
-    .from('job_parking_contexts')
+    .from('work_blockers')
     .select(
-      'job_id, reason, note, responsible_employee_record_id, next_review_date, updated_at'
+      'id, job_id, version, reason, details, responsible_employee_record_id, next_review_date, updated_at'
     )
     .eq('organization_id', auth.context.orgId)
+    .eq('kind', 'parking')
+    .eq('state', 'open')
+    .not('job_id', 'is', null)
     .limit(1001);
   if (error || (rows?.length ?? 0) > 1000) {
     console.error('Failed to load job parking contexts:', { code: error?.code ?? 'overflow' });
@@ -215,9 +236,11 @@ export async function getJobParkingContexts(): Promise<
   return {
     success: true,
     contexts: (rows ?? []).map((row) => ({
-      jobId: row.job_id,
-      reason: row.reason,
-      note: row.note,
+      jobId: row.job_id!,
+      blockerId: row.id,
+      version: row.version,
+      reason: row.reason ?? 'other',
+      note: row.details,
       responsibleEmployeeRecordId: row.responsible_employee_record_id,
       responsibleName: row.responsible_employee_record_id
         ? (responsibleNames.get(row.responsible_employee_record_id) ?? null)

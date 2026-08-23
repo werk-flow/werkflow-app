@@ -20,9 +20,9 @@ import {
 import {
   getParkedJobs,
   updateJob as updateJobAction,
-  updateJobStatus,
   type UpdateJobInput,
 } from '@/lib/jobs/actions';
+import { parkWorkTarget, unparkWorkTarget } from '@/lib/work-lifecycle/actions';
 import {
   getPlanningEntries,
   updatePlanningCalendarEntry,
@@ -728,7 +728,9 @@ export function CalendarContainer({
   useEffect(() => {
     void fetchParkingContexts();
   }, [fetchParkingContexts, organizationId]);
-  useRealtimeEvent('job_parking_contexts', () => {
+  useRealtimeEvent('work_blockers', (event) => {
+    const kind = (event.new ?? event.old)?.kind;
+    if (kind !== undefined && kind !== 'parking') return;
     void fetchParkingContexts();
   });
 
@@ -1127,7 +1129,7 @@ export function CalendarContainer({
     return map;
   }, [members]);
 
-  const handleParkJob = useCallback(async (jobId: string) => {
+  const handleParkJob = useCallback((jobId: string) => {
     clearCalendarDragState();
     const job = calendarJobsRef.current.find((j) => j.id === jobId);
     if (!job) return;
@@ -1146,56 +1148,8 @@ export function CalendarContainer({
       jobId: authoritativeJobId,
     };
 
-    const origDate = job.plannedDate;
-    const origTime = job.plannedTime;
-    const origStatus = job.status;
-
-    handleOperationStart();
-    setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-    setParkedJobs((prev) => [...prev, { ...parkedJob, plannedDate: null, plannedTime: null, status: 'geparkt' }]);
-
-    const undone = { current: false };
-
-    showParkplatzBanner({
-      variant: 'success',
-      message: 'Auftrag wurde geparkt.',
-      onUndo: async () => {
-        undone.current = true;
-        handleOperationStart();
-        setParkedJobs((prev) => prev.filter((j) => j.id !== authoritativeJobId));
-        setCalendarJobs((prev) => [...prev, { ...job, plannedDate: origDate, plannedTime: origTime, status: origStatus }]);
-        await updateJobStatus(authoritativeJobId, origStatus);
-        await (job.occurrenceId
-          ? updatePlanningCalendarEntry(job.occurrenceId, {
-              plannedDate: origDate ?? undefined,
-              plannedTime: origTime ?? undefined,
-            })
-          : updateJobAction(authoritativeJobId, {
-              plannedDate: origDate ?? '',
-              plannedTime: origTime ?? '',
-            }));
-        handleSilentRefresh();
-      },
-    });
-
-    const result = await updateJobStatus(authoritativeJobId, 'geparkt');
-    if (undone.current) { handleSilentRefresh(); return; }
-
-    if (!result.success) {
-      setParkedJobs((prev) => prev.filter((j) => j.id !== authoritativeJobId));
-      setCalendarJobs((prev) => [...prev, job]);
-      showParkplatzBanner({
-        variant: 'error',
-        message: 'Auftrag konnte nicht geparkt werden.',
-      });
-    } else {
-      // P1-12: deliberate parking should record its context. Dismissing keeps
-      // the honest "Kontext fehlt" state — nothing is fabricated.
-      setParkingContextJob(parkedJob);
-    }
-
-    handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, showParkplatzBanner]);
+    setParkingContextJob(parkedJob);
+  }, [showParkplatzBanner]);
 
   const handleUnparkJob = useCallback(async (
     jobId: string,
@@ -1209,6 +1163,23 @@ export function CalendarContainer({
     const jobIndex = parkedList.findIndex((j) => j.id === jobId);
     const job = jobIndex >= 0 ? parkedList[jobIndex] : null;
     if (!job) return;
+    if (!parkingContexts) {
+      showParkplatzBanner({
+        variant: 'error',
+        message: 'Der Parkplatz-Kontext konnte nicht geladen werden.',
+      });
+      return;
+    }
+    const parkingContext = parkingContexts.get(jobId);
+    if (!parkingContext) {
+      showParkplatzBanner({
+        variant: 'error',
+        message: 'Der Parkplatz wurde inzwischen geändert. Bitte lade die Ansicht neu.',
+      });
+      void fetchParkingContexts();
+      fetchParkedJobs();
+      return;
+    }
 
     const nextDurationMinutes =
       targetTime && job.estimatedDurationMinutes == null
@@ -1228,10 +1199,58 @@ export function CalendarContainer({
     }
 
     handleOperationStart();
+    const unparkResult = await unparkWorkTarget({
+      targetType: 'job',
+      targetId: jobId,
+      blockerVersion: parkingContext.version,
+      reason: 'Im Kalender neu eingeplant',
+    }).catch(() => ({ success: false as const, error: 'work_action_failed' }));
+    if (!unparkResult.success) {
+      showParkplatzBanner({ variant: 'error', message: 'Der Parkplatz konnte nicht verlassen werden.' });
+      handleSilentRefresh();
+      return;
+    }
+
+    const restoreParking = async (): Promise<boolean> => {
+      if (!parkingContext.responsibleEmployeeRecordId || !parkingContext.nextReviewDate) {
+        showParkplatzBanner({
+          variant: 'error',
+          message: 'Der frühere Parkplatz-Kontext konnte nicht wiederhergestellt werden.',
+        });
+        return false;
+      }
+      const restoreResult = await parkWorkTarget({
+        targetType: 'job',
+        targetId: jobId,
+        expectedExecutionVersion: job.executionVersion ?? 0,
+        reason: parkingContext.reason,
+        details: parkingContext.note ?? undefined,
+        responsibleEmployeeRecordId: parkingContext.responsibleEmployeeRecordId,
+        nextReviewDate: parkingContext.nextReviewDate,
+      }).catch(() => ({ success: false as const, error: 'work_action_failed' }));
+      if (!restoreResult.success) {
+        showParkplatzBanner({
+          variant: 'error',
+          message: 'Der frühere Parkplatz-Kontext konnte nicht wiederhergestellt werden.',
+        });
+        return false;
+      }
+      return true;
+    };
+
     setParkedJobs((prev) => prev.filter((j) => j.id !== jobId));
     setCalendarJobs((prev) => [...prev, newJob]);
 
     const undone = { current: false };
+
+    const updatePromise = updateJob(jobId, {
+      plannedDate: targetDate,
+      plannedTime: targetTime ?? '',
+      ...(nextDurationMinutes !== job.estimatedDurationMinutes
+        ? { estimatedDurationMinutes: nextDurationMinutes }
+        : {}),
+      selectedUserIds: newJob.assignedUserIds,
+    });
 
     showParkplatzBanner({
       variant: 'success',
@@ -1239,13 +1258,16 @@ export function CalendarContainer({
       onUndo: async () => {
         undone.current = true;
         handleOperationStart();
+        await updatePromise;
+        const restored = await restoreParking();
         setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-        setParkedJobs((prev) => {
-          const next = [...prev];
-          next.splice(Math.min(jobIndex, next.length), 0, job);
-          return next;
-        });
-        await updateJobStatus(jobId, 'geparkt');
+        if (restored) {
+          setParkedJobs((prev) => {
+            const next = [...prev];
+            next.splice(Math.min(jobIndex, next.length), 0, job);
+            return next;
+          });
+        }
         if (assignToUserId && !job.assignedUserIds.includes(assignToUserId)) {
           await updateJob(jobId, { selectedUserIds: job.assignedUserIds });
         }
@@ -1254,23 +1276,19 @@ export function CalendarContainer({
     });
 
     // updateJob with a planned_date on a geparkt job auto-sets status to nicht_bearbeitet
-    const result = await updateJob(jobId, {
-      plannedDate: targetDate,
-      plannedTime: targetTime ?? '',
-      ...(nextDurationMinutes !== job.estimatedDurationMinutes
-        ? { estimatedDurationMinutes: nextDurationMinutes }
-        : {}),
-      selectedUserIds: newJob.assignedUserIds,
-    });
+    const result = await updatePromise;
     if (undone.current) { handleSilentRefresh(); return; }
 
     if (!result.success) {
+      const restored = await restoreParking();
       setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-      setParkedJobs((prev) => {
-        const next = [...prev];
-        next.splice(Math.min(jobIndex, next.length), 0, job);
-        return next;
-      });
+      if (restored) {
+        setParkedJobs((prev) => {
+          const next = [...prev];
+          next.splice(Math.min(jobIndex, next.length), 0, job);
+          return next;
+        });
+      }
       if (result.error === 'qualification_declined') {
         handleSilentRefresh();
         return;
@@ -1284,7 +1302,7 @@ export function CalendarContainer({
     }
 
     if (!undone.current) handleSilentRefresh();
-  }, [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner]);
+  }, [fetchParkedJobs, fetchParkingContexts, handleOperationStart, handleSilentRefresh, parkingContexts, updateJob, showParkplatzBanner]);
 
   const handleScheduleJob = useCallback(async (
     jobId: string,
@@ -1892,6 +1910,8 @@ export function CalendarContainer({
         <ParkingContextDialog
           jobId={parkingContextJob.jobId ?? parkingContextJob.id}
           jobTitle={parkingContextJob.title}
+          expectedExecutionVersion={parkingContextJob.executionVersion ?? 0}
+          isAlreadyParked={parkingContextJob.status === 'geparkt'}
           existingContext={
             parkingContexts?.get(
               parkingContextJob.jobId ?? parkingContextJob.id
@@ -1899,8 +1919,13 @@ export function CalendarContainer({
           }
           onClose={() => setParkingContextJob(null)}
           onSaved={() => {
+            const wasAlreadyParked = parkingContextJob.status === 'geparkt';
             setParkingContextJob(null);
             void fetchParkingContexts();
+            if (!wasAlreadyParked) {
+              showParkplatzBanner({ variant: 'success', message: 'Auftrag wurde geparkt.' });
+            }
+            handleSilentRefresh();
           }}
         />
       )}

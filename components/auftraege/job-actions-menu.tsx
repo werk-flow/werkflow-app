@@ -6,7 +6,6 @@ import {
   MoreHorizontal,
   ExternalLink,
   Trash2,
-  ArrowRightLeft,
   Loader2,
   Pencil,
 } from 'lucide-react';
@@ -17,9 +16,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import {
@@ -32,21 +28,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { useBanner } from '@/components/ui/banner';
-import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditJobDialog } from './edit-job-dialog';
-import { deleteJob, updateJobStatus } from '@/lib/jobs/actions';
+import { deleteJob } from '@/lib/jobs/actions';
 import {
   JOB_DELETE_FAILED_MESSAGE,
   JOB_DELETE_HISTORY_MESSAGE,
 } from '@/lib/jobs/messages';
 import {
   getJobDisplayTitle,
-  JOB_STATUS_LABELS,
-  JOB_STATUS_ORDER,
   type Client,
   type Job,
-  type JobStatus,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
@@ -76,75 +67,9 @@ export function JobActionsMenu({
   const router = useRouter();
   const displayTitle = getJobDisplayTitle(job);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showParkDialog, setShowParkDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { showBanner } = useBanner();
-
-  const handleStatusChange = async (newStatus: JobStatus) => {
-    if (isChangingStatus) return;
-    if (newStatus === 'geparkt') {
-      setShowParkDialog(true);
-      return;
-    }
-    setIsChangingStatus(true);
-
-    try {
-      const result = await updateJobStatus(job.id, newStatus);
-
-      if (result.success) {
-        if (onJobUpdated) {
-          await onJobUpdated({
-            job: result.job,
-          });
-        } else {
-          router.refresh();
-        }
-      } else {
-        showBanner({
-          variant: 'error',
-          message: 'Der Status konnte nicht geändert werden.',
-        });
-      }
-    } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Der Status konnte nicht geändert werden.',
-      });
-    } finally {
-      setIsChangingStatus(false);
-    }
-  };
-
-  const handleParkConfirm = async () => {
-    setIsChangingStatus(true);
-    try {
-      const result = await updateJobStatus(job.id, 'geparkt');
-      if (result.success) {
-        if (onJobUpdated) {
-          await onJobUpdated({
-            job: result.job,
-          });
-        } else {
-          router.refresh();
-        }
-      } else {
-        showBanner({
-          variant: 'error',
-          message: 'Der Auftrag konnte nicht geparkt werden.',
-        });
-      }
-    } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Der Auftrag konnte nicht geparkt werden.',
-      });
-    } finally {
-      setIsChangingStatus(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (isDeleting) return;
@@ -170,8 +95,7 @@ export function JobActionsMenu({
     }
   };
 
-  const isLoading = isDeleting || isChangingStatus;
-  const availableStatuses = JOB_STATUS_ORDER.filter((s) => s !== job.status);
+  const isLoading = isDeleting;
 
   return (
     <>
@@ -200,22 +124,6 @@ export function JobActionsMenu({
             <Pencil className="size-4" />
             Bearbeiten
           </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <ArrowRightLeft className="size-4" />
-              Status ändern
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {availableStatuses.map((status) => (
-                <DropdownMenuItem
-                  key={status}
-                  onClick={() => handleStatusChange(status)}
-                >
-                  {JOB_STATUS_LABELS[status]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -269,15 +177,6 @@ export function JobActionsMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <ParkConfirmationDialog
-        open={showParkDialog}
-        onOpenChange={setShowParkDialog}
-        variant="job"
-        title={displayTitle}
-        identifier={job.jobNumber ?? undefined}
-        onConfirm={handleParkConfirm}
-      />
 
       <EditJobDialog
         job={job}

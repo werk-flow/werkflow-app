@@ -703,12 +703,13 @@ async function deriveParkingReviewTasks(
   // an unusually large backlog truncates instead of failing the whole
   // attention overview (failed stays reserved for real query errors).
   const { data: contexts, error: contextError } = await admin
-    .from('job_parking_contexts')
-    .select('job_id, next_review_date, responsible_employee_record_id')
+    .from('work_blockers')
+    .select('id, job_id, project_id, instruction_item_id, kind, next_review_date, responsible_employee_record_id, version')
     .eq('organization_id', context.orgId)
+    .eq('state', 'open')
     .lte('next_review_date', businessToday)
     .order('next_review_date', { ascending: true })
-    .order('job_id', { ascending: true })
+    .order('id', { ascending: true })
     .limit(200);
   if (contextError) {
     console.error('Failed to load parking review contexts:', {
@@ -718,7 +719,25 @@ async function deriveParkingReviewTasks(
   }
   if (!contexts?.length) return { tasks: [], failed: false };
 
-  const jobIds = contexts.map((row) => row.job_id);
+  const instructionIds = contexts.flatMap((row) => row.instruction_item_id ? [row.instruction_item_id] : []);
+  const instructionsResult = instructionIds.length
+    ? await admin.from('job_instruction_items').select('id, content, job_id, project_id').eq('organization_id', context.orgId).in('id', instructionIds)
+    : { data: [], error: null };
+  if (instructionsResult.error) {
+    console.error('Failed to load blocker review instruction items:', {
+      code: instructionsResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const instructions = new Map((instructionsResult.data ?? []).map((row) => [row.id, row]));
+  const jobIds = [...new Set(contexts.flatMap((row) => {
+    const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
+    return row.job_id ? [row.job_id] : instruction?.job_id ? [instruction.job_id] : [];
+  }))];
+  const projectIds = [...new Set(contexts.flatMap((row) => {
+    const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
+    return row.project_id ? [row.project_id] : instruction?.project_id ? [instruction.project_id] : [];
+  }))];
   const responsibleIds = [
     ...new Set(
       contexts.flatMap((row) =>
@@ -728,12 +747,17 @@ async function deriveParkingReviewTasks(
       )
     ),
   ];
-  const [jobsResult, recordsResult] = await Promise.all([
-    admin
-      .from('jobs')
-      .select('id, title, description, job_number, status')
-      .eq('organization_id', context.orgId)
-      .in('id', jobIds),
+  const [jobsResult, projectsResult, recordsResult] = await Promise.all([
+    jobIds.length
+      ? admin
+          .from('jobs')
+          .select('id, title, description, job_number')
+          .eq('organization_id', context.orgId)
+          .in('id', jobIds)
+      : { data: [], error: null },
+    projectIds.length
+      ? admin.from('projects').select('id, name, description, project_number').eq('organization_id', context.orgId).in('id', projectIds)
+      : { data: [], error: null },
     responsibleIds.length
       ? admin
           .from('employee_records')
@@ -742,9 +766,9 @@ async function deriveParkingReviewTasks(
           .in('id', responsibleIds)
       : { data: [], error: null },
   ]);
-  if (jobsResult.error || recordsResult.error) {
+  if (jobsResult.error || projectsResult.error || recordsResult.error) {
     console.error('Failed to load parking review references:', {
-      code: (jobsResult.error ?? recordsResult.error)?.code ?? 'unknown',
+      code: (jobsResult.error ?? projectsResult.error ?? recordsResult.error)?.code ?? 'unknown',
     });
     return { tasks: [], failed: true };
   }
@@ -777,25 +801,42 @@ async function deriveParkingReviewTasks(
     ])
   );
   const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
+  const projects = new Map((projectsResult.data ?? []).map((project) => [project.id, project]));
 
-  const tasks: AttentionTask[] = contexts.flatMap((row) => {
-    const job = jobs.get(row.job_id);
-    // The unpark trigger clears contexts, but guard against a race anyway.
-    if (!job || job.status !== 'geparkt' || !row.next_review_date) return [];
-    return [
-      {
-        sourceType: 'job_parking_review',
-        sourceId: row.job_id,
-        jobNumber: job.job_number,
-        jobTitle: job.title.trim() || job.description?.trim() || 'Auftrag',
-        nextReviewDate: row.next_review_date,
-        responsibleName: row.responsible_employee_record_id
-          ? (nameByRecordId.get(row.responsible_employee_record_id) ?? null)
-          : null,
-        stateVersion: `review:${row.next_review_date}`,
-      },
-    ];
-  });
+  const tasks: AttentionTask[] = [];
+  for (const row of contexts) {
+    const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
+    const jobId = row.job_id ?? instruction?.job_id ?? null;
+    const projectId = row.project_id ?? instruction?.project_id ?? null;
+    const job = jobId ? jobs.get(jobId) : undefined;
+    const project = projectId ? projects.get(projectId) : undefined;
+    if (!row.next_review_date || (!job && !project)) {
+      console.error('Work blocker review has no accessible target.', {
+        blockerId: row.id,
+      });
+      return { tasks: [], failed: true };
+    }
+    const targetLabel = instruction
+      ? instruction.content
+      : job?.title.trim() || job?.description?.trim() || project?.name.trim() || project?.description?.trim() || 'Arbeit';
+    const targetHref = job?.job_number
+      ? `/auftraege/${encodeURIComponent(job.job_number)}`
+      : project?.project_number
+        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}`
+        : '/auftraege';
+    tasks.push({
+      sourceType: 'work_blocker_review',
+      sourceId: row.id,
+      targetLabel,
+      targetHref,
+      blockerKind: row.kind,
+      nextReviewDate: row.next_review_date,
+      responsibleName: row.responsible_employee_record_id
+        ? (nameByRecordId.get(row.responsible_employee_record_id) ?? null)
+        : null,
+      stateVersion: `review:${row.version}:${row.next_review_date}`,
+    });
+  }
   return { tasks, failed: false };
 }
 

@@ -6,9 +6,7 @@ import {
   MoreHorizontal,
   ExternalLink,
   Trash2,
-  ArrowRightLeft,
   Loader2,
-  RotateCcw,
   Pencil,
 } from 'lucide-react';
 
@@ -18,9 +16,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import {
@@ -33,17 +28,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { useBanner } from '@/components/ui/banner';
-import { ParkConfirmationDialog } from './park-confirmation-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
-import { updateProject, deleteProject, parkProject } from '@/lib/projects/actions';
+import { deleteProject } from '@/lib/projects/actions';
 import {
-  PROJECT_STATUS_LABELS,
-  PROJECT_STATUS_ORDER,
   type Client,
   type Job,
   type Project,
-  type ProjectStatus,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
 
@@ -69,71 +59,9 @@ export function ProjectActionsMenu({
 }: ProjectActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showParkDialog, setShowParkDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { showBanner } = useBanner();
-
-  const handleStatusOverride = async (newStatus: ProjectStatus | null) => {
-    if (newStatus === 'geparkt') {
-      setShowParkDialog(true);
-      return;
-    }
-    if (isChangingStatus) return;
-    setIsChangingStatus(true);
-
-    try {
-      const result = await updateProject(project.id, { statusOverride: newStatus });
-
-      if (result.success) {
-        if (onProjectUpdated) {
-          await onProjectUpdated({ project: result.project });
-        } else {
-          router.refresh();
-        }
-      } else {
-        showBanner({
-          variant: 'error',
-          message: 'Der Status konnte nicht geändert werden.',
-        });
-      }
-    } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Der Status konnte nicht geändert werden.',
-      });
-    } finally {
-      setIsChangingStatus(false);
-    }
-  };
-
-  const handleParkConfirm = async () => {
-    setIsChangingStatus(true);
-    try {
-      const result = await parkProject(project.id);
-      if (result.success) {
-        if (onProjectUpdated) {
-          await onProjectUpdated({ project: result.project });
-        } else {
-          router.refresh();
-        }
-      } else {
-        showBanner({
-          variant: 'error',
-          message: 'Das Projekt konnte nicht geparkt werden.',
-        });
-      }
-    } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Das Projekt konnte nicht geparkt werden.',
-      });
-    } finally {
-      setIsChangingStatus(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (isDeleting) return;
@@ -155,7 +83,7 @@ export function ProjectActionsMenu({
     }
   };
 
-  const isLoading = isDeleting || isChangingStatus;
+  const isLoading = isDeleting;
 
   return (
     <>
@@ -184,33 +112,6 @@ export function ProjectActionsMenu({
             <Pencil className="size-4" />
             Bearbeiten
           </DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <ArrowRightLeft className="size-4" />
-              Status überschreiben
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {project.statusOverride && (
-                <>
-                  <DropdownMenuItem onClick={() => handleStatusOverride(null)}>
-                    <RotateCcw className="size-4" />
-                    Automatisch (zurücksetzen)
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              {PROJECT_STATUS_ORDER.filter((s) => s !== project.statusOverride).map(
-                (status) => (
-                  <DropdownMenuItem
-                    key={status}
-                    onClick={() => handleStatusOverride(status)}
-                  >
-                    {PROJECT_STATUS_LABELS[status]}
-                  </DropdownMenuItem>
-                )
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -259,15 +160,6 @@ export function ProjectActionsMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <ParkConfirmationDialog
-        open={showParkDialog}
-        onOpenChange={setShowParkDialog}
-        variant="project"
-        title={project.name}
-        identifier={project.projectNumber ?? undefined}
-        onConfirm={handleParkConfirm}
-      />
 
       <EditProjectDialog
         project={project}

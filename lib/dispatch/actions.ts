@@ -260,7 +260,7 @@ function toMaterializedOccurrence(occurrence: {
   };
 }
 
-async function composeReadinessForTarget(input: {
+export async function composeReadinessForTarget(input: {
   admin: AdminClient;
   orgId: string;
   occurrenceId: string | null;

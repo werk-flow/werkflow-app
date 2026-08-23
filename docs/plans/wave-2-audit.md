@@ -62,11 +62,24 @@ One section per slice, added at slice acceptance. Same row format and status voc
 
 **Invariant:** `27/27 mapped; 27/27 fully evidenced; 0 partial; 0 unmapped`.
 
+### P1-14 — Arbeitsstand, Blocker, Voraussetzungen und Einsatzbereitschaft
+
+| Catalog flow IDs | Coverage | Status | Whole-bullet clause evidence |
+| --- | --- | --- | --- |
+| `P1-14-F01`…`F12` | `tests/audit/wave-2/p1-14.spec.ts` — summary, filters, role transitions, stale recovery and dialog catch-up | `fully evidenced` | UI-only work creation proves separate canonical/planned/readiness facets, next action, canonical list badge/filter and employee denial. Parallel Admin/Büro dialogs produce one accepted transition, a persisted version/event pair, preserved input, catch-up signal and concrete stale rejection; interruption persists its required reason. |
+| `P1-14-F13`…`F25` | same spec — blocker ownership, attention, resolution/reopen and parking | `fully evidenced` | An assigned employee creates a self-owned due-today safety blocker through the UI; persisted owner/reason/review/version and manager attention are asserted. Employee resolution, manager reopen, second resolution and event-compatible versions are followed by manager parking with bounded context. Database state proves one blocker model, resolved/open distinction and execution/parking separation. |
+| `P1-14-F26`…`F36` | same spec — work prerequisites and predecessor state | `fully evidenced` | Manager UI links two jobs, start is atomically denied, the inverse link is rejected as a cycle, predecessor execution completion satisfies the link, and reopening makes it unsatisfied again. The persisted row proves the chosen start effect and retained identity; the companion template/gate journey exercises the existing instruction prerequisite primitive. |
+| `P1-14-F37`…`F48` | same spec — live readiness, current-fact completion gates and handover | `fully evidenced` | A template-backed assigned/planned job renders the shared readiness dimensions, honest unknown/tool state and unreserved material wording. Required-instruction completion blocks execution completion until the employee persists it. Completion then succeeds, while handover needs the checked manager exception and reason; the final event asserts distinct state, current zero instruction gap, gate snapshot and 64-character fingerprint. |
+| `P1-14-F49`…`F63` | same spec — project derivation/override, planning/time automation, audit, RLS and negative promises | `fully evidenced` | UI-only project/job creation proves automatic project derivation, a reasoned non-cascading override, reasoned clear and unchanged child. A scheduled job starts through actual clock-in and persists the atomic automatic event; clock-out restores test hygiene. Direct database assertions prove no template/application or inventory movement side effect, outsider UI denial and zero cross-organization lifecycle visibility. Golden compatibility stories additionally exercise legacy parking and the dedicated lifecycle journeys. |
+
+**Invariant:** `63/63 mapped; 63/63 fully evidenced; 0 partial; 0 unmapped`.
+
 ## In-world left-behind state (shared battery)
 
 One entry per slice spec, added at acceptance, same purpose as Wave 1's register: what the spec leaves in-world for later specs in a full battery run.
 
 - **P1-13:** owns run-day +70 through +74 at 06:00 Europe/Berlin. It leaves two run-scoped templates with published/version history (one archived then reactivated), direct and converted jobs/projects, one later child job, material/capability catalog additions, template applications and attributed instruction/evidence/dependency/material/capability rows, plus the request conversion/history facts created by the six journeys. It creates no stock movements, reservations, dispatches, attention types, actual time or documents. Later specs must address these records by `world.runId` and cannot assume an empty template/application domain.
+- **P1-14:** owns run-day +75 through +79 at 06:00 Europe/Berlin. It leaves run-scoped jobs/projects with canonical transitions and project overrides, execution/blocker/dependency/instruction event history, one resolved blocker plus one open parking blocker, one linked dependency, one template/application and checklist completion, planning occurrences and a closed time session. It creates no inventory movement, reservation, document, signature, message or customer package. Later specs must select lifecycle records by `world.runId` and cannot assume the work-lifecycle or P1-13 template domains are empty.
 
 ## Session log
 
@@ -74,5 +87,6 @@ Newest first: per-slice audit closure entries and the final certification gate.
 
 | Date | Slice / gate | Summary | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-23 | `P1-14` | Accepted with the owner-confirmed 63-flow contract. Focused `@AUDIT-W2-P1-14` passed 5/5 on the final frozen build; affected Wave-1 A1/A5/A6/A7 audits and full Golden 101/101 passed after lifecycle compatibility updates. | `tests/audit/wave-2/p1-14.spec.ts`; gate log 2026-08-23 |
 | 2026-08-23 | `P1-13` | First Wave 2 slice accepted with its owner-confirmed 27-flow contract. Focused `@AUDIT-W2-P1-13` passed 6/6 after CodeRabbit hardening; affected Wave-1 `@AUDIT-W1-A1` passed 28/28. | `tests/audit/wave-2/p1-13.spec.ts`; gate log 2026-08-23 |
 | 2026-08-21 | — | Per-slice audit model established (this document, roadmap protocol 5a and the audit-coverage acceptance items, testing rule 12 extension, `tests/audit/` config widened to all waves, `test:audit`/`test:audit:w2` scripts). No Wave 2 slice started. | This session |
