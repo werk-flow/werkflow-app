@@ -12,7 +12,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox, ListTodo, Award } from 'lucide-react';
+import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox, ListTodo, Award, ClipboardList } from 'lucide-react';
 
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-
 import { AnfragenPageSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
 import { QualifikationenPageSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
 import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
+import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
 import {
   AttentionCountProvider,
@@ -105,6 +106,12 @@ const navItems: NavItem[] = [
     href: '/inventar',
     label: 'Inventar',
     icon: Boxes,
+    managerOrAbove: true
+  },
+  {
+    href: '/arbeitsvorlagen',
+    label: 'Arbeitsvorlagen',
+    icon: ClipboardList,
     managerOrAbove: true
   },
   {
@@ -457,6 +464,9 @@ function OrgSwitchOverlay() {
     if (pathname.startsWith('/anfragen')) return <AnfragenPageSkeleton />;
     if (pathname.startsWith('/qualifikationen')) {
       return <QualifikationenPageSkeleton />;
+    }
+    if (pathname.startsWith('/arbeitsvorlagen')) {
+      return <WorkTemplatesPageSkeleton />;
     }
     if (pathname.startsWith('/einstellungen')) {
       return <EinstellungenPageSkeleton />;

@@ -47,6 +47,9 @@ import {
   type Client,
   type JobPriority,
 } from '@/lib/jobs/types';
+import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
+import { QualificationWarningDialog } from '@/components/auftraege/qualification-warning-dialog';
+import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -61,6 +64,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   title_or_description_required: 'Bitte gib einen Titel ein.',
   name_required: 'Bitte gib einen Projektnamen ein.',
   create_failed: 'Die Umwandlung ist fehlgeschlagen.',
+  work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
+  work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
+  template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };
 
@@ -96,6 +102,8 @@ export function ConvertRequestDialog({
   const [plannedDate, setPlannedDate] = useState('');
   const [plannedTime, setPlannedTime] = useState('');
   const [location, setLocation] = useState('');
+  const [templateVersionId, setTemplateVersionId] = useState('');
+  const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,6 +121,7 @@ export function ConvertRequestDialog({
     setPlannedDate('');
     setPlannedTime('');
     setLocation('');
+    setTemplateVersionId('');
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, request.id]);
@@ -145,8 +154,11 @@ export function ConvertRequestDialog({
     };
   }, [open, target]);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  useEffect(() => {
+    setTemplateVersionId('');
+  }, [target]);
+
+  const submitConversion = async (approval?: AssignmentApproval) => {
     setError(null);
 
     if (!clientId) {
@@ -168,8 +180,14 @@ export function ConvertRequestDialog({
           plannedDate: plannedDate || undefined,
           plannedTime: plannedTime || undefined,
           location: location.trim() || undefined,
+          templateVersionId: templateVersionId || undefined,
+          assignmentApproval: approval ?? null,
         });
         if (!result.success) {
+          if ((result.error === 'qualification_warning' || result.error === 'stale_evaluation') && 'evaluation' in result) {
+            setQualificationWarning(result.evaluation as AssignmentEvaluation);
+            return;
+          }
           setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
           return;
         }
@@ -187,6 +205,7 @@ export function ConvertRequestDialog({
           siteId: siteId || undefined,
           contactId: contactId || undefined,
           projectNumber: number.trim() || undefined,
+          templateVersionId: templateVersionId || undefined,
         });
         if (!result.success) {
           setError(ERROR_MESSAGES[result.error] || 'Unbekannter Fehler');
@@ -206,7 +225,13 @@ export function ConvertRequestDialog({
     }
   };
 
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await submitConversion();
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="sm:max-w-[520px]"
@@ -234,6 +259,13 @@ export function ConvertRequestDialog({
                 </TabsTrigger>
               </TabsList>
             </Tabs>
+
+            <WorkTemplatePicker
+              targetType={target}
+              value={templateVersionId}
+              onChange={setTemplateVersionId}
+              disabled={isLoading}
+            />
 
             <div className="grid gap-2">
               <Label htmlFor="convert-title">
@@ -414,5 +446,12 @@ export function ConvertRequestDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <QualificationWarningDialog
+      evaluation={qualificationWarning}
+      isSubmitting={isLoading}
+      onCancel={() => setQualificationWarning(null)}
+      onConfirm={(approval) => submitConversion(approval)}
+    />
+    </>
   );
 }

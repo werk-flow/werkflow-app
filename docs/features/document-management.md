@@ -32,6 +32,8 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Thumbnail generation | **Not implemented** (Phase 1 build-out) |
 | Dedicated offer/contract/invoice entities | **Not implemented** |
 
+Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual document capture and links remain owned by this document system, while structured artifact/approval/signature behavior remains P1-15.
+
 Implementation was delivered in four stages:
 
 1. **Stage 1 — Core:** tables, Storage bucket, RLS, server actions, `/dokumente` page, contextual job/project sections.

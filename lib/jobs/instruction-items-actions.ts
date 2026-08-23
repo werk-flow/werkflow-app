@@ -4,6 +4,7 @@ import { revalidatePath, updateTag } from 'next/cache';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/supabase/database.types';
 
 import { authenticateAndAuthorize } from './auth';
 import {
@@ -187,6 +188,7 @@ async function hydrateInstructionItems(
   );
 
   const profileMap = new Map<string, ProfileRow>();
+  const itemIds = rows.map((row) => row.id);
 
   if (profileIds.length > 0) {
     const { data: profiles } = await admin
@@ -199,6 +201,17 @@ async function hydrateInstructionItems(
     }
   }
 
+  const [evidenceResult, dependencyResult] = itemIds.length > 0
+    ? await Promise.all([
+        admin.from('job_instruction_item_evidence_requirements').select('id, instruction_item_id, description, document_category').in('instruction_item_id', itemIds).order('sort_order'),
+        admin.from('job_instruction_item_dependencies').select('dependent_item_id, predecessor_item_id').in('dependent_item_id', itemIds),
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+  if (evidenceResult.error || dependencyResult.error) {
+    console.error('Failed to hydrate instruction item template metadata:', evidenceResult.error ?? dependencyResult.error);
+  }
+  const contentById = new Map(rows.map((row) => [row.id, row.content]));
+
   return rows.map((row) => ({
     ...toJobInstructionItem(row),
     creator: mapProfileToActor(profileMap.get(row.created_by)),
@@ -207,6 +220,8 @@ async function hydrateInstructionItems(
         ? profileMap.get(row.last_status_changed_by)
         : null
     ),
+    evidenceRequirements: (evidenceResult.data ?? []).filter((item) => item.instruction_item_id === row.id).map((item) => ({ id: item.id, description: item.description, documentCategory: item.document_category })),
+    predecessors: (dependencyResult.data ?? []).filter((item) => item.dependent_item_id === row.id).map((item) => ({ id: item.predecessor_item_id, content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag' })),
   }));
 }
 
@@ -221,6 +236,19 @@ async function getHydratedInstructionItemsForJob(
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
 
+  return hydrateInstructionItems(admin, rows ?? []);
+}
+
+async function getHydratedInstructionItemsForProject(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  projectId: string
+): Promise<JobInstructionItemWithDetails[]> {
+  const { data: rows } = await admin
+    .from('job_instruction_items')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
   return hydrateInstructionItems(admin, rows ?? []);
 }
 
@@ -269,8 +297,81 @@ async function persistInstructionItemOrder(
 
 function revalidateInstructionItemPaths(orgId: string) {
   updateTag(CACHE_TAGS.jobs(orgId));
+  updateTag(CACHE_TAGS.projects(orgId));
   revalidatePath('/auftraege', 'layout');
   revalidatePath('/mitarbeiter', 'layout');
+}
+
+async function getAuthorizedProjectContext(projectId: string) {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
+  const admin = createSupabaseAdminClient();
+  const { data: project } = await admin.from('projects').select('id').eq('id', projectId).eq('organization_id', auth.context.orgId).maybeSingle();
+  if (!project) return { success: false as const, error: 'project_not_found' };
+  return { success: true as const, admin, projectId, orgId: auth.context.orgId, userId: auth.context.userId };
+}
+
+async function getProjectInstructionItemIds(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  projectId: string
+): Promise<string[]> {
+  const { data, error } = await admin
+    .from('job_instruction_items')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('project_id', projectId)
+    .order('sort_order')
+    .order('created_at');
+  if (error) throw error;
+  return (data ?? []).map((row) => row.id);
+}
+
+export async function getProjectInstructionItems(
+  projectId: string
+): Promise<GetJobInstructionItemsResult> {
+  const context = await getAuthorizedProjectContext(projectId);
+  if (!context.success) return context;
+  return { success: true as const, items: await getHydratedInstructionItemsForProject(context.admin, projectId) };
+}
+
+export async function createProjectInstructionItem(input: {
+  projectId: string;
+  content: string;
+}): Promise<CreateJobInstructionItemResult> {
+  const context = await getAuthorizedProjectContext(input.projectId);
+  if (!context.success) return context;
+  const content = trimInstructionContent(input.content);
+  if (!content) return { success: false as const, error: 'content_required' };
+  const currentIds = await getProjectInstructionItemIds(context.admin, context.orgId, input.projectId);
+  const { data: row, error } = await context.admin.from('job_instruction_items').insert({
+    organization_id: context.orgId,
+    project_id: input.projectId,
+    content,
+    sort_order: currentIds.length,
+    created_by: context.userId,
+  }).select('*').single();
+  if (error || !row) return { success: false as const, error: 'create_failed' };
+  revalidateInstructionItemPaths(context.orgId);
+  const item = await getHydratedInstructionItemById(context.admin, row.id);
+  return item ? { success: true as const, item } : { success: false as const, error: 'item_not_found' };
+}
+
+export async function reorderProjectInstructionItems(input: {
+  projectId: string;
+  itemIds: string[];
+}): Promise<ReorderJobInstructionItemsResult> {
+  const context = await getAuthorizedProjectContext(input.projectId);
+  if (!context.success) return context;
+  const currentIds = new Set(await getProjectInstructionItemIds(context.admin, context.orgId, input.projectId));
+  if (input.itemIds.length !== currentIds.size || new Set(input.itemIds).size !== input.itemIds.length || input.itemIds.some((id) => !currentIds.has(id))) {
+    return { success: false as const, error: 'invalid_reorder' };
+  }
+  const result = await persistInstructionItemOrder(context.admin, input.itemIds);
+  if (!result.success) return result;
+  revalidateInstructionItemPaths(context.orgId);
+  return { success: true as const };
 }
 
 export async function getJobInstructionItems(
@@ -407,6 +508,19 @@ export async function deleteJobInstructionItem(
     return { success: false, error: 'delete_failed' };
   }
 
+  if (!context.item.job_id) {
+    const remainingItems = await getHydratedInstructionItemsForProject(
+      context.admin,
+      context.item.project_id!
+    );
+    const reorderResult = await persistInstructionItemOrder(
+      context.admin,
+      remainingItems.map((item) => item.id)
+    );
+    if (!reorderResult.success) return reorderResult;
+    revalidateInstructionItemPaths(context.orgId);
+    return { success: true };
+  }
   const remainingItems = await getHydratedInstructionItemsForJob(
     context.admin,
     context.item.job_id
@@ -492,4 +606,36 @@ export async function reorderJobInstructionItems(
 
   revalidateInstructionItemPaths(context.orgId);
   return { success: true };
+}
+
+export async function updateInstructionItemDetails(input: {
+  itemId: string;
+  itemKind: 'task' | 'checklist';
+  requirementState: 'required' | 'optional';
+  groupLabel?: string | null;
+  notes?: string | null;
+  evidence: Array<{ id: string; description: string; documentCategory: string; sortOrder: number }>;
+  predecessorItemIds: string[];
+}): Promise<UpdateJobInstructionItemResult> {
+  const context = await getAuthorizedItemContext(input.itemId);
+  if (!context.success) return context;
+  if (!context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
+  const { error } = await context.admin.rpc('update_instruction_item_details', {
+    p_organization_id: context.orgId,
+    p_instruction_item_id: input.itemId,
+    p_actor_id: context.userId,
+    p_item_kind: input.itemKind,
+    p_requirement_state: input.requirementState,
+    p_group_label: input.groupLabel ?? null,
+    p_notes: input.notes ?? null,
+    p_evidence: input.evidence.map((item) => ({ id: item.id, description: item.description.trim(), document_category: item.documentCategory, sort_order: item.sortOrder })) as Json,
+    p_predecessor_item_ids: input.predecessorItemIds,
+  });
+  if (error) {
+    const known = ['instruction_dependency_cycle', 'instruction_dependency_self', 'instruction_dependency_target_invalid', 'instruction_item_details_invalid'].find((code) => error.message.includes(code));
+    return { success: false as const, error: known ?? 'update_failed' };
+  }
+  revalidateInstructionItemPaths(context.orgId);
+  const item = await getHydratedInstructionItemById(context.admin, input.itemId);
+  return item ? { success: true as const, item } : { success: false as const, error: 'item_not_found' };
 }

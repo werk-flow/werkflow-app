@@ -47,6 +47,7 @@ import {
 } from '@/lib/jobs/planned-working';
 import { toLocalDateString } from '@/lib/utils';
 import type { CalendarEntryDraft } from '@/components/kalender/calendar-entry-draft';
+import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 
 const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'niedrig', label: JOB_PRIORITY_LABELS.niedrig },
@@ -66,6 +67,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   project_not_found: 'Projekt nicht gefunden.',
   create_failed: 'Fehler beim Erstellen des Auftrags.',
   assign_failed: 'Fehler beim Zuweisen des Mitarbeiters.',
+  work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
+  work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
+  template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
 
@@ -112,6 +116,7 @@ export function CreateJobFormContent({
   const [jobNumber, setJobNumber] = useState(initialJobNumber ?? '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [templateVersionId, setTemplateVersionId] = useState('');
   const [qualificationWarning, setQualificationWarning] =
     useState<AssignmentEvaluation | null>(null);
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<
@@ -271,6 +276,7 @@ export function CreateJobFormContent({
         selectedUserIds: selectedEmployees,
         assignmentApproval: approval ?? null,
         assignmentTeamSourceId,
+        templateVersionId: templateVersionId || undefined,
       };
 
       const result = await createJob(input);
@@ -490,6 +496,13 @@ export function CreateJobFormContent({
           />
           <ErrorText>{showContentError ? contentError : null}</ErrorText>
         </div>
+
+        <WorkTemplatePicker
+          targetType="job"
+          value={templateVersionId}
+          onChange={setTemplateVersionId}
+          disabled={formDisabled}
+        />
 
         <Separator />
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

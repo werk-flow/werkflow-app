@@ -68,6 +68,7 @@ import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditJobDialog } from './edit-job-dialog';
 import { JobInstructionItemsCard } from './job-instruction-items-card';
 import { JobQualificationSection } from './job-qualification-section';
+import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import { JobDispatchSection } from './job-dispatch-section';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -1331,6 +1332,10 @@ export function JobDetailContent({
               isAdminOrManager={isAdminOrManager}
               currentUserActor={currentUserActor}
             />
+
+            {isAdminOrManager && (
+              <ApplyWorkTemplateCard targetType="job" targetId={liveJob.id} />
+            )}
 
             {liveJob.client ? (
               <EntityLinkCard

@@ -27,6 +27,81 @@ function createAdminClient(): SupabaseClient {
   });
 }
 
+export async function getWorkTemplateStateByName(orgId: string, name: string) {
+  const admin = createAdminClient();
+  const { data: matchedVersion, error: matchError } = await admin.from('work_template_versions').select('template_id').eq('organization_id', orgId).eq('name', name).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (matchError || !matchedVersion) throw new Error(`No work template found for ${name}: ${matchError?.message}`);
+  const templateId = matchedVersion.template_id as string;
+  const { data: versions, error } = await admin.from('work_template_versions').select('id, template_id, version_number, status, name, published_at').eq('organization_id', orgId).eq('template_id', templateId).order('version_number');
+  if (error || !versions?.length) throw new Error(`No work template versions found for ${name}: ${error?.message}`);
+  const versionIds = versions.map((version) => version.id as string);
+  const [templateResult, itemsResult, evidenceResult, dependenciesResult, materialResult, capabilityResult, eventsResult] = await Promise.all([
+    admin.from('work_templates').select('id, target_type, draft_version_id, current_published_version_id, archived_at').eq('organization_id', orgId).eq('id', templateId).single(),
+    admin.from('work_template_items').select('id, version_id, content, item_kind, requirement_state, group_label, notes, sort_order').eq('organization_id', orgId).in('version_id', versionIds).order('sort_order'),
+    admin.from('work_template_item_evidence_requirements').select('version_id, template_item_id, description, document_category').eq('organization_id', orgId).in('version_id', versionIds),
+    admin.from('work_template_item_dependencies').select('version_id, predecessor_item_id, dependent_item_id').eq('organization_id', orgId).in('version_id', versionIds),
+    admin.from('work_template_material_lines').select('version_id, item_id, preferred_location_id, planned_quantity, is_billable, notes').eq('organization_id', orgId).in('version_id', versionIds),
+    admin.from('work_template_capability_requirements').select('version_id, capability_id, require_confirmation').eq('organization_id', orgId).in('version_id', versionIds),
+    admin.from('work_template_events').select('event_type, template_version_id, application_id, event_payload, actor_id, created_at').eq('organization_id', orgId).eq('template_id', templateId).order('created_at'),
+  ]);
+  const firstError = [templateResult, itemsResult, evidenceResult, dependenciesResult, materialResult, capabilityResult, eventsResult].find((result) => result.error)?.error;
+  if (firstError || !templateResult.data) throw new Error(`Work template state failed: ${firstError?.message}`);
+  return { template: templateResult.data, versions, items: itemsResult.data ?? [], evidence: evidenceResult.data ?? [], dependencies: dependenciesResult.data ?? [], materials: materialResult.data ?? [], capabilities: capabilityResult.data ?? [], events: eventsResult.data ?? [] };
+}
+
+export async function getAppliedWorkTemplateState(orgId: string, input: { jobNumber?: string; projectNumber?: string }) {
+  if (Number(Boolean(input.jobNumber)) + Number(Boolean(input.projectNumber)) !== 1) {
+    throw new Error('Applied work-template lookup requires exactly one target number.');
+  }
+  const admin = createAdminClient();
+  const targetTable = input.jobNumber ? 'jobs' : 'projects';
+  const numberColumn = input.jobNumber ? 'job_number' : 'project_number';
+  const targetNumber = input.jobNumber ?? input.projectNumber;
+  if (!targetNumber) throw new Error('Applied work-template target number is missing.');
+  const { data: target, error: targetError } = await admin.from(targetTable).select('id').eq('organization_id', orgId).eq(numberColumn, targetNumber).single();
+  if (targetError || !target) throw new Error(`Applied target lookup failed: ${targetError?.message}`);
+  const targetId = target.id as string;
+  const isJob = Boolean(input.jobNumber);
+  const [applications, instructions, materials, capabilities, movements, occurrences, assignments, timeEntries, documentLinks, assessments, projectJobs] = await Promise.all([
+    admin.from('work_template_applications').select('id, template_id, template_version_id, applied_by, applied_at').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId),
+    admin.from('job_instruction_items').select('id, content, item_kind, requirement_state, group_label, notes, is_completed, last_status_changed_by, last_status_changed_at, work_template_application_id, source_work_template_item_id').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId).order('sort_order'),
+    admin.from('job_material_lines').select('id, item_id, preferred_location_id, planned_quantity, taken_quantity, returned_quantity, is_billable, notes, work_template_application_id, source_work_template_material_line_id').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId),
+    admin.from('job_capability_requirements').select('id, capability_id, require_confirmation, job_id, project_id').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId),
+    admin.from('inventory_movements').select('id').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId),
+    isJob ? admin.from('planning_occurrences').select('id').eq('organization_id', orgId).eq('job_id', targetId) : Promise.resolve({ data: [], error: null }),
+    isJob ? admin.from('job_assignments').select('id, user_id').eq('job_id', targetId) : Promise.resolve({ data: [], error: null }),
+    isJob ? admin.from('time_entries').select('id').eq('organization_id', orgId).eq('job_id', targetId) : Promise.resolve({ data: [], error: null }),
+    admin.from('document_links').select('id').eq('organization_id', orgId).eq(isJob ? 'job_id' : 'project_id', targetId),
+    isJob ? admin.from('job_qualification_assessments').select('id, coverage_fingerprint, override_reason, created_at').eq('organization_id', orgId).eq('job_id', targetId) : Promise.resolve({ data: [], error: null }),
+    !isJob ? admin.from('jobs').select('id').eq('organization_id', orgId).eq('project_id', targetId) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const instructionIds = (instructions.data ?? []).map((item) => item.id as string);
+  const requirementIds = (capabilities.data ?? []).map((item) => item.id as string);
+  const [evidence, dependencies, capabilityOrigins] = await Promise.all([
+    instructionIds.length ? admin.from('job_instruction_item_evidence_requirements').select('id, instruction_item_id, description, document_category, source_work_template_evidence_id').eq('organization_id', orgId).in('instruction_item_id', instructionIds) : Promise.resolve({ data: [], error: null }),
+    instructionIds.length ? admin.from('job_instruction_item_dependencies').select('id, predecessor_item_id, dependent_item_id, source_work_template_dependency_id').eq('organization_id', orgId).in('dependent_item_id', instructionIds) : Promise.resolve({ data: [], error: null }),
+    requirementIds.length ? admin.from('job_capability_requirement_origins').select('id, requirement_id, work_template_application_id, source_work_template_requirement_id').eq('organization_id', orgId).in('requirement_id', requirementIds) : Promise.resolve({ data: [], error: null }),
+  ]);
+  const firstError = [applications, instructions, materials, capabilities, movements, occurrences, assignments, timeEntries, documentLinks, assessments, projectJobs, evidence, dependencies, capabilityOrigins].find((result) => result.error)?.error;
+  if (firstError) throw new Error(`Applied work template state failed: ${firstError.message}`);
+  return { targetId, applications: applications.data ?? [], instructions: instructions.data ?? [], evidence: evidence.data ?? [], dependencies: dependencies.data ?? [], materials: materials.data ?? [], capabilities: capabilities.data ?? [], capabilityOrigins: capabilityOrigins.data ?? [], inventoryMovements: movements.data ?? [], planningOccurrences: occurrences.data ?? [], assignments: assignments.data ?? [], timeEntries: timeEntries.data ?? [], documentLinks: documentLinks.data ?? [], qualificationAssessments: assessments.data ?? [], projectJobs: projectJobs.data ?? [] };
+}
+
+export async function getWorkTemplateApplicationCountForTarget(orgId: string, input: { jobId?: string; projectId?: string }): Promise<number> {
+  if (Number(Boolean(input.jobId)) + Number(Boolean(input.projectId)) !== 1) throw new Error('Work template application count requires exactly one target id.');
+  const targetId = input.jobId ?? input.projectId;
+  if (!targetId) throw new Error('Work template application count target is missing.');
+  const { count, error } = await createAdminClient().from('work_template_applications').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq(input.jobId ? 'job_id' : 'project_id', targetId);
+  if (error) throw new Error(`Work template application count failed: ${error.message}`);
+  return count ?? 0;
+}
+
+export async function getJobCountByNumber(orgId: string, jobNumber: string): Promise<number> {
+  const { count, error } = await createAdminClient().from('jobs').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('job_number', jobNumber);
+  if (error) throw new Error(`Job count failed: ${error.message}`);
+  return count ?? 0;
+}
+
 // The invite email link carries this code; reading it from the database is the
 // harness's stand-in for opening the invitee's mailbox.
 export async function getPendingInviteCode(orgId: string, email: string): Promise<string> {

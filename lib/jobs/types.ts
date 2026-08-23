@@ -119,7 +119,14 @@ export type JobInstructionActor = {
 export type JobInstructionItem = {
   id: string;
   organizationId: string;
-  jobId: string;
+  jobId: string | null;
+  projectId: string | null;
+  itemKind: 'task' | 'checklist';
+  requirementState: 'required' | 'optional';
+  groupLabel: string | null;
+  notes: string | null;
+  templateApplicationId: string | null;
+  sourceTemplateItemId: string | null;
   content: string;
   sortOrder: number;
   isCompleted: boolean;
@@ -161,6 +168,12 @@ export type ProjectWithDetails = Project & {
 export type JobInstructionItemWithDetails = JobInstructionItem & {
   creator: JobInstructionActor | null;
   lastStatusChangedByProfile: JobInstructionActor | null;
+  evidenceRequirements: Array<{
+    id: string;
+    description: string;
+    documentCategory: string;
+  }>;
+  predecessors: Array<{ id: string; content: string }>;
 };
 
 /**
@@ -431,6 +444,13 @@ export function toJobInstructionItem(
     id: row.id,
     organizationId: row.organization_id,
     jobId: row.job_id,
+    projectId: row.project_id,
+    itemKind: row.item_kind as 'task' | 'checklist',
+    requirementState: row.requirement_state as 'required' | 'optional',
+    groupLabel: row.group_label,
+    notes: row.notes,
+    templateApplicationId: row.work_template_application_id,
+    sourceTemplateItemId: row.source_work_template_item_id,
     content: row.content,
     sortOrder: row.sort_order,
     isCompleted: row.is_completed,

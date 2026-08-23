@@ -52,6 +52,9 @@ import { MetadataSection, type MetadataField } from '@/components/shared/metadat
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { JobMaterialsSection } from '@/components/inventar/job-materials-section';
+import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
+import { JobInstructionItemsCard } from './job-instruction-items-card';
+import { ProjectQualificationSection } from './project-qualification-section';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
@@ -219,6 +222,7 @@ export function ProjectDetailContent({
   const dialogOptionsRequestInFlightRef = useRef(false);
   const [liveProject, setLiveProject] = useState(project);
   const [liveJobs, setLiveJobs] = useState(jobs);
+  const [instructionRefreshSignal, setInstructionRefreshSignal] = useState(0);
   const repairTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [projectTimeEntries, setProjectTimeEntries] = useState<
@@ -904,15 +908,30 @@ export function ProjectDetailContent({
             </div>
 
             {isAdminOrManager ? (
-              <JobMaterialsSection
-                projectId={liveProject.id}
-                initialLines={materialSummary.directLines}
-                inheritedJobGroups={materialSummary.jobGroups}
-                totals={materialSummary.totals}
-                inventoryItems={inventoryItems}
-                locations={inventoryLocations}
-                isAdminOrManager
-              />
+              <>
+                <JobInstructionItemsCard
+                  projectId={liveProject.id}
+                  initialItems={[]}
+                  isAdminOrManager
+                  currentUserActor={null}
+                  refreshSignal={instructionRefreshSignal}
+                />
+                <ApplyWorkTemplateCard
+                  targetType="project"
+                  targetId={liveProject.id}
+                  onApplied={() => setInstructionRefreshSignal((value) => value + 1)}
+                />
+                <ProjectQualificationSection projectId={liveProject.id} />
+                <JobMaterialsSection
+                  projectId={liveProject.id}
+                  initialLines={materialSummary.directLines}
+                  inheritedJobGroups={materialSummary.jobGroups}
+                  totals={materialSummary.totals}
+                  inventoryItems={inventoryItems}
+                  locations={inventoryLocations}
+                  isAdminOrManager
+                />
+              </>
             ) : null}
 
             <ContextualDocumentsSection

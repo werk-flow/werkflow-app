@@ -41,6 +41,10 @@ import {
   type ClientContact,
   type ClientSite,
 } from '@/lib/clients/types';
+import {
+  applyWorkTemplateWithAdmin,
+  loadWorkTemplateRequirementRows,
+} from '@/lib/work-templates/server';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,6 +71,7 @@ export type CreateJobInput = {
   selectedUserIds?: string[];
   assignmentApproval?: AssignmentApproval | null;
   assignmentTeamSourceId?: string | null;
+  templateVersionId?: string;
 };
 
 export type UpdateJobInput = Omit<Partial<CreateJobInput>, 'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'> & {
@@ -96,6 +101,11 @@ async function assessAssignmentSelection(input: {
   selectedUserIds: string[];
   assessedForDate?: string | null;
   approval?: AssignmentApproval | null;
+  requirementRows?: Array<{
+    id: string;
+    capability_id: string;
+    require_confirmation: boolean;
+  }>;
 }): Promise<
   | { success: true; evaluation: AssignmentEvaluation }
   | {
@@ -111,6 +121,7 @@ async function assessAssignmentSelection(input: {
     jobId: input.jobId,
     selectedUserIds: input.selectedUserIds,
     assessedForDate: input.assessedForDate,
+    requirementRows: input.requirementRows,
   });
   if (!result.success) return result;
   if (!result.evaluation.requiresOverride) return result;
@@ -150,14 +161,16 @@ async function replaceJobAssignmentsAfterAssessment(input: {
   evaluation: AssignmentEvaluation;
   approval?: AssignmentApproval | null;
   teamSourceId?: string | null;
+  recordAssessment?: boolean;
 }): Promise<
   | { success: true; assignments: ReturnType<typeof toJobAssignment>[] }
   | { success: false; error: string }
 > {
   const selectedUserIds = [...new Set(input.selectedUserIds)].sort();
-  const recordAssessment =
+  const recordAssessment = input.recordAssessment ?? (
     input.evaluation.requirementCoverage.length > 0 ||
-    input.evaluation.apprenticeWarning.status !== 'not_configured';
+    input.evaluation.apprenticeWarning.status !== 'not_configured'
+  );
   const { error: replaceError } = await input.context.admin.rpc(
     'replace_job_assignments_with_assessment',
     {
@@ -536,11 +549,22 @@ export async function createJob(
       actorId: userId,
     };
     const selectedUserIds = input.selectedUserIds ?? [];
+    const templateRequirements = input.templateVersionId
+      ? await loadWorkTemplateRequirementRows({
+          admin,
+          organizationId: orgId,
+          versionId: input.templateVersionId,
+        })
+      : { success: true as const, rows: [], templateRequirementCount: 0 };
+    if (!templateRequirements.success) return templateRequirements;
     const assignmentAssessment = await assessAssignmentSelection({
       context: assignmentContext,
       selectedUserIds,
       assessedForDate: input.plannedDate,
       approval: input.assignmentApproval,
+      requirementRows: input.templateVersionId
+        ? templateRequirements.rows
+        : undefined,
     });
     if (!assignmentAssessment.success) return assignmentAssessment;
 
@@ -645,6 +669,7 @@ export async function createJob(
         evaluation: assignmentAssessment.evaluation,
         approval: input.assignmentApproval,
         teamSourceId: input.assignmentTeamSourceId,
+        recordAssessment: templateRequirements.templateRequirementCount === 0,
       });
       if (!assignmentResult.success) {
         const { error: rollbackError } = await admin
@@ -660,8 +685,50 @@ export async function createJob(
       }
     }
 
+    if (input.templateVersionId) {
+      const evaluation = assignmentAssessment.evaluation;
+      const { error: templateError } = await applyWorkTemplateWithAdmin(
+        admin,
+        orgId,
+        userId,
+        {
+          templateVersionId: input.templateVersionId,
+          jobId: data.id,
+          idempotencyKey: `create-job-${data.id}-${input.templateVersionId}`,
+          qualificationAssessment: templateRequirements.templateRequirementCount > 0
+            ? {
+                assessedForDate: evaluation.assessedForDate,
+                selectedUserIds: evaluation.selectedUserIds,
+                selectedEmployeeRecordIds: evaluation.selectedEmployeeRecordIds,
+                requirementsSnapshot: toJson(evaluation.requirementCoverage),
+                coverageSnapshot: toJson({ requirements: evaluation.requirementCoverage, apprentice_warning: evaluation.apprenticeWarning }),
+                coverageFingerprint: evaluation.fingerprint,
+                overrideReason: evaluation.requiresOverride ? input.assignmentApproval?.reason.trim() || null : null,
+                teamSourceId: input.assignmentTeamSourceId ?? input.assignmentApproval?.teamSourceId ?? null,
+              }
+            : undefined,
+        }
+      );
+      if (templateError) {
+        console.error('Failed to apply work template while creating job:', templateError);
+        const { error: rollbackError } = await admin.from('jobs').delete().eq('id', data.id).eq('organization_id', orgId);
+        if (rollbackError) return { success: false, error: 'rollback_failed' };
+        const knownCode = [
+          'work_template_version_unavailable',
+          'work_template_reference_unavailable',
+          'work_template_qualification_assessment_required',
+        ].find((code) => templateError.message.includes(code)) ??
+          (['work_template_material_reference_unavailable', 'work_template_capability_reference_unavailable']
+            .some((code) => templateError.message.includes(code))
+            ? 'work_template_reference_unavailable'
+            : undefined);
+        return { success: false, error: knownCode ?? 'template_apply_failed' };
+      }
+    }
+
     updateTag(CACHE_TAGS.jobs(orgId));
     updateTag(CACHE_TAGS.qualifications(orgId));
+    updateTag(CACHE_TAGS.workTemplates(orgId));
     if (input.projectId) {
       updateTag(CACHE_TAGS.projects(orgId));
     }

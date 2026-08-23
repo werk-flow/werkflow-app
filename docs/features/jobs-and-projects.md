@@ -57,7 +57,10 @@ The following behavior exists today and is the baseline future work must preserv
 
 ### Instructions, Time, Documents, And Materials
 
-- Jobs have ordered instruction/checklist items. Managers create, edit, reorder, and remove them; assigned employees can mark them complete or reopen them. The last status actor and time are retained.
+- Jobs have ordered instruction/checklist items. Managers create, edit, reorder, and remove them; assigned employees can mark them complete or reopen them. The last status actor and time are retained. Since P1-13 the same primitive also carries task/checklist kind, required/optional state, optional group and notes, expected evidence, structural prerequisites, and immutable template-origin attribution; project-level rows use the same table and remain manager planning.
+- **Work templates (P1-13):** Admin/Büro manage organization-created Auftrag or Projekt templates under `/arbeitsvorlagen`. A stable template owns numbered versions; one draft is editable, while every published version and its normalized task/checklist, evidence, material, capability and dependency rows are immutable. Editing published content creates the next draft. Archive hides a template from application pickers without deleting versions or applied work.
+- Applying a published version at direct creation, request conversion, or later on incomplete work materializes editable rows into `job_instruction_items`, their evidence/dependency children, `job_material_lines`, and `job_capability_requirements`. The application records the exact version and source rows. Later template edits never rewrite the Auftrag or Projekt. The same version cannot be applied twice; another template/version is additive only after explicit confirmation.
+- Template application is planning only: it creates no stock movement or reservation, no planning occurrence, dispatch, assignment, actual time, document, approval, signature, message, attention item or execution gate. Inactive referenced catalog data blocks the whole transaction. Existing job assignments still use the P1-09 fingerprinted qualification assessment and reasoned override.
 - Job and project detail pages show linked time entries. Project views aggregate time from their jobs.
 - Contextual `Dokumente & Bilder` sections link work to the central document system. Assigned employees can upload and view files on their jobs; managers have broader project and document-management actions.
 - Job and project detail pages already include `Material & Inventar`.
@@ -68,7 +71,7 @@ The following behavior exists today and is the baseline future work must preserv
 
 - Request intake and once-only conversion exist (P1-02), but the work record does not yet show what changed during qualification, and converting a request into an update of existing work is deferred to the service slices.
 - The status model does not yet express blocked reasons, dependencies, readiness gates, customer waiting states, or separate completion and handover; P1-12's parked reasons and compositional dispatch-readiness signals are deliberately narrow precursors, not that state machine (`P1-14`).
-- Instruction items are useful checklists, not a complete task/dependency system or reusable template library.
+- P1-13 adds reusable, versioned organization work templates and structural task prerequisites, but it does not add execution status, owners, due dates, blocker enforcement or readiness gates; P1-14 owns that mature execution model.
 - Site diaries, structured measurements, defects, change-work records, formal approvals, handover packages, and customer signatures are not implemented as dedicated operational artifacts.
 - Planned-versus-actual comparison now has a reliable visit-level planning source (`P1-11`) and separate actual time records, but there is still no complete operational variance or profitability view.
 - Structured offers, contracts, invoices, payments, and accounting remain outside the current implementation.

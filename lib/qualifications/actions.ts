@@ -10,6 +10,7 @@ import {
   CONFIRMATION_STATUSES,
   EVIDENCE_STATES,
   type AssignmentEvaluation,
+  type CapabilityDefinition,
   type CapabilityKind,
   type ConfirmationStatus,
   type EvidenceState,
@@ -1374,6 +1375,84 @@ export async function getJobQualificationDetail(
         : null,
     },
   };
+}
+
+type ProjectCapabilityRequirement = {
+  id: string;
+  capability_id: string;
+  require_confirmation: boolean;
+};
+
+type ProjectCapabilityRequirementsResult =
+  | {
+      success: true;
+      data: {
+        capabilities: CapabilityDefinition[];
+        requirements: ProjectCapabilityRequirement[];
+      };
+    }
+  | { success: false; error: string };
+
+type SetProjectCapabilityRequirementsResult =
+  | { success: true }
+  | { success: false; error: string };
+
+export async function getProjectCapabilityRequirements(
+  projectId: string
+): Promise<ProjectCapabilityRequirementsResult> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
+  const admin = createSupabaseAdminClient();
+  const { data: project } = await admin.from('projects').select('id').eq('id', projectId).eq('organization_id', auth.context.orgId).maybeSingle();
+  if (!project) return { success: false as const, error: 'project_not_found' };
+  const [definitionsResult, requirementsResult] = await Promise.all([
+    admin.from('organization_capabilities').select('*').eq('organization_id', auth.context.orgId).is('retired_at', null).order('name').limit(501),
+    admin.from('job_capability_requirements').select('id, capability_id, require_confirmation').eq('organization_id', auth.context.orgId).eq('project_id', projectId).order('created_at').limit(201),
+  ]);
+  if (definitionsResult.error || requirementsResult.error || (definitionsResult.data?.length ?? 0) > 500 || (requirementsResult.data?.length ?? 0) > 200) return { success: false as const, error: 'load_failed' };
+  return {
+    success: true as const,
+    data: {
+      capabilities: (definitionsResult.data ?? []).map(toCapabilityDefinition),
+      requirements: requirementsResult.data ?? [],
+    },
+  };
+}
+
+export async function setProjectCapabilityRequirements(input: {
+  projectId: string;
+  requirements: Array<{ capabilityId: string; requireConfirmation: boolean }>;
+  expectedRequirements: Array<{ capabilityId: string; requireConfirmation: boolean }>;
+}): Promise<SetProjectCapabilityRequirementsResult> {
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false as const, error: 'not_authorized' };
+  const normalized = [...new Map(input.requirements.map((requirement) => [requirement.capabilityId, requirement])).values()]
+    .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
+  const expected = [...new Map(input.expectedRequirements.map((requirement) => [requirement.capabilityId, requirement])).values()]
+    .sort((left, right) => left.capabilityId.localeCompare(right.capabilityId));
+  if (normalized.length > 200) return { success: false as const, error: 'invalid_input' };
+  const { error } = await createSupabaseAdminClient().rpc('replace_project_capability_requirements_checked', {
+    p_organization_id: auth.context.orgId,
+    p_project_id: input.projectId,
+    p_capability_ids: normalized.map((requirement) => requirement.capabilityId),
+    p_require_confirmations: normalized.map((requirement) => requirement.requireConfirmation),
+    p_expected_capability_ids: expected.map((requirement) => requirement.capabilityId),
+    p_expected_require_confirmations: expected.map((requirement) => requirement.requireConfirmation),
+    p_actor_id: auth.context.userId,
+  });
+  if (error) {
+    return {
+      success: false as const,
+      error: error.message.includes('project_capability_requirements_conflict')
+        ? 'conflict'
+        : 'update_failed',
+    };
+  }
+  updateTag(CACHE_TAGS.qualifications(auth.context.orgId));
+  updateTag(CACHE_TAGS.projects(auth.context.orgId));
+  return { success: true as const };
 }
 
 export async function expandTeamForAssignment(input: {

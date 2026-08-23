@@ -46,6 +46,7 @@ export async function createJob(
     expectedInheritedContactName?: string;
     qualificationOverrideReason?: string;
     plannedDateDigits?: string;
+    workTemplateName?: string;
   }
 ): Promise<void> {
   await page.goto('/auftraege');
@@ -57,6 +58,11 @@ export async function createJob(
 
   await page.locator('#job-number').fill(options.jobNumber);
   await page.locator('#job-title').fill(options.title);
+
+  if (options.workTemplateName) {
+    await expect(page.locator('#work-template-job')).toBeVisible({ timeout: 15_000 });
+    await selectFromSearchable(page, page.locator('#work-template-job'), options.workTemplateName);
+  }
 
   if (options.plannedDateDigits) {
     await typeIntoDatePicker(
@@ -163,6 +169,7 @@ export async function createProject(
     clientName?: string;
     siteName?: string;
     contactName?: string;
+    workTemplateName?: string;
   }
 ): Promise<void> {
   if ((options.siteName || options.contactName) && !options.clientName) {
@@ -178,6 +185,10 @@ export async function createProject(
   await expect(projectNumberInput).not.toHaveValue('', { timeout: 15_000 });
   await projectNumberInput.fill(options.projectNumber);
   await dialog.locator('#create-project-name').fill(options.title);
+  if (options.workTemplateName) {
+    await expect(dialog.locator('#work-template-project')).toBeVisible({ timeout: 15_000 });
+    await selectFromSearchable(page, dialog.locator('#work-template-project'), options.workTemplateName);
+  }
   if (options.clientName) {
     await dialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
     await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
@@ -206,6 +217,48 @@ export async function createProject(
   }
   await dialog.getByRole('button', { name: 'Projekt erstellen', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function createAndPublishWorkTemplate(
+  page: Page,
+  options: {
+    name: string;
+    targetType: 'job' | 'project';
+    firstItem: string;
+    secondItem?: string;
+    evidenceDescription?: string;
+  }
+): Promise<void> {
+  await page.goto('/arbeitsvorlagen');
+  await page.getByRole('button', { name: /Vorlage erstellen|Erste Vorlage erstellen/ }).first().click();
+  const createDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Arbeitsvorlage erstellen' }) });
+  await createDialog.locator('#new-template-name').fill(options.name);
+  if (options.targetType === 'project') {
+    await createDialog.locator('#new-template-target').click();
+    await page.getByRole('option', { name: 'Projekte', exact: true }).click();
+  }
+  await createDialog.getByRole('button', { name: 'Erstellen', exact: true }).click();
+  await expect(createDialog).toHaveCount(0, { timeout: 15_000 });
+
+  const editor = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: /Entwurf · Version 1/ }) });
+  await expect(editor).toBeVisible({ timeout: 20_000 });
+  await editor.getByRole('button', { name: 'Eintrag', exact: true }).click();
+  await editor.getByLabel('Bezeichnung').last().fill(options.firstItem);
+  if (options.evidenceDescription) {
+    await editor.getByRole('button', { name: 'Nachweis', exact: true }).click();
+    await editor.getByLabel('Nachweisbeschreibung').last().fill(options.evidenceDescription);
+  }
+  if (options.secondItem) {
+    await editor.getByRole('button', { name: 'Eintrag', exact: true }).click();
+    const labels = editor.getByLabel('Bezeichnung');
+    await labels.last().fill(options.secondItem);
+    const secondCard = labels.last().locator('xpath=ancestor::*[@data-slot="card"][1]');
+    await secondCard.getByRole('combobox', { name: `Verbindlichkeit für ${options.secondItem}` }).click();
+    await page.getByRole('option', { name: 'Optional', exact: true }).click();
+    await toggleInSearchableMulti(page, secondCard.getByRole('combobox', { name: `Voraussetzungen für ${options.secondItem}` }), [options.firstItem]);
+  }
+  await editor.getByRole('button', { name: 'Veröffentlichen', exact: true }).click();
+  await expect(editor).toHaveCount(0, { timeout: 20_000 });
 }
 
 // Uploads into the "Dokumente & Bilder" section of the page currently open.
@@ -928,7 +981,7 @@ export async function uploadDocumentOnRequestDetail(
 
 export async function convertRequestToJobViaDialog(
   page: Page,
-  options?: { clientName?: string; plannedDate?: string }
+  options?: { clientName?: string; plannedDate?: string; workTemplateName?: string; qualificationOverrideReason?: string }
 ): Promise<void> {
   await page.getByRole('button', { name: 'Umwandeln' }).click();
   await expect(page.getByRole('heading', { name: 'Anfrage umwandeln' })).toBeVisible();
@@ -956,6 +1009,9 @@ export async function convertRequestToJobViaDialog(
       options.plannedDate
     );
   }
+  if (options?.workTemplateName) {
+    await selectFromSearchable(page, page.getByRole('dialog').locator('#work-template-job'), options.workTemplateName);
+  }
 
   // The job number is suggested asynchronously after the dialog opens;
   // submitting before it arrives fails validation like it would for a user.
@@ -967,6 +1023,12 @@ export async function convertRequestToJobViaDialog(
     .getByRole('dialog')
     .getByRole('button', { name: 'In Auftrag umwandeln' })
     .click();
+  if (options?.qualificationOverrideReason) {
+    const warningDialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Zuweisung prüfen' }) });
+    await expect(warningDialog).toBeVisible({ timeout: 15_000 });
+    await warningDialog.locator('#qualification-override-reason').fill(options.qualificationOverrideReason);
+    await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
+  }
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
   await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({
     timeout: 15_000,
@@ -990,7 +1052,8 @@ export async function matchRequestToExistingCustomer(
 
 export async function convertRequestToProjectViaDialog(
   page: Page,
-  projectNumber: string
+  projectNumber: string,
+  workTemplateName?: string
 ): Promise<void> {
   await page.getByRole('button', { name: 'Umwandeln' }).click();
   const dialog = page.getByRole('dialog');
@@ -998,6 +1061,9 @@ export async function convertRequestToProjectViaDialog(
   await dialog.getByRole('tab', { name: 'Projekt' }).click();
   await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, { timeout: 15_000 });
   await dialog.locator('#convert-number').fill(projectNumber);
+  if (workTemplateName) {
+    await selectFromSearchable(page, dialog.locator('#work-template-project'), workTemplateName);
+  }
   await dialog.getByRole('button', { name: 'In Projekt umwandeln' }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
   await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({ timeout: 15_000 });

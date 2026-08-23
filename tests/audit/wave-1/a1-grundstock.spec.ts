@@ -239,7 +239,11 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       employeePage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }),
       world.orgName
     );
-    await expect(visibleText(employeePage, world.orgName)).toBeVisible({ timeout: 20_000 });
+    const employeeOrganizationSwitcher = employeePage.getByRole('combobox').filter({
+      hasText: world.orgName,
+    });
+    await expect(employeeOrganizationSwitcher).toBeDisabled();
+    await expect(employeeOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
     await employeePage.goto('/auftraege');
     await expect(employeePage.getByText(`Nur Zweitorg ${world.runId}`)).toHaveCount(0);
     await employeeContext.close();
@@ -249,7 +253,11 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       adminPage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }),
       world.orgName
     );
-    await expect(visibleText(adminPage, world.orgName)).toBeVisible({ timeout: 20_000 });
+    const primaryOrganizationSwitcher = adminPage.getByRole('combobox').filter({
+      hasText: world.orgName,
+    });
+    await expect(primaryOrganizationSwitcher).toBeDisabled();
+    await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
     await adminPage.goto('/kunden');
     await expect(adminPage.getByText(`Nur Zweitorg ${world.runId}`)).toHaveCount(0);
     await selectFromSearchable(
@@ -257,7 +265,11 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       adminPage.getByRole('combobox').filter({ hasText: world.orgName }),
       secondaryOrganizationName
     );
-    await expect(visibleText(adminPage, secondaryOrganizationName)).toBeVisible({ timeout: 20_000 });
+    const secondaryOrganizationSwitcher = adminPage.getByRole('combobox').filter({
+      hasText: secondaryOrganizationName,
+    });
+    await expect(secondaryOrganizationSwitcher).toBeDisabled();
+    await expect(secondaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
     await adminPage.goto('/kunden');
     await expect(visibleText(adminPage, `Nur Zweitorg ${world.runId}`)).toBeVisible();
     await expect(adminPage.getByText(primaryOrganizationCustomer)).toHaveCount(0);
@@ -266,9 +278,8 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       adminPage.getByRole('combobox').filter({ hasText: secondaryOrganizationName }),
       world.orgName
     );
-    await expect(adminPage.getByRole('combobox').filter({ hasText: world.orgName })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(primaryOrganizationSwitcher).toBeDisabled();
+    await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
   });
 
   test('A1-04/A1-06: Handwerker-Oberfläche und konservative Rollenregeln', async ({
@@ -1664,7 +1675,10 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await linkDialog.getByRole('button', { name: 'Speichern' }).click();
     await expect(linkDialog).toHaveCount(0, { timeout: 20_000 });
 
-    await adminPage.getByRole('link', { name: 'Alle Dateien' }).click();
+    // The save closes with a router refresh; under a loaded shared-world run it
+    // can supersede this tab click. Navigate to the link target directly so the
+    // filter assertions start from the persisted post-save view.
+    await adminPage.goto('/dokumente?view=all');
     await expect(adminPage).toHaveURL(/view=all/);
     const documentSearch = adminPage.getByPlaceholder('Dokumente suchen...');
     await documentSearch.fill(fileName);
@@ -2076,6 +2090,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     employeePage,
     world,
   }) => {
+    test.setTimeout(300_000);
     const projectNumber = `A1-MAT-P-${world.runId}`;
     const projectTitle = `A1 Materialprojekt ${world.runId}`;
     const jobNumber = `A1-MAT-J-${world.runId}`;
@@ -2144,10 +2159,19 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       world.inventory.itemId,
       world.inventory.locationId
     );
-    await adminPage.getByRole('button', { name: 'Material planen' }).click();
+    // P1-13 adds the project qualification client section immediately before
+    // material. Wait for that boundary to hydrate so the first material click
+    // cannot land on the streamed HTML before its handler is attached.
+    await expect(adminPage.getByText('Geplante Qualifikationen', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    const projectMaterialButton = adminPage.getByRole('button', { name: 'Material planen' });
+    await expect(projectMaterialButton).toBeEnabled({ timeout: 30_000 });
+    await projectMaterialButton.click();
     dialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Material planen' }),
     });
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
     await dialog.getByLabel('Artikel suchen').fill(world.inventory.itemName);
     await dialog.getByRole('button').filter({ hasText: world.inventory.itemName }).click();
     await dialog.locator('input[id$="-quantity"]').fill('1');

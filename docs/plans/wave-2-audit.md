@@ -49,13 +49,24 @@ After the wave's last slice is accepted: fresh production build, then sequential
 
 One section per slice, added at slice acceptance. Same row format and status vocabulary as Wave 1 (`docs/plans/wave-1-audit.md`): catalog flow IDs, coverage mapping, status, whole-bullet clause evidence, closed with the invariant line.
 
-*(No Wave 2 slice is accepted yet.)*
+### P1-13 — Versioned work templates
+
+| Catalog flow IDs | Coverage | Status | Whole-bullet clause evidence |
+| --- | --- | --- | --- |
+| `P1-13-F01`, `F02`, `F03`, `F09`, `F26`, `F27` | `tests/audit/wave-2/p1-13.spec.ts` — empty state, role denial, validation, creation, filters, and safe Realtime catch-up | `fully evidenced` | Real Admin/Büro/employee/outsider sessions prove zero seeded templates, manager creation and validation, description/target/status filters, employee redirect and outsider isolation. A Büro dialog stays open across an Admin mutation and receives the queued refresh only after close. |
+| `P1-13-F04`, `F05`, `F06`, `F07`, `F08`, `F10` | same spec — complete draft content and immutable publish | `fully evidenced` | UI-only creation, editing, ordering and deletion cover task/checklist kind, required/optional state, grouping/notes, evidence category, material plus inline item/location creation, organization capability creation, multiple structural prerequisites, cycle rejection and successful immutable publish. Persisted version rows and every child collection are asserted. |
+| `P1-13-F11`, `F12`, `F13`, `F14`, `F19`, `F20`, `F21`, `F22` | same spec — version history, creation application, editability and snapshot meaning | `fully evidenced` | Direct job creation selects a published version, uses the established qualification override, materializes attributed existing primitives, keeps stock/time/documents untouched, and preserves the pre-existing planning occurrence and assignment. Employee checklist completion is persisted with actor/time. Manager edits checklist metadata/evidence and material through existing sections; provenance survives. V2, archive/reactivation and actor/timestamp/target history never rewrite V1 work. |
+| `P1-13-F17`, `F18`, `F23`, `F24` | same spec — after-creation application and project-direct planning | `fully evidenced` | The preview shows exact counts; same-version retry is denied; another version requires explicit additive confirmation. A project application creates direct project instruction/material/capability rows, no child job, and no inherited row on a later child. Empty pickers exclude drafts, archives and foreign-organization versions. |
+| `P1-13-F15`, `F16` | same spec — shared creation contexts and atomic request conversion | `fully evidenced` | Customer, employee, project-child and calendar creation dialogs expose the optional matching picker without changing their existing defaults. Job and project conversion materialize the selected version and persist the once-only request link; target state is read from the database. |
+| `P1-13-F25`, `F26` | same spec — retired references and closed boundaries | `fully evidenced` | A retired capability makes template-backed creation fail atomically: the request/job count and application count stay unchanged, the named correction appears, and retry remains possible. Direct employee action and cross-organization reads/writes stay denied. |
+
+**Invariant:** `27/27 mapped; 27/27 fully evidenced; 0 partial; 0 unmapped`.
 
 ## In-world left-behind state (shared battery)
 
 One entry per slice spec, added at acceptance, same purpose as Wave 1's register: what the spec leaves in-world for later specs in a full battery run.
 
-*(Empty.)*
+- **P1-13:** owns run-day +70 through +74 at 06:00 Europe/Berlin. It leaves two run-scoped templates with published/version history (one archived then reactivated), direct and converted jobs/projects, one later child job, material/capability catalog additions, template applications and attributed instruction/evidence/dependency/material/capability rows, plus the request conversion/history facts created by the six journeys. It creates no stock movements, reservations, dispatches, attention types, actual time or documents. Later specs must address these records by `world.runId` and cannot assume an empty template/application domain.
 
 ## Session log
 
@@ -63,4 +74,5 @@ Newest first: per-slice audit closure entries and the final certification gate.
 
 | Date | Slice / gate | Summary | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-23 | `P1-13` | First Wave 2 slice accepted with its owner-confirmed 27-flow contract. Focused `@AUDIT-W2-P1-13` passed 6/6 after CodeRabbit hardening; affected Wave-1 `@AUDIT-W1-A1` passed 28/28. | `tests/audit/wave-2/p1-13.spec.ts`; gate log 2026-08-23 |
 | 2026-08-21 | — | Per-slice audit model established (this document, roadmap protocol 5a and the audit-coverage acceptance items, testing rule 12 extension, `tests/audit/` config widened to all waves, `test:audit`/`test:audit:w2` scripts). No Wave 2 slice started. | This session |

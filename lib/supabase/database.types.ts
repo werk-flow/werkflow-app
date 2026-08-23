@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -2370,14 +2370,71 @@ export type Database = {
           },
         ]
       }
+      job_capability_requirement_origins: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          requirement_id: string
+          source_work_template_requirement_id: string
+          work_template_application_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          requirement_id: string
+          source_work_template_requirement_id: string
+          work_template_application_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          requirement_id?: string
+          source_work_template_requirement_id?: string
+          work_template_application_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_capability_requirement_or_source_work_template_require_fkey"
+            columns: ["source_work_template_requirement_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_capability_requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_capability_requirement_or_work_template_application_id_fkey"
+            columns: ["work_template_application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_capability_requirement_origins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_capability_requirement_origins_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "job_capability_requirements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_capability_requirements: {
         Row: {
           capability_id: string
           created_at: string
           created_by: string | null
           id: string
-          job_id: string
+          job_id: string | null
           organization_id: string
+          project_id: string | null
           require_confirmation: boolean
           updated_at: string
           updated_by: string | null
@@ -2387,8 +2444,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          job_id: string
+          job_id?: string | null
           organization_id: string
+          project_id?: string | null
           require_confirmation?: boolean
           updated_at?: string
           updated_by?: string | null
@@ -2398,8 +2456,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
-          job_id?: string
+          job_id?: string | null
           organization_id?: string
+          project_id?: string | null
           require_confirmation?: boolean
           updated_at?: string
           updated_by?: string | null
@@ -2426,6 +2485,156 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "job_capability_requirements_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_instruction_item_dependencies: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          dependent_item_id: string
+          id: string
+          organization_id: string
+          predecessor_item_id: string
+          source_work_template_dependency_id: string | null
+          work_template_application_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          dependent_item_id: string
+          id?: string
+          organization_id: string
+          predecessor_item_id: string
+          source_work_template_dependency_id?: string | null
+          work_template_application_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          dependent_item_id?: string
+          id?: string
+          organization_id?: string
+          predecessor_item_id?: string
+          source_work_template_dependency_id?: string | null
+          work_template_application_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_instruction_item_dependen_source_work_template_depende_fkey"
+            columns: ["source_work_template_dependency_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_item_dependencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_dependen_work_template_application_id_fkey"
+            columns: ["work_template_application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_dependencies_dependent_item_id_fkey"
+            columns: ["dependent_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_dependencies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_dependencies_predecessor_item_id_fkey"
+            columns: ["predecessor_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_instruction_item_evidence_requirements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          document_category: string
+          id: string
+          instruction_item_id: string
+          organization_id: string
+          sort_order: number
+          source_work_template_evidence_id: string | null
+          updated_at: string
+          updated_by: string | null
+          work_template_application_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description: string
+          document_category: string
+          id?: string
+          instruction_item_id: string
+          organization_id: string
+          sort_order: number
+          source_work_template_evidence_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          work_template_application_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          document_category?: string
+          id?: string
+          instruction_item_id?: string
+          organization_id?: string
+          sort_order?: number
+          source_work_template_evidence_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          work_template_application_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_instruction_item_evidence_requirem_instruction_item_id_fkey"
+            columns: ["instruction_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_requirements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_source_work_template_evidenc_fkey"
+            columns: ["source_work_template_evidence_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_item_evidence_requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_work_template_application_id_fkey"
+            columns: ["work_template_application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
+            referencedColumns: ["id"]
+          },
         ]
       }
       job_instruction_items: {
@@ -2433,40 +2642,61 @@ export type Database = {
           content: string
           created_at: string
           created_by: string
+          group_label: string | null
           id: string
           is_completed: boolean
-          job_id: string
+          item_kind: string
+          job_id: string | null
           last_status_changed_at: string | null
           last_status_changed_by: string | null
+          notes: string | null
           organization_id: string
+          project_id: string | null
+          requirement_state: string
           sort_order: number
+          source_work_template_item_id: string | null
           updated_at: string
+          work_template_application_id: string | null
         }
         Insert: {
           content: string
           created_at?: string
           created_by: string
+          group_label?: string | null
           id?: string
           is_completed?: boolean
-          job_id: string
+          item_kind?: string
+          job_id?: string | null
           last_status_changed_at?: string | null
           last_status_changed_by?: string | null
+          notes?: string | null
           organization_id: string
+          project_id?: string | null
+          requirement_state?: string
           sort_order?: number
+          source_work_template_item_id?: string | null
           updated_at?: string
+          work_template_application_id?: string | null
         }
         Update: {
           content?: string
           created_at?: string
           created_by?: string
+          group_label?: string | null
           id?: string
           is_completed?: boolean
-          job_id?: string
+          item_kind?: string
+          job_id?: string | null
           last_status_changed_at?: string | null
           last_status_changed_by?: string | null
+          notes?: string | null
           organization_id?: string
+          project_id?: string | null
+          requirement_state?: string
           sort_order?: number
+          source_work_template_item_id?: string | null
           updated_at?: string
+          work_template_application_id?: string | null
         }
         Relationships: [
           {
@@ -2497,6 +2727,27 @@ export type Database = {
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "job_instruction_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_items_source_work_template_item_id_fkey"
+            columns: ["source_work_template_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_items_work_template_application_id_fkey"
+            columns: ["work_template_application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
+            referencedColumns: ["id"]
+          },
         ]
       }
       job_material_lines: {
@@ -2515,9 +2766,11 @@ export type Database = {
           preferred_location_id: string | null
           project_id: string | null
           returned_quantity: number
+          source_work_template_material_line_id: string | null
           status: string
           taken_quantity: number
           updated_at: string
+          work_template_application_id: string | null
         }
         Insert: {
           billable_quantity?: number
@@ -2534,9 +2787,11 @@ export type Database = {
           preferred_location_id?: string | null
           project_id?: string | null
           returned_quantity?: number
+          source_work_template_material_line_id?: string | null
           status?: string
           taken_quantity?: number
           updated_at?: string
+          work_template_application_id?: string | null
         }
         Update: {
           billable_quantity?: number
@@ -2553,9 +2808,11 @@ export type Database = {
           preferred_location_id?: string | null
           project_id?: string | null
           returned_quantity?: number
+          source_work_template_material_line_id?: string | null
           status?: string
           taken_quantity?: number
           updated_at?: string
+          work_template_application_id?: string | null
         }
         Relationships: [
           {
@@ -2598,6 +2855,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_material_lines_source_work_template_material_line_id_fkey"
+            columns: ["source_work_template_material_line_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_material_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_material_lines_work_template_application_id_fkey"
+            columns: ["work_template_application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
             referencedColumns: ["id"]
           },
         ]
@@ -5089,6 +5360,589 @@ export type Database = {
           },
         ]
       }
+      work_template_applications: {
+        Row: {
+          applied_at: string
+          applied_by: string | null
+          id: string
+          idempotency_key: string
+          job_id: string | null
+          organization_id: string
+          project_id: string | null
+          template_id: string
+          template_version_id: string
+        }
+        Insert: {
+          applied_at?: string
+          applied_by?: string | null
+          id?: string
+          idempotency_key: string
+          job_id?: string | null
+          organization_id: string
+          project_id?: string | null
+          template_id: string
+          template_version_id: string
+        }
+        Update: {
+          applied_at?: string
+          applied_by?: string | null
+          id?: string
+          idempotency_key?: string
+          job_id?: string | null
+          organization_id?: string
+          project_id?: string | null
+          template_id?: string
+          template_version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_applications_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_applications_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_applications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_applications_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "work_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_applications_template_version_id_fkey"
+            columns: ["template_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_capability_requirements: {
+        Row: {
+          capability_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+          require_confirmation: boolean
+          sort_order: number
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          capability_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+          require_confirmation?: boolean
+          sort_order: number
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          capability_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+          require_confirmation?: boolean
+          sort_order?: number
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_capability_requirements_capability_id_fkey"
+            columns: ["capability_id"]
+            isOneToOne: false
+            referencedRelation: "organization_capabilities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_capability_requirements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_capability_requirements_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_events: {
+        Row: {
+          actor_id: string | null
+          application_id: string | null
+          created_at: string
+          event_payload: Json
+          event_type: string
+          id: string
+          organization_id: string
+          template_id: string
+          template_version_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          application_id?: string | null
+          created_at?: string
+          event_payload?: Json
+          event_type: string
+          id?: string
+          organization_id: string
+          template_id: string
+          template_version_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          application_id?: string | null
+          created_at?: string
+          event_payload?: Json
+          event_type?: string
+          id?: string
+          organization_id?: string
+          template_id?: string
+          template_version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_events_application_id_fkey"
+            columns: ["application_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_applications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_events_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "work_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_events_template_version_id_fkey"
+            columns: ["template_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_item_dependencies: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          dependent_item_id: string
+          id: string
+          organization_id: string
+          predecessor_item_id: string
+          version_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          dependent_item_id: string
+          id?: string
+          organization_id: string
+          predecessor_item_id: string
+          version_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          dependent_item_id?: string
+          id?: string
+          organization_id?: string
+          predecessor_item_id?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_item_dependencies_dependent_item_id_fkey"
+            columns: ["dependent_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_item_dependencies_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_item_dependencies_predecessor_item_id_fkey"
+            columns: ["predecessor_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_item_dependencies_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_item_evidence_requirements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string
+          document_category: string
+          id: string
+          organization_id: string
+          sort_order: number
+          template_item_id: string
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description: string
+          document_category: string
+          id?: string
+          organization_id: string
+          sort_order: number
+          template_item_id: string
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          document_category?: string
+          id?: string
+          organization_id?: string
+          sort_order?: number
+          template_item_id?: string
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_item_evidence_requirements_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_item_evidence_requirements_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_item_evidence_requirements_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_items: {
+        Row: {
+          content: string
+          copied_from_item_id: string | null
+          created_at: string
+          created_by: string | null
+          group_label: string | null
+          id: string
+          item_kind: string
+          notes: string | null
+          organization_id: string
+          requirement_state: string
+          sort_order: number
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          content: string
+          copied_from_item_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          group_label?: string | null
+          id?: string
+          item_kind: string
+          notes?: string | null
+          organization_id: string
+          requirement_state: string
+          sort_order: number
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          content?: string
+          copied_from_item_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          group_label?: string | null
+          id?: string
+          item_kind?: string
+          notes?: string | null
+          organization_id?: string
+          requirement_state?: string
+          sort_order?: number
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_items_copied_from_item_id_fkey"
+            columns: ["copied_from_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_items_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_material_lines: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_billable: boolean
+          item_id: string
+          notes: string | null
+          organization_id: string
+          planned_quantity: number
+          preferred_location_id: string | null
+          sort_order: number
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_billable?: boolean
+          item_id: string
+          notes?: string | null
+          organization_id: string
+          planned_quantity: number
+          preferred_location_id?: string | null
+          sort_order: number
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_billable?: boolean
+          item_id?: string
+          notes?: string | null
+          organization_id?: string
+          planned_quantity?: number
+          preferred_location_id?: string | null
+          sort_order?: number
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_material_lines_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_material_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_material_lines_preferred_location_id_fkey"
+            columns: ["preferred_location_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_material_lines_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_template_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          organization_id: string
+          published_at: string | null
+          published_by: string | null
+          status: string
+          template_id: string
+          updated_at: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          organization_id: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          template_id: string
+          updated_at?: string
+          version_number: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          organization_id?: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          template_id?: string
+          updated_at?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_template_versions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_template_versions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "work_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_templates: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          created_at: string
+          created_by: string | null
+          current_published_version_id: string | null
+          draft_version_id: string | null
+          id: string
+          organization_id: string
+          target_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_published_version_id?: string | null
+          draft_version_id?: string | null
+          id?: string
+          organization_id: string
+          target_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_published_version_id?: string | null
+          draft_version_id?: string | null
+          id?: string
+          organization_id?: string
+          target_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_templates_current_published_version_id_fkey"
+            columns: ["current_published_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_templates_draft_version_id_fkey"
+            columns: ["draft_version_id"]
+            isOneToOne: false
+            referencedRelation: "work_template_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -5113,6 +5967,46 @@ export type Database = {
           p_responsibility: Database["public"]["Enums"]["organization_responsibility"]
         }
         Returns: string
+      }
+      apply_work_template: {
+        Args: {
+          p_actor_id: string
+          p_allow_additional?: boolean
+          p_assessed_for_date?: string
+          p_coverage_fingerprint?: string
+          p_coverage_snapshot?: Json
+          p_idempotency_key: string
+          p_job_id?: string
+          p_organization_id: string
+          p_override_reason?: string
+          p_project_id?: string
+          p_requirements_snapshot?: Json
+          p_selected_employee_record_ids?: string[]
+          p_selected_user_ids?: string[]
+          p_team_source_id?: string
+          p_template_version_id: string
+        }
+        Returns: Json
+      }
+      apply_work_template_unserialized: {
+        Args: {
+          p_actor_id: string
+          p_allow_additional?: boolean
+          p_assessed_for_date?: string
+          p_coverage_fingerprint?: string
+          p_coverage_snapshot?: Json
+          p_idempotency_key: string
+          p_job_id?: string
+          p_organization_id: string
+          p_override_reason?: string
+          p_project_id?: string
+          p_requirements_snapshot?: Json
+          p_selected_employee_record_ids?: string[]
+          p_selected_user_ids?: string[]
+          p_team_source_id?: string
+          p_template_version_id: string
+        }
+        Returns: Json
       }
       batch_reschedule_planning_occurrences: {
         Args: {
@@ -5221,6 +6115,24 @@ export type Database = {
           p_substitute_employee_record_id: string
           p_valid_from: string
           p_valid_until: string
+        }
+        Returns: string
+      }
+      create_work_template: {
+        Args: {
+          p_actor_id: string
+          p_description?: string
+          p_name: string
+          p_organization_id: string
+          p_target_type: string
+        }
+        Returns: string
+      }
+      create_work_template_draft: {
+        Args: {
+          p_actor_id: string
+          p_organization_id: string
+          p_template_id: string
         }
         Returns: string
       }
@@ -5336,6 +6248,14 @@ export type Database = {
         }
         Returns: string
       }
+      publish_work_template: {
+        Args: {
+          p_actor_id: string
+          p_organization_id: string
+          p_template_id: string
+        }
+        Returns: string
+      }
       record_client_communication_exception: {
         Args: {
           p_actor_id: string
@@ -5442,6 +6362,28 @@ export type Database = {
         }
         Returns: undefined
       }
+      replace_project_capability_requirements: {
+        Args: {
+          p_actor_id: string
+          p_capability_ids: string[]
+          p_organization_id: string
+          p_project_id: string
+          p_require_confirmations: boolean[]
+        }
+        Returns: undefined
+      }
+      replace_project_capability_requirements_checked: {
+        Args: {
+          p_actor_id: string
+          p_capability_ids: string[]
+          p_expected_capability_ids: string[]
+          p_expected_require_confirmations: boolean[]
+          p_organization_id: string
+          p_project_id: string
+          p_require_confirmations: boolean[]
+        }
+        Returns: undefined
+      }
       reschedule_planning_series: {
         Args: {
           p_actor_id: string
@@ -5505,6 +6447,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      save_work_template_draft: {
+        Args: {
+          p_actor_id: string
+          p_capabilities?: Json
+          p_dependencies?: Json
+          p_description?: string
+          p_evidence?: Json
+          p_items?: Json
+          p_materials?: Json
+          p_name: string
+          p_organization_id: string
+          p_template_id: string
+        }
+        Returns: string
+      }
       set_client_communication_preference: {
         Args: {
           p_actor_id: string
@@ -5559,6 +6516,15 @@ export type Database = {
           p_status: Database["public"]["Enums"]["planning_occurrence_status"]
         }
         Returns: number
+      }
+      set_work_template_archived: {
+        Args: {
+          p_actor_id: string
+          p_archived: boolean
+          p_organization_id: string
+          p_template_id: string
+        }
+        Returns: undefined
       }
       transition_client_follow_up: {
         Args: {
@@ -5637,6 +6603,20 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      update_instruction_item_details: {
+        Args: {
+          p_actor_id: string
+          p_evidence?: Json
+          p_group_label?: string
+          p_instruction_item_id: string
+          p_item_kind: string
+          p_notes?: string
+          p_organization_id: string
+          p_predecessor_item_ids?: string[]
+          p_requirement_state: string
+        }
+        Returns: undefined
       }
       update_planning_dispatch_instruction: {
         Args: {

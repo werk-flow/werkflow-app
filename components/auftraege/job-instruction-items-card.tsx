@@ -7,20 +7,31 @@ import {
   Check,
   ClipboardList,
   Loader2,
+  Settings2,
   Trash2,
 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableMultiSelect } from '@/components/ui/searchable-select';
+import { ErrorText } from '@/components/ui/error-text';
 import { cn } from '@/lib/utils';
 import {
   createJobInstructionItem,
+  createProjectInstructionItem,
   deleteJobInstructionItem,
   getJobInstructionItems,
+  getProjectInstructionItems,
   reorderJobInstructionItems,
+  reorderProjectInstructionItems,
   toggleJobInstructionItemCompletion,
   updateJobInstructionItemContent,
+  updateInstructionItemDetails,
 } from '@/lib/jobs/instruction-items-actions';
 import type {
   JobInstructionActor,
@@ -28,10 +39,12 @@ import type {
 } from '@/lib/jobs/types';
 
 type JobInstructionItemsCardProps = {
-  jobId: string;
+  jobId?: string;
+  projectId?: string;
   initialItems: JobInstructionItemWithDetails[];
   isAdminOrManager: boolean;
   currentUserActor: JobInstructionActor | null;
+  refreshSignal?: number;
 };
 
 type DraftInstructionItem = {
@@ -86,9 +99,11 @@ function formatDateTime(value: string): string {
 
 export function JobInstructionItemsCard({
   jobId,
+  projectId,
   initialItems,
   isAdminOrManager,
   currentUserActor,
+  refreshSignal = 0,
 }: JobInstructionItemsCardProps) {
   const [items, setItems] = useState<RenderedInstructionItem[]>(initialItems);
   const [draft, setDraft] = useState<DraftInstructionItem | null>(
@@ -103,6 +118,7 @@ export function JobInstructionItemsCard({
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [reorderingItemId, setReorderingItemId] = useState<string | null>(null);
   const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
+  const [detailsItem, setDetailsItem] = useState<JobInstructionItemWithDetails | null>(null);
   const { showBanner } = useBanner();
   const reorderInFlightRef = useRef(false);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -112,6 +128,12 @@ export function JobInstructionItemsCard({
   useEffect(() => {
     setItems(initialItems);
   }, [initialItems]);
+
+  useEffect(() => {
+    if (projectId) void syncItemsFromServer();
+    // The project detail route does not preload these rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, refreshSignal]);
 
   useEffect(() => {
     if (!isAdminOrManager) {
@@ -169,7 +191,9 @@ export function JobInstructionItemsCard({
   }
 
   async function syncItemsFromServer(): Promise<RenderedInstructionItem[]> {
-    const result = await getJobInstructionItems(jobId);
+    const result = projectId
+      ? await getProjectInstructionItems(projectId)
+      : await getJobInstructionItems(jobId!);
     if (!result.success) {
       return items;
     }
@@ -249,7 +273,14 @@ export function JobInstructionItemsCard({
     const optimisticItem: RenderedInstructionItem = {
       id: optimisticId,
       organizationId: '',
-      jobId,
+      jobId: jobId ?? null,
+      projectId: projectId ?? null,
+      itemKind: 'checklist',
+      requirementState: 'required',
+      groupLabel: null,
+      notes: null,
+      templateApplicationId: null,
+      sourceTemplateItemId: null,
       content: draftSnapshot.content,
       sortOrder: items.length,
       isCompleted: false,
@@ -260,6 +291,8 @@ export function JobInstructionItemsCard({
       lastStatusChangedAt: null,
       creator: currentUserActor,
       lastStatusChangedByProfile: null,
+      evidenceRequirements: [],
+      predecessors: [],
       isOptimistic: true,
     };
 
@@ -274,10 +307,9 @@ export function JobInstructionItemsCard({
       setFocusedDraftId(nextDraftId);
     }
 
-    const result = await createJobInstructionItem({
-      jobId,
-      content: draftSnapshot.content,
-    });
+    const result = projectId
+      ? await createProjectInstructionItem({ projectId, content: draftSnapshot.content })
+      : await createJobInstructionItem({ jobId: jobId!, content: draftSnapshot.content });
 
     if (!result.success) {
       setItems((currentItems) =>
@@ -363,10 +395,9 @@ export function JobInstructionItemsCard({
     reorderInFlightRef.current = true;
     setReorderingItemId(itemId);
     try {
-      const result = await reorderJobInstructionItems({
-        jobId,
-        itemIds: nextItems.map((item) => item.id),
-      });
+      const result = projectId
+        ? await reorderProjectInstructionItems({ projectId, itemIds: nextItems.map((item) => item.id) })
+        : await reorderJobInstructionItems({ jobId: jobId!, itemIds: nextItems.map((item) => item.id) });
 
       if (result.success) {
         await syncItemsFromServer();
@@ -545,6 +576,7 @@ export function JobInstructionItemsCard({
                         </div>
                         {isAdminOrManager && (
                           <div className="flex shrink-0 self-end gap-0.5">
+                            <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground" onPointerDown={(event) => event.preventDefault()} onClick={() => setDetailsItem(item)} aria-label="Eintragsdetails bearbeiten"><Settings2 className="size-3.5" /></Button>
                             <Button
                               type="button"
                               variant="ghost"
@@ -592,6 +624,13 @@ export function JobInstructionItemsCard({
                           </div>
                         )}
                       </div>
+                      {(item.groupLabel || item.requirementState === 'optional' || item.predecessors.length > 0 || item.evidenceRequirements.length > 0) && (
+                        <div className="mt-2 space-y-1 rounded-md bg-muted/35 px-2.5 py-2 text-xs text-muted-foreground">
+                          <p>{[item.groupLabel, item.itemKind === 'task' ? 'Aufgabe' : 'Checkliste', item.requirementState === 'optional' ? 'Optional' : 'Erforderlich'].filter(Boolean).join(' · ')}</p>
+                          {item.predecessors.length > 0 && <p>Voraussetzung: {item.predecessors.map((entry) => entry.content).join(', ')}</p>}
+                          {item.evidenceRequirements.map((evidence) => <p key={evidence.id}>Nachweis erwartet: {evidence.description}</p>)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -600,6 +639,33 @@ export function JobInstructionItemsCard({
           </div>
         )}
       </div>
+      <InstructionItemDetailsDialog
+        key={detailsItem?.id ?? 'closed'}
+        item={detailsItem}
+        allItems={items}
+        onClose={() => setDetailsItem(null)}
+        onSaved={(item) => { replaceItem(item); setDetailsItem(null); showBanner({ variant: 'success', message: 'Eintragsdetails gespeichert.' }); }}
+      />
     </>
   );
+}
+
+function InstructionItemDetailsDialog({ item, allItems, onClose, onSaved }: { item: JobInstructionItemWithDetails | null; allItems: JobInstructionItemWithDetails[]; onClose: () => void; onSaved: (item: JobInstructionItemWithDetails) => void }) {
+  const [itemKind, setItemKind] = useState(item?.itemKind ?? 'checklist');
+  const [requirementState, setRequirementState] = useState(item?.requirementState ?? 'required');
+  const [groupLabel, setGroupLabel] = useState(item?.groupLabel ?? '');
+  const [notes, setNotes] = useState(item?.notes ?? '');
+  const [predecessorIds, setPredecessorIds] = useState(item?.predecessors.map((entry) => entry.id) ?? []);
+  const [evidence, setEvidence] = useState(item?.evidenceRequirements.map((entry, index) => ({ ...entry, sortOrder: index })) ?? []);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  if (!item) return null;
+  async function save(event: React.FormEvent) {
+    event.preventDefault(); setError(null); setIsPending(true);
+    const result = await updateInstructionItemDetails({ itemId: item!.id, itemKind, requirementState, groupLabel, notes, evidence, predecessorItemIds: predecessorIds });
+    setIsPending(false);
+    if (!result.success) { setError(result.error === 'instruction_dependency_cycle' ? 'Abhängigkeiten dürfen keinen Kreis bilden.' : 'Die Eintragsdetails konnten nicht gespeichert werden.'); return; }
+    onSaved(result.item);
+  }
+  return <Dialog open onOpenChange={(open) => !open && !isPending && onClose()}><DialogContent className="sm:max-w-xl"><form onSubmit={save} className="contents"><DialogHeader><DialogTitle>Eintragsdetails bearbeiten</DialogTitle><DialogDescription>Die Angaben gehören zu diesem Auftrag oder Projekt und ändern die Vorlage nicht.</DialogDescription></DialogHeader><DialogBody className="space-y-4 py-1"><div className="grid gap-3 sm:grid-cols-2"><div><Label>Art</Label><Select value={itemKind} onValueChange={(value) => setItemKind(value as typeof itemKind)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="task">Aufgabe</SelectItem><SelectItem value="checklist">Checkliste</SelectItem></SelectContent></Select></div><div><Label>Verbindlichkeit</Label><Select value={requirementState} onValueChange={(value) => setRequirementState(value as typeof requirementState)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="required">Erforderlich</SelectItem><SelectItem value="optional">Optional</SelectItem></SelectContent></Select></div></div><div><Label htmlFor="instruction-group">Gruppe</Label><Input id="instruction-group" value={groupLabel} onChange={(event) => setGroupLabel(event.target.value)} /></div><div><Label>Voraussetzungen</Label><SearchableMultiSelect options={allItems.filter((entry) => entry.id !== item.id).map((entry) => ({ value: entry.id, label: entry.content }))} selectedIds={predecessorIds} onSelectionChange={setPredecessorIds} placeholder="Keine Voraussetzungen" searchPlaceholder="Eintrag suchen…" emptyMessage="Kein anderer Eintrag" /></div><div><Label htmlFor="instruction-notes">Hinweise</Label><Textarea id="instruction-notes" value={notes} onChange={(event) => setNotes(event.target.value)} /></div><div className="space-y-2"><div className="flex items-center justify-between"><Label>Erwartete Nachweise</Label><Button type="button" variant="ghost" size="sm" onClick={() => setEvidence((current) => [...current, { id: generateDraftId(), description: '', documentCategory: 'photo', sortOrder: current.length }])}>Nachweis ergänzen</Button></div>{evidence.map((entry) => <div key={entry.id} className="grid gap-2 sm:grid-cols-[1fr_140px_auto]"><Input aria-label="Nachweisbeschreibung" value={entry.description} onChange={(event) => setEvidence((current) => current.map((value) => value.id === entry.id ? { ...value, description: event.target.value } : value))} /><Select value={entry.documentCategory} onValueChange={(value) => setEvidence((current) => current.map((currentEntry) => currentEntry.id === entry.id ? { ...currentEntry, documentCategory: value } : currentEntry))}><SelectTrigger aria-label="Nachweiskategorie"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="photo">Foto</SelectItem><SelectItem value="report">Bericht</SelectItem><SelectItem value="contract">Vertrag</SelectItem><SelectItem value="offer">Angebot</SelectItem><SelectItem value="invoice">Rechnung</SelectItem><SelectItem value="other">Sonstiges</SelectItem></SelectContent></Select><Button type="button" size="icon" variant="ghost" aria-label="Nachweis entfernen" onClick={() => setEvidence((current) => current.filter((value) => value.id !== entry.id))}><Trash2 className="size-4" /></Button></div>)}</div><ErrorText>{error}</ErrorText></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter></form></DialogContent></Dialog>;
 }

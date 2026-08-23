@@ -88,6 +88,11 @@ export async function loadAssignmentEvaluation(input: {
   selectedUserIds?: string[];
   selectedEmployeeRecordIds?: string[];
   assessedForDate?: string | null;
+  requirementRows?: Array<{
+    id: string;
+    capability_id: string;
+    require_confirmation: boolean;
+  }>;
 }): Promise<
   | { success: true; evaluation: AssignmentEvaluation }
   | { success: false; error: string }
@@ -119,7 +124,9 @@ export async function loadAssignmentEvaluation(input: {
     selectedRecordsResult,
     selectedUsersResult,
   ] = await Promise.all([
-    input.jobId
+    input.requirementRows
+      ? Promise.resolve({ data: input.requirementRows, error: null })
+      : input.jobId
       ? input.admin
           .from('job_capability_requirements')
           .select('id, capability_id, require_confirmation')

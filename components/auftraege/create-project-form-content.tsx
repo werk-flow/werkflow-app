@@ -23,6 +23,7 @@ import {
 import { updateJob } from '@/lib/jobs/actions';
 import { type Client, type Job, type Project } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
+import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
@@ -34,6 +35,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   project_number_taken: 'Diese Projektnummer ist bereits vergeben.',
   client_not_found: 'Kunde nicht gefunden.',
   create_failed: 'Fehler beim Erstellen des Projekts.',
+  work_template_version_unavailable: 'Die gewählte Arbeitsvorlage ist nicht mehr verfügbar.',
+  work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
+  template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };
 
@@ -59,6 +63,7 @@ export function CreateProjectFormContent({
 }: CreateProjectFormContentProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [templateVersionId, setTemplateVersionId] = useState('');
   const [clientId, setClientId] = useState<string>(defaultClientId ?? '');
   const [siteId, setSiteId] = useState<string>('');
   const [contactId, setContactId] = useState<string>('');
@@ -127,6 +132,7 @@ export function CreateProjectFormContent({
     setPlannedStartDate(undefined);
     setPlannedEndDate(undefined);
     setSelectedJobIds([]);
+    setTemplateVersionId('');
     setHasAttemptedSubmit(false);
     setContentError(null);
     setProjectNumberError(null);
@@ -168,6 +174,7 @@ export function CreateProjectFormContent({
         plannedEndDate: plannedEndDate
           ? toLocalDateString(plannedEndDate)
           : undefined,
+        templateVersionId: templateVersionId || undefined,
       };
 
       const result = await createProject(input);
@@ -281,6 +288,13 @@ export function CreateProjectFormContent({
           />
           <ErrorText>{showContentError ? contentError : null}</ErrorText>
         </div>
+
+        <WorkTemplatePicker
+          targetType="project"
+          value={templateVersionId}
+          onChange={setTemplateVersionId}
+          disabled={formDisabled}
+        />
 
         <div className="grid gap-2">
           <Label htmlFor="create-project-client">Kunde</Label>

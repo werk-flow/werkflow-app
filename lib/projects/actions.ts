@@ -20,6 +20,7 @@ import {
   getEffectiveProjectStatus,
 } from '@/lib/jobs/types';
 import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
+import { applyWorkTemplateWithAdmin } from '@/lib/work-templates/server';
 
 // ============================================
 // Input Types
@@ -35,9 +36,10 @@ export type CreateProjectInput = {
   // Default site/contact for the project's jobs; each job may override.
   siteId?: string;
   contactId?: string;
+  templateVersionId?: string;
 };
 
-export type UpdateProjectInput = Partial<CreateProjectInput> & {
+export type UpdateProjectInput = Partial<Omit<CreateProjectInput, 'templateVersionId'>> & {
   statusOverride?: ProjectStatus | null;
 };
 
@@ -138,7 +140,35 @@ export async function createProject(
       return { success: false, error: 'create_failed' };
     }
 
+    if (input.templateVersionId) {
+      const { error: templateError } = await applyWorkTemplateWithAdmin(
+        admin,
+        orgId,
+        userId,
+        {
+          templateVersionId: input.templateVersionId,
+          projectId: data.id,
+          idempotencyKey: `create-project-${data.id}-${input.templateVersionId}`,
+        }
+      );
+      if (templateError) {
+        console.error('Failed to apply work template while creating project:', templateError);
+        const { error: rollbackError } = await admin.from('projects').delete().eq('id', data.id).eq('organization_id', orgId);
+        if (rollbackError) return { success: false, error: 'rollback_failed' };
+        const knownCode = [
+          'work_template_version_unavailable',
+          'work_template_reference_unavailable',
+        ].find((code) => templateError.message.includes(code)) ??
+          (['work_template_material_reference_unavailable', 'work_template_capability_reference_unavailable']
+            .some((code) => templateError.message.includes(code))
+            ? 'work_template_reference_unavailable'
+            : undefined);
+        return { success: false, error: knownCode ?? 'template_apply_failed' };
+      }
+    }
+
     updateTag(CACHE_TAGS.projects(orgId));
+    updateTag(CACHE_TAGS.workTemplates(orgId));
 
     return { success: true, project: toProject(data) };
   } catch (error) {

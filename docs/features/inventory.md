@@ -50,6 +50,7 @@ The implemented V1 is a useful native WerkFlow foundation, not the complete oper
 - Direct project material and material inherited from jobs inside the project are kept visible separately, with an aggregate project total.
 - Planned, taken, returned, unplanned, preferred-location, billable, and status information exists on material lines. There is not yet a reservation, picking, approval, procurement, invoice, or full post-calculation workflow.
 - Since P1-12, the calendar's dispatch-readiness view consumes these facts read-only and honestly: open demand (geplant − entnommen) is compared against current on-hand stock and always labeled „nicht reserviert"; a shortfall warns, a failed lookup shows as unknown, and tool availability is always „nicht bewertet" until `P1-32`. No calendar action reserves, moves, or repairs stock.
+- Since P1-13, organization work templates can prepare material demand with quantity, preferred location, billability and notes. Application creates ordinary `job_material_lines` on the Auftrag or Projekt with template provenance; every quantity begins planned with taken/returned at zero. It never creates a stock movement or reservation. Managers edit the resulting line through the existing `Material & Inventar` surface; P1-26 still owns reservation.
 - A billable default and billable-quantity infrastructure exist, but no structured offer or invoice module consumes them yet.
 
 ### Tools, Assets, And Missing Operational Depth

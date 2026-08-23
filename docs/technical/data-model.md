@@ -103,7 +103,15 @@ Concepts:
 - Project (`Projekt`): a larger body of work that may contain multiple jobs. A project may carry a default site/contact that prefills new jobs; each job can override it (no forced sync).
 - Job/order (`Auftrag`): a concrete unit of work, either standalone or under a project. A job may reference one of its customer's sites and contacts. The job's free-text location is a snapshot taken when a site is selected; site edits never rewrite it, preserving the historical execution location.
 - Assignment: connection between a job and one or more employees.
-- Instruction item: checklist/instruction content attached to a job.
+- Instruction item: the shared task/checklist primitive attached to exactly one job or project. P1-13 adds required/optional state, grouping, notes, template application/source attribution, expected-evidence children and same-target structural dependency children. Existing completion actor/time remains authoritative; there is no parallel template-task runtime.
+
+### Work Template Domain (P1-13)
+
+- `work_templates` is the stable organization-scoped identity and target type (`job` or `project`); archive is visibility, not deletion.
+- `work_template_versions` owns numbered snapshots. A template can point to one editable draft and one current published version. Published versions and their item/evidence/dependency/material/capability children are database-immutable.
+- `work_template_applications` binds one exact published version to one job or project, records actor/time and a retry key, and is serialized per target. Application materializes into existing instruction, material and capability tables; origin columns preserve the source without making later reads reference mutable template content.
+- Capability application merges the existing authoritative target requirement by capability and never weakens `require_confirmation`; origin rows preserve every contributing template application. Evidence expectations are metadata, not documents. Dependencies are structural declarations only.
+- Mutable operational tables use organization-scoped RLS and service-role-only business RPCs. `work_template_events` is append-only manager history. No deploy-time template rows are seeded.
 
 Ownership rule: sites, contacts, manual follow-ups, and communication guidance belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity). Customer master and P1-10 relationship reads are manager-only under RLS; field workers receive only purpose-limited context through assigned work.
 

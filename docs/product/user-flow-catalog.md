@@ -230,3 +230,33 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-12-F15` — Büro/Admin: starten im Einsätze-Panel den **Auswahlmodus**, wählen mehrere zukünftige Besuche per Checkbox (auch über Aufträge hinweg) und geben eine Verschiebung an — ganze Tage und/oder eine neue Uhrzeit.
 - `P1-12-F16` — Vor der Ausführung zeigt eine **Vorschau** je Termin den alten und neuen Zeitpunkt, entstehende Kapazitäts-/Qualifikationskonflikte, wie viele Bestätigungen ungültig würden und welche Kundenzusagen betroffen wären. Konflikte lassen sich wie überall nur mit Grund übersteuern.
 - `P1-12-F17` — Die Ausführung ist **alles oder nichts**: entweder werden alle gewählten Termine verschoben oder keiner. Ausgewählte Serientermine werden dabei zu Einzel-Ausnahmen ihrer Serie; die Historie jedes Termins bleibt erhalten.
+
+### `P1-13` — Versionierte Arbeitsvorlagen (2026-08-23)
+
+- `P1-13-F01` — Büro/Admin: öffnen **Arbeitsvorlagen**, sehen in einer Organisation ohne Vorlagen den leeren Zustand „Erste Arbeitsvorlage anlegen“ und erhalten keine automatisch angelegten Produktvorlagen.
+- `P1-13-F02` — Büro/Admin: legen einen Entwurf für Aufträge oder Projekte mit Name und optionaler Beschreibung an; zum Veröffentlichen ist mindestens ein gültiger Arbeits- oder Checklistenpunkt erforderlich.
+- `P1-13-F03` — Büro/Admin: suchen Vorlagen nach Name oder Beschreibung, filtern nach Zielart und Status und sehen archivierte Vorlagen erst nach bewusstem Einblenden.
+- `P1-13-F04` — Büro/Admin: ergänzen, bearbeiten, sortieren und entfernen Aufgaben oder Checklistenpunkte, kennzeichnen sie als erforderlich oder optional und gruppieren sie bei Bedarf.
+- `P1-13-F05` — Büro/Admin: hinterlegen an einem Punkt erwartete Nachweise mit Dokumentkategorie und Beschreibung; dabei entstehen weder Datei, Freigabe noch Unterschrift.
+- `P1-13-F06` — Büro/Admin: planen Material mit Menge, optionalem Lager, Abrechenbarkeit und Notiz und können fehlendes Material oder Lager im Auswahlablauf anlegen; dadurch ändern sich weder Bestand noch Reservierung.
+- `P1-13-F07` — Büro/Admin: planen Fähigkeiten oder Zertifikate aus dem Organisationswortschatz, können fehlende Begriffe im Auswahlablauf anlegen und fordern bei Zertifikaten optional eine Bestätigung.
+- `P1-13-F08` — Büro/Admin: erklären eine oder mehrere Voraussetzungen zwischen Punkten; Selbstbezüge, fremde Punkte und Zyklen werden abgewiesen, die Abhängigkeit sperrt in P1-13 aber keine Ausführung.
+- `P1-13-F09` — Büro/Admin: speichern einen Entwurf; Feld- und Aktionsfehler erscheinen im Formular, ein Erfolg schließt den Dialog oder bestätigt auf der Seite per Banner.
+- `P1-13-F10` — Büro/Admin: veröffentlichen einen gültigen Entwurf als unveränderliche Version; fehlende Inhalte oder ungültige Referenzen verhindern die Veröffentlichung mit einer konkreten Korrekturangabe.
+- `P1-13-F11` — Büro/Admin: erstellen aus einer veröffentlichten Version einen neuen Entwurf; die alte Version und bereits erzeugte Arbeit bleiben unverändert.
+- `P1-13-F12` — Büro/Admin: archivieren oder reaktivieren eine Vorlage; archivierte Vorlagen fehlen in Anwendungsauswahlen, ihre Versionen und bereits erzeugte Arbeit bleiben erhalten.
+- `P1-13-F13` — Büro/Admin: sehen Versions- und Anwendungshistorie mit Akteur, Zeitpunkt, Ziel und verwendeter Versionsnummer.
+- `P1-13-F14` — Büro/Admin: wählen beim direkten Erstellen eines Auftrags oder Projekts optional eine veröffentlichte, zur Zielart passende Vorlage; ohne Auswahl bleibt das bestehende Erstellen unverändert.
+- `P1-13-F15` — Büro/Admin: erhalten dieselbe optionale Auswahl in Kunden- und Mitarbeiterkontexten, bei Projekt-Unteraufträgen und in der Kalendererstellung; vorhandene Vorbelegungen bleiben unverändert.
+- `P1-13-F16` — Büro/Admin: wählen bei der Anfrageumwandlung optional eine passende Vorlage; schlägt die Anwendung fehl, bleibt die Anfrage offen und es bleiben weder Teilauftrag noch Teilprojekt zurück.
+- `P1-13-F17` — Büro/Admin: wenden auf einen noch nicht abgeschlossenen Auftrag oder ein noch nicht abgeschlossenes Projekt eine Vorlage nachträglich an und sehen vorher Version sowie Anzahlen der erzeugten Inhalte.
+- `P1-13-F18` — Büro/Admin: können eine andere Vorlage oder neuere Version nach einer deutlichen Doppelungswarnung additiv anwenden; dieselbe Version auf demselben Ziel wird als Duplikat abgewiesen.
+- `P1-13-F19` — Die Anwendung erzeugt normale Arbeits- und Checklistenpunkte, Nachweiserwartungen, Materialzeilen und Qualifikationsanforderungen mit Herkunft; sie reserviert keinen Bestand und erzeugt weder Termin, Planungsvorkommen, Zuweisung, Versand, Ist-Zeit, Dokument, Nachricht noch Freigabe.
+- `P1-13-F20` — Büro/Admin: bearbeiten alle erzeugten Inhalte später in den bestehenden Auftrags- oder Projektbereichen; spätere Änderungen an der Vorlage überschreiben diese Inhalte nicht.
+- `P1-13-F21` — Bei einem Auftrag mit zugewiesenen Personen bewertet die Anwendung die resultierenden Qualifikationsanforderungen; eine Lücke verlangt den bestehenden begründeten und versionsgebundenen Übersteuerungsablauf.
+- `P1-13-F22` — Zugewiesene Handwerker sehen erzeugte Auftragspunkte in derselben einfachen Checkliste wie bisher, mit kompakten Hinweisen zu erforderlich oder optional, Nachweisen und Abhängigkeiten; der Abschluss bleibt personell und zeitlich zugeordnet.
+- `P1-13-F23` — Eine Projektvorlage erzeugt Punkte, Material und Qualifikationsanforderungen direkt am Projekt; sie erzeugt keine Unteraufträge und vererbt nichts automatisch an spätere Unteraufträge.
+- `P1-13-F24` — Gibt es keine passende veröffentlichte Vorlage, zeigt die Auswahl einen erklärenden leeren Zustand und bietet Managern den Weg zur Vorlagenverwaltung; Entwürfe, Archive und fremde Organisationen erscheinen nie.
+- `P1-13-F25` — Wurde ein referenziertes Material, Lager oder eine Fähigkeit stillgelegt, bricht die Anwendung vollständig ab, nennt die zu korrigierende Referenz und lässt Ziel und Wiederholungsversuch sauber bestehen.
+- `P1-13-F26` — Handwerker sehen keine Vorlagenverwaltung und können keine Vorlage erstellen, ändern, veröffentlichen, archivieren oder anwenden; ein direkter Routen- oder Aktionsaufruf wird abgewiesen und Organisationsgrenzen bleiben dicht.
+- `P1-13-F27` — Änderungen an Vorlagen und Anwendungen aktualisieren offene Manageransichten per Realtime; ein offener Dialog verliert keine Eingabe und erhält nach dem Schließen genau eine nachgeholte Aktualisierung.
