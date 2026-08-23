@@ -19,7 +19,6 @@ reviews:
     - "!package-lock.json"
     - "!lib/supabase/database.types.ts"
     - "!.agents/**"
-    - "!.cursor/rules/**"
     - "!docs/**"
     - "!Transcript_*.txt"
     - "!agent-response.md"

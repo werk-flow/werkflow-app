@@ -1,5 +1,7 @@
 # Acquisition Process
 
+Status: living placeholder
+
 This document is a placeholder for the future WerkFlow customer acquisition process.
 
 It should eventually describe how SHK businesses discover, evaluate, buy, onboard, and expand their use of WerkFlow.

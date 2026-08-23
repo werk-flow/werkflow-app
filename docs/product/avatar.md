@@ -1,5 +1,7 @@
 # Customer Avatar
 
+Status: living placeholder
+
 This document is a placeholder for a deeper customer avatar/persona description.
 
 For now, use `AGENTS.md` as the source of truth for broad target-user context.

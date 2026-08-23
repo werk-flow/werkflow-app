@@ -14,7 +14,7 @@ It is a TypeScript web app today and is expected to have an associated React Nat
 
 The app should help SHK business owners and their teams save time, reduce paperwork, organize work digitally, and replace slow, outdated software with a fast, modern system tailored to their daily operations. Core product areas include customers/CRM, employee and working-time management, calendar/resource planning, project/job and service management, document management, inventory/procurement, commercial/finance workflows, and later AI-assisted automations.
 
-WerkFlow has two broad product phases. First, build a complete operational core with the depth expected from serious Handwerkersoftware; this is not a bare-minimum MVP. Then use that trustworthy operational data and workflow foundation for differentiated AI assistance, configurable automation, and bounded agents inside and outside the app. The product-wide capability and dependency map lives in `docs/product/product-capability-map.md`. The living implementation order, slice dependencies, current checkpoint, and Phase 1 acceptance gates live in `docs/plans/phase-1-build-roadmap.md`; agents doing Phase 1 feature work must read and update it.
+WerkFlow has two broad product phases. First, build a complete operational core with the depth expected from serious Handwerkersoftware; this is not a bare-minimum MVP. Then use that trustworthy operational data and workflow foundation for differentiated AI assistance, configurable automation, and bounded agents inside and outside the app. The product-wide capability and dependency map lives in `docs/product/product-capability-map.md`. The living implementation order, slice dependencies, and current checkpoint live in `docs/plans/phase-1/roadmap.md` (the entry file; the execution protocol, gate definitions, progress log, and per-slice acceptance records live beside it under `docs/plans/phase-1/`); agents doing Phase 1 feature work must read and update it. The annotated index of every doc — one line each with a read-when hint and status — is `docs/README.md`; route through it instead of globbing the docs tree.
 
 ## Target User / Avatar
 
@@ -134,13 +134,13 @@ Keep route names, database enum values, and identifiers aligned with the existin
 
 ## Future Product Context
 
-The following topics should likely become separate docs instead of making this file too large:
+These topics live in separate docs so this file stays small. All three exist today as thin placeholders that will grow as the business decisions are made:
 
 - `docs/product/offer.md`: product offer, packaging, pricing assumptions, guarantees, and buying objections.
 - `docs/product/acquisition.md`: target channels, funnel, onboarding path, and lead/customer acquisition process.
 - `docs/product/avatar.md`: a deeper description of the ideal customer profile and user personas if this outgrows the summary above.
 
-When those files exist, agents should read them for tasks that touch positioning, onboarding, monetization, growth, or sales-driven product changes.
+Agents should read them for tasks that touch positioning, onboarding, monetization, growth, or sales-driven product changes, and should still ask or leave TODOs instead of inventing details the placeholders do not yet contain.
 
 ## Always-On Repository Rules
 
@@ -213,6 +213,6 @@ These rules apply to every task in this repository. They originated as Cursor ru
 
 ## Maintenance Guidance
 
-Update this file when the product direction changes, not for every implementation detail. During Phase 1 implementation, update the affected feature specifications and `docs/plans/phase-1-build-roadmap.md` as part of the same change. Keep this file concise enough that an agent can read it quickly at the start of a task.
+Update this file when the product direction changes, not for every implementation detail. During Phase 1 implementation, update the affected feature specifications and the affected files under `docs/plans/phase-1/` as part of the same change. Keep this file concise enough that an agent can read it quickly at the start of a task.
 
 If a future task needs exact database state, inspect Supabase directly through the available MCP/plugin workflow before making schema-specific claims.

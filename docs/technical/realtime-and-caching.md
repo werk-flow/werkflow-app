@@ -1,5 +1,7 @@
 # Realtime And Caching
 
+Status: living — last reviewed 2026-08-24
+
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
 ## Current Building Blocks

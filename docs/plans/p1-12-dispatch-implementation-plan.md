@@ -1,6 +1,8 @@
 # P1-12 — Dispatch, Batch Rescheduling, Readiness, Acknowledgement, Customer Commitments
 
-Owner-confirmed 2026-08-13 (pre-implementation report items 2–10). This plan records the confirmed contract, the migration/commit sequence, and the running execution ledger for the slice. The roadmap row and progress log in [`phase-1-build-roadmap.md`](./phase-1-build-roadmap.md) hold the authoritative status.
+Status: closed (accepted complete 2026-08-14) — historical confirmed contract and execution ledger
+
+Owner-confirmed 2026-08-13 (pre-implementation report items 2–10). This plan records the confirmed contract, the migration/commit sequence, and the running execution ledger for the slice. The slice record [`phase-1/slices/p1-12-dispatch.md`](./phase-1/slices/p1-12-dispatch.md) and the progress log in [`phase-1/log.md`](./phase-1/log.md) hold the authoritative status.
 
 ## Bounded Outcome
 

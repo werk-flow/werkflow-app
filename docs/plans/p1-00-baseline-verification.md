@@ -1,5 +1,7 @@
 # P1-00 — Baseline Verification Report
 
+Status: closed (2026-08-04) — historical baseline-verification report
+
 Date: 2026-08-04. This report records the discrepancy findings and resolutions required by roadmap slice `P1-00` (baseline lock). Update it if later verification invalidates a finding.
 
 ## Verified In Sync

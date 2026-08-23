@@ -1,5 +1,7 @@
 # Customers And CRM
 
+Status: living — last reviewed 2026-08-24
+
 Customer relationship management in WerkFlow means maintaining the operational customer context an SHK business needs to receive requests, plan visits, perform work, communicate reliably, and understand the history of a relationship.
 
 It does not mean copying a generic enterprise sales CRM. Most WerkFlow users need to know who the customer and relevant contact are, where the work happens, what was requested, what equipment is involved, what has happened before, and what must happen next. They should not have to maintain marketing campaigns, abstract deal stages, or sales-administration fields that do not improve real work.
@@ -300,15 +302,7 @@ Phase 2 should reduce intake, data-quality, and follow-up work after the operati
 
 ## Related Docs
 
-- [Jobs and projects](./jobs-and-projects.md)
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Calendar and resource planning](./calendar-and-resource-planning.md)
-- [Service and maintenance](./service-and-maintenance.md)
-- [Document management](./document-management.md)
-- [Inventory management](./inventory.md)
-- [Commercial and finance](./commercial-and-finance.md)
-- [Time tracking](./time-tracking.md)
-- [Employee management](./employee-management.md)
-- [AI automations](./ai-automations.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.

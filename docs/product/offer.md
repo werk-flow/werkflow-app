@@ -1,5 +1,7 @@
 # Product Offer
 
+Status: living placeholder
+
 This document is still a placeholder for the complete WerkFlow offer.
 
 The offer should describe the product package around the app, including services that may be sold alongside the software, such as onboarding support or an initial inventory audit.

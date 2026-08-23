@@ -1,0 +1,51 @@
+# Setting up a knowledge graph as a central context store
+
+Source: https://www.instagram.com/p/DcYcP6Jt1Dt/
+Creator: @kem_glitch (Kem @ GlitchCatClub)
+Platform: Instagram
+Posted: 2026-08-23
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+How should I begin to think about setting up Knowledge Graph systems for my 'SeCoNd BrAIN'? Yes, I'm on a train. Happy Sunday 🫶
+#ai #artificialintelligence #openai
+
+## Transcript
+
+How do I set up a knowledge graph for my second brain? That's the biggest question
+I get asked. So let's talk about it. Happy Sunday by the way. We should all now
+understand it's a difficult problem. We should also know it's not always the
+right solution, right? So that aside, I built an artifact to get you thinking
+about it. It should be behind me if I've done it right. Side note, second brain is a
+really bullshit way to describe this, right? Let's call it what it is. It's a
+central store for context. That's it. So the whole value is in retrieval. Good.
+All right. Now, what are the people telling you how to set these things up?
+Generally, promise. I think they say put everything in a single place, get AI to
+add some YAML from matter or something like that. Let it dictate some links and
+that somehow that amounts to a graph like system, right? The reality is that
+doesn't work well at all in my opinion. Nothing is governing it, right? So the
+schema drifts and there's lots of other things. I won't get into it now. The
+retrieval underneath it still just grep, right? Now, grep can work but it can only
+answer what a single document holds, right? And you have to read it in full to
+get everything that's in there and that costs money and it costs compute time,
+right? So more often than not, honestly, most use cases, real answers actually
+live in multiple places, right? Multiple documents, right? So I always use the
+same example to describe this, right? Like a refund policy, right? That's in one
+document and you might need someone to sign it off. That's in a different
+document and that person might be out of office and that calendar's in another
+document and so on and so forth, right? Like their replacement. Okay, good. So
+keyword search finds one and generally stops, right? Unless you throw more
+compute or a better model and do all the reading and that just takes more time,
+cost more tokens, etc., so forth. Not efficient. It's also not complete always,
+right? You're kind of at the mercy of a probabilistic model, right? So if you want
+an actual graph, you have to model it, friends, and that starts before any tool,
+right? You'll also require the questions that you need to get answered from the
+graph, right? Then comes like all the data stuff, right? The entities, you know, why
+things exist and how they connect, you know, how machine is actually going to
+retrieve them, right? So this artifact should begin to kind of get you thinking
+the right way, takes you through it, match the problems you're likely to face and
+all that good stuff, right? Just trying to demystify this a little bit. Hopefully
+this will help. If you want it, the link is always in my Instagram broadcast
+channel. I posted it today and the link to my broadcast channel is in my story.
+Have a great day, guys. All the best. Chemical and Sket Club.

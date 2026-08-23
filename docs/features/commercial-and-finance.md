@@ -1,5 +1,7 @@
 # Commercial And Finance
 
+Status: living — last reviewed 2026-08-24
+
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
 This document distinguishes the current baseline from the intended complete operational core. Phase 1 is not an MVP checklist, technical design, or promised release sequence. It describes the outcomes needed for a coherent SHK job-to-cash and purchase-to-cost workflow. Native accounting, payroll, and tax filing are separate product decisions, not implied by this scope.
@@ -293,7 +295,7 @@ Infrastructure direction ([decision 0001](../../docs/decisions/0001-infrastructu
 
 WerkFlow should not claim GoBD conformity, legally compliant archiving, qualified signatures, or tax correctness solely because an audit trail or PDF exists. Claims require current expert review, documented procedures, and acceptance evidence.
 
-> **Heads-up for implementation agents:** this feature area is the highest-risk part of Phase 1 (see "Practical Execution Cautions" in the [Phase 1 roadmap](../plans/phase-1-build-roadmap.md)). Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports need paid, qualified German tax/legal expertise before acceptance — no agent or document research substitutes for it. Surface this as `decision_blocked` rather than implementing plausible-looking compliance behavior.
+> **Heads-up for implementation agents:** this feature area is the highest-risk part of Phase 1 (see "Practical Execution Cautions" in the [Phase 1 roadmap](../plans/phase-1/roadmap.md)). Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports need paid, qualified German tax/legal expertise before acceptance — no agent or document research substitutes for it. Surface this as `decision_blocked` rather than implementing plausible-looking compliance behavior.
 
 ### Onboarding, Packaging, Integrations, And Support
 
@@ -478,17 +480,8 @@ No legal, tax, accounting, security, or standards-compliance claim should ship w
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Inventory](./inventory.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Customers and CRM](./customers-and-crm.md)
-- [Jobs and projects](./jobs-and-projects.md)
-- [Service and maintenance](./service-and-maintenance.md)
-- [Calendar and resource planning](./calendar-and-resource-planning.md)
-- [Document management](./document-management.md)
-- [Time tracking](./time-tracking.md)
-- [Employee management](./employee-management.md)
-- [AI automations](./ai-automations.md)
-- [Product offer](../product/offer.md)
-- [Data model](../technical/data-model.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- [Decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md) — accounting and payment stack decision gates.

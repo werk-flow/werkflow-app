@@ -1,5 +1,7 @@
 # Wave 1 Flow Audit
 
+Status: closed (2026-08-18) — retired wave-end audit model; kept as the Wave 1 coverage ledger
+
 Wave 1 (`P1-00` through `P1-12`) is accepted complete and **AUDITED**: session F closed the final gate on 2026-08-18 with the recorded sequential pair — full Golden suite 93/93 and entire `@AUDIT-W1` battery 74/74 on one fresh production build — plus the mechanical 119/119 catalog-ID proof (`0 partial; 0 unmapped`). All sessions A1–A7 are Rule-12 certified; R1 closed at `88/88 mapped; 88/88 fully evidenced; 0 partial; 0 unmapped`. `P1-13` is unblocked. This document remains the protocol, the session plan, and the **coverage ledger** (the authoritative record of what was tested, how, and what came of it). **This wave-end-session model is retired:** since Wave 2, every slice ships its own rule-12 audit coverage at acceptance and the wave end only certifies — see [`wave-2-audit.md`](./wave-2-audit.md).
 
 ## Why this exists
@@ -217,7 +219,7 @@ Organisation, Konten, Rollen:
 | A1-04 | `BASE-ORG-F03`, `BASE-ORG-F05`, `BASE-TIME-F03` | Einladung per E-Mail (Büro), Einlösung, rollengerechte Oberflächen; Entfernung während laufender Zeit | covered:@GG-00 („Einladung: Eingeladene Person tritt bei…") + new:A1-04 | `defect_fixed` | Beide Einladerollen, offene Einladung, Einlösung und Rollenoberflächen automatisiert; Entfernung einer gerade arbeitenden Person schreibt nun `auto_clocked_out=true` in das Mitgliedschaftsereignis und wird read-only belegt. |
 | A1-05 | `BASE-ORG-F05` | Mitgliederliste mit Live-Stempelstatus („arbeitet") | new:A1-05 (piggyback on A1-26 clock-in) | `pass` | Live-Status „Arbeitet" in `A1-05/A1-26/A1-27/A1-28`. |
 | A1-06 | `BASE-ORG-F06` | Rollenänderungs-Schutz: eigene Rolle nicht änderbar, kein zweiter Admin, Büro verwaltet nur Handwerker | new:A1-06 | `catalog_corrected` | Schutzregeln verifiziert; Katalog präzisiert, dass Büro zwar Büro einladen, bestehende Büro/Admin aber nicht verwalten kann. |
-| A1-07 | `BASE-ORG-F01`, `BASE-TIME-F03` | Abmelden (+ Auto-Ausstempeln beim Abmelden) | covered:@GG-00 (Abmelden); Auto-Ausstempeln new:A1-07 | `deferred` | Abmelden und Auto-Ausstempeln grün; Entfernung eines Mitglieds löscht dessen Zeithistorie. **Owner ruling 2026-08-15: deferred to `P1-33`** (offboarding owns retained historical identity); the defect is recorded in the `P1-33` roadmap row so it cannot get lost. |
+| A1-07 | `BASE-ORG-F01`, `BASE-TIME-F03` | Abmelden (+ Auto-Ausstempeln beim Abmelden) | covered:@GG-00 (Abmelden); Auto-Ausstempeln new:A1-07 | `deferred` | Abmelden und Auto-Ausstempeln grün; Entfernung eines Mitglieds löscht dessen Zeithistorie. **Owner ruling 2026-08-15: deferred to `P1-33`** (offboarding owns retained historical identity); the defect is recorded in the `P1-33` index row in `phase-1/roadmap.md` so it cannot get lost. |
 
 Kunden-Basis:
 

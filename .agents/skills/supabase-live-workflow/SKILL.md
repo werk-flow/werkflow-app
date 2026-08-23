@@ -8,7 +8,7 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 WerkFlow runs on **two** Supabase projects since 2026-08-18 (decision `docs/decisions/0003-dev-prod-environment-split.md`; operational reference `docs/technical/environments.md`):
 
 - **Prod** `jbgaqpdjauzoocplgdsn` — real customers, serves the deployed Vercel app. Treat as read-only outside the migration rule below.
-- **Dev** `mbkkzuqjbdvzelqvuzcn` — local dev and the entire Playwright harness. Routine-write territory. Free tier: auto-pauses after ~1 week idle (restore in the dashboard; not a code bug).
+- **Dev** `mbkkzuqjbdvzelqvuzcn` — local dev and the entire Playwright harness. Routine-write territory. Both projects run under the org's Pro plan since 2026-08-21, so dev does not auto-pause; the current plan/compute posture lives in `docs/technical/environments.md`.
 
 `.env.local` points at dev. Schemas are kept identical through the shared migration history in `supabase/migrations/`.
 
@@ -16,7 +16,7 @@ WerkFlow runs on **two** Supabase projects since 2026-08-18 (decision `docs/deci
 
 | Access path | Prod | Dev |
 | --- | --- | --- |
-| claude.ai Supabase connector (org-scoped OAuth) | read/write | **cannot see it** — never retry against dev |
+| claude.ai Supabase connector (org-scoped OAuth) | read/write | read/write (both projects share one org since 2026-08-20) |
 | Account-wide Supabase MCP server (`.mcp.json`, PAT via `SUPABASE_ACCESS_TOKEN`) | yes | yes |
 | Supabase CLI `bunx supabase` (PAT exported) | yes — but never `link`/`db push` | yes (repo links to dev ref) |
 | Management API `api.supabase.com` (PAT) | yes | yes |

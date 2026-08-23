@@ -1,6 +1,6 @@
 # CodeRabbit Reviews
 
-Last reviewed: 2026-08-04
+Status: living — last reviewed 2026-08-24
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -32,10 +32,10 @@ Current important settings:
 - `tone_instructions` asks for direct, practical findings focused on correctness, security, data integrity, accessibility, and production risk.
 - `reviews.profile: "assertive"` asks CodeRabbit to be more thorough.
 - `reviews.enable_prompt_for_ai_agents: true` asks CodeRabbit to include agent-friendly fix prompts in review comments.
-- `reviews.path_filters` excludes low-signal files such as lock files, generated Supabase types, `.agents/**`, `.cursor/rules/**`, and `docs/**`.
+- `reviews.path_filters` excludes low-signal files such as lock files, generated Supabase types, `.agents/**`, and `docs/**`.
 - `reviews.path_instructions` gives targeted review guidance for `app/**`, `components/**`, `lib/**`, inventory, document management, realtime, calendar, time tracking, jobs, middleware, and Next config.
 - `reviews.pre_merge_checks.custom_checks` adds repo-specific warnings for tenant/role safety, product fit, German user-facing copy, and inventory ledger integrity.
-- `knowledge_base.code_guidelines.enabled: true` allows CodeRabbit to use repo instruction files such as `AGENTS.md` and Cursor rules as review criteria.
+- `knowledge_base.code_guidelines.enabled: true` allows CodeRabbit to use repo instruction files such as `AGENTS.md` as review criteria.
 - `knowledge_base.learnings.scope: "local"` keeps CodeRabbit learnings scoped locally for this repository.
 
 When changing `.coderabbit.yaml`, validate it against the schema declared at the top of the file:
@@ -53,7 +53,7 @@ CodeRabbit gets context from several places:
 - The Git diff or pull request being reviewed.
 - The root `.coderabbit.yaml` configuration.
 - Path-specific review instructions in `.coderabbit.yaml`.
-- Auto-detected guideline files such as `AGENTS.md`, `.cursor/rules/*`, `CLAUDE.md`, and similar files.
+- Auto-detected guideline files such as `AGENTS.md`, `CLAUDE.md`, and similar files.
 - CodeRabbit learnings from previous feedback, depending on plan and repository setup.
 - For PR reviews, connected GitHub/issue/PR context when available.
 - For some plans/features, broader knowledge-base sources such as linked repositories, MCP servers, and web search.
@@ -191,7 +191,7 @@ bun run lint
 bun run build
 ```
 
-Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure if you should run it again, it is generally speaking better to let it run once more than not to. However since we currently are still on the free plan, we are limited to 3 CLI reviews per hour so beware of that when running multiple subsequent reviews during a specific task.
+Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure if you should run it again, it is generally speaking better to let it run once more than not to. However CLI reviews are rate-limited by plan (as of early August 2026 the repo was on the free plan with 3 CLI reviews per hour; verify the current plan before assuming a higher limit), so beware of that when running multiple subsequent reviews during a specific task.
 
 ## Plans, Free Use, And Limits
 

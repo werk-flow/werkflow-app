@@ -127,7 +127,7 @@ Reopen this decision if any of the following occurs:
 
 ## Related Docs
 
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md) — slice `P1-00a` and sequencing
+- [Phase 1 build roadmap](../plans/phase-1/roadmap.md) — slice `P1-00a` and sequencing
 - [Technical architecture](../technical/architecture.md)
 - [Document management](../features/document-management.md) — storage model
 - [Commercial and finance](../features/commercial-and-finance.md) — retention and audit

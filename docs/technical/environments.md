@@ -1,5 +1,7 @@
 # Environments
 
+Status: living — last reviewed 2026-08-24
+
 WerkFlow runs on two fully separated backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)). This document is the operational reference: which project is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
 
 ## The two backends

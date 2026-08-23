@@ -1,0 +1,37 @@
+# Folders, YAML and Markdown as agent architecture
+
+Source: https://www.instagram.com/p/DZli1fcuoZ1/
+Creator: @lostandlucky (Jake Van Clief)
+Platform: Instagram
+Posted: 2026-06-15
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+No I don't actually think they stole anything. This is what a lot of researchers are focusing on and exploring and that's the whole beauty of Open source research!
+
+Links in bio! 
+
+Can y'all share this till Google hangs out with me. I don't actually think they stole anything I just want to collaborate! 
+
+@google @googlecloud  I'm already building the solutions and have 37,000 people ready to rip on it ! Let's work together!
+
+## Transcript
+
+Google stole my research.
+Or, at the very least, their researchers are on the same idea that I had three months ago.
+I published a research paper three months ago about using folder structure as agentic architecture.
+And just recently, Google dropped their own version of it.
+Basically, I believed that using folders, YAML, and Markdown was way more efficient to send AI to use tools and data
+than all these crazy things that people were building with agentics and agentic frameworks and stuff like that.
+And I broke it down in a very large 21-page research paper where I showed how this may work.
+Basically, these two researchers came to the same conclusion that I did, which is
+folders and files work really well for routing agents, these LLM wiki-style patterns.
+And they specifically say, just Markdowns, just files, just YAML, front matter.
+I built hundreds of workspaces using this exact methodology, crushing any agentic systems that people have built.
+And man, does their work look super similar to mine.
+But guess what? I'm not angry, because this is how it should be.
+I'm not teaching anything new. This is Unix methodology.
+This is methodology from the 60s and 70s, and it's what we should have been doing years ago, like I was already doing to begin with.
+They are creating some interesting tools that I actually might use or integrate. We'll see.
+And if anyone knows the researchers at Google, just tell them to come my way. I'd love to work with them. It sounds fun.

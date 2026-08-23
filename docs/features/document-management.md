@@ -1,5 +1,7 @@
 # Document Management
 
+Status: living — last reviewed 2026-08-24
+
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
 This document describes the **current implementation** (Stages 1–4), the **major product/technical decisions** behind it, and the Phase 1/Phase 2 **future product build-out**. For exact schema details, prefer live Supabase inspection and `lib/supabase/database.types.ts` over this file.
@@ -636,19 +638,12 @@ Financially, legally, technically, or employment-relevant extraction remains a p
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md) — product phases and cross-feature rules.
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md) — active slice order, prerequisites, evidence, and golden-scenario gates.
-- [Competitive landscape](../product/competitive-landscape.md) — external evidence and comparison method.
-- [Jobs and projects](./jobs-and-projects.md) — operational context for links.
-- [Customers and CRM](./customers-and-crm.md) — customer/site context.
-- [Service and maintenance](./service-and-maintenance.md) — reports, equipment files, and service history.
-- [Inventory](./inventory.md) — supplier, receipt, warranty, and asset documents.
-- [Commercial and finance](./commercial-and-finance.md) — structured commercial records and document handoffs.
-- [AI automations](./ai-automations.md) — extraction, drafting, review, and document-triggered workflows.
-- [Conceptual data model](../technical/data-model.md) — high-level domain model pointer.
-- `AGENTS.md` — agent-facing product summary.
-
----
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- [Decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md) — the R2 storage decision this feature implements.
+- [Technical architecture](../technical/architecture.md) — the signed-upload storage flow in the runtime picture.
 
 ## Maintenance Notes
 

@@ -1,5 +1,7 @@
 # Employee Management
 
+Status: living — last reviewed 2026-08-24
+
 Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
 
 This is a future-facing product specification. It distinguishes the implemented baseline from the capabilities WerkFlow should provide when the operational core is complete. Exact schema and permission details must still be verified against live Supabase, generated types, and current application code before implementation work.
@@ -364,15 +366,7 @@ Resolved with `P1-08` (2026-08-08): the illness/proof/evidence flow. A sickness 
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md) — shared phases, objects, and cross-feature rules.
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md) — active slice order, prerequisites, evidence, and golden-scenario gates.
-- [Competitive landscape](../product/competitive-landscape.md) — cross-competitor lessons on progressive disclosure, field adoption, fragmented employee apps, time transparency, and auditability.
-- [Time tracking](./time-tracking.md) — actual time, time accounts, corrections, approvals, compliance configuration, and payroll handoff.
-- [Calendar and resource planning](./calendar-and-resource-planning.md) — availability, skills, capacity, absence, and assignment planning.
-- [Jobs and projects](./jobs-and-projects.md) — assignments, project roles, and operational work context.
-- [Customers and CRM](./customers-and-crm.md) — customer/site context without exposing private employee data.
-- [Document management](./document-management.md) — current employee links, contextual access, versions, audit, and future personnel-document requirements.
-- [Inventory](./inventory.md) — employee material actions and future tool/asset responsibility.
-- [Commercial and finance](./commercial-and-finance.md) — costing, payroll/accounting handoff, and permission boundaries.
-- [AI automations](./ai-automations.md) — human-review and audit principles for future automation.
-- [Product context](../../AGENTS.md) — WerkFlow's target users, product purpose, roles, language, and operational principles.
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.

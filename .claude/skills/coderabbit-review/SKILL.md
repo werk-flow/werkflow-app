@@ -1,11 +1,11 @@
 ---
-name: code-review
-description: Reviews code changes using CodeRabbit AI. Use when user asks for code review, PR feedback, code quality checks, security issues, or requests fix-review cycles.
+name: coderabbit-review
+description: Reviews code changes using CodeRabbit AI. Use when user asks for a CodeRabbit review, PR feedback via CodeRabbit, or requests fix-review cycles with CodeRabbit.
 ---
 
 # CodeRabbit Review
 
-Use this skill to run CodeRabbit from the terminal, summarize the issues found, and help implement follow-up fixes.
+Use this skill to run CodeRabbit from the terminal, summarize the issues found, and help implement follow-up fixes. (This skill exists only in `.claude/skills/` on purpose — Codex ships its own CodeRabbit skill, so it is not mirrored in `.agents/skills/`. It is distinct from the harness's built-in `/code-review`.) Repo-specific facts — the WSL install path, invocation traps, review protocol, and plan limits — are owned by `docs/technical/coderabbit.md`; follow that document when it and this skill disagree.
 
 Stay silent while an active review is running. Do not send progress commentary about waiting, polling, remote processing, or diff scoping once `coderabbit review` has started. Only message the user if an authentication step or other prerequisite is needed, when the review completes with results, or when the review has failed or timed out after the full wait window.
 

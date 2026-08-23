@@ -1,6 +1,6 @@
 # P1-14 Work Lifecycle Implementation Plan
 
-Status: accepted complete on 2026-08-23; owner confirmed report items 2–10 before implementation.
+Status: closed (accepted complete 2026-08-23) — historical confirmed contract and verification record; owner confirmed report items 2–10 before implementation. The acceptance record is `phase-1/slices/p1-14-work-lifecycle.md`.
 
 ## Confirmed boundary
 

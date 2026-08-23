@@ -4,7 +4,7 @@ import { loadEnvLocal } from './tests/golden/support/env';
 
 loadEnvLocal();
 
-// Golden-gate harness (docs/plans/phase-1-build-roadmap.md). Runs the GG-XX
+// Golden-gate harness (docs/plans/phase-1/gates.md). Runs the GG-XX
 // business scenarios against a locally running app and the live Supabase
 // project using disposable, organization-isolated fixture data.
 export default defineConfig({

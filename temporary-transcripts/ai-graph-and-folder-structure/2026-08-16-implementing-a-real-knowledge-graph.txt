@@ -1,0 +1,47 @@
+# Where to start on a real knowledge graph implementation
+
+Source: https://www.instagram.com/p/DcHG2kPtZZG/
+Creator: @kem_glitch (Kem @ GlitchCatClub)
+Platform: Instagram
+Posted: 2026-08-16
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Shout out @lostandlucky and @agentic.james for initiating this conversation and to all of you for engaging! 🫶
+
+As promised here is the start of showing everyone how to implement real knowledge graph! 
+#ai #artificialintelligence #aiagent
+
+## Transcript
+
+shout out agentic James and lost and lucky you kicked off this process we
+was talking about knowledge graph proper implementation yes yesterday got a lot
+of traction number one comment how do I actually do it right and I kept saying
+well it kind of depends on this and that and it's very complicated and
+ontological logical modeling and all of this kind of stuff and a little bit some
+bobs in between I told you all I would have a think about it how to start
+communicating I promised you I would start sharing content on YouTube about
+it it's begun it's begun so today I have created an artifact right that goes
+through everything and guess what there's a repo ha there's a repo and in
+the repo I've got a classic example of what I call TR 1 it's very cool and I'm
+gonna also link you a YouTube video that shows you it in action it's it's
+fun I've created like a crazy test case where you ask this question and it's got
+loads of like tricks and traps in it and then I show you it being run with fable
+and then I show you it being run with haiku you see haiku completely like
+lose the plot and you're just completely like stupid and then you see it with
+knowledge graph and haiku responds in two milliseconds why cuz it's not
+actually haiku responding it is knowledge graph and you see the fact
+that it uses almost no tokens zero token well not zero tokens the amount of
+tokens in a prompt injection and I'm also showing you a really cool system
+where it's actually as I said prompt injected which means you don't even have
+to do anything you just type normally and just it's just it's just there it's
+in the graph just finding information that you need retrieving the bits of
+context that you need when you need it and it's super efficient and it scales
+like infinitely and it's multi hop traversing and it doesn't use grep I
+prove it all I prove it all in the video so yeah I will be doing more stuff on
+this and I will be showing you like how to do it grab the repo grab the
+artifacts watch the YouTube comment like all that good stuff so that I can keep
+this stuff getting out there and more people getting engaged and yeah let me
+know what you think I'm sure you're gonna have a million questions but don't
+worry I'm gonna cover it all off enjoy have a happy Sunday

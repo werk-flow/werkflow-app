@@ -1,6 +1,8 @@
 # Golden-Gate Run Log
 
-Append-only record of golden-gate runs, newest first, as required by the roadmap's gate protocol. Record: date, gate, commit/build, environment, fixtures, result, evidence, defects, and anything deliberately skipped.
+Status: living — append-only, newest first
+
+Append-only record of golden-gate runs, newest first, as required by the gate definitions in [`phase-1/gates.md`](phase-1/gates.md). Record: date, gate, commit/build, environment, fixtures, result, evidence, defects, and anything deliberately skipped.
 
 | Date | Gate | Commit / build | Environment | Fixtures | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -1,0 +1,42 @@
+# Duplicate and fabricated entities are why your graph fails
+
+Source: https://www.instagram.com/p/DcTIPKyt7Am/
+Creator: @kem_glitch (Kem @ GlitchCatClub)
+Platform: Instagram
+Posted: 2026-08-21
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+20 minute rant in 3 mins! Your graph isn't working. I bet this is why?! Let me know below. Next time you ask in comments have you tried - keep this in mind. Love you guys! The engagement and messages has been blowing my mind. Changing my little average life! 🫶❤️
+#ai #artificialintelligence #aiagent
+
+## Transcript
+
+one of the smartest companies on earth for memory ai apparently are begging their own ai
+never fabricate entity names and funnily enough someone sent me their graph this week
+one complaint duplicates everywhere i didn't need to open it because the best in the industry and
+someone like this same problem same disease look when it works it's magic you ask a question
+something fires slightly it walks your graph links a person to like a meeting or like a decision
+um hands it to the model exactly you know the context that it actually needs and it answers
+grounded milliseconds deterministic that part is actually solved the poison sits upstream
+so let's go upstream underneath every graph there's basically a table it's like a spreadsheet
+one row perfect who for example did what when before anyone fills it in someone has to pick
+the columns what exists in your world whatever it's called how it connects that decision is
+called ontology and the columns are your schema it's not that complicated if you have someone
+in your mobile phone as dave david dave smith and they're all the same person then you're
+going to get duplicates but how does the model know that that's all the same person they don't
+this is well known guys apparently someone ran microsoft's graph frag on sherlock homes and got
+four different homes sherlock sherlock homes mr homes homes microsoft closed it not planned
+so surely the smartest companies on earth have solved this no they haven't they've each picked
+which price to pay i'm looking at it now neo4j make they make you do the modeling yourself
+microsoft let the model read everything which is crazy expensive in fact their repo says
+maintenance mode and the next version is going to pull the model back out mem zero for example stop
+letting the model update facts entirely so you see the pattern now everything serious ends up a
+hybrid and everyone is retreating now from these models doing all this stuff autonomously
+and that's only if you're dealing with frozen documents which of course you're not every new
+meeting every new thing is going to re-ask this this is why autonomous digest basically has to
+be hybrid it has to have something that roots in the model and this is where it all falls apart
+and you're trying to build this stuff at scale guys it comes down to fundamentals i told you it
+was hard semantic ontological modeling have a happy day if you need to join my little broadcast
+channel you can find it in my story chemically cat club signing out

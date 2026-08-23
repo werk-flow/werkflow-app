@@ -1,5 +1,7 @@
 # Calendar And Resource Planning
 
+Status: living — last reviewed 2026-08-24
+
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations, and materials needed to deliver it.
 
 It should become the shared operational planning surface for office staff without turning into a generic personal calendar or a heavyweight project-management tool.
@@ -248,15 +250,8 @@ The system should start with proposals and previews. Automatic rescheduling, cus
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Jobs and projects](./jobs-and-projects.md)
-- [Customers and CRM](./customers-and-crm.md)
-- [Service and maintenance](./service-and-maintenance.md)
-- [Employee management](./employee-management.md)
-- [Time tracking](./time-tracking.md)
-- [Inventory](./inventory.md)
-- [Document management](./document-management.md)
-- [Commercial and finance](./commercial-and-finance.md)
-- [AI automations](./ai-automations.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- [Realtime and caching](../technical/realtime-and-caching.md) — the freshness model the calendar relies on.

@@ -1,7 +1,7 @@
 # Inventory V1 Implementation Plan
 
-Status: Planning source for first implementation
-Date: 2026-07-06
+Status: Closed — Inventory V1 shipped; this file is kept as the historical planning record. The implemented behavior is documented in `docs/features/inventory.md` (Current Product Baseline).
+Date: 2026-07-06 (closed 2026-08-24)
 
 ## Purpose
 

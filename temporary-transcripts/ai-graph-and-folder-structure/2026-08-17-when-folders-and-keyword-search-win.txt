@@ -1,0 +1,88 @@
+# When folders and keyword search beat a graph
+
+Source: https://www.instagram.com/p/DcI_-FStEqz/
+Creator: @kem_glitch (Kem @ GlitchCatClub)
+Platform: Instagram
+Posted: 2026-08-17
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Do you need a graph?! Short answer prob not! 
+Artefact in pinned contains repo link updated with cerb rag design and guidance for you to test. 
+
+Folders + keyword search wins until there is too much to search and read (not enough context window) > folders + keyword + index > need semantic then check out Cerberus Rag design pattern > tons of files willing to go all in on modelling > graph may be for you! 
+
+#ai #artificialintelligence #aiagent
+
+## Transcript
+
+right so we spent time talking about the fact that a lot of people think they're
+using knowledge graph but they're not I tried to help that I explained it's
+really difficult yada yada yada I said hey if you want to get used to it you
+want to see it in action this is what it's like it's a way look food I made
+the claim that it's the best thing ever because nothing else competes and I'm
+right come at me bro if you don't agree it is the fastest it is the lowest
+compute it is all of that stuff right but there is a trade-off there is a
+reason why you might not want to use this because it is complicated right I
+keep telling you it's so complicated that frontier labs have chosen not to
+use it as at a mass scale mass production right instead what do they do
+they do claim keyword search in other words they've done huge analysis their
+research labs they check this stuff right and they've learned that against
+the benchmarks like rag and other things you know standard rag and stuff
+the best actual way for the AI to actually find things is just standard
+grep standard keyword search right they all do this they've all come to the same
+conclusion guys simple folders and rip grip if you want a little bit more if
+your corpus starts to grow a little bit you know too much and it's kind of
+reading the wrong stuff you could also add like a little index file in each
+folder and subfolder just to say hey this is what's in here this is kind of
+where you'll find things you could try something like that right and that will
+probably get you most of the way most systems will operate optimally at the
+best possible performance of memory by doing that so then you can focus on
+actually the real issues with the system like that right which is things like
+maintenance because AI loves to put files in any place that it likes right so
+create rules create rules for it keep it maintained remove staleness develop
+systems that's where the work goes it's not just setting up folders right it's a
+full system treat it like a system you will get incredible results guys
+incredible results right amazing good let's move on so what else is there
+what's the other option memory architecture is complicated right you
+see all these weird solutions and well mostly they're bullshit right and people
+just over engineer and there's all sorts of weird stuff out there and
+Claude men and men palace it was but anyway the point is rag is not actually
+bad rag is good it's really good for a particular purpose it allows you to look
+at things understand things semantically right that's that's the beauty kind of
+what is the question what is the huge amount of information that I've got and
+how can I find the relevant thing in a way that's not obvious where I'm not
+literally using a keyword right so that's what it's for it's great but rag
+is me there's a lot of people talking about different ways to do it there is a
+lot of ways to do it this hybrid rags and this right but just keep it simple
+right keep it simple stupid right now interestingly very recently there was a
+blog post a blog post from a company called cerebras right and they build
+some of the fastest AI hardware these mega chips right and they use an
+internal knowledge base they get about 15,000 engineer questions a day and it's
+a rag it's a rag why did they pick a rag because they worked out a very
+interesting thing and they made a post about this right a blog post about it
+you can go and check out and it basically they distill every entry into
+the questions that they think you're going to ask later right and they
+basically embed that along at the time that it's happening right so this is an
+interesting idea right because this is about accuracy with with rag right so
+anyway I looked at this I thought this was super neat I can't remember where I
+saw it I think someone shared it to me after kind of I think it could have been Nick
+Seraf who kind of made a YouTube video about it and I saw it and I thought oh I
+want to try this right I didn't believe people I want to test this right so I
+went in and I took a more traditional rag I tested a whole bunch of things I
+tested a whole bunch of local models for embedding and looked at it all for you
+and I concluded that it was excellent it was genuinely good it actually improved
+performance but interestingly the thing that improved performance the most with
+the rag and it really improved performance more than 3.1 X right and
+all the numbers are in the artifacts right was actually removing common
+things that people think are good like reranking and and changing the local
+model the actual embedding model itself ironically to a much smaller model I
+don't I don't know don't I don't get it but it doesn't make sense anyway don't
+worry I've got you covered if you want to explore this rag process with the
+whole cerebus thing and distilling and and use the model and stuff I'm gonna
+upload it to the github repo I've got you covered we're gonna keep talking
+about different things it seems to be memories that the thing of the week
+right but we're gonna keep talking keep having fun keep glitching keep pushing
+forward we're gonna work out the BS from the facts right here every day I hope
+let's see chemical is cut club signing out

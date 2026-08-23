@@ -5,6 +5,8 @@ description: Guidance for distinctive, intentional visual design when building n
 
 # Frontend Design
 
+WerkFlow precedence note: for UI inside this repo, the `werkflow-design` skill's calm, deliberately understated canon is authoritative — use this skill's ambition (intentionality, typography discipline, no templated defaults) inside that canon, and never against it (no aesthetic risks that break the token system, orange scarcity, or component conventions).
+
 Approach this as the design lead at a small studio known for giving every client a visual identity that could not be mistaken for anyone else's. This client has already rejected proposals that felt templated, and is paying for a distinctive point of view: make deliberate, opinionated choices about palette, typography, and layout that are specific to this brief, and take one real aesthetic risk you can justify.
 
 ## Ground it in the subject

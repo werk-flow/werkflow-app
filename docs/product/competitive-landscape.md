@@ -1,5 +1,7 @@
 # Competitive Landscape: German Trades Software
 
+Status: living — dated research snapshot (2026-07-23); refresh volatile figures before using them in a current decision
+
 This document is a research reference for WerkFlow's competitive environment in German trade-business software (`Handwerkersoftware`). It focuses on software used by HVAC / SHK, plumbing, roofing, tiling, electrical, and adjacent construction trades.
 
 It is intended to help future product and engineering work:

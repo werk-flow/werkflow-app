@@ -1,5 +1,7 @@
 # Product Capability Map
 
+Status: living — last reviewed 2026-08-24
+
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
 It answers four questions:
@@ -39,7 +41,7 @@ The product is documented at three levels:
 | Product context | Why WerkFlow exists, who it serves, and broad principles | `AGENTS.md` |
 | Product capability map | How all feature areas form one product, their phases, dependencies, and decision gates | This document |
 | Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | `docs/features/*.md` |
-| Phase 1 build roadmap | Ordered vertical slices, direct prerequisites, current progress, exit evidence, and golden-scenario gates | [`phase-1-build-roadmap.md`](../plans/phase-1-build-roadmap.md) |
+| Phase 1 build roadmap | Ordered vertical slices, direct prerequisites, current progress, exit evidence, and golden-scenario gates | [`phase-1/roadmap.md`](../plans/phase-1/roadmap.md) |
 
 Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in `docs/plans/`, technical docs, or decision records after the product behavior is decided.
 
@@ -361,7 +363,7 @@ Do not copy exact competitor behavior into a feature spec without asking whether
 
 ## Related Docs
 
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
+- [Phase 1 build roadmap](../plans/phase-1/roadmap.md)
 - [Competitive landscape](./competitive-landscape.md)
 - [Product offer](./offer.md)
 - [Customer avatar](./avatar.md)

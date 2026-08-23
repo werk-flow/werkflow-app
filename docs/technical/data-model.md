@@ -1,5 +1,7 @@
 # Conceptual Data Model
 
+Status: living — last reviewed 2026-08-24
+
 This document describes WerkFlow's domain model at a conceptual level. It is not a schema dump.
 
 For exact tables, columns, enums, functions, and relationships, use live Supabase inspection and `lib/supabase/database.types.ts`.
@@ -25,7 +27,7 @@ The organization is the workspace/company boundary for:
 - Time tracking.
 - Settings and preferences.
 - Documents.
-- Future inventory.
+- Inventory.
 
 Users can belong to multiple organizations. Features must be explicit about whether data is user-scoped, organization-scoped, or both.
 

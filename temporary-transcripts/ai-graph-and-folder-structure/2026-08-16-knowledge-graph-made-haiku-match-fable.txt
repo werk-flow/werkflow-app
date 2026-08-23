@@ -1,0 +1,109 @@
+# How a knowledge graph made Haiku as accurate as Fable 5
+
+Source: https://www.youtube.com/watch?v=svvlT-nX6N8
+Creator: @glitchcatclub (Glitch Cat Club)
+Platform: YouTube
+Posted: 2026-08-16
+Duration: 5.6 min
+Transcript: YouTube auto-captions. The audio download was blocked by YouTube's bot check, so this text was not produced by Whisper like the others and contains recognition errors, including the channel name.
+
+## Caption
+
+Everyone asked the same question after my last post: how does this actually look when you're using a real knowledge graph? So I built it and recorded it.
+
+Same prompt, four runs. A customer wants an £800 refund in March, and the question is who signs it off. The answer is three hops away and it's split across separate documents, with decoys planted on purpose. Refunds over £500 need ops manager approval. The ops manager is Sarah. Sarah is out of office for all of March, and Marcus Webb is her cover.
+
+The results:
+
+Fable 5 with no graph gets there, but it greps the corpus, reads files, and burns 20 seconds and around 4,000 tokens doing it.
+
+Fable 5 with the graph answers from memory. Eight facts recalled, 2ms, a handful of tokens, zero tool calls.
+
+Haiku 4.5 with no graph falls apart. It asks which organisation I mean, then decides the founder signs it off. Completely lost.
+
+Haiku 4.5 with the graph gets it right. Marcus Webb, same eight facts, same 2ms.
+
+The mechanism is a deterministic prompt injection through a UserPromptSubmit hook. Retrieval never touches the model. There is no tool call, no search, no reasoning step where it can go wrong, and that's exactly why the small model stops failing. OpenAI has hooks for this too, so the pattern isn't Claude specific.
+
+The repo is in the artifact below. It covers pull vs push, the ontology and the logical model, how to set the hooks up, the tiers of implementation, the evals, and a getting started guide. Everything you need to build your own.
+
+Deeper dives on this are coming to the channel.
+
+REPO: 
+Artifact: https://claude.ai/code/artifact/5f055546-f494-4dc4-a677-677e9dfcfff4
+Join Glitch Cat Club: https://www.skool.com/glitchcatclub
+glitchcatclub.com
+
+Instagram: @kem_glitch
+
+#knowledgegraph #claudecode #aiagents #rag #contextengineering
+
+## Transcript
+
+Right, hi guys. Chemical AI Cat Club. Obviously, I didn't expect my post to go uh as
+well as it did. A lot of people, the number one question, how do I actually do this and
+how does it look when you're using real knowledge graph? So, I listened. I've done what
+you said. I've created an artifact. I'm going to give you the link below. A knowledge
+graph made the smallest model, namely Haiku in this example, as accurate as the biggest.
+Haiku went from a wrong answer to the right one with zero tool calls and two millisecond
+retrieval. Second point, faster and cheaper measured. So, 20 seconds of visible
+searching when you're doing it the wrong way, right? Versus much quicker, less compute,
+less tokens, pretty straightforward. In the test case, I've deliberately gone for a a
+multi-hop trap case, meaning we're trying to make this a little bit tricky. Number four,
+I'm going to show you the mechanism of a tier one implementation that you can all play
+around with. In that, the mechanism is a deterministic prompt injection through a user
+prompt submit hook cuz I'm using Anthropic's code. You can do that in OpenAI as well.
+They've got the hooks for that kind of thing. You do need a model that can do that for
+this particular use case. So, retrieval bypasses the model entirely. It's got nothing to
+do with the model, nothing to do with tool calls, right? We're going to prove that here.
+And then number five, it's going to have a guidance in the artifact about how you can
+build your own, the ontology, the logical model. It's all been covered in the repo, etc.
+Okay, so let's get into the test case. You'll notice here I've got knowledge, the one
+with knowledge graph, and I've got the version with no graph, right? Let me give you the
+test case quickly so you understand it. Right, number one. Um with the graph, I've said
+to you the smallest model will win. We're going to prove that, but we're going to start
+by showing you how it is with Fable 5, which actually bothers to do proper looking
+versus something like Haiku where traps are more present. Okay, great. Um the rules in
+the repo that I'm also going to share live in one file, right? And the idea is the use
+case is I'm going to ask the question, a customer wants an 800-pound refund in March,
+who signs it off, right? Now, I've told you uh in the repo, this is the perfect case, uh
+refunds over 500 need a ops manager's approval. That's the first point we're looking
+for, right? That person lives in another document randomly, right? Um the ops manager is
+called Sarah. That's number two, the point. But there's a twist. The twist lives in
+another document stashed away that Sarah is out of office and uh for all of March and uh
+Marcus is her cover, right? We've also got lots of decoys planted in there. You can see
+it for yourself. Uh it's great. So, we're going to do it. Here we go. This is a normal
+Fable call. You can see it here. It's It's reasoning. It's thinking. It's going to start
+searching. Here we go. Grep, right? Grep. We're not using knowledge graph. We're just
+using grep. It's searching. And um the files are being read. You can see how long this
+is taking. It's read the corpus. Okay, it's come up with an answer. 20 seconds, guys.
+4,000 tokens. 4,000 tokens, right? Okay, good. Did it come up with the answer? Yes, it
+did. Marcus Webb, it got it right. And it explains why. Wonderful. Okay. Now, let's go
+to the no uh the graph example. Same thing. Fable 5 on XHI auto mode. We're going to
+give it the same exact prompt. Customer wants $800 refund. Let's go. As you can see, the
+submit prompt hook has fired. Eight facts already called. 2 milliseconds. Just a couple
+of tokens. Look at that. Not even scratch the surface. Quick reply. And the chain from
+memory, it's given us the right example. That is multi-hop traversal demonstrated.
+Right. Now, let's take it a step further. I'm going to clear the context. Boom. I'm
+going to clear the context. Boom. I'm going to go to model IQ. Amazing. I'm going to go
+to model uh IQ. There it is, down here. You can see it. IQ 4.5. Boom. I'm going to go
+here. I'm going to do the same. Model IQ. Boom. There it is. Right. Let's it without the
+graph. No graph, right? Okay. Remember this is no graph. Same question, here we go.
+Thinking, go on HiKu, you can do it. We believe in you. Let's see how she does. Might
+get lucky. Oh, I need to surface the unpinned details before I can answer this. Which
+organization, right? HiKu is really confused. Let's try and give it your best shot. HiKu
+is failing already. Look at that, unbelievable. Kim signs it off, you're the founder. Oh
+my god, it it's just completely got confused. It's looking through my system, it doesn't
+have a clue. Okay, no problem. Let's try it with a knowledge graph. HiKu Use a prompt,
+submit memory, eight facts recalled in 2 seconds. Marcus Web signs it off, how about
+that? It didn't even fail, it just got completely confused. I think I've demonstrated my
+point, everyone. Good news is I've got you a GitHub repo. In that repo, I talked through
+the difference between pull and push, how to set it up properly. I've given you a
+getting started guide, I've explained tiers of this stuff. I'm going to do deeper dives
+on this on our YouTube. The graph made the smallest model accurate, I've given you all
+the details why, all the evals. I've given you the code, how to set up the hooks. I
+mean, I'm looking through it right now, it's pretty much everything you could possibly
+need. Have fun. If you want to know more about how this incredible, incredible world of
+knowledge graph actually should be implemented, I'm your guy. I'm going to help you.
+We're going to work this out together, and we're going to cut through all of the that
+you're seeing online. Big love. Have a great Sunday. Peace out.

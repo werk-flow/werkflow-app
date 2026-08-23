@@ -1,5 +1,7 @@
 # Service And Maintenance
 
+Status: living — last reviewed 2026-08-24
+
 Service and maintenance covers recurring maintenance, reactive customer service, faults, inspections, emergency work, and the long-term history of installed customer equipment.
 
 This is a distinct SHK operating model, not merely another job status. It connects customer sites and installations with contracts, recurring demand, dispatch, field execution, materials, reports, and billing.
@@ -239,15 +241,7 @@ Predictive-maintenance claims require enough reliable history and domain validat
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Customers and CRM](./customers-and-crm.md)
-- [Jobs and projects](./jobs-and-projects.md)
-- [Calendar and resource planning](./calendar-and-resource-planning.md)
-- [Employee management](./employee-management.md)
-- [Time tracking](./time-tracking.md)
-- [Inventory](./inventory.md)
-- [Document management](./document-management.md)
-- [Commercial and finance](./commercial-and-finance.md)
-- [AI automations](./ai-automations.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.

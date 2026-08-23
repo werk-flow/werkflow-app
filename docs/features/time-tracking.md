@@ -1,5 +1,7 @@
 # Time Tracking
 
+Status: living — last reviewed 2026-08-24
+
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
 This is a future-facing product specification. It distinguishes the implemented baseline from the complete operational core WerkFlow should provide. It describes product outcomes and workflow contracts, not a database or legal-compliance design.
@@ -21,7 +23,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated 6 August 2026 through `P1-06`) includes:
+The implemented baseline (updated through `P1-08`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
@@ -334,15 +336,7 @@ Resolved with `P1-05` (2026-08-06): the fixed-role fallback remains Admin plus B
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md) — shared phases, objects, and cross-feature rules.
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md) — active slice order, prerequisites, evidence, and golden-scenario gates.
-- [Competitive landscape](../product/competitive-landscape.md) — cross-competitor lessons on understandable balances, one employee app, offline state, progressive disclosure, and auditability.
-- [Employee management](./employee-management.md) — employment conditions, schedules, absence, approvals, privacy, and payroll identity.
-- [Calendar and resource planning](./calendar-and-resource-planning.md) — planned work, availability, and actual-versus-planned boundaries.
-- [Jobs and projects](./jobs-and-projects.md) — assignments, planned effort, operational context, and actual job labor.
-- [Service and maintenance](./service-and-maintenance.md) — service, travel, on-call, and emergency-work context.
-- [Document management](./document-management.md) — contextual documents, audit history, exports, and access boundaries.
-- [Inventory](./inventory.md) — job material usage and field-worker actions that share job context but not automatic time effects.
-- [Commercial and finance](./commercial-and-finance.md) — costing, billing candidates, period close, and accounting/payroll handoff.
-- [AI automations](./ai-automations.md) — human-control requirements for future suggestions and workflow automation.
-- [Product context](../../AGENTS.md) — WerkFlow's target users, role principles, language, and product purpose.
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.

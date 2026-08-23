@@ -1,5 +1,7 @@
 # Inventory Management
 
+Status: living — last reviewed 2026-08-24
+
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
 This document separates the current V1 baseline from the complete product direction. Phase 1 below is not an MVP checklist or an implementation sequence. It describes the complete operational core that the product should eventually provide before inventory is treated as mature. It deliberately defines outcomes and domain boundaries rather than tables, APIs, or a database design.
@@ -387,17 +389,8 @@ Each supplier standard or API needs a partner, version, direction, support model
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Commercial and finance](./commercial-and-finance.md)
-- [Inventory V1 implementation plan](../plans/inventory-v1-implementation-plan.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Customers and CRM](./customers-and-crm.md)
-- [Jobs and projects](./jobs-and-projects.md)
-- [Service and maintenance](./service-and-maintenance.md)
-- [Calendar and resource planning](./calendar-and-resource-planning.md)
-- [Document management](./document-management.md)
-- [Time tracking](./time-tracking.md)
-- [Employee management](./employee-management.md)
-- [AI automations](./ai-automations.md)
-- [Data model](../technical/data-model.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- [Inventory V1 implementation plan (closed)](../plans/inventory-v1-implementation-plan.md) — the historical V1 planning record.

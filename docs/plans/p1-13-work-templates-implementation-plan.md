@@ -1,6 +1,6 @@
 # P1-13 work templates implementation plan
 
-> Status: `complete`
+> Status: closed (accepted complete 2026-08-23) — historical confirmed contract, flow list, and execution ledger; the acceptance record is `phase-1/slices/p1-13-work-templates.md`
 > Started: 22 August 2026
 > Accepted: 23 August 2026
 > Baseline: `e8bd727`

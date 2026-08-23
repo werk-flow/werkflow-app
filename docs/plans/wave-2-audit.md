@@ -1,6 +1,8 @@
 # Wave 2 Flow Audit (per-slice model)
 
-Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; the process rules live in the roadmap's execution protocol and testing rules 12–13.
+Status: living — Wave 2 per-slice coverage ledger and certification-gate record
+
+Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; the process rules live in [`phase-1/protocol.md`](phase-1/protocol.md) and testing rules 12–13.
 
 ## Why the model changed (decision, 2026-08-21)
 
@@ -89,4 +91,4 @@ Newest first: per-slice audit closure entries and the final certification gate.
 | --- | --- | --- | --- |
 | 2026-08-23 | `P1-14` | Accepted with the owner-confirmed 63-flow contract. Focused `@AUDIT-W2-P1-14` passed 5/5 on the final frozen build; affected Wave-1 A1/A5/A6/A7 audits and full Golden 101/101 passed after lifecycle compatibility updates. | `tests/audit/wave-2/p1-14.spec.ts`; gate log 2026-08-23 |
 | 2026-08-23 | `P1-13` | First Wave 2 slice accepted with its owner-confirmed 27-flow contract. Focused `@AUDIT-W2-P1-13` passed 6/6 after CodeRabbit hardening; affected Wave-1 `@AUDIT-W1-A1` passed 28/28. | `tests/audit/wave-2/p1-13.spec.ts`; gate log 2026-08-23 |
-| 2026-08-21 | — | Per-slice audit model established (this document, roadmap protocol 5a and the audit-coverage acceptance items, testing rule 12 extension, `tests/audit/` config widened to all waves, `test:audit`/`test:audit:w2` scripts). No Wave 2 slice started. | This session |
+| 2026-08-21 | — | Per-slice audit model established (this document, protocol step 5a — now in `phase-1/protocol.md` — and the audit-coverage acceptance items, testing rule 12 extension, `tests/audit/` config widened to all waves, `test:audit`/`test:audit:w2` scripts). No Wave 2 slice started. | This session |

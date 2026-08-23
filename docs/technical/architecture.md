@@ -1,5 +1,7 @@
 # Technical Architecture
 
+Status: living — last reviewed 2026-08-24
+
 This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`.
 
 ## Product Context

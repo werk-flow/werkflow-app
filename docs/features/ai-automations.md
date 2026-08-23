@@ -1,5 +1,7 @@
 # AI Automations
 
+Status: living — last reviewed 2026-08-24
+
 AI automations are WerkFlow's second product phase: assistants, recommendations, workflows, and bounded agents that use the complete operational context of the business to reduce repetitive work inside and outside the app.
 
 They should be built after the relevant core workflow and data are trustworthy. AI cannot compensate for missing job states, ambiguous stock movements, incomplete permissions, or unreliable commercial records.
@@ -337,15 +339,8 @@ The organization may configure narrower permissions. It should not be allowed to
 
 ## Related Docs
 
-- [Product capability map](../product/product-capability-map.md)
-- [Phase 1 build roadmap](../plans/phase-1-build-roadmap.md)
-- [Competitive landscape](../product/competitive-landscape.md)
-- [Customers and CRM](./customers-and-crm.md)
-- [Jobs and projects](./jobs-and-projects.md)
-- [Service and maintenance](./service-and-maintenance.md)
-- [Calendar and resource planning](./calendar-and-resource-planning.md)
-- [Employee management](./employee-management.md)
-- [Time tracking](./time-tracking.md)
-- [Document management](./document-management.md)
-- [Inventory](./inventory.md)
-- [Commercial and finance](./commercial-and-finance.md)
+- [Product capability map](../product/product-capability-map.md) — feature ownership, shared objects, and cross-feature handoff rules.
+- [Phase 1 roadmap](../plans/phase-1/roadmap.md) — slice order, current status, and links to per-slice acceptance records.
+- [User-flow catalog](../product/user-flow-catalog.md) — this feature's accepted user-visible flows by stable ID.
+- Connected feature specs: the **Connected Workflow Contracts** table above names every cross-feature contract; load only the specs the current slice names.
+- [Decision 0001 — infrastructure stack](../decisions/0001-infrastructure-stack.md) — Phase 2 AI hosting via provider APIs.

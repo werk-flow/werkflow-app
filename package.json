@@ -15,7 +15,8 @@
     "env:dev": "bun scripts/switch-env.ts dev",
     "env:prod": "bun scripts/switch-env.ts prod",
     "test:audit": "playwright test --config playwright.audit.config.ts",
-    "test:audit:w2": "playwright test --config playwright.audit.config.ts --grep @AUDIT-W2"
+    "test:audit:w2": "playwright test --config playwright.audit.config.ts --grep @AUDIT-W2",
+    "docs:check": "bun scripts/check-docs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",

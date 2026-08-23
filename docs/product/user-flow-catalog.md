@@ -1,5 +1,7 @@
 # User Flow Catalog
 
+Status: living — updated at every slice acceptance
+
 ## Purpose And Rules (for agents)
 
 This file is the tactical, exhaustive answer to one question per slice: **what can a user actually DO in the app now that they could not do before, and what does the app do in response?**

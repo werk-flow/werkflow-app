@@ -1,0 +1,43 @@
+# Why an Obsidian wiki view is not a knowledge graph
+
+Source: https://www.instagram.com/p/DcEBQNPNPzs/
+Creator: @kem_glitch (Kem @ GlitchCatClub)
+Platform: Instagram
+Posted: 2026-08-15
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+We like @agentic.james but graph is not obsidian and graphify. That's a mess! If you're curious to learn more always happy to help! 
+#ai #artificialintelligence #aiagent
+
+## Transcript
+
+Most people use something like obsidian with a wiki knowledge graph
+You could do something like the graphify open source repo that basically helps your agent build a knowledge graph around a large set of folders
+and files now things get more complicated when you want your agent to actually remember a specific term. I
+Love you agentic James. I think you're a cool dude
+I think you make some awesome videos and I've seen some cool stuff and ways you put together, but you're wrong
+You're wrong on this one big time. No, they're it doesn't get more complicated than this
+Knowledge graph is the most complicated memory architecture
+The reason people like you and others don't realize that is because you haven't had the benefit of 15 years plus experience
+Implementing knowledge graph at scale in things like investment banks. Let me tell you what the issue is
+You're not doing it right and I mean that respectfully. It's just frustrating seeing this stuff and I want to help, right?
+In order for knowledge graph to work you have to ontologically and logically model and guess what? It's really hard, right?
+It's really hard to do you cannot outsource this stuff to some vibe coded repo or something like obsidian
+Which will just automatically base synthesize from some glob or something tooling right and create some rough
+YAML and just link everything together and it's not gonna work if you have no actual multi
+Obt traversal tooling if you're just grepping YAML and jumping from bar to bar
+That is not knowledge graph
+That is a big fucking mess that your AI needs to read through at minimum at best
+It might just be reading the YAML and jumping through things right that you're praying to God have been modeled beautifully
+So that it can find what it needs. Of course, it's going to eat up your context
+That is not knowledge graph and it certainly isn't knowledge graph memory architecture
+I am always here to help you if you want to know how to do this stuff properly and actually experience
+What real knowledge graph is like, right?
+And if you want to look and explore the ideas of things like graph engineering
+Which I'm not that big of a fan of but if you're curious, I can also help you with that, right? Keep making awesome videos
+I love them. I get a lot of inspiration. You have some really cool ideas. Don't fall for this Carpathie hype and stuff
+He's a he's amazing. He's incredibly bright, but he's a researcher
+He comes up with vague ideas loose ideas that are not formally tested by practitioners at scale, right?
+If you want to know more about it always happy to help reach out chemically check club signing out
