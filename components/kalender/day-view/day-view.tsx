@@ -8,7 +8,7 @@ import {
   useCallback,
   useRef
 } from 'react';
-import { Briefcase, Clock, ParkingSquare } from 'lucide-react';
+import { Briefcase, Clock, ParkingSquare, Undo2 } from 'lucide-react';
 import { TimelineHeader } from './timeline-header';
 import { EmployeeTimelineRow } from './employee-timeline-row';
 import {
@@ -214,6 +214,7 @@ export function DayView({
         ...(banner.variant === 'success' && banner.onUndo
           ? {
               actionLabel: 'Rückgängig',
+              actionIcon: <Undo2 className="size-3.5" />,
               onAction: () => {
                 void banner.onUndo?.().catch(() => {
                   silentRefresh();

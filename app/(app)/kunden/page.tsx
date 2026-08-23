@@ -9,7 +9,7 @@ import { toClient } from '@/lib/jobs/types';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton';
-import { ActionBanner } from '@/components/shared/action-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 
 async function KundenData({ activeOrgId }: { activeOrgId: string }) {
@@ -106,7 +106,7 @@ export default async function KundenPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Suspense fallback={null}>
-        <ActionBanner
+        <UrlFlashBanner
           paramKey="deleted_client"
           messageTemplate='Kunde „{name}" wurde erfolgreich gelöscht.'
         />

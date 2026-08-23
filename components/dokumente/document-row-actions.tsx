@@ -188,6 +188,11 @@ export function DocumentActionsMenu({
           size="icon-sm"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
+          // The table rows select on POINTERDOWN (drag/selection handling in
+          // document-library-table.tsx), and Radix menus also open on
+          // pointerdown — stopping only `click` still lets the row flash
+          // selected. The actions cell must be inert for row selection.
+          onPointerDown={(event) => event.stopPropagation()}
         >
           <MoreHorizontal className="size-4" />
           <span className="sr-only">Dateiaktionen für {document.displayName} öffnen</span>
@@ -235,6 +240,11 @@ export function FolderActionsMenu({
           size="icon-sm"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
+          // The table rows select on POINTERDOWN (drag/selection handling in
+          // document-library-table.tsx), and Radix menus also open on
+          // pointerdown — stopping only `click` still lets the row flash
+          // selected. The actions cell must be inert for row selection.
+          onPointerDown={(event) => event.stopPropagation()}
         >
           <MoreHorizontal className="size-4" />
           <span className="sr-only">Ordneraktionen für {folder.name} öffnen</span>

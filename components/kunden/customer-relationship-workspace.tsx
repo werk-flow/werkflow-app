@@ -41,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
+import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { useBanner } from '@/components/ui/banner';
 import {
   createCustomerFollowUp,
@@ -435,11 +436,11 @@ export function CustomerRelationshipWorkspace({
         )}
 
         {historicFollowUps.length > 0 && (
-          <details className="rounded-md border px-3 py-2">
-            <summary className="cursor-pointer text-sm text-muted-foreground">
-              Abgeschlossene und abgebrochene Nachfassaktionen ({historicFollowUps.length})
-            </summary>
-            <div className="mt-2 divide-y">
+          <FormDisclosure
+            className="rounded-md border px-3 py-2"
+            label={`Abgeschlossene und abgebrochene Nachfassaktionen (${historicFollowUps.length})`}
+          >
+            <div className="divide-y">
               {historicFollowUps.map((followUp) => (
                 <div key={followUp.id} className="py-2 text-sm">
                   <p className="font-medium">{followUp.title}</p>
@@ -450,7 +451,7 @@ export function CustomerRelationshipWorkspace({
                 </div>
               ))}
             </div>
-          </details>
+          </FormDisclosure>
         )}
       </section>
 

@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle, Info, Loader2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, Loader2, Undo2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,8 @@ export type BannerState = {
   variant: BannerVariant;
   message: string;
   actionLabel?: string;
+  /** Icon rendered inside the action button (e.g. Undo2 for „Rückgängig"). */
+  actionIcon?: ReactNode;
   onAction?: () => void;
 };
 
@@ -69,6 +71,12 @@ export function Banner({
 }) {
   return (
     <div
+      // CENTERING INVARIANT: `left-1/2 -translate-x-1/2` is the ONLY source
+      // of horizontal centering. The banner keyframes in app/globals.css
+      // animate opacity + translateY only and must never gain an x-shift —
+      // Tailwind v4's translate utility (the `translate` property) COMPOSES
+      // with the animation's `transform`, so an x-shift in the keyframes
+      // pushes the banner off-center. Change neither side without the other.
       className={cn(
         'fixed left-1/2 top-4 z-[120] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2',
         isExiting ? 'animate-banner-out' : 'animate-banner-in'
@@ -85,14 +93,17 @@ export function Banner({
         <BannerIcon variant={banner.variant} />
         <p className="flex-1 text-sm font-medium">{banner.message}</p>
         {banner.actionLabel && banner.onAction && (
+          // A real button with an icon, not underlined text: the action (e.g.
+          // „Rückgängig") must read as a clickable control at a glance.
           <button
             type="button"
             onClick={() => {
               banner.onAction?.();
               onDismiss();
             }}
-            className="shrink-0 rounded-md px-2 py-1 text-sm font-semibold underline-offset-2 hover:underline"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-current/25 bg-white/40 px-2.5 py-1 text-sm font-semibold transition-colors hover:bg-white/70 dark:bg-white/10 dark:hover:bg-white/20"
           >
+            {banner.actionIcon}
             {banner.actionLabel}
           </button>
         )}
@@ -116,6 +127,7 @@ type ShowBannerInput = {
   variant: BannerVariant;
   message: string;
   actionLabel?: string;
+  actionIcon?: ReactNode;
   onAction?: () => void;
   /** Override the encoded timing; `null` persists until dismissed/replaced. */
   autoDismissMs?: number | null;
@@ -282,6 +294,7 @@ export function UndoBanner({
         variant: 'success',
         message: banner.message,
         actionLabel,
+        actionIcon: <Undo2 className="size-3.5" />,
         onAction: banner.onUndo,
       }}
       onDismiss={onDismiss}

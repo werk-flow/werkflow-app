@@ -12,7 +12,7 @@ import {
 } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { toClient, type Client } from '@/lib/jobs/types';
-import { ActionBanner } from '@/components/shared/action-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail-content';
 import { RouteRedirect } from '@/components/shared/route-redirect';
@@ -120,7 +120,7 @@ async function ProjectDetailData({
   return (
     <>
       <Suspense fallback={null}>
-        <ActionBanner
+        <UrlFlashBanner
           paramKey="deleted_job"
           messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
         />

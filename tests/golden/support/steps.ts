@@ -301,6 +301,24 @@ export async function uploadDocumentOnJobPage(
   await uploadIntoDocumentsSection(page, filePath, expectedFileName);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// The job picker is deliberately a FLAT LIST (search bar + always-visible
+// radio rows), not a SearchableSelect — see components/job-picker-modal.tsx.
+// A row's accessible name is its full text (title + number/client/project
+// line), so match by substring, never exact.
+async function selectJobInPicker(
+  dialog: ReturnType<Page['getByRole']>,
+  jobTitle: string
+): Promise<void> {
+  await dialog
+    .getByRole('radio', { name: new RegExp(escapeRegExp(jobTitle)) })
+    .first()
+    .click();
+}
+
 export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void> {
   await page.goto('/dashboard');
   // The clock control is a floating action button named via its title attribute.
@@ -309,11 +327,7 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
   await expect(dialog.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
 
   if (jobTitle) {
-    await selectFromSearchable(
-      page,
-      dialog.locator('#job-picker-job'),
-      jobTitle
-    );
+    await selectJobInPicker(dialog, jobTitle);
   }
 
   await dialog.getByRole('button', { name: 'Einstempeln', exact: true }).click();
@@ -337,11 +351,7 @@ export async function endClockBreak(page: Page, jobTitle?: string): Promise<void
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeVisible();
   if (jobTitle) {
-    await selectFromSearchable(
-      page,
-      dialog.locator('#job-picker-job'),
-      jobTitle
-    );
+    await selectJobInPicker(dialog, jobTitle);
   }
   // Without a job the picker keeps its default „Ohne Auftrag" selection.
   await dialog.getByRole('button', { name: 'Fortsetzen', exact: true }).click();
@@ -357,7 +367,7 @@ export async function switchClockJob(page: Page, jobTitle: string): Promise<void
   await page.locator('button[title="Auftrag wechseln"]').click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Auftrag wechseln' })).toBeVisible();
-  await selectFromSearchable(page, dialog.locator('#job-picker-job'), jobTitle);
+  await selectJobInPicker(dialog, jobTitle);
   await dialog.getByRole('button', { name: 'Wechseln', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeHidden({
     timeout: 15_000,
@@ -2736,8 +2746,12 @@ async function selectPlanningOption(
   if (await alreadySelected.isVisible().catch(() => false)) return;
 
   await comboboxes.filter({ hasText: triggerText }).click();
-  await dialog.getByPlaceholder(searchPlaceholder).fill(optionText);
-  await dialog
+  // The searchable popover portals to <body> (not into the dialog — see the
+  // portaling invariant in components/ui/searchable-select.tsx), so its
+  // search input and listbox must be located PAGE-scoped, never dialog-scoped.
+  const page = dialog.page();
+  await page.getByPlaceholder(searchPlaceholder).fill(optionText);
+  await page
     .getByRole('listbox')
     .getByRole('button')
     .filter({ hasText: optionText })

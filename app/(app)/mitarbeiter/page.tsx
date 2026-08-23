@@ -9,7 +9,7 @@ import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
 import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton';
-import { ActionBanner } from '@/components/shared/action-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
 import {
@@ -167,7 +167,7 @@ export default async function MitarbeiterPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Suspense fallback={null}>
-        <ActionBanner
+        <UrlFlashBanner
           paramKey="removed_member"
           messageTemplate='„{name}" wurde aus der Organisation entfernt.'
         />

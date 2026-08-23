@@ -144,26 +144,35 @@ textarea::-moz-selection,
   color: var(--selection-foreground);
 }
 
-/* Banner animation keyframes */
+/* Banner animation keyframes.
+   CENTERING INVARIANT (recurring regression, fixed 2026-08-23): these
+   keyframes animate ONLY opacity and a vertical transform. They must NEVER
+   contain an x-translation. Horizontal centering comes exclusively from the
+   banner element's Tailwind classes `left-1/2 -translate-x-1/2`; in
+   Tailwind v4 that utility uses the standalone `translate` CSS property,
+   and `translate` COMPOSES with `transform` instead of being overridden by
+   it — an x-shift here therefore double-shifts the banner off-center.
+   Every element using .animate-banner-in/out must itself carry
+   `left-1/2 -translate-x-1/2` (see components/ui/banner.tsx). */
 @keyframes banner-slide-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -0.5rem);
+    transform: translateY(-0.5rem);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
 }
 
 @keyframes banner-fade-out {
   from {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(0);
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -1.5rem);
+    transform: translateY(-1.5rem);
   }
 }
 

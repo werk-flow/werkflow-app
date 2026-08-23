@@ -1,19 +1,26 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Play, ArrowLeftRight, Loader2, Briefcase } from 'lucide-react';
+import {
+  Play,
+  ArrowLeftRight,
+  Loader2,
+  Briefcase,
+  Search,
+  Check,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { filterByQuery } from '@/lib/ui/search';
 import { getJobsForPicker } from '@/lib/time-tracking/actions';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 
@@ -36,9 +43,15 @@ interface JobPickerModalProps {
   isPending: boolean;
 }
 
-// Job picking for the clock flows: a shell over the Dialog primitive (which
-// suspends Realtime router refreshes while open) and the registry's
-// SearchableSelect, which owns search, filtering, and empty states.
+/**
+ * Job picking for the clock flows. DELIBERATELY NOT a collapsed select:
+ * clocking in is the field worker's most frequent action, so the search bar
+ * and the full option list are visible IMMEDIATELY when the modal opens —
+ * no extra click to expand a dropdown. This flat-list presentation is an
+ * owner-confirmed registry design (restored 2026-08-23 after a regression
+ * replaced it with a SearchableSelect inside the dialog); keep it.
+ * The Dialog primitive host provides the Realtime-refresh suspension.
+ */
 export function JobPickerModal({
   open,
   onClose,
@@ -50,7 +63,9 @@ export function JobPickerModal({
 }: JobPickerModalProps) {
   const [jobs, setJobs] = useState<PickerJob[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedJobId, setSelectedJobId] = useState<string>('');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const openRef = useRef(open);
   openRef.current = open;
@@ -82,21 +97,20 @@ export function JobPickerModal({
   useEffect(() => {
     if (open) {
       fetchJobs();
-      setSelectedJobId(mode === 'switch' ? currentJobId ?? '' : '');
+      setSearchQuery('');
+      setSelectedJobId(mode === 'switch' ? currentJobId : null);
+      requestAnimationFrame(() => searchInputRef.current?.focus());
     }
   }, [open, fetchJobs, mode, currentJobId]);
 
-  const jobOptions = useMemo(
+  const filteredJobs = useMemo(
     () =>
-      jobs.map((job) => ({
-        value: job.id,
-        label: job.title,
-        description:
-          [job.jobNumber, job.clientName, job.projectName]
-            .filter(Boolean)
-            .join(' · ') || undefined,
-      })),
-    [jobs]
+      filterByQuery(jobs, searchQuery, (job) =>
+        [job.title, job.jobNumber, job.projectName, job.clientName]
+          .filter(Boolean)
+          .join(' ')
+      ),
+    [jobs, searchQuery]
   );
 
   const title =
@@ -130,34 +144,113 @@ export function JobPickerModal({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            onConfirm(selectedJobId || null);
+            onConfirm(selectedJobId);
           }}
           noValidate
-          className="space-y-4"
+          className="flex min-h-0 flex-1 flex-col gap-3"
         >
-          <div className="space-y-2">
-            <Label htmlFor="job-picker-job">Auftrag</Label>
-            {isLoading && jobs.length === 0 ? (
-              <Skeleton className="h-9 w-full" />
-            ) : (
-              <SearchableSelect
-                id="job-picker-job"
-                options={jobOptions}
-                value={selectedJobId}
-                onChange={setSelectedJobId}
-                placeholder="Ohne Auftrag"
-                searchPlaceholder="Auftrag suchen..."
-                emptyMessage="Keine Aufträge gefunden"
-                allowNone
-                noneLabel="Ohne Auftrag"
-              />
-            )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Auftrag suchen..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 w-full rounded-lg border bg-muted/50 pl-9 pr-3 text-sm placeholder:text-muted-foreground/70 transition-colors focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
           </div>
+
+          <DialogBody className="min-h-40">
+            {isLoading && jobs.length === 0 ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-0.5" role="radiogroup" aria-label="Auftrag">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selectedJobId === null}
+                  onClick={() => setSelectedJobId(null)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                    selectedJobId === null
+                      ? 'bg-primary/10 ring-1 ring-primary/20'
+                      : 'hover:bg-accent'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                      selectedJobId === null
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-muted-foreground/30'
+                    )}
+                  >
+                    {selectedJobId === null && <Check className="h-3 w-3" />}
+                  </div>
+                  <span className="text-muted-foreground">Ohne Auftrag</span>
+                </button>
+
+                {filteredJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedJobId === job.id}
+                    onClick={() => setSelectedJobId(job.id)}
+                    className={cn(
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
+                      selectedJobId === job.id
+                        ? 'bg-primary/10 ring-1 ring-primary/20'
+                        : 'hover:bg-accent'
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                        selectedJobId === job.id
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-muted-foreground/30'
+                      )}
+                    >
+                      {selectedJobId === job.id && <Check className="h-3 w-3" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="line-clamp-2 break-words font-medium"
+                        title={job.title}
+                      >
+                        {job.title}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[job.jobNumber, job.clientName, job.projectName]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+
+                {filteredJobs.length === 0 && !isLoading && (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {searchQuery
+                        ? 'Keine Aufträge gefunden'
+                        : 'Keine Aufträge verfügbar'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </DialogBody>
 
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
+              className="flex-1 sm:flex-initial"
               onClick={onClose}
               disabled={isPending}
             >
@@ -165,10 +258,10 @@ export function JobPickerModal({
             </Button>
             <Button
               type="submit"
-              className="select-none"
+              className="flex-1 select-none sm:flex-initial"
               disabled={
                 isPending ||
-                (mode === 'switch' && selectedJobId === (currentJobId ?? ''))
+                (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))
               }
             >
               {isPending ? (

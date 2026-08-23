@@ -73,6 +73,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Success/error/info/progress feedback | `Banner` via `useBanner()` | `components/ui/banner` |
 | Inline field/action errors | `ErrorText` | `components/ui/error-text` |
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
+| Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
 Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, or `type="number"` inputs, no native `<select>`, no sonner imports.
 
@@ -99,7 +100,7 @@ One convention: on success the dialog closes immediately and the success banner 
 ### Long forms in dialogs
 
 - `DialogContent` caps its height; long content goes in `DialogBody`, which makes the dialog a fixed-header/scroll-body/fixed-footer column. The title and the submit row never scroll out of view.
-- Forms with more than ~8 fields group into titled sections with dividers. Genuinely optional blocks collapse behind a quiet disclosure ("Weitere Angaben").
+- Forms with more than ~8 fields group into titled sections with dividers. Genuinely optional blocks collapse behind `FormDisclosure` — the registry component with the app's rotating-chevron affordance. Never native `<details>`/`<summary>` (the browser marker triangle is off-brand).
 - No multi-step wizards for operational forms — office users fill these daily; steps add clicks to routine work. Very large editors use a two-column grid (`sm:grid-cols-2`) plus section grouping instead.
 
 ### Loading states

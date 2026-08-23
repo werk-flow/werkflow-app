@@ -10,6 +10,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { ErrorText } from '@/components/ui/error-text';
+import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
@@ -451,9 +452,8 @@ export function PlanningEntryForm({
         </div>
 
         {entryKind === 'internal' && (
-          <details className="text-sm">
-            <summary className="cursor-pointer font-medium">Weitere Angaben</summary>
-            <div className="mt-3 grid gap-3">
+          <FormDisclosure className="text-sm">
+            <div className="grid gap-3">
               <div className="space-y-2">
                 <Label htmlFor="planning-location">Ort</Label>
                 <Input
@@ -471,7 +471,7 @@ export function PlanningEntryForm({
                 />
               </div>
             </div>
-          </details>
+          </FormDisclosure>
         )}
 
         {conflicts.length > 0 && (

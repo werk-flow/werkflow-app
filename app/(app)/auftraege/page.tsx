@@ -19,7 +19,7 @@ import {
 } from '@/lib/jobs/types';
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
 import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
-import { ActionBanner } from '@/components/shared/action-banner';
+import { UrlFlashBanner } from '@/components/ui/banner';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 
@@ -281,13 +281,13 @@ export default async function AuftraegePage() {
   return (
     <>
       <Suspense fallback={null}>
-        <ActionBanner
+        <UrlFlashBanner
           paramKey="deleted_job"
           messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
         />
       </Suspense>
       <Suspense fallback={null}>
-        <ActionBanner
+        <UrlFlashBanner
           paramKey="deleted_project"
           messageTemplate='Projekt „{name}" wurde erfolgreich gelöscht.'
         />

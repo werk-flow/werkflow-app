@@ -69,79 +69,20 @@ function handleListWheel(e: React.WheelEvent<HTMLDivElement>) {
   el.scrollTop = Math.max(0, Math.min(maxScroll, scrollTop + e.deltaY));
 }
 
-function useDialogPortalContainer(
-  triggerRef: React.RefObject<HTMLElement | null>,
-  open: boolean
-) {
-  const [container, setContainer] = React.useState<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const dialogEl = trigger.closest('[role="dialog"]') as HTMLElement | null;
-    setContainer(dialogEl);
-  }, [open, triggerRef]);
-
-  return container;
-}
-
-type DropdownSide = 'top' | 'bottom';
-
-function useDialogAwareDropdownLayout(
-  triggerRef: React.RefObject<HTMLElement | null>,
-  open: boolean,
-  optionCount: number
-) {
-  const [side, setSide] = React.useState<DropdownSide>('bottom');
-  const [maxHeight, setMaxHeight] = React.useState(240);
-
-  React.useEffect(() => {
-    if (!open) return;
-
-    const update = () => {
-      const trigger = triggerRef.current;
-      if (!trigger) return;
-
-      const triggerRect = trigger.getBoundingClientRect();
-      const VIEWPORT_PADDING = 12;
-      const MIN_DROPDOWN_HEIGHT = 176;
-      const MAX_DROPDOWN_HEIGHT = 320;
-      const bounds = {
-        top: VIEWPORT_PADDING,
-        bottom: window.innerHeight - VIEWPORT_PADDING
-      };
-
-      const spaceBelow = bounds.bottom - triggerRect.bottom - 8;
-      const spaceAbove = triggerRect.top - bounds.top - 8;
-      const estimatedContent = Math.min(
-        MAX_DROPDOWN_HEIGHT,
-        Math.max(MIN_DROPDOWN_HEIGHT, 52 + optionCount * 38)
-      );
-
-      const preferredSide: DropdownSide =
-        spaceBelow >= estimatedContent || spaceBelow >= spaceAbove
-          ? 'bottom'
-          : 'top';
-      const available = preferredSide === 'bottom' ? spaceBelow : spaceAbove;
-
-      setSide(preferredSide);
-      setMaxHeight(
-        Math.max(MIN_DROPDOWN_HEIGHT, Math.min(MAX_DROPDOWN_HEIGHT, Math.floor(available - 52)))
-      );
-    };
-
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [open, optionCount, triggerRef]);
-
-  return { side, maxHeight };
-}
+/*
+ * DROPDOWN PORTALING INVARIANT (regression fixed 2026-08-23):
+ * The popover MUST portal to document.body (Radix's default portal) and be
+ * sized/flipped by Radix collision handling against the VIEWPORT.
+ * Never portal it into the surrounding dialog: DialogContent clips overflow,
+ * so inside a short dialog the expanded list gets cut off and becomes
+ * unusable (this happened with a hand-rolled `closest('[role="dialog"]')`
+ * portal container plus viewport-based height math — the math saw viewport
+ * space the dialog's clip rect didn't have). Popover-in-Dialog with body
+ * portals is the stock Radix/shadcn combination; the layer stack keeps
+ * clicks inside the popover from counting as outside the dialog.
+ * The list's max height comes from --radix-popover-content-available-height,
+ * capped at 320px, so it always fits the viewport on either side.
+ */
 
 interface SearchableSelectProps extends SearchableSelectBaseProps {
   id?: string;
@@ -176,7 +117,6 @@ export function SearchableSelect({
   const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const portalContainer = useDialogPortalContainer(triggerRef, open);
 
   React.useEffect(() => {
     if (open) {
@@ -188,11 +128,6 @@ export function SearchableSelect({
   const filtered = React.useMemo(
     () => filterOptions(options, search),
     [options, search]
-  );
-  const { side, maxHeight } = useDialogAwareDropdownLayout(
-    triggerRef,
-    open,
-    filtered.length + (allowNone ? 1 : 0) + (action ? 1 : 0)
   );
 
   const selectedOption = options.find((o) => o.value === value);
@@ -240,15 +175,15 @@ export function SearchableSelect({
         </button>
       </PopoverPrimitive.Trigger>
 
-      <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
+      {/* Body portal + viewport collision handling — see the invariant comment above. */}
+      <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          side={side}
           align="start"
           sideOffset={4}
           collisionPadding={8}
           avoidCollisions
           className={cn(
-            'z-[120] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
+            'z-[120] flex max-h-[min(320px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] flex-col rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -282,8 +217,7 @@ export function SearchableSelect({
           <div
             id={listboxId}
             role="listbox"
-            className="overflow-y-auto overscroll-contain p-1"
-            style={{ maxHeight }}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
             onWheelCapture={handleListWheel}
           >
             {action && (
@@ -413,7 +347,6 @@ export function SearchableMultiSelect({
   const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const portalContainer = useDialogPortalContainer(triggerRef, open);
 
   React.useEffect(() => {
     if (open) {
@@ -425,11 +358,6 @@ export function SearchableMultiSelect({
   const filtered = React.useMemo(
     () => filterOptions(options, search),
     [options, search]
-  );
-  const { side, maxHeight } = useDialogAwareDropdownLayout(
-    triggerRef,
-    open,
-    filtered.length + (allowNone ? 1 : 0) + (action ? 1 : 0)
   );
 
   const toggle = (val: string) => {
@@ -487,15 +415,15 @@ export function SearchableMultiSelect({
         </button>
       </PopoverPrimitive.Trigger>
 
-      <PopoverPrimitive.Portal container={portalContainer ?? undefined}>
+      {/* Body portal + viewport collision handling — see the invariant comment above. */}
+      <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          side={side}
           align="start"
           sideOffset={4}
           collisionPadding={8}
           avoidCollisions
           className={cn(
-            'z-[120] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
+            'z-[120] flex max-h-[min(320px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] flex-col rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
@@ -529,8 +457,7 @@ export function SearchableMultiSelect({
           <div
             id={listboxId}
             role="listbox"
-            className="overflow-y-auto overscroll-contain p-1"
-            style={{ maxHeight }}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
             onWheelCapture={handleListWheel}
           >
             {action && (

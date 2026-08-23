@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Undo2 } from 'lucide-react';
 import { CalendarHeader } from './calendar-header';
 import { CalendarViewTabs } from './calendar-view-tabs';
 import { DayView } from './day-view/day-view';
@@ -917,6 +917,7 @@ export function CalendarContainer({
         ...(banner.variant === 'success' && banner.onUndo
           ? {
               actionLabel: 'Rückgängig',
+              actionIcon: <Undo2 className="size-3.5" />,
               onAction: () => {
                 void banner.onUndo?.().catch(() => {
                   handleSilentRefresh();
