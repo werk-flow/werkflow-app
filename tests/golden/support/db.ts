@@ -2124,7 +2124,7 @@ export async function getWorkLifecycleState(
       .order('id'),
     admin
       .from('work_dependencies')
-      .select('id, effect, declared_kind, description, manual_state, removed_at, version, predecessor_job_id, predecessor_project_id, predecessor_instruction_item_id')
+      .select('id, effect, declared_kind, description, manual_state, removed_at, version, predecessor_job_id, predecessor_project_id, predecessor_instruction_item_id, artifact_approval_action_id')
       .eq('organization_id', orgId)
       .eq(dependentColumn, targetId)
       .order('created_at')
@@ -2157,6 +2157,7 @@ export async function getWorkLifecycleState(
   );
   return {
     entity: entityResult.data,
+    snapshot: snapshot.snapshot,
     blockers: blockers.data ?? [],
     dependencies: (dependencies.data ?? []).map((dependency) => ({
       ...dependency,
@@ -2201,6 +2202,70 @@ export async function getVisibleWorkLifecycleCountsAs(
     counts[table] = count ?? 0;
   }
   return counts;
+}
+
+export async function getWorkArtifactState(
+  orgId: string,
+  target: { jobNumber: string } | { projectNumber: string }
+) {
+  const admin = createAdminClient();
+  const isJob = 'jobNumber' in target;
+  const targetResult = isJob
+    ? await admin.from('jobs').select('id').eq('organization_id', orgId).eq('job_number', target.jobNumber).single()
+    : await admin.from('projects').select('id').eq('organization_id', orgId).eq('project_number', target.projectNumber).single();
+  if (targetResult.error) throw new Error(`Artifact target lookup failed: ${targetResult.error.message}`);
+  const targetColumn = isJob ? 'job_id' : 'project_id';
+  const { data: artifacts, error: artifactError } = await admin.from('work_artifacts').select('*')
+    .eq('organization_id', orgId).eq(targetColumn, targetResult.data.id).order('created_at').limit(101);
+  if (artifactError || (artifacts?.length ?? 0) > 100) throw new Error(`Artifact lookup failed: ${artifactError?.message ?? 'overflow'}`);
+  const artifactIds = (artifacts ?? []).map((artifact) => artifact.id);
+  if (!artifactIds.length) return { artifacts: [], revisions: [], actions: [], measurements: [], defects: [], changes: [], documents: [], sources: [], fulfillments: [] };
+  const [revisions, actions] = await Promise.all([
+    admin.from('work_artifact_revisions').select('*').in('artifact_id', artifactIds).order('revision_number').limit(101),
+    admin.from('work_artifact_actions').select('*').in('artifact_id', artifactIds).order('created_at').order('id').limit(101),
+  ]);
+  if (revisions.error || actions.error || (revisions.data?.length ?? 0) > 100 || (actions.data?.length ?? 0) > 100) {
+    throw new Error(`Artifact ledger lookup failed: ${(revisions.error ?? actions.error)?.message ?? 'overflow'}`);
+  }
+  const revisionIds = (revisions.data ?? []).map((revision) => revision.id);
+  const [measurements, defects, changes, documents, sources, fulfillments] = await Promise.all([
+    admin.from('work_artifact_measurement_lines').select('*').in('revision_id', revisionIds).order('line_number'),
+    admin.from('work_artifact_defect_details').select('*').in('revision_id', revisionIds),
+    admin.from('work_artifact_change_details').select('*').in('revision_id', revisionIds),
+    admin.from('work_artifact_revision_documents').select('*').in('revision_id', revisionIds).order('created_at'),
+    admin.from('work_artifact_revision_sources').select('*').in('revision_id', revisionIds).order('created_at'),
+    admin.from('job_instruction_item_evidence_fulfillments').select('*').in('artifact_revision_id', revisionIds),
+  ]);
+  const error = measurements.error ?? defects.error ?? changes.error ?? documents.error ?? sources.error ?? fulfillments.error;
+  if (error) throw new Error(`Artifact detail lookup failed: ${error.message}`);
+  return { artifacts: artifacts ?? [], revisions: revisions.data ?? [], actions: actions.data ?? [],
+    measurements: measurements.data ?? [], defects: defects.data ?? [], changes: changes.data ?? [],
+    documents: documents.data ?? [], sources: sources.data ?? [], fulfillments: fulfillments.data ?? [] };
+}
+
+export async function getVisibleWorkArtifactCountsAs(
+  user: { email: string; password: string },
+  orgId: string
+) {
+  const client = createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error: signInError } = await client.auth.signInWithPassword(user);
+  if (signInError) throw new Error(`Artifact RLS sign-in failed: ${signInError.message}`);
+  try {
+    const tables = ['work_artifacts', 'work_artifact_revisions', 'work_artifact_actions',
+      'work_artifact_measurement_lines', 'work_artifact_defect_details', 'work_artifact_change_details',
+      'work_artifact_revision_documents', 'work_artifact_revision_sources',
+      'job_instruction_item_evidence_fulfillments'] as const;
+    const counts = {} as Record<(typeof tables)[number], number>;
+    for (const table of tables) {
+      const { count, error } = await client.from(table).select('*', { count: 'exact', head: true }).eq('organization_id', orgId);
+      if (error) throw new Error(`Artifact RLS lookup failed for ${table}: ${error.message}`);
+      counts[table] = count ?? 0;
+    }
+    return counts;
+  } finally {
+    await client.auth.signOut();
+  }
 }
 
 export async function getCommitmentState(

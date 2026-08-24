@@ -58,7 +58,9 @@ import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
 import { WorkLifecycleCard, WorkLifecycleLoadError } from './work-lifecycle-card';
+import { WorkArtifactsSection } from './work-artifacts-section';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 
 import { updateProject, deleteProject } from '@/lib/projects/actions';
 import {
@@ -81,6 +83,7 @@ import {
   type ProjectRow,
   type Client,
   type Job,
+  type JobInstructionItemWithDetails,
   type JobRow,
   type DerivedProjectStatus,
   type ProjectStatus,
@@ -177,6 +180,10 @@ interface ProjectDetailContentProps {
   clients: Client[];
   members: OrgMemberOption[];
   isAdminOrManager: boolean;
+  canApproveWorkArtifacts: boolean;
+  currentUserId: string;
+  instructionItems: JobInstructionItemWithDetails[];
+  initialArtifacts: WorkArtifactSummary[];
   projectDocuments: OrganizationDocument[];
   jobDocumentGroups: ProjectJobDocumentGroup[];
   materialSummary: ProjectMaterialSummary;
@@ -193,6 +200,10 @@ export function ProjectDetailContent({
   clients,
   members,
   isAdminOrManager,
+  canApproveWorkArtifacts,
+  currentUserId,
+  instructionItems,
+  initialArtifacts,
   projectDocuments,
   jobDocumentGroups,
   materialSummary,
@@ -454,6 +465,19 @@ export function ProjectDetailContent({
 
     return { totalMinutes, perJob: perJob.sort((a, b) => b.minutes - a.minutes) };
   }, [liveJobs, projectTimeEntries]);
+  const artifactEvidenceRequirements = useMemo(
+    () => instructionItems.flatMap((item) => item.evidenceRequirements), [instructionItems]
+  );
+  const artifactInstructionOptions = useMemo(
+    () => instructionItems.map((item) => ({ id: item.id, label: item.content })), [instructionItems]
+  );
+  const artifactTimeEntryOptions = useMemo(
+    () => projectTimeEntries.flatMap((group) => group.entries
+      .filter((entry) => entry.entryType === 'clock_in')
+      .map((entry) => ({ id: entry.id,
+        label: `${group.jobTitle} · ${formatDateTime(entry.timestamp)}` }))),
+    [projectTimeEntries]
+  );
 
   function formatDurationMins(mins: number): string {
     const h = Math.floor(mins / 60);
@@ -843,7 +867,7 @@ export function ProjectDetailContent({
               <>
                 <JobInstructionItemsCard
                   projectId={liveProject.id}
-                  initialItems={[]}
+                  initialItems={instructionItems}
                   isAdminOrManager
                   currentUserActor={null}
                   refreshSignal={instructionRefreshSignal}
@@ -865,6 +889,19 @@ export function ProjectDetailContent({
                 />
               </>
             ) : null}
+
+            <WorkArtifactsSection
+              targetType="project"
+              targetId={liveProject.id}
+              initialArtifacts={initialArtifacts}
+              isManager={isAdminOrManager}
+              canApprove={canApproveWorkArtifacts}
+              currentUserId={currentUserId}
+              documents={projectDocuments}
+              evidenceRequirements={artifactEvidenceRequirements}
+              instructionOptions={artifactInstructionOptions}
+              timeEntryOptions={artifactTimeEntryOptions}
+            />
 
             <ContextualDocumentsSection
               title="Dokumente"

@@ -67,9 +67,11 @@ import { JobQualificationSection } from './job-qualification-section';
 import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-template-card';
 import { JobDispatchSection } from './job-dispatch-section';
 import { WorkLifecycleCard, WorkLifecycleLoadError } from './work-lifecycle-card';
+import { WorkArtifactsSection } from './work-artifacts-section';
 import { ProjectAssignmentDialog } from './project-assignment-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 
 import {
   updateJob,
@@ -112,6 +114,7 @@ import {
   CLIENT_TYPE_LABELS,
   normalizeJobPlannedTime,
 } from '@/lib/jobs/types';
+
 import type { OrgMemberOption } from './employee-multi-select';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type {
@@ -218,7 +221,9 @@ interface JobDetailContentProps {
   members: OrgMemberOption[];
   projects?: ProjectWithDetails[];
   isAdminOrManager: boolean;
+  canApproveWorkArtifacts: boolean;
   instructionItems: JobInstructionItemWithDetails[];
+  initialArtifacts: WorkArtifactSummary[];
   documents: OrganizationDocument[];
   materialLines: JobMaterialLine[];
   inventoryItems: InventoryPickerOption[];
@@ -236,7 +241,9 @@ export function JobDetailContent({
   members,
   projects = [],
   isAdminOrManager,
+  canApproveWorkArtifacts,
   instructionItems,
+  initialArtifacts,
   documents,
   materialLines,
   inventoryItems,
@@ -625,6 +632,17 @@ export function JobDetailContent({
       avatarPath: currentAssignment.avatarPath,
     };
   }, [currentUserId, liveJob.assignments, members]);
+  const artifactEvidenceRequirements = useMemo(
+    () => instructionItems.flatMap((item) => item.evidenceRequirements), [instructionItems]
+  );
+  const artifactInstructionOptions = useMemo(
+    () => instructionItems.map((item) => ({ id: item.id, label: item.content })), [instructionItems]
+  );
+  const artifactTimeEntryOptions = useMemo(
+    () => timeEntries.filter((entry) => entry.jobId === liveJob.id && entry.entryType === 'clock_in')
+      .map((entry) => ({ id: entry.id, label: formatDateTime(entry.timestamp) })),
+    [liveJob.id, timeEntries]
+  );
 
   const handleDelete = () => {
     setDeleteError(null);
@@ -1282,6 +1300,20 @@ export function JobDetailContent({
               initialItems={instructionItems}
               isAdminOrManager={isAdminOrManager}
               currentUserActor={currentUserActor}
+            />
+
+            <WorkArtifactsSection
+              targetType="job"
+              targetId={liveJob.id}
+              initialArtifacts={initialArtifacts}
+              isManager={isAdminOrManager}
+              canApprove={canApproveWorkArtifacts}
+              currentUserId={currentUserId}
+              documents={documents}
+              evidenceRequirements={artifactEvidenceRequirements}
+              instructionOptions={artifactInstructionOptions}
+              defaultSiteId={liveJob.site?.id}
+              timeEntryOptions={artifactTimeEntryOptions}
             />
 
             {isAdminOrManager && (

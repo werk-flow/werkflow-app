@@ -73,6 +73,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 | `tests/golden/p1-12.spec.ts` | The `GG-03` gate (`@GG-03`, P1-12 exit, sorts last, dual-mode): parked backlog context and the labeled legacy missing-context state, honest unscheduled dispatch with readiness (tools „nicht bewertet"), traceable unscheduled→scheduled target transition that preserves the independent parking blocker, revision-bound acknowledgement invalidated by a material move, challenge/keep-resolution/re-confirmation, customer commitment surviving an atomic batch reschedule as a visible mismatch and superseding re-commit, dispatch/rescheduling event history, cross-manager Realtime, employee/outsider RLS matrix, and zero actual-time creation |
 | `tests/golden/p1-13.spec.ts` | P1-13 slice proof (`@P1-13`, sorts last, dual-mode): immutable published job template, materialization into the existing checklist primitive, no stock/schedule side effects, future-only version changes, direct project planning, and employee/outsider template-management denial |
 | `tests/golden/p1-14.spec.ts` | P1-14 slice proof (`@P1-14`, sorts last, dual-mode): atomic time-start execution, employee-owned blocker resolution, parking/execution separation, reasoned project override/derivation and lifecycle RLS isolation |
+| `tests/golden/p1-15.spec.ts` | P1-15 slice proof (`@P1-15`, sorts last, dual-mode): assigned-field capture, manager review, typed Aufmaß, lifecycle evidence/customer/signature gates, organization isolation and teardown |
 
 ## Conventions
 

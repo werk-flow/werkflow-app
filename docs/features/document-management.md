@@ -34,9 +34,9 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Thumbnail generation | **Not implemented** (Phase 1 build-out) |
 | Dedicated offer/contract/invoice entities | **Not implemented** |
 
-Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual document capture and links remain owned by this document system, while structured artifact/approval/signature behavior remains P1-15.
+Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual file capture remains owned by this document system.
 
-P1-14 shows expected evidence and later handover/document gates as „nicht prüfbar“ unless an existing authoritative primitive can answer them. A lifecycle transition never creates, links, approves or versions a document and never treats a mere expectation as captured evidence. P1-15 still owns structured artifacts, approvals, signatures and revisions; P1-17 owns the customer-visible handover package.
+Since P1-15, an existing document can be deliberately related to one exact work-artifact revision as supporting evidence, closure proof, signature mark or rendered export. The structured record and document metadata remain separate sources of truth connected by that relation; ordinary uploads never become evidence automatically. Instruction evidence is fulfilled only by an explicit document or artifact-revision relation and can be removed only with an attributable reason. Deterministic HTML exports retain the revision, renderer and content hash. P1-17 still owns the customer-visible handover package.
 
 Implementation was delivered in four stages:
 

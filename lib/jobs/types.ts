@@ -180,6 +180,12 @@ export type JobInstructionItemWithDetails = JobInstructionItem & {
     id: string;
     description: string;
     documentCategory: string;
+    fulfillment?: {
+      id: string;
+      documentId: string | null;
+      artifactRevisionId: string | null;
+      version: number;
+    } | null;
   }>;
   predecessors: Array<{ id: string; content: string }>;
 };

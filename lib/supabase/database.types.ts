@@ -2611,6 +2611,80 @@ export type Database = {
           },
         ]
       }
+      job_instruction_item_evidence_fulfillments: {
+        Row: {
+          artifact_revision_id: string | null
+          created_at: string
+          created_by: string
+          document_id: string | null
+          evidence_requirement_id: string
+          id: string
+          note: string | null
+          organization_id: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          version: number
+        }
+        Insert: {
+          artifact_revision_id?: string | null
+          created_at?: string
+          created_by: string
+          document_id?: string | null
+          evidence_requirement_id: string
+          id: string
+          note?: string | null
+          organization_id: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          version?: number
+        }
+        Update: {
+          artifact_revision_id?: string | null
+          created_at?: string
+          created_by?: string
+          document_id?: string | null
+          evidence_requirement_id?: string
+          id?: string
+          note?: string | null
+          organization_id?: string
+          removal_reason?: string | null
+          removed_at?: string | null
+          removed_by?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_instruction_evidence_fulfillments_revision_fkey"
+            columns: ["artifact_revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_fulf_evidence_requirement_id_fkey"
+            columns: ["evidence_requirement_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_item_evidence_requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_fulfillments_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_fulfillments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_instruction_item_evidence_requirements: {
         Row: {
           created_at: string
@@ -5260,6 +5334,626 @@ export type Database = {
           },
         ]
       }
+      work_artifact_actions: {
+        Row: {
+          action_type: Database["public"]["Enums"]["work_artifact_action_type"]
+          artifact_id: string
+          capture_method: string | null
+          comment: string | null
+          created_at: string
+          created_by: string
+          id: string
+          organization_id: string
+          reason: string | null
+          responsibility_snapshot: Json | null
+          revision_id: string
+          signature_document_id: string | null
+          signer_company_context: string | null
+          signer_name: string | null
+          signer_relationship: string | null
+          signer_role: string | null
+          witness_context: string | null
+          wording_snapshot: string | null
+        }
+        Insert: {
+          action_type: Database["public"]["Enums"]["work_artifact_action_type"]
+          artifact_id: string
+          capture_method?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by: string
+          id: string
+          organization_id: string
+          reason?: string | null
+          responsibility_snapshot?: Json | null
+          revision_id: string
+          signature_document_id?: string | null
+          signer_company_context?: string | null
+          signer_name?: string | null
+          signer_relationship?: string | null
+          signer_role?: string | null
+          witness_context?: string | null
+          wording_snapshot?: string | null
+        }
+        Update: {
+          action_type?: Database["public"]["Enums"]["work_artifact_action_type"]
+          artifact_id?: string
+          capture_method?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          organization_id?: string
+          reason?: string | null
+          responsibility_snapshot?: Json | null
+          revision_id?: string
+          signature_document_id?: string | null
+          signer_company_context?: string | null
+          signer_name?: string | null
+          signer_relationship?: string | null
+          signer_role?: string | null
+          witness_context?: string | null
+          wording_snapshot?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_actions_artifact_fkey"
+            columns: ["artifact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_artifact_actions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_actions_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_artifact_actions_signature_document_id_fkey"
+            columns: ["signature_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_artifact_change_details: {
+        Row: {
+          actual_labor_minutes: number | null
+          actual_material_summary: string | null
+          authorization_state: Database["public"]["Enums"]["work_artifact_change_authorization_state"]
+          change_description: string
+          change_reason: string
+          expected_labor_minutes: number | null
+          expected_material_summary: string | null
+          organization_id: string
+          requested_by_context: string
+          revision_id: string
+          schedule_impact: string | null
+        }
+        Insert: {
+          actual_labor_minutes?: number | null
+          actual_material_summary?: string | null
+          authorization_state?: Database["public"]["Enums"]["work_artifact_change_authorization_state"]
+          change_description: string
+          change_reason: string
+          expected_labor_minutes?: number | null
+          expected_material_summary?: string | null
+          organization_id: string
+          requested_by_context: string
+          revision_id: string
+          schedule_impact?: string | null
+        }
+        Update: {
+          actual_labor_minutes?: number | null
+          actual_material_summary?: string | null
+          authorization_state?: Database["public"]["Enums"]["work_artifact_change_authorization_state"]
+          change_description?: string
+          change_reason?: string
+          expected_labor_minutes?: number | null
+          expected_material_summary?: string | null
+          organization_id?: string
+          requested_by_context?: string
+          revision_id?: string
+          schedule_impact?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_change_details_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_change_details_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      work_artifact_defect_details: {
+        Row: {
+          description: string
+          due_date: string | null
+          location: string
+          organization_id: string
+          proposed_resolution: string | null
+          resolution_summary: string | null
+          responsibility_context: string | null
+          responsible_employee_record_id: string | null
+          revision_id: string
+          severity: Database["public"]["Enums"]["work_artifact_defect_severity"]
+          state: Database["public"]["Enums"]["work_artifact_defect_state"]
+        }
+        Insert: {
+          description: string
+          due_date?: string | null
+          location: string
+          organization_id: string
+          proposed_resolution?: string | null
+          resolution_summary?: string | null
+          responsibility_context?: string | null
+          responsible_employee_record_id?: string | null
+          revision_id: string
+          severity: Database["public"]["Enums"]["work_artifact_defect_severity"]
+          state?: Database["public"]["Enums"]["work_artifact_defect_state"]
+        }
+        Update: {
+          description?: string
+          due_date?: string | null
+          location?: string
+          organization_id?: string
+          proposed_resolution?: string | null
+          resolution_summary?: string | null
+          responsibility_context?: string | null
+          responsible_employee_record_id?: string | null
+          revision_id?: string
+          severity?: Database["public"]["Enums"]["work_artifact_defect_severity"]
+          state?: Database["public"]["Enums"]["work_artifact_defect_state"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_defect_details_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_defect_details_responsible_employee_record_i_fkey"
+            columns: ["responsible_employee_record_id"]
+            isOneToOne: false
+            referencedRelation: "employee_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_defect_details_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      work_artifact_measurement_lines: {
+        Row: {
+          description: string
+          id: string
+          line_number: number
+          location: string | null
+          note: string | null
+          organization_id: string
+          quantity: number
+          revision_id: string
+          unit: Database["public"]["Enums"]["work_artifact_measurement_unit"]
+        }
+        Insert: {
+          description: string
+          id: string
+          line_number: number
+          location?: string | null
+          note?: string | null
+          organization_id: string
+          quantity: number
+          revision_id: string
+          unit: Database["public"]["Enums"]["work_artifact_measurement_unit"]
+        }
+        Update: {
+          description?: string
+          id?: string
+          line_number?: number
+          location?: string | null
+          note?: string | null
+          organization_id?: string
+          quantity?: number
+          revision_id?: string
+          unit?: Database["public"]["Enums"]["work_artifact_measurement_unit"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_measurement_lines_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_measurement_lines_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      work_artifact_revision_documents: {
+        Row: {
+          content_hash: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          document_id: string
+          id: string
+          organization_id: string
+          relation: Database["public"]["Enums"]["work_artifact_document_relation"]
+          renderer_version: string | null
+          revision_id: string
+        }
+        Insert: {
+          content_hash?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          document_id: string
+          id: string
+          organization_id: string
+          relation: Database["public"]["Enums"]["work_artifact_document_relation"]
+          renderer_version?: string | null
+          revision_id: string
+        }
+        Update: {
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          document_id?: string
+          id?: string
+          organization_id?: string
+          relation?: Database["public"]["Enums"]["work_artifact_document_relation"]
+          renderer_version?: string | null
+          revision_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_revision_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revision_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revision_documents_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      work_artifact_revision_sources: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          inventory_movement_id: string | null
+          organization_id: string
+          revision_id: string
+          time_entry_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id: string
+          inventory_movement_id?: string | null
+          organization_id: string
+          revision_id: string
+          time_entry_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          inventory_movement_id?: string | null
+          organization_id?: string
+          revision_id?: string
+          time_entry_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_revision_sources_inventory_movement_id_fkey"
+            columns: ["inventory_movement_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revision_sources_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revision_sources_revision_fkey"
+            columns: ["revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revision_sources_time_entry_id_fkey"
+            columns: ["time_entry_id"]
+            isOneToOne: false
+            referencedRelation: "time_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_artifact_revisions: {
+        Row: {
+          artifact_id: string
+          captured_at: string
+          correction_reason: string | null
+          corrects_revision_id: string | null
+          created_at: string
+          created_by: string
+          customer_statement: string | null
+          decisions: string | null
+          deliveries: string | null
+          id: string
+          impediments: string | null
+          instruction_item_id: string | null
+          kind: Database["public"]["Enums"]["work_artifact_kind"]
+          materials_summary: string | null
+          measurement_date: string | null
+          measurement_location: string | null
+          measurement_notes: string | null
+          next_visit_at: string | null
+          notable_events: string | null
+          organization_id: string
+          outstanding_work: string | null
+          people_present: string | null
+          performed_work: string | null
+          progress: string | null
+          requires_customer_response: boolean
+          requires_signature: boolean
+          revision_number: number
+          site_conditions: string | null
+          site_id: string | null
+          summary: string | null
+          title: string
+          visibility: Database["public"]["Enums"]["work_artifact_visibility"]
+          visit_ended_at: string | null
+          visit_started_at: string | null
+          weather_conditions: string | null
+          work_date: string | null
+        }
+        Insert: {
+          artifact_id: string
+          captured_at: string
+          correction_reason?: string | null
+          corrects_revision_id?: string | null
+          created_at?: string
+          created_by: string
+          customer_statement?: string | null
+          decisions?: string | null
+          deliveries?: string | null
+          id: string
+          impediments?: string | null
+          instruction_item_id?: string | null
+          kind: Database["public"]["Enums"]["work_artifact_kind"]
+          materials_summary?: string | null
+          measurement_date?: string | null
+          measurement_location?: string | null
+          measurement_notes?: string | null
+          next_visit_at?: string | null
+          notable_events?: string | null
+          organization_id: string
+          outstanding_work?: string | null
+          people_present?: string | null
+          performed_work?: string | null
+          progress?: string | null
+          requires_customer_response?: boolean
+          requires_signature?: boolean
+          revision_number: number
+          site_conditions?: string | null
+          site_id?: string | null
+          summary?: string | null
+          title: string
+          visibility: Database["public"]["Enums"]["work_artifact_visibility"]
+          visit_ended_at?: string | null
+          visit_started_at?: string | null
+          weather_conditions?: string | null
+          work_date?: string | null
+        }
+        Update: {
+          artifact_id?: string
+          captured_at?: string
+          correction_reason?: string | null
+          corrects_revision_id?: string | null
+          created_at?: string
+          created_by?: string
+          customer_statement?: string | null
+          decisions?: string | null
+          deliveries?: string | null
+          id?: string
+          impediments?: string | null
+          instruction_item_id?: string | null
+          kind?: Database["public"]["Enums"]["work_artifact_kind"]
+          materials_summary?: string | null
+          measurement_date?: string | null
+          measurement_location?: string | null
+          measurement_notes?: string | null
+          next_visit_at?: string | null
+          notable_events?: string | null
+          organization_id?: string
+          outstanding_work?: string | null
+          people_present?: string | null
+          performed_work?: string | null
+          progress?: string | null
+          requires_customer_response?: boolean
+          requires_signature?: boolean
+          revision_number?: number
+          site_conditions?: string | null
+          site_id?: string | null
+          summary?: string | null
+          title?: string
+          visibility?: Database["public"]["Enums"]["work_artifact_visibility"]
+          visit_ended_at?: string | null
+          visit_started_at?: string | null
+          weather_conditions?: string | null
+          work_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_revisions_artifact_fkey"
+            columns: ["artifact_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifacts"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revisions_corrects_fkey"
+            columns: ["corrects_revision_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revisions_instruction_item_id_fkey"
+            columns: ["instruction_item_id"]
+            isOneToOne: false
+            referencedRelation: "job_instruction_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revisions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifact_revisions_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "client_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_artifacts: {
+        Row: {
+          created_at: string
+          created_by: string
+          current_revision_id: string | null
+          id: string
+          job_id: string | null
+          kind: Database["public"]["Enums"]["work_artifact_kind"]
+          organization_id: string
+          project_id: string | null
+          status: Database["public"]["Enums"]["work_artifact_status"]
+          updated_at: string
+          version: number
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          current_revision_id?: string | null
+          id: string
+          job_id?: string | null
+          kind: Database["public"]["Enums"]["work_artifact_kind"]
+          organization_id: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["work_artifact_status"]
+          updated_at?: string
+          version?: number
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          current_revision_id?: string | null
+          id?: string
+          job_id?: string | null
+          kind?: Database["public"]["Enums"]["work_artifact_kind"]
+          organization_id?: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["work_artifact_status"]
+          updated_at?: string
+          version?: number
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_artifacts_current_revision_fkey"
+            columns: ["current_revision_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_artifacts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_artifacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       work_blocker_events: {
         Row: {
           after_state: Json | null
@@ -5428,6 +6122,7 @@ export type Database = {
       }
       work_dependencies: {
         Row: {
+          artifact_approval_action_id: string | null
           created_at: string
           created_by: string | null
           declared_kind:
@@ -5452,6 +6147,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          artifact_approval_action_id?: string | null
           created_at?: string
           created_by?: string | null
           declared_kind?:
@@ -5476,6 +6172,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          artifact_approval_action_id?: string | null
           created_at?: string
           created_by?: string | null
           declared_kind?:
@@ -5500,6 +6197,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "work_dependencies_artifact_approval_action_id_fkey"
+            columns: ["artifact_approval_action_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_actions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "work_dependencies_dependent_job_id_fkey"
             columns: ["dependent_job_id"]
@@ -6512,6 +7216,27 @@ export type Database = {
         }
         Returns: string
       }
+      create_work_artifact_revision: {
+        Args: {
+          p_actor_id: string
+          p_artifact_id: string
+          p_captured_at: string
+          p_content: Json
+          p_correction_reason: string
+          p_corrects_revision_id: string
+          p_expected_version: number
+          p_job_id: string
+          p_kind: Database["public"]["Enums"]["work_artifact_kind"]
+          p_organization_id: string
+          p_project_id: string
+          p_revision_id: string
+          p_submit: boolean
+          p_submit_action_id: string
+          p_title: string
+          p_visibility: Database["public"]["Enums"]["work_artifact_visibility"]
+        }
+        Returns: Json
+      }
       create_work_template: {
         Args: {
           p_actor_id: string
@@ -6557,6 +7282,52 @@ export type Database = {
           p_series_id: string
         }
         Returns: string[]
+      }
+      finalize_work_artifact_export: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_artifact_id: string
+          p_content_hash: string
+          p_document_id: string
+          p_expected_version: number
+          p_link_id: string
+          p_organization_id: string
+          p_renderer_version: string
+          p_revision_id: string
+        }
+        Returns: Json
+      }
+      fulfill_instruction_evidence: {
+        Args: {
+          p_actor_id: string
+          p_artifact_revision_id: string
+          p_document_id: string
+          p_evidence_requirement_id: string
+          p_fulfillment_id: string
+          p_note: string
+          p_organization_id: string
+        }
+        Returns: {
+          artifact_revision_id: string | null
+          created_at: string
+          created_by: string
+          document_id: string | null
+          evidence_requirement_id: string
+          id: string
+          note: string | null
+          organization_id: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "job_instruction_item_evidence_fulfillments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       generate_job_number: { Args: { p_org_id: string }; Returns: string }
       generate_personnel_number: { Args: { p_org_id: string }; Returns: string }
@@ -6651,6 +7422,77 @@ export type Database = {
         }
         Returns: string
       }
+      link_work_artifact_document: {
+        Args: {
+          p_actor_id: string
+          p_artifact_id: string
+          p_content_hash: string
+          p_description: string
+          p_document_id: string
+          p_expected_version: number
+          p_link_id: string
+          p_organization_id: string
+          p_relation: Database["public"]["Enums"]["work_artifact_document_relation"]
+          p_renderer_version: string
+          p_revision_id: string
+        }
+        Returns: Json
+      }
+      link_work_artifact_source: {
+        Args: {
+          p_actor_id: string
+          p_artifact_id: string
+          p_description: string
+          p_expected_version: number
+          p_inventory_movement_id: string
+          p_link_id: string
+          p_organization_id: string
+          p_revision_id: string
+          p_time_entry_id: string
+        }
+        Returns: Json
+      }
+      link_work_dependency_artifact_approval: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_dependency_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: {
+          artifact_approval_action_id: string | null
+          created_at: string
+          created_by: string | null
+          declared_kind:
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null
+          dependent_job_id: string | null
+          dependent_project_id: string | null
+          description: string | null
+          effect: Database["public"]["Enums"]["work_dependency_effect"]
+          id: string
+          manual_state:
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null
+          organization_id: string
+          predecessor_instruction_item_id: string | null
+          predecessor_job_id: string | null
+          predecessor_project_id: string | null
+          removed_at: string | null
+          removed_by: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "work_dependencies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       park_work_target: {
         Args: {
           p_actor_id: string
@@ -6719,6 +7561,23 @@ export type Database = {
           quantity_before: number
         }[]
       }
+      record_work_artifact_action: {
+        Args: {
+          p_action_id: string
+          p_action_type: Database["public"]["Enums"]["work_artifact_action_type"]
+          p_actor_id: string
+          p_artifact_id: string
+          p_comment: string
+          p_customer_context: Json
+          p_expected_version: number
+          p_organization_id: string
+          p_reason: string
+          p_responsibility_snapshot: Json
+          p_revision_id: string
+          p_signature_document_id: string
+        }
+        Returns: Json
+      }
       redeem_organization_invite: {
         Args: { p_invite_code: string }
         Returns: {
@@ -6734,6 +7593,35 @@ export type Database = {
           org_id: string
           org_name: string
         }[]
+      }
+      remove_instruction_evidence_fulfillment: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_fulfillment_id: string
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: {
+          artifact_revision_id: string | null
+          created_at: string
+          created_by: string
+          document_id: string | null
+          evidence_requirement_id: string
+          id: string
+          note: string | null
+          organization_id: string
+          removal_reason: string | null
+          removed_at: string | null
+          removed_by: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "job_instruction_item_evidence_fulfillments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       remove_work_dependency: {
         Args: {
@@ -6931,6 +7819,7 @@ export type Database = {
           p_state: Database["public"]["Enums"]["work_dependency_manual_state"]
         }
         Returns: {
+          artifact_approval_action_id: string | null
           created_at: string
           created_by: string | null
           declared_kind:
@@ -7191,6 +8080,7 @@ export type Database = {
           p_predecessor_project_id: string
         }
         Returns: {
+          artifact_approval_action_id: string | null
           created_at: string
           created_by: string | null
           declared_kind:
@@ -7220,6 +8110,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      void_work_artifact: {
+        Args: {
+          p_action_id: string
+          p_actor_id: string
+          p_artifact_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_reason: string
+        }
+        Returns: Json
       }
       withdraw_customer_commitment: {
         Args: {
@@ -7257,7 +8158,10 @@ export type Database = {
       job_priority: "niedrig" | "mittel" | "hoch"
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt"
       org_role: "admin" | "buero" | "employee"
-      organization_responsibility: "time_approval" | "leave_approval"
+      organization_responsibility:
+        | "time_approval"
+        | "leave_approval"
+        | "work_artifact_approval"
       planning_entry_kind: "job_visit" | "internal"
       planning_internal_type: "internal_work" | "meeting" | "training" | "other"
       planning_occurrence_status: "scheduled" | "skipped" | "cancelled"
@@ -7290,6 +8194,53 @@ export type Database = {
       subscription_status: "active" | "inactive" | "canceled" | "trialing"
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete"
       time_tracking_break_mode: "manual" | "automatic"
+      work_artifact_action_type:
+        | "review_requested"
+        | "review_withdrawn"
+        | "internal_approved"
+        | "internal_rejected"
+        | "correction_requested"
+        | "customer_acknowledged"
+        | "customer_refused"
+        | "customer_reserved"
+        | "signature_captured"
+        | "exported"
+        | "voided"
+      work_artifact_change_authorization_state:
+        | "not_requested"
+        | "requested"
+        | "authorized"
+        | "rejected"
+      work_artifact_defect_severity: "low" | "medium" | "high" | "critical"
+      work_artifact_defect_state: "open" | "in_progress" | "resolved"
+      work_artifact_document_relation:
+        | "supporting_evidence"
+        | "closure_proof"
+        | "signature_mark"
+        | "rendered_export"
+      work_artifact_kind:
+        | "site_diary"
+        | "work_report"
+        | "measurement"
+        | "defect"
+        | "change_work"
+      work_artifact_measurement_unit:
+        | "piece"
+        | "meter"
+        | "square_meter"
+        | "cubic_meter"
+        | "liter"
+        | "kilogram"
+        | "hour"
+        | "flat_rate"
+      work_artifact_status:
+        | "draft"
+        | "submitted"
+        | "approved"
+        | "rejected"
+        | "correction_requested"
+        | "voided"
+      work_artifact_visibility: "internal_only" | "customer_facing"
       work_blocker_kind: "blocker" | "parking"
       work_blocker_reason:
         | "customer"
@@ -7472,7 +8423,11 @@ export const Constants = {
       job_priority: ["niedrig", "mittel", "hoch"],
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
       org_role: ["admin", "buero", "employee"],
-      organization_responsibility: ["time_approval", "leave_approval"],
+      organization_responsibility: [
+        "time_approval",
+        "leave_approval",
+        "work_artifact_approval",
+      ],
       planning_entry_kind: ["job_visit", "internal"],
       planning_internal_type: ["internal_work", "meeting", "training", "other"],
       planning_occurrence_status: ["scheduled", "skipped", "cancelled"],
@@ -7508,6 +8463,59 @@ export const Constants = {
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_tracking_break_mode: ["manual", "automatic"],
+      work_artifact_action_type: [
+        "review_requested",
+        "review_withdrawn",
+        "internal_approved",
+        "internal_rejected",
+        "correction_requested",
+        "customer_acknowledged",
+        "customer_refused",
+        "customer_reserved",
+        "signature_captured",
+        "exported",
+        "voided",
+      ],
+      work_artifact_change_authorization_state: [
+        "not_requested",
+        "requested",
+        "authorized",
+        "rejected",
+      ],
+      work_artifact_defect_severity: ["low", "medium", "high", "critical"],
+      work_artifact_defect_state: ["open", "in_progress", "resolved"],
+      work_artifact_document_relation: [
+        "supporting_evidence",
+        "closure_proof",
+        "signature_mark",
+        "rendered_export",
+      ],
+      work_artifact_kind: [
+        "site_diary",
+        "work_report",
+        "measurement",
+        "defect",
+        "change_work",
+      ],
+      work_artifact_measurement_unit: [
+        "piece",
+        "meter",
+        "square_meter",
+        "cubic_meter",
+        "liter",
+        "kilogram",
+        "hour",
+        "flat_rate",
+      ],
+      work_artifact_status: [
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "correction_requested",
+        "voided",
+      ],
+      work_artifact_visibility: ["internal_only", "customer_facing"],
       work_blocker_kind: ["blocker", "parking"],
       work_blocker_reason: [
         "customer",

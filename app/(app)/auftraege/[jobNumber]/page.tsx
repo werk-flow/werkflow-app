@@ -14,6 +14,8 @@ import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
+import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -53,6 +55,12 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id })
       : null
   );
+  const artifactsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null
+  );
+  const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
+    organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
+  });
 
   const [
     result,
@@ -63,6 +71,8 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     materialLinesResult,
     inventoryOptionsResult,
     lifecycleResult,
+    artifactsResult,
+    approvalHolder,
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
@@ -76,6 +86,8 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     materialLinesResultPromise,
     inventoryOptionsResultPromise,
     lifecycleResultPromise,
+    artifactsResultPromise,
+    approvalHolderPromise,
   ]);
 
   if (!result.success) {
@@ -146,7 +158,9 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       members={members}
       projects={[]}
       isAdminOrManager={isAdminOrManager}
+      canApproveWorkArtifacts={Boolean(approvalHolder)}
       instructionItems={instructionItems}
+      initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : []}
       documents={documents}
       materialLines={materialLines}
       inventoryItems={inventoryItems}

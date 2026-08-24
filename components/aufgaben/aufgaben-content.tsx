@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Check,
   CheckCheck,
+  ClipboardCheck,
   Clock,
   Inbox,
   Loader2,
@@ -13,6 +14,7 @@ import {
   Palmtree,
   ParkingSquare,
   Send,
+  TriangleAlert,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -38,6 +40,7 @@ import {
   REQUEST_URGENCY_LABELS,
 } from '@/lib/requests/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 
 const MARK_READ_ERROR =
   'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
@@ -189,6 +192,7 @@ export function AufgabenContent() {
   useRealtimeEvent('planning_dispatch_recipients', scheduleRefetch);
   useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefetch);
   useRealtimeEvent('work_blockers', scheduleRefetch);
+  useRealtimeEvent('work_artifacts', scheduleRefetch);
   useRealtimeEvent('attention_read_states', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
   useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
@@ -277,6 +281,15 @@ export function AufgabenContent() {
   const parkingReviewTasks = overview.tasks.filter(
     (task) => task.sourceType === 'work_blocker_review'
   );
+  const artifactReviewTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'work_artifact_review'
+  );
+  const artifactCorrectionTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'work_artifact_correction'
+  );
+  const dueDefectTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'work_defect_due'
+  );
   const unreadCount = overview.notifications.filter(
     (notification) => notification.unread
   ).length;
@@ -298,7 +311,10 @@ export function AufgabenContent() {
           followUpTasks.length === 0 &&
           dispatchAcknowledgementTasks.length === 0 &&
           dispatchChallengeTasks.length === 0 &&
-          parkingReviewTasks.length === 0 && (
+          parkingReviewTasks.length === 0 &&
+          artifactReviewTasks.length === 0 &&
+          artifactCorrectionTasks.length === 0 &&
+          dueDefectTasks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Keine offenen Aufgaben.
             </p>
@@ -335,6 +351,30 @@ export function AufgabenContent() {
             testId="attention-parking-review-tasks"
           >
             {parkingReviewTasks.map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {(artifactReviewTasks.length > 0 || artifactCorrectionTasks.length > 0) && (
+          <TaskGroup
+            icon={<ClipboardCheck className="size-4" />}
+            title="Arbeitsnachweise"
+            testId="attention-work-artifact-tasks"
+          >
+            {[...artifactReviewTasks, ...artifactCorrectionTasks].map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {dueDefectTasks.length > 0 && (
+          <TaskGroup
+            icon={<TriangleAlert className="size-4" />}
+            title="Fällige Mängel"
+            testId="attention-work-defect-tasks"
+          >
+            {dueDefectTasks.map((task) => (
               <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
             ))}
           </TaskGroup>
@@ -669,6 +709,40 @@ function TaskRow({ task }: { task: AttentionTask }) {
         <p className="text-xs text-muted-foreground tabular-nums">
           {task.blockerKind === 'parking' ? 'Parkplatz' : 'Blocker'} · Wiedervorlage {formatDate(task.nextReviewDate)}
           {task.responsibleName ? ` · Zuständig: ${task.responsibleName}` : ''}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (
+    task.sourceType === 'work_artifact_review' ||
+    task.sourceType === 'work_artifact_correction'
+  ) {
+    const needsReview = task.sourceType === 'work_artifact_review';
+    return (
+      <TaskLink
+        href={`${task.targetHref}?arbeitsnachweis=${task.sourceId}#arbeitsnachweise`}
+        ariaLabel={`${needsReview ? 'Prüfung' : 'Korrektur'} für ${task.artifactTitle} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.artifactTitle}</p>
+        <p className="text-xs text-muted-foreground">
+          {WORK_ARTIFACT_KIND_LABELS[task.artifactKind]} · Version {task.revisionNumber} · {needsReview ? 'Prüfung ausstehend' : 'Korrektur erforderlich'}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'work_defect_due') {
+    return (
+      <TaskLink
+        href={`${task.targetHref}?arbeitsnachweis=${task.sourceId}#arbeitsnachweise`}
+        ariaLabel={`Fälligen Mangel ${task.artifactTitle} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.artifactTitle}</p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {task.targetLabel} · fällig {formatDate(task.dueDate)}
         </p>
       </TaskLink>
     );

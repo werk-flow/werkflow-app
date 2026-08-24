@@ -476,6 +476,26 @@ async function ensureProjectManagerAccess(
   return { success: true };
 }
 
+async function ensureProjectWorkAccess(
+  context: AuthorizedDocumentContext,
+  projectId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  if (context.isManagerOrAbove) {
+    return ensureProjectManagerAccess(context, projectId);
+  }
+  const { data: assignedJob } = await context.admin
+    .from('jobs')
+    .select('job_assignments!inner(id)')
+    .eq('organization_id', context.orgId)
+    .eq('project_id', projectId)
+    .eq('job_assignments.user_id', context.userId)
+    .limit(1)
+    .maybeSingle();
+  return assignedJob
+    ? { success: true }
+    : { success: false, error: 'not_authorized' };
+}
+
 async function ensureClientManagerAccess(
   context: AuthorizedDocumentContext,
   clientId: string
@@ -873,14 +893,23 @@ async function getAuthorizedDocument(
 
   const { data: links } = await context.admin
     .from('document_links')
-    .select('job_id')
+    .select('job_id, project_id')
     .eq('document_id', row.id)
-    .eq('organization_id', context.orgId)
-    .not('job_id', 'is', null);
+    .eq('organization_id', context.orgId);
 
-  const jobIds = ((links ?? []) as Pick<DocumentLinkRow, 'job_id'>[])
+  const linkedRows = (links ?? []) as Pick<DocumentLinkRow, 'job_id' | 'project_id'>[];
+  const jobIds = linkedRows
     .map((link) => link.job_id)
     .filter((jobId): jobId is string => Boolean(jobId));
+  const projectIds = linkedRows
+    .map((link) => link.project_id)
+    .filter((projectId): projectId is string => Boolean(projectId));
+
+  if (projectIds.length > 0) {
+    const { data: projectJobs } = await context.admin.from('jobs').select('id')
+      .eq('organization_id', context.orgId).in('project_id', projectIds);
+    jobIds.push(...(projectJobs ?? []).map((job) => job.id));
+  }
 
   if (jobIds.length === 0) {
     return { success: false, error: 'not_authorized' };
@@ -2195,7 +2224,7 @@ async function authorizeDocumentUploadTarget(
     const access = await ensureJobAccess(context, jobId);
     if (!access.success) return access;
   } else if (projectId) {
-    const access = await ensureProjectManagerAccess(context, projectId);
+    const access = await ensureProjectWorkAccess(context, projectId);
     if (!access.success) return access;
   } else if (clientId) {
     const access = await ensureClientManagerAccess(context, clientId);

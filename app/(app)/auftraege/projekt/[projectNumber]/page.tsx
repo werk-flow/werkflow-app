@@ -18,6 +18,9 @@ import { ProjectDetailContent } from '@/components/auftraege/project-detail-cont
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import ProjectDetailLoading from './loading';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
+import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import { getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
+import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -64,8 +67,17 @@ async function ProjectDetailData({
       ? getWorkLifecycleSnapshot({ targetType: 'project', targetId: result.details.project.id })
       : null
   );
+  const artifactsResultPromise = projectResultPromise.then((result) =>
+    result.success ? getWorkArtifacts({ targetType: 'project', targetId: result.details.project.id }) : null
+  );
+  const instructionItemsResultPromise = projectResultPromise.then((result) =>
+    result.success ? getProjectInstructionItems(result.details.project.id) : null
+  );
+  const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
+    organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
+  });
 
-  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult] = await Promise.all([
+  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder] = await Promise.all([
     projectResultPromise,
     admin
       .from('clients')
@@ -76,6 +88,9 @@ async function ProjectDetailData({
     materialResultPromise,
     inventoryOptionsResultPromise,
     lifecycleResultPromise,
+    artifactsResultPromise,
+    instructionItemsResultPromise,
+    approvalHolderPromise,
   ]);
 
   if (!result.success) {
@@ -139,6 +154,10 @@ async function ProjectDetailData({
         clients={clients}
         members={[]}
         isAdminOrManager={isAdminOrManager}
+        canApproveWorkArtifacts={Boolean(approvalHolder)}
+        currentUserId={user.id}
+        instructionItems={instructionItemsResult?.success ? instructionItemsResult.items : []}
+        initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : []}
         projectDocuments={projectDocuments}
         jobDocumentGroups={jobDocumentGroups}
         materialSummary={materialSummary}

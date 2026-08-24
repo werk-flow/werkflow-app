@@ -4,6 +4,7 @@ import type {
   ResponsibilityAssignmentSource,
   ResponsibilityConfigurationMode,
 } from './types';
+import { ORGANIZATION_RESPONSIBILITIES } from './types';
 
 export type ResponsibilityMember = {
   employeeRecordId: string;
@@ -278,12 +279,13 @@ export function canHolderApproveTarget(
 }
 
 export function getResponsibilitiesStrandedByEmployeeRemoval(
-  effective: Record<OrganizationResponsibility, EffectiveResponsibility>,
+  effective: Partial<Record<OrganizationResponsibility, EffectiveResponsibility>>,
   employeeRecordId: string
 ): OrganizationResponsibility[] {
-  return (['time_approval', 'leave_approval'] as const).filter(
+  return ORGANIZATION_RESPONSIBILITIES.filter(
     (responsibility) => {
       const resolved = effective[responsibility];
+      if (!resolved) return false;
       const baseHolders = resolved.holders.filter(
         (holder) => holder.source.kind !== 'delegation'
       );

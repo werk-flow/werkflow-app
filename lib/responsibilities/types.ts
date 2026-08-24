@@ -11,6 +11,7 @@ export type OrgRole = Database['public']['Enums']['org_role'];
 export const ORGANIZATION_RESPONSIBILITIES = [
   'time_approval',
   'leave_approval',
+  'work_artifact_approval',
 ] as const satisfies readonly OrganizationResponsibility[];
 
 export const RESPONSIBILITY_LABELS: Record<
@@ -19,6 +20,7 @@ export const RESPONSIBILITY_LABELS: Record<
 > = {
   time_approval: 'Zeitfreigaben',
   leave_approval: 'Urlaubsfreigaben',
+  work_artifact_approval: 'Arbeitsnachweise freigeben',
 };
 
 export const RESPONSIBILITY_DESCRIPTIONS: Record<
@@ -29,6 +31,8 @@ export const RESPONSIBILITY_DESCRIPTIONS: Record<
     'Erlaubt die Freigabe eingereichter Arbeitszeiten, ohne weitere Verwaltungsrechte zu vergeben.',
   leave_approval:
     'Legt fest, wer Urlaubsanträge freigeben darf, sobald der Urlaubsprozess verfügbar ist.',
+  work_artifact_approval:
+    'Legt fest, wer eingereichte Arbeitsnachweise nach dem Vier-Augen-Prinzip intern freigeben darf.',
 };
 
 export type ResponsibilityPerson = {
@@ -46,4 +50,3 @@ export function formatResponsibilityPersonName(
   const name = [person.firstName, person.lastName].filter(Boolean).join(' ');
   return name || person.email || 'Unbekannte Person';
 }
-

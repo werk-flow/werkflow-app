@@ -18,6 +18,7 @@ import type {
   OrganizationResponsibility,
   ResponsibilityPerson,
 } from './types';
+import { ORGANIZATION_RESPONSIBILITIES } from './types';
 
 export type ResponsibilityRuntimeState = {
   members: ResponsibilityMember[];
@@ -247,18 +248,12 @@ export async function getResponsibilitySettingsData(): Promise<
       delegation.substituteEmployeeRecordId,
     ]),
   ]);
-  const timeApproval = resolveEffectiveResponsibility({
-    responsibility: 'time_approval',
-    actionTime,
-    businessDate,
-    ...state,
-  });
-  const leaveApproval = resolveEffectiveResponsibility({
-    responsibility: 'leave_approval',
-    actionTime,
-    businessDate,
-    ...state,
-  });
+  const effectiveResponsibilities = Object.fromEntries(
+    ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
+      responsibility,
+      resolveEffectiveResponsibility({ responsibility, actionTime, businessDate, ...state }),
+    ])
+  ) as Record<OrganizationResponsibility, EffectiveResponsibility>;
 
   const scopeEffective = (
     effectiveResponsibility: EffectiveResponsibility
@@ -288,10 +283,12 @@ export async function getResponsibilitySettingsData(): Promise<
           ),
       configurations: isManager ? state.configurations : [],
       delegations: visibleDelegations,
-      effective: {
-        time_approval: scopeEffective(timeApproval),
-        leave_approval: scopeEffective(leaveApproval),
-      },
+      effective: Object.fromEntries(
+        ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
+          responsibility,
+          scopeEffective(effectiveResponsibilities[responsibility]),
+        ])
+      ) as Record<OrganizationResponsibility, EffectiveResponsibility>,
     },
   };
 }
@@ -373,20 +370,12 @@ export async function getResponsibilitiesStrandedByMemberRemoval(input: {
 
   const actionTime = getSkewGuardedActionTime(state.configurations);
   const businessDate = getBusinessTodayIso();
-  const effective = {
-    time_approval: resolveEffectiveResponsibility({
-      responsibility: 'time_approval',
-      actionTime,
-      businessDate,
-      ...state,
-    }),
-    leave_approval: resolveEffectiveResponsibility({
-      responsibility: 'leave_approval',
-      actionTime,
-      businessDate,
-      ...state,
-    }),
-  };
+  const effective = Object.fromEntries(
+    ORGANIZATION_RESPONSIBILITIES.map((responsibility) => [
+      responsibility,
+      resolveEffectiveResponsibility({ responsibility, actionTime, businessDate, ...state }),
+    ])
+  ) as Record<OrganizationResponsibility, EffectiveResponsibility>;
   return getResponsibilitiesStrandedByEmployeeRemoval(
     effective,
     employeeRecordId

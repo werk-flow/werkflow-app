@@ -19,7 +19,9 @@ import {
   type WorkBlockerReason,
   type WorkDeclaredDependencyKind,
   type WorkDependencyEffect,
+  type WorkDependency,
   type WorkExecutionState,
+  type WorkEntityOption,
   type WorkLifecycleSnapshot,
   type WorkTargetType,
 } from "./types";
@@ -148,6 +150,9 @@ function mapWorkError(error: { message: string } | null): string {
     "work_dependency_cycle",
     "work_dependency_self",
     "work_dependency_not_authorized",
+    "work_dependency_approval_not_found",
+    "work_dependency_approval_action_invalid",
+    "work_dependency_approval_target_mismatch",
     "instruction_predecessor_incomplete",
     "instruction_item_stale_version",
     "work_with_history_cannot_be_deleted",
@@ -806,6 +811,69 @@ export async function setDeclaredWorkDependencyState(input: {
     return { success: false as const, error: mapWorkError(error) };
   revalidateWork(auth.context.orgId);
   return { success: true as const, dependency: data };
+}
+
+export async function getApprovedArtifactActionsForTarget(input: {
+  targetType: WorkTargetType;
+  targetId: string;
+}): Promise<
+  | WorkActionFailure
+  | { success: true; options: WorkEntityOption[] }
+> {
+  const parsed = targetSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "invalid_input" };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: "not_authorized" };
+  const admin = createSupabaseAdminClient();
+  const targetColumn = parsed.data.targetType === "job" ? "job_id" : "project_id";
+  const { data: artifacts, error: artifactError } = await admin.from("work_artifacts")
+    .select("id, current_revision_id").eq("organization_id", auth.context.orgId)
+    .eq(targetColumn, parsed.data.targetId).eq("status", "approved")
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100);
+  if (artifactError) return { success: false, error: "work_action_failed" };
+  const revisionIds = (artifacts ?? []).flatMap((artifact) => artifact.current_revision_id ? [artifact.current_revision_id] : []);
+  if (!revisionIds.length) return { success: true, options: [] };
+  const [revisions, actions] = await Promise.all([
+    admin.from("work_artifact_revisions").select("id, title, revision_number").in("id", revisionIds),
+    admin.from("work_artifact_actions").select("id, revision_id, created_at").eq("organization_id", auth.context.orgId)
+      .eq("action_type", "internal_approved").in("revision_id", revisionIds)
+      .order("created_at", { ascending: false }).order("id", { ascending: false }),
+  ]);
+  if (revisions.error || actions.error) return { success: false, error: "work_action_failed" };
+  const revisionById = new Map((revisions.data ?? []).map((revision) => [revision.id, revision]));
+  const approvalDateFormatter = new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeZone: "Europe/Berlin",
+  });
+  return { success: true, options: (actions.data ?? []).flatMap((action) => {
+    const revision = revisionById.get(action.revision_id);
+    return revision ? [{ value: action.id, label: revision.title,
+      description: `Version ${revision.revision_number} · freigegeben ${approvalDateFormatter.format(new Date(action.created_at))}` }] : [];
+  }) };
+}
+
+export async function linkWorkDependencyArtifactApproval(input: {
+  dependencyId: string;
+  expectedVersion: number;
+  actionId: string;
+  reason: string;
+}): Promise<WorkActionFailure | { success: true; dependency: WorkDependency }> {
+  const parsed = z.object({ dependencyId: z.string().uuid(), expectedVersion: versionSchema,
+    actionId: z.string().uuid(), reason: reasonSchema }).safeParse(input);
+  if (!parsed.success) return { success: false, error: "invalid_input" };
+  const auth = await authenticateAndAuthorize();
+  if (!auth.success) return auth;
+  if (!auth.context.isManagerOrAbove) return { success: false, error: "not_authorized" };
+  const { data, error } = await createSupabaseAdminClient().rpc(
+    "link_work_dependency_artifact_approval",
+    { p_organization_id: auth.context.orgId, p_actor_id: auth.context.userId,
+      p_dependency_id: parsed.data.dependencyId, p_expected_version: parsed.data.expectedVersion,
+      p_action_id: parsed.data.actionId, p_reason: parsed.data.reason },
+  );
+  if (error || !data) return { success: false, error: mapWorkError(error) };
+  revalidateWork(auth.context.orgId);
+  return { success: true, dependency: data };
 }
 
 export async function removeWorkDependency(input: {

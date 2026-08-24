@@ -20,11 +20,18 @@ const snapshot = (
   gates: {
     incompleteRequiredInstructions: 0,
     reopenedInstructionPredecessors: 0,
+    incompleteInstructionEvidence: 0,
     openBlockers: 0,
     openStartDependencies: 0,
     openCompletionDependencies: 0,
     activeJobClocks: 0,
     incompleteProjectChildren: 0,
+    measurementArtifacts: 0,
+    openDefects: 0,
+    pendingFormalApprovals: 0,
+    requiredCustomerDecisions: 0,
+    requiredSignatures: 0,
+    artifactFacts: [],
     notAssessable: [],
   },
   blockers: [],
@@ -150,6 +157,21 @@ describe("work lifecycle", () => {
       Object.entries(databaseSnapshot).filter(([key]) => key !== "gates"),
     );
     expect(parseWorkLifecycleSnapshot(withoutGates).success).toBe(false);
+  });
+
+  test("validates populated artifact gate facts", () => {
+    const artifactFact = {
+      artifactId: "00000000-0000-4000-8000-000000000005", version: 2,
+      revisionId: "00000000-0000-4000-8000-000000000006", status: "approved",
+      kind: "defect", latestActionId: null, defectState: "resolved",
+    };
+    const populated = { ...databaseSnapshot, gates: {
+      ...databaseSnapshot.gates, artifactFacts: [artifactFact],
+    } };
+    expect(parseWorkLifecycleSnapshot(populated).success).toBe(true);
+    expect(parseWorkLifecycleSnapshot({ ...populated, gates: {
+      ...populated.gates, artifactFacts: [{ ...artifactFact, kind: "unknown" }],
+    } }).success).toBe(false);
   });
 
   test("rejects a transition fingerprint with the wrong size", () => {

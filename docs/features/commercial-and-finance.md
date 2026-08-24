@@ -30,7 +30,8 @@ WerkFlow does not currently have structured commercial or finance modules.
 - Job, project, customer, and employee pages can hold linked documents and images. The central document library can store business documents, but an uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
 - Inventory V1 stores basic purchase price, sale price, tax-rate infrastructure, billable defaults, material planning, and actual take/return quantities. No current workflow converts these fields into offers, invoices, procurement accounting, revenue, or profit.
 - Time entries can be associated with operational work, but there is no approved billable-time handoff, labor calculation, commercial rate card, or job post-calculation.
-- There is no structured product/service price catalog, calculation engine, offer, order confirmation, contract/change-order, measurement, invoice, credit, incoming-bill, payment, open-item, dunning, bank-matching, accounting-export, or native ledger workflow.
+- P1-15 provides versioned operational Aufmaß and Regie-/Änderungsnachweise with internal decisions and customer-response evidence. They carry no prices, commercial scope acceptance, billing release or invoice effect.
+- There is no structured product/service price catalog, calculation engine, offer, order confirmation, commercial contract/change order, billable measurement, invoice, credit, incoming-bill, payment, open-item, dunning, bank-matching, accounting-export, or native ledger workflow.
 - WerkFlow does not currently claim XRechnung, ZUGFeRD, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll, or tax-filing capability.
 
 This baseline matters: future-facing sections below must not be described as implemented behavior until the product and its acceptance evidence exist.

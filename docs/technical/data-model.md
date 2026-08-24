@@ -126,6 +126,15 @@ Concepts:
 - `get_work_lifecycle_snapshot` returns one bounded operational read model. Live readiness remains the application-level P1-12 `composeReadiness` projection; `app_private.build_work_gate_snapshot` captures only current authoritative start/completion facts and labels later-slice facts not assessable.
 - Operational blockers/dependencies use narrow manager-or-assigned-work RLS, replica identity full and Realtime publication. Execution, blocker, dependency and instruction-completion event ledgers are unpublished and immutable. Business writes are service-role-only, action-time authorized, organization-scoped, version-checked RPCs.
 
+### Structured Work Artifact Domain (P1-15)
+
+- `work_artifacts` is the stable organization-scoped identity for exactly one job or project and one bounded kind. `current_revision_id`, status and version serialize current state without overwriting business history.
+- `work_artifact_revisions` stores immutable numbered snapshots. Normalized measurement, defect and change-work detail tables enforce their typed fields; exact revision document/source relations preserve evidence provenance.
+- `work_artifact_actions` is the append-only review, customer outcome, signature, export and void ledger. Decisions and signatures reference the exact revision; internal approval snapshots the existing scoped-responsibility resolution and enforces Four-Eyes.
+- `job_instruction_evidence_fulfillments` is the current attributable link from one expected-evidence row to one document or artifact revision. Removal is versioned and reasoned; the expectation itself stays in the instruction domain.
+- P1-14 declared approval dependencies can reference one current `internal_approved` artifact action. Lifecycle gate snapshots derive required evidence, customer decisions, signatures, defects and formal approval facts without storing a second lifecycle state.
+- Mutable `work_artifacts` and active evidence fulfilments use organization-scoped RLS, replica identity full and Realtime publication. Revisions, detail rows, relations and actions are immutable unpublished ledgers. Business writes use action-time authorized, organization-scoped, version-checked and request-idempotent RPCs.
+
 Ownership rule: sites, contacts, manual follow-ups, and communication guidance belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity). Customer master and P1-10 relationship reads are manager-only under RLS; field workers receive only purpose-limited context through assigned work.
 
 Projects can have derived state based on child jobs unless manually overridden. Jobs can be scheduled, assigned, parked, completed, and connected to customers and time entries.

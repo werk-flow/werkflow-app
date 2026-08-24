@@ -210,6 +210,21 @@ async function hydrateInstructionItems(
   if (evidenceResult.error || dependencyResult.error) {
     console.error('Failed to hydrate instruction item template metadata:', evidenceResult.error ?? dependencyResult.error);
   }
+  const requirementIds = (evidenceResult.data ?? []).map((requirement) => requirement.id);
+  const fulfillmentResult = requirementIds.length
+    ? await admin.from('job_instruction_item_evidence_fulfillments')
+        .select('id, evidence_requirement_id, document_id, artifact_revision_id, version')
+        .eq('organization_id', rows[0].organization_id)
+        .in('evidence_requirement_id', requirementIds).is('removed_at', null)
+    : { data: [], error: null };
+  if (fulfillmentResult.error) {
+    console.error('Failed to hydrate instruction evidence fulfillments:', fulfillmentResult.error);
+  }
+  const fulfillmentByRequirementId = new Map((fulfillmentResult.data ?? []).map((fulfillment) => [
+    fulfillment.evidence_requirement_id,
+    { id: fulfillment.id, documentId: fulfillment.document_id,
+      artifactRevisionId: fulfillment.artifact_revision_id, version: fulfillment.version },
+  ]));
   const contentById = new Map(rows.map((row) => [row.id, row.content]));
 
   return rows.map((row) => ({
@@ -220,7 +235,7 @@ async function hydrateInstructionItems(
         ? profileMap.get(row.last_status_changed_by)
         : null
     ),
-    evidenceRequirements: (evidenceResult.data ?? []).filter((item) => item.instruction_item_id === row.id).map((item) => ({ id: item.id, description: item.description, documentCategory: item.document_category })),
+    evidenceRequirements: (evidenceResult.data ?? []).filter((item) => item.instruction_item_id === row.id).map((item) => ({ id: item.id, description: item.description, documentCategory: item.document_category, fulfillment: fulfillmentByRequirementId.get(item.id) ?? null })),
     predecessors: (dependencyResult.data ?? []).filter((item) => item.dependent_item_id === row.id).map((item) => ({ id: item.predecessor_item_id, content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag' })),
   }));
 }

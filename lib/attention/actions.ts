@@ -12,11 +12,13 @@
 import { cookies } from 'next/headers';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
 import { getBusinessTodayIso, toBusinessIsoDate } from '@/lib/personnel/types';
 import { formatProfileName } from '@/lib/members/profile-name';
 import type { OrgRole } from '@/lib/members/actions';
+import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import {
   getPendingChangeRequests,
   getPendingSessions,
@@ -840,6 +842,167 @@ async function deriveParkingReviewTasks(
   return { tasks, failed: false };
 }
 
+async function deriveWorkArtifactTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  const admin = createSupabaseAdminClient();
+  const isManager = context.role === 'admin' || context.role === 'buero';
+  const artifactReader = isManager ? admin : await createSupabaseServerClient();
+  const businessToday = getBusinessTodayIso();
+  const [reviewArtifactsResult, dueDefectsResult, holder] = await Promise.all([
+    artifactReader
+      .from('work_artifacts')
+      .select('id, job_id, project_id, status, kind, current_revision_id, version')
+      .eq('organization_id', context.orgId)
+      .in('status', ['submitted', 'correction_requested'])
+      .order('updated_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(301),
+    artifactReader
+      .from('work_artifact_defect_details')
+      .select('revision_id, due_date, severity, state, responsible_employee_record_id')
+      .eq('organization_id', context.orgId)
+      .neq('state', 'resolved')
+      .lte('due_date', businessToday)
+      .limit(301),
+    getEffectiveResponsibilityHolderForActor({
+      organizationId: context.orgId,
+      responsibility: 'work_artifact_approval',
+      actorUserId: context.userId,
+    }),
+  ]);
+  if (
+    reviewArtifactsResult.error || dueDefectsResult.error
+    || (reviewArtifactsResult.data?.length ?? 0) > 300
+    || (dueDefectsResult.data?.length ?? 0) > 300
+  ) {
+    console.error('Failed to load bounded work artifact attention contexts:', {
+      code: (reviewArtifactsResult.error ?? dueDefectsResult.error)?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const dueRevisionIds = (dueDefectsResult.data ?? []).map((defect) => defect.revision_id);
+  const dueArtifactsResult = dueRevisionIds.length
+    ? await artifactReader
+        .from('work_artifacts')
+        .select('id, job_id, project_id, status, kind, current_revision_id, version')
+        .eq('organization_id', context.orgId)
+        .neq('status', 'voided')
+        .in('current_revision_id', dueRevisionIds)
+        .limit(301)
+    : { data: [], error: null };
+  if (dueArtifactsResult.error || (dueArtifactsResult.data?.length ?? 0) > 300) {
+    console.error('Failed to load bounded due-defect artifact contexts:', {
+      code: dueArtifactsResult.error?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const artifacts = [...new Map([
+    ...(reviewArtifactsResult.data ?? []),
+    ...(dueArtifactsResult.data ?? []),
+  ].map((artifact) => [artifact.id, artifact])).values()];
+  if (!artifacts.length) return { tasks: [], failed: false };
+
+  const revisionIds = artifacts.flatMap((artifact) =>
+    artifact.current_revision_id ? [artifact.current_revision_id] : []
+  );
+  const revisionsResult = await admin
+    .from('work_artifact_revisions')
+    .select('id, title, kind, revision_number, created_by')
+    .eq('organization_id', context.orgId)
+    .in('id', revisionIds);
+  if (revisionsResult.error) {
+    console.error('Failed to load work artifact attention facts:', {
+      code: revisionsResult.error.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const jobIds = [...new Set(artifacts.flatMap((artifact) => artifact.job_id ? [artifact.job_id] : []))];
+  const projectIds = [...new Set(artifacts.flatMap((artifact) => artifact.project_id ? [artifact.project_id] : []))];
+  const [jobsResult, projectsResult, ownRecordResult, assignmentsResult] = await Promise.all([
+    jobIds.length
+      ? admin.from('jobs').select('id, project_id, title, description, job_number')
+          .eq('organization_id', context.orgId).in('id', jobIds)
+      : { data: [], error: null },
+    projectIds.length
+      ? admin.from('projects').select('id, name, description, project_number')
+          .eq('organization_id', context.orgId).in('id', projectIds)
+      : { data: [], error: null },
+    admin.from('employee_records').select('id').eq('organization_id', context.orgId)
+      .eq('user_id', context.userId).maybeSingle(),
+    admin.from('job_assignments').select('job_id, jobs!inner(project_id, organization_id)')
+      .eq('user_id', context.userId).eq('jobs.organization_id', context.orgId),
+  ]);
+  if (jobsResult.error || projectsResult.error || ownRecordResult.error || assignmentsResult.error) {
+    console.error('Failed to load work artifact attention targets:', {
+      code: (jobsResult.error ?? projectsResult.error ?? ownRecordResult.error ?? assignmentsResult.error)?.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const revisions = new Map((revisionsResult.data ?? []).map((revision) => [revision.id, revision]));
+  const defects = new Map((dueDefectsResult.data ?? []).map((defect) => [defect.revision_id, defect]));
+  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
+  const projects = new Map((projectsResult.data ?? []).map((project) => [project.id, project]));
+  const assignedJobIds = new Set((assignmentsResult.data ?? []).map((assignment) => assignment.job_id));
+  const assignedProjectIds = new Set((assignmentsResult.data ?? []).flatMap((assignment) => {
+    const joined = Array.isArray(assignment.jobs) ? assignment.jobs[0] : assignment.jobs;
+    return joined?.project_id ? [joined.project_id] : [];
+  }));
+  const tasks: AttentionTask[] = [];
+
+  for (const artifact of artifacts) {
+    if (!artifact.current_revision_id) continue;
+    const revision = revisions.get(artifact.current_revision_id);
+    if (!revision) continue;
+    const job = artifact.job_id ? jobs.get(artifact.job_id) : undefined;
+    const project = artifact.project_id ? projects.get(artifact.project_id) : undefined;
+    const targetHref = job?.job_number
+      ? `/auftraege/${encodeURIComponent(job.job_number)}`
+      : project?.project_number
+        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}`
+        : '/auftraege';
+    const targetLabel = job?.title.trim() || job?.description?.trim()
+      || project?.name.trim() || project?.description?.trim() || 'Arbeit';
+    const canAccessTarget = isManager
+      || (artifact.job_id ? assignedJobIds.has(artifact.job_id) : assignedProjectIds.has(artifact.project_id!));
+
+    if (artifact.status === 'submitted' && holder && canAccessTarget && revision.created_by !== context.userId) {
+      tasks.push({
+        sourceType: 'work_artifact_review', sourceId: artifact.id,
+        artifactTitle: revision.title, artifactKind: revision.kind,
+        revisionNumber: revision.revision_number, targetLabel, targetHref,
+        stateVersion: `review:${artifact.version}:${revision.id}`,
+      });
+    }
+    if (artifact.status === 'correction_requested' && revision.created_by === context.userId) {
+      tasks.push({
+        sourceType: 'work_artifact_correction', sourceId: artifact.id,
+        artifactTitle: revision.title, artifactKind: revision.kind,
+        revisionNumber: revision.revision_number, targetLabel, targetHref,
+        stateVersion: `correction:${artifact.version}:${revision.id}`,
+      });
+    }
+
+    const defect = defects.get(revision.id);
+    const canSeeDefect = canAccessTarget
+      || (ownRecordResult.data?.id != null
+        && defect?.responsible_employee_record_id === ownRecordResult.data.id);
+    if (defect?.due_date && canSeeDefect) {
+      tasks.push({
+        sourceType: 'work_defect_due', sourceId: artifact.id,
+        artifactTitle: revision.title, targetLabel, targetHref,
+        dueDate: defect.due_date, severity: defect.severity,
+        stateVersion: `defect:${artifact.version}:${revision.id}:${defect.state}:${defect.due_date}`,
+      });
+    }
+  }
+  return { tasks, failed: false };
+}
+
 // The reason belonging to a decision's current status: the cancellation
 // reason for cancelled requests, otherwise the decision comment.
 function resolveDecisionReason(
@@ -1211,6 +1374,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       dispatchAcknowledgements,
       dispatchChallenges,
       parkingReviews,
+      workArtifacts,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -1222,6 +1386,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       deriveDispatchAcknowledgementTasks(context),
       deriveDispatchChallengeTasks(context),
       deriveParkingReviewTasks(context),
+      deriveWorkArtifactTasks(context),
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
       deriveCertificationExpiryNotifications(context),
@@ -1237,6 +1402,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       dispatchAcknowledgements.failed ||
       dispatchChallenges.failed ||
       parkingReviews.failed ||
+      workArtifacts.failed ||
       notifications.failed ||
       sicknessNotifications.failed ||
       certificationNotifications.failed ||
@@ -1271,6 +1437,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
           ...dispatchAcknowledgements.tasks,
           ...dispatchChallenges.tasks,
           ...parkingReviews.tasks,
+          ...workArtifacts.tasks,
         ]),
         notifications: sortNotificationsNewestFirst(
           dedupeAttentionItems([
@@ -1310,6 +1477,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       dispatchAcknowledgements,
       dispatchChallenges,
       parkingReviews,
+      workArtifacts,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -1321,6 +1489,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
         deriveDispatchAcknowledgementTasks(context),
         deriveDispatchChallengeTasks(context),
         deriveParkingReviewTasks(context),
+        deriveWorkArtifactTasks(context),
         deriveOwnNotifications(context),
         deriveSicknessNotifications(context),
         deriveCertificationExpiryNotifications(context),
@@ -1332,6 +1501,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       dispatchAcknowledgements.failed ||
       dispatchChallenges.failed ||
       parkingReviews.failed ||
+      workArtifacts.failed ||
       notifications.failed ||
       sicknessNotifications.failed
       || certificationNotifications.failed
@@ -1346,6 +1516,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       ...dispatchAcknowledgements.tasks,
       ...dispatchChallenges.tasks,
       ...parkingReviews.tasks,
+      ...workArtifacts.tasks,
     ]);
     const allNotifications = dedupeAttentionItems([
       ...notifications.notifications,

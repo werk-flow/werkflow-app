@@ -86,6 +86,8 @@ The provider subscribes to tables that affect active operational views, includin
 - `planning_customer_commitments`
 - `work_blockers`
 - `work_dependencies`
+- `work_artifacts`
+- `job_instruction_evidence_fulfillments`
 
 Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
 
@@ -104,6 +106,8 @@ P1-12 publishes `planning_dispatches`, `planning_dispatch_recipients`, `planning
 P1-13 publishes the mutable template/version/content/application/origin tables with replica identity full and organization filters. Manager template lists and work-detail consumers refetch through the central debounced provider; open registry dialogs suspend route refresh and receive one queued catch-up after close. Append-only `work_template_events` stays unpublished. Template reads use the `work-templates-<orgId>` tag; mutations invalidate it plus the existing jobs, inventory and qualification tags affected by materialization. Application does not subscribe or invalidate calendar/dispatch/time domains because it creates no schedule, dispatch or actual-time fact.
 
 P1-14 publishes `work_blockers` and `work_dependencies` with replica identity full. Their append-only event tables and `work_execution_events`/instruction-completion events stay unpublished. Job/project detail cards subscribe through the central provider and preserve open dialogs by surfacing a catch-up control instead of replacing input. Blocker changes also refresh the one attention-count and `/aufgaben` pipeline. Mutations reuse the existing organization-scoped jobs/projects tags and revalidate `/auftraege`, `/kalender`, `/aufgaben`, and `/mitarbeiter`; no lifecycle-specific cache duplicates the work sources.
+
+P1-15 publishes only current `work_artifacts` and active `job_instruction_evidence_fulfillments`, both with replica identity full. Immutable revisions, type details, document/source relations and action ledgers stay unpublished. Job/project detail uses the central dialog-safe catch-up behavior; artifact review, correction and due-defect changes also refresh the unified attention pipeline. Mutations reuse jobs/projects, documents and responsibilities tags and routes rather than adding an artifact cache.
 
 ## Refresh Patterns
 

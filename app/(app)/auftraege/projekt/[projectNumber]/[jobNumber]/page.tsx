@@ -15,6 +15,8 @@ import { JobDetailContent } from '@/components/auftraege/job-detail-content';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
+import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -60,6 +62,12 @@ async function NestedJobDetailData({
       ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id })
       : null
   );
+  const artifactsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null
+  );
+  const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
+    organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
+  });
 
   const [
     projectResult,
@@ -71,6 +79,8 @@ async function NestedJobDetailData({
     materialLinesResult,
     inventoryOptionsResult,
     lifecycleResult,
+    artifactsResult,
+    approvalHolder,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -85,6 +95,8 @@ async function NestedJobDetailData({
     materialLinesResultPromise,
     inventoryOptionsResultPromise,
     lifecycleResultPromise,
+    artifactsResultPromise,
+    approvalHolderPromise,
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -153,7 +165,9 @@ async function NestedJobDetailData({
       members={members}
       projects={[]}
       isAdminOrManager={isAdminOrManager}
+      canApproveWorkArtifacts={Boolean(approvalHolder)}
       instructionItems={instructionItems}
+      initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : []}
       documents={documents}
       materialLines={materialLines}
       inventoryItems={inventoryItems}

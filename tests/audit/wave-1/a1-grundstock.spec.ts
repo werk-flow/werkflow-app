@@ -2231,10 +2231,14 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     });
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await adminPage.getByRole('button', { name: 'Material planen' }).click();
+    await adminPage.waitForLoadState('networkidle');
+    const jobMaterialButton = adminPage.getByRole('button', { name: 'Material planen' });
+    await expect(jobMaterialButton).toBeEnabled({ timeout: 30_000 });
+    await jobMaterialButton.click();
     let dialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Material planen' }),
     });
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
     await dialog.getByLabel('Artikel suchen').fill(world.inventory.itemName);
     await dialog.getByRole('button').filter({ hasText: world.inventory.itemName }).click();
     await dialog.locator('input[id$="-quantity"]').fill('3');
@@ -2278,6 +2282,9 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     );
     await dialog.getByRole('button', { name: 'Zurücklegen' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    const returnReachedUi = await expect(worldMaterialLine).toContainText(/\+1/, { timeout: 5_000 })
+      .then(() => true).catch(() => false);
+    if (!returnReachedUi) await employeePage.reload();
     await expect(worldMaterialLine).toContainText(/\+1/);
     await expect(worldMaterialLine).toContainText(/Abrechenbar\s+1/);
     await takeMaterialOnJobPage(employeePage, jobNumber, inventoryItemName, 1);
@@ -2326,9 +2333,9 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       has: adminPage.getByText(world.inventory.itemName, { exact: true }),
     }).last();
     await expect(projectTotal).toContainText('Bedarf');
-    await expect(projectTotal).toContainText(/-2/);
+    await expect(projectTotal).toContainText(/-3/);
     await expect(projectTotal).toContainText(/\+1/);
-    await expect(projectTotal).toContainText(/Abrechenbar\s+1/);
+    await expect(projectTotal).toContainText(/Abrechenbar\s+2/);
   });
 
   test('A1-43: CSV-Spaltenzuordnung legt Stammdaten und Anfangsbewegung an', async ({

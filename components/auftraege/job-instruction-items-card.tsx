@@ -631,7 +631,7 @@ export function JobInstructionItemsCard({
                         <div className="mt-2 space-y-1 rounded-md bg-muted/35 px-2.5 py-2 text-xs text-muted-foreground">
                           <p>{[item.groupLabel, item.itemKind === 'task' ? 'Aufgabe' : 'Checkliste', item.requirementState === 'optional' ? 'Optional' : 'Erforderlich'].filter(Boolean).join(' · ')}</p>
                           {item.predecessors.length > 0 && <p>Voraussetzung: {item.predecessors.map((entry) => entry.content).join(', ')}</p>}
-                          {item.evidenceRequirements.map((evidence) => <p key={evidence.id}>Nachweis erwartet: {evidence.description}</p>)}
+                          {item.evidenceRequirements.map((evidence) => <p key={evidence.id}>{evidence.fulfillment ? 'Nachweis erfüllt' : 'Nachweis erwartet'}: {evidence.description}</p>)}
                         </div>
                       )}
                     </div>

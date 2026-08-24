@@ -328,3 +328,84 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-14-F61` — Änderungen an Arbeitsstand, Blockern, Voraussetzungen, Planung und Checkliste aktualisieren betroffene Detail-, Listen-, Kalender- und Aufgabenansichten über die bestehenden Cache-Tags und zentralen Realtime-Abonnements.
 - `P1-14-F62` — Ein Lebenszykluswechsel reserviert, entnimmt, verbraucht oder retourniert kein Material und erstellt oder verändert keinen Termin, Versand, Zeiteintrag, kein Dokument und keine Unterschrift.
 - `P1-14-F63` — P1-14 sendet keine Nachricht, erzeugt kein Kundenpaket und baut weder eine zweite Checkliste, Planung, Inbox noch einen konfigurierbaren Workflow; spätere Slices bleiben die Eigentümer dieser Funktionen.
+
+### `P1-15` — Strukturierte Arbeitsnachweise, Freigaben und Unterschriften (2026-08-24)
+
+- `P1-15-F01` — Berechtigte Nutzer finden Arbeitsnachweise direkt am Auftrag oder Projekt zwischen Arbeitsanweisungen und allgemeinen Dokumenten; es entsteht keine zusätzliche Hauptnavigation.
+- `P1-15-F02` — Berechtigte Nutzer wählen beim Erstellen genau eine der fünf Arten Bautagebuch, Arbeitsbericht, Aufmaß, Mangel oder Regie-/Änderungsnachweis.
+- `P1-15-F03` — Jeder Arbeitsnachweis behält eine stabile Identität, während jede ausdrückliche Speicherung eine neue, unveränderliche Version mit eigener Nummer, Zeit und Urheber erzeugt.
+- `P1-15-F04` — Ein Arbeitsnachweis gehört genau zu einem Auftrag oder genau zu einem Projekt derselben Organisation; leere, doppelte oder organisationsfremde Ziele werden serverseitig abgewiesen.
+- `P1-15-F05` — Bei einem Auftrag übernimmt ein neuer Arbeitsnachweis den vorhandenen Einsatzort als nachvollziehbaren Kontext, ohne einen zweiten Einsatzort anzulegen.
+- `P1-15-F06` — Nutzer können eine Version bewusst einem vorhandenen Arbeits- oder Checklistenpunkt zuordnen; die Zuordnung ersetzt weder Aufgabe noch Nachweiserwartung.
+- `P1-15-F07` — Nutzer wählen „Nur intern“ oder „Für Kundendokumentation“; Kundenentscheidung und Unterschrift lassen sich nur für eine kundenbezogene Version verlangen.
+- `P1-15-F08` — Ein leerer Bereich erklärt ruhig, dass noch keine Arbeitsnachweise vorhanden sind, und bietet eine klare Aktion „Neu“.
+- `P1-15-F09` — Die Liste zeigt Titel, Art, aktuelle Versionsnummer und aktuellen Status; ungültige Nachweise bleiben als Historie erkennbar statt zu verschwinden.
+- `P1-15-F10` — Die Detailansicht zeigt die aktuelle strukturierte Version, Dokument- und Quellenbezüge, Entscheidungen sowie den vollständigen Versions- und Aktionsverlauf.
+- `P1-15-F11` — Ein zugewiesener Handwerker kann Arbeitsnachweise am eigenen Auftrag und an einem Projekt mit einem ihm zugewiesenen Unterauftrag erstellen und überarbeiten.
+- `P1-15-F12` — Büro/Admin können Arbeitsnachweise an jedem Auftrag oder Projekt der aktiven Organisation erstellen, überarbeiten und verwalten.
+- `P1-15-F13` — Nicht zugewiesene Handwerker und Mitglieder einer fremden Organisation sehen weder Arbeitsnachweis noch Version, Detaildaten, Entscheidung, Dokumentbezug oder Nachweiserfüllung.
+- `P1-15-F14` — Ein Bautagebuch erfasst Arbeitstag, Fortschritt, anwesende Personen, Wetter, Bedingungen vor Ort, Lieferungen, Behinderungen, Entscheidungen und besondere Ereignisse.
+- `P1-15-F15` — Ein unvollständiges Bautagebuch bleibt als Entwurf speicherbar; zum Einreichen sind mindestens Arbeitstag und Fortschritt erforderlich.
+- `P1-15-F16` — Ein Arbeitsbericht erfasst Besuchsbeginn und -ende, ausgeführte und offene Arbeiten, Materialhinweise, Kundenaussage und nächsten Besuch.
+- `P1-15-F17` — Ein Arbeitsbericht kann konkrete, zum Ziel gehörende Zeiteinträge als unveränderliche Quellenbezüge aufnehmen; die Zeiteinträge selbst bleiben im Zeitdomänenmodell.
+- `P1-15-F18` — Material- und Zeitangaben im Bericht sind Nachweiskontext und werden weder zu Rechnungspositionen noch zu neuen Zeit- oder Bestandsbewegungen.
+- `P1-15-F19` — Ein Aufmaß erfasst Datum, Ort/Bereich, Hinweise und beliebig viele Positionen mit Bezeichnung, Ort, positiver Menge und fester Einheit.
+- `P1-15-F20` — Aufmaßmengen akzeptieren deutsche Dezimaleingabe, bleiben positiv und verwenden nur Stück, Meter, Quadratmeter, Kubikmeter, Liter, Kilogramm, Stunde oder Pauschale.
+- `P1-15-F21` — Ein Aufmaß lässt sich erst mit Datum, Ort und mindestens einer gültigen Position zur Prüfung einreichen; der aktuelle Stand bleibt für Abschlussprüfungen auswertbar.
+- `P1-15-F22` — Ein Mangel erfasst Problem, Schweregrad, Ort, Zuständigkeit, Fälligkeit, Status, vorgeschlagene Lösung und Behebung.
+- `P1-15-F23` — Ein Mangel wechselt über eine begründete neue Version zwischen offen, in Bearbeitung und behoben; frühere Zustände und Entscheidungen bleiben erhalten.
+- `P1-15-F24` — Ein als behoben eingereichter Mangel verlangt einen bewusst verknüpften Abschlussnachweis derselben Version; eine bloße Behauptung genügt nicht.
+- `P1-15-F25` — Ein heute fälliger oder überfälliger offener Mangel erscheint einmal in der gemeinsamen Aufgabenansicht für Büro/Admin, die zugewiesene oder die ausdrücklich verantwortliche Person.
+- `P1-15-F26` — Ein Regie-/Änderungsnachweis erfasst Änderung, Grund, anfordernden Kontext, erwartete und tatsächliche Arbeitsminuten und Materialien, Autorisierungsstand und Terminauswirkung.
+- `P1-15-F27` — „Angefragt“, „autorisiert“ oder „abgelehnt“ im Regienachweis dokumentiert nur den operativen Kontext und erzeugt keinen Vertrag, Preis, Nachtrag oder abrechenbare Position.
+- `P1-15-F28` — Eine kundenbezogene Version kann Kundenaussage, erforderliche Kundenentscheidung und erforderliche Unterschrift getrennt kennzeichnen.
+- `P1-15-F29` — „Als Entwurf speichern“ legt die aktuelle Eingabe ausdrücklich als Version ab; nicht gespeicherte Eingabe bleibt nur im geöffneten Formular.
+- `P1-15-F30` — „Zur Prüfung einreichen“ validiert die gewählte Nachweisart und erzeugt zusammen mit der Version genau eine unveränderliche Prüfanforderung.
+- `P1-15-F31` — Fehlende Pflichtangaben, ungültige Zeitfolgen, Mengen, Zielbezüge oder Kundenoptionen verhindern die gesamte Speicherung und lassen die Formulareingabe zur Korrektur stehen.
+- `P1-15-F32` — Bereits gespeicherte Versionen und ihre typisierten Detailzeilen lassen sich weder überschreiben noch löschen; jede Änderung läuft über „Neue Version“.
+- `P1-15-F33` — Nach Einreichung, Entscheidung, Kundenreaktion, Unterschrift oder sonstigem Versionsbezug verlangt eine neue Version einen konkreten Korrekturgrund.
+- `P1-15-F34` — Eine neue Version erbt weder interne Freigabe noch Kundenentscheidung oder Unterschrift stillschweigend; ältere Evidenz bleibt an ihrer ursprünglichen Version sichtbar.
+- `P1-15-F35` — Der Verlauf zeigt alle Versionen und Aktionen mit Zeitpunkt, Akteur, Korrekturgrund und Bezug zur exakten Version.
+- `P1-15-F36` — Büro/Admin setzen einen Arbeitsnachweis nur mit Grund ungültig; Inhalt und Verlauf bleiben erhalten und die aktuelle Projektion kennzeichnet ihn als ungültig.
+- `P1-15-F37` — Ein Auftrag oder Projekt mit Arbeitsnachweisverlauf lässt sich nicht hart löschen; normale bestehende Arbeit ohne solchen Verlauf behält ihren bisherigen Löschpfad.
+- `P1-15-F38` — Zwei gleichzeitige Änderungen können nicht dieselbe Artefaktversion überschreiben; die veraltete Aktion scheitert ohne Teilstand und die lokale Eingabe bleibt erhalten.
+- `P1-15-F39` — Wiederholte Übermittlung derselben Versions-, Aktions-, Dokument- oder Quellen-ID liefert das bereits gespeicherte Ergebnis; eine abweichende Wiederverwendung wird als Konflikt abgewiesen.
+- `P1-15-F40` — Realtime aktualisiert eine ruhende Arbeitsnachweisliste; ein offener Dialog verliert keine Eingabe und holt nach dem Schließen den aktuellen Stand nach.
+- `P1-15-F41` — Interne Entscheidungen verwenden die bestehende Zuständigkeit „Arbeitsnachweise freigeben“ mit Rollenstandard, ausgewählten Personen und zeitlich wirksamer Vertretung.
+- `P1-15-F42` — Der Urheber einer Version kann diese nicht selbst intern freigeben, ablehnen oder zur Korrektur zurückgeben; die Datenbank erzwingt das Vier-Augen-Prinzip.
+- `P1-15-F43` — Eine zuständige zweite Person gibt eine eingereichte exakte Version intern frei; Status, Zuständigkeits-Snapshot, Akteur und Zeitpunkt bleiben unveränderlich.
+- `P1-15-F44` — Eine zuständige zweite Person lehnt eine eingereichte Version nur mit Grund ab; die Ablehnung ersetzt keine frühere Version oder Evidenz.
+- `P1-15-F45` — Eine zuständige zweite Person fordert mit Grund eine Korrektur an; der aktuelle Versionsurheber erhält dafür denselben stabilen Aufgabenbezug.
+- `P1-15-F46` — Der Einreichende oder Büro/Admin zieht eine noch offene Prüfung zurück; die Version wird wieder Entwurf, während Einreichung und Rückzug im Verlauf bleiben.
+- `P1-15-F47` — Eine offene Prüfung erscheint für aktuell zuständige, zugleich zielberechtigte Personen einmal in der gemeinsamen Aufgabenansicht und verschwindet nach Entscheidung oder Rückzug.
+- `P1-15-F48` — Eine angeforderte Korrektur erscheint einmal für den Urheber der aktuellen Version und führt direkt zum Arbeitsnachweis; eine neue Version löst denselben offenen Bezug auf.
+- `P1-15-F49` — Beginnt oder endet eine Vertretung, wird die Freigabezuständigkeit aus dem aktuellen Berliner Geschäftszeitpunkt neu abgeleitet, ohne alte Entscheidungen umzuschreiben.
+- `P1-15-F50` — Interne Freigabe und Kundenbestätigung sind getrennte Aktionen; keine davon wird aus der anderen abgeleitet.
+- `P1-15-F51` — Büro/Admin dokumentieren eine Kundenbestätigung mit Name, Rolle/Funktion, Bezug zum Kunden, Erfassungsweg, Wortlaut und Zeitpunkt für genau eine Version.
+- `P1-15-F52` — Büro/Admin dokumentieren eine Weigerung mit demselben Kontext und einem verpflichtenden Grund, ohne eine Bestätigung vorzutäuschen.
+- `P1-15-F53` — Büro/Admin dokumentieren einen Vorbehalt mit demselben Kontext und einem verpflichtenden Grund; Vorbehalt und uneingeschränkte Bestätigung bleiben unterscheidbar.
+- `P1-15-F54` — Hat die bestätigende Person kein WerkFlow-Konto, bleibt ihre eingegebene Identität und Beziehung als Kontext erhalten, ohne ein Benutzerkonto zu erfinden.
+- `P1-15-F55` — Kundenentscheidung, Weigerung, Vorbehalt und Unterschrift verweisen immer auf die exakte aktuelle Version und werden bei einer Folgeversion nicht umgehängt.
+- `P1-15-F56` — Büro/Admin zeichnen eine Unterschrift auf einem zugänglichen Zeigegerät, setzen sie zurück oder speichern sie; die Bilddatei läuft direkt über den vorhandenen signierten Browser-zu-R2-Upload und wird der Version zugeordnet.
+- `P1-15-F57` — Vor der Kundenreaktion zeigt die Oberfläche den gespeicherten Wortlaut und den Hinweis, dass WerkFlow damit keine besondere Rechtswirksamkeit oder qualifizierte elektronische Signatur bestätigt.
+- `P1-15-F58` — Eine Weigerung oder ein Vorbehalt verhindert nicht, dass das Team den tatsächlichen Vorgang dokumentiert; die offene Anforderung gilt als beantwortet statt als erfundene Zustimmung.
+- `P1-15-F59` — Die Oberfläche bezeichnet keine erfasste Unterschrift als für einen bestimmten deutschen Rechtszweck ausreichend und bietet keinen externen Signaturanbieter an.
+- `P1-15-F60` — Berechtigte Nutzer verknüpfen ein vorhandenes, zum selben Auftrag oder Projekt gehörendes Dokument mit genau einer Version; fremde oder gelöschte Dokumente werden abgewiesen.
+- `P1-15-F61` — Beim Dokumentbezug wählen Nutzer bewusst „Nachweis“ oder „Abschlussnachweis“; eine Unterschrift und ein gerenderter Export verwenden eigene feste Beziehungen.
+- `P1-15-F62` — Ein gewöhnliches Foto oder Dokument bleibt gewöhnlich, bis ein Nutzer es ausdrücklich mit einer Version oder Nachweiserwartung verknüpft; P1-15 erzwingt keine allgemeine Dokumentfreigabe.
+- `P1-15-F63` — Ein verknüpfter Zeiteintrag muss zum selben Auftrag beziehungsweise Projekt gehören und bleibt eine unveränderliche Quelle der Version; er verändert die Zeiterfassung nicht.
+- `P1-15-F64` — Nutzer erfüllen eine vorhandene P1-13-Nachweiserwartung bewusst mit genau einem Dokument oder einer exakten Arbeitsnachweisversion; die Checkliste zeigt anschließend „Nachweis erfüllt“.
+- `P1-15-F65` — Eine bereits aktiv erfüllte Nachweiserwartung kann nicht doppelt erfüllt werden; Entfernen oder Ersetzen verlangt einen versionierten, begründeten Vorgang.
+- `P1-15-F66` — Eine erforderliche, noch unerfüllte Nachweiserwartung verhindert „Ausführung abgeschlossen“ atomar; ein aktueller Nachweis macht nur diese konkrete Lücke prüfbar.
+- `P1-15-F67` — Büro/Admin erzeugen aus der aktuellen Version einen deterministischen, eigenständigen UTF-8-HTML-Export mit A4-Drucklayout.
+- `P1-15-F68` — Der Export wird als vorhandene Dokumentkategorie „Bericht“ in R2 gespeichert, zum Auftrag oder Projekt und als gerenderte Ausgabe zur exakten Version verknüpft.
+- `P1-15-F69` — Renderer-Version und Inhalts-Hash machen denselben Export wiederholbar und idempotent; Teilfehler entfernen nicht registrierte Objekte und zeigen einen sichtbaren Fehler.
+- `P1-15-F70` — Der Export nennt Artefakt, Version, Status, Renderer und Inhalts-Hash und enthält die aktuelle strukturierte Fassung samt Aufmaß und aufgezeichneten Entscheidungen.
+- `P1-15-F71` — Der P1-14-Prüfstand zählt aktuelle Aufmaße und lässt „Messungen“ nur dann als nicht bewertbar stehen, wenn kein belastbares Aufmaß vorhanden ist.
+- `P1-15-F72` — Der P1-14-Prüfstand zählt offene aktuelle Mängel; ihre Bearbeitung bleibt Warnung und verwendet weiterhin das eine Mangelartefakt statt eines zweiten Blockermodells.
+- `P1-15-F73` — Der P1-14-Prüfstand zählt ausstehende formale Freigaben der aktuellen Version und erneuert seinen Fingerabdruck nach Einreichung, Entscheidung, Korrektur oder neuer Version.
+- `P1-15-F74` — Eine ausdrücklich verlangte Kundenentscheidung oder Unterschrift verhindert die normale Übergabe, bis für die aktuelle Version ein tatsächlicher Ausgang erfasst ist; die bestehende begründete Manager-Ausnahme bleibt möglich.
+- `P1-15-F75` — Büro/Admin erfüllen eine deklarierte P1-14-Freigabevoraussetzung nur durch die bewusste Verknüpfung mit einer aktuellen internen Freigabe desselben Ziels; Freitext oder eine alte Version genügen nicht.
+- `P1-15-F76` — Änderungen an Arbeitsnachweisen und aktiven Nachweiserfüllungen aktualisieren Detail-, Aufgaben-, Dokument- und Lebenszyklusansichten über bestehende Cache-Tags und zentrale Realtime-Abonnements; unveränderliche Ledger bleiben unveröffentlicht.
+- `P1-15-F77` — Erstellen, Ändern, Entscheiden, Signieren, Verknüpfen und Exportieren eines Arbeitsnachweises verändert weder Planung, Versand, Ist-Zeit, Bestand, Preis, Rechnung, Kundenpaket noch Nachricht.
+- `P1-15-F78` — P1-15 baut weder einen vollständigen Außendienst-Arbeitspack noch Übergabepaket, Geräteakte, Abrechnung, Dokumenten-Pipeline, Rechtsarchiv, Kundenportal oder generischen Formular-/Workflow-Designer; die vorgesehenen späteren Slices bleiben Eigentümer.

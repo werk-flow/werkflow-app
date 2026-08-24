@@ -62,7 +62,9 @@ export type RealtimeTable =
   | 'work_dependencies'
   | 'job_instruction_items'
   | 'job_instruction_item_evidence_requirements'
+  | 'job_instruction_item_evidence_fulfillments'
   | 'job_instruction_item_dependencies'
+  | 'work_artifacts'
   | 'work_templates'
   | 'work_template_versions'
   | 'work_template_items'
@@ -147,7 +149,9 @@ const TABLES: RealtimeTable[] = [
   'work_dependencies',
   'job_instruction_items',
   'job_instruction_item_evidence_requirements',
+  'job_instruction_item_evidence_fulfillments',
   'job_instruction_item_dependencies',
+  'work_artifacts',
   'work_templates',
   'work_template_versions',
   'work_template_items',
@@ -623,6 +627,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         )
         .on(
           'postgres_changes',
+          { event: '*', schema: 'public', table: 'job_instruction_item_evidence_fulfillments', filter: `organization_id=eq.${activeOrgId}` },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('job_instruction_item_evidence_fulfillments', p)
+        )
+        .on(
+          'postgres_changes',
           { event: '*', schema: 'public', table: 'job_instruction_item_dependencies', filter: `organization_id=eq.${activeOrgId}` },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('job_instruction_item_dependencies', p)
@@ -779,6 +789,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('work_dependencies', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'work_artifacts',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('work_artifacts', p)
         )
         .on(
           'postgres_changes',

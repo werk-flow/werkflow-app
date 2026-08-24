@@ -36,7 +36,10 @@ export type AttentionSourceType =
   // Kept for persisted P1-12 read/event identities; new tasks use
   // work_blocker_review after the P1-14 parking migration.
   | 'job_parking_review'
-  | 'work_blocker_review';
+  | 'work_blocker_review'
+  | 'work_artifact_review'
+  | 'work_artifact_correction'
+  | 'work_defect_due';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -133,6 +136,36 @@ export type AttentionTask =
       blockerKind: 'blocker' | 'parking';
       nextReviewDate: string;
       responsibleName: string | null;
+      stateVersion: string;
+    }
+  | {
+      sourceType: 'work_artifact_review';
+      sourceId: string;
+      artifactTitle: string;
+      artifactKind: Database['public']['Enums']['work_artifact_kind'];
+      revisionNumber: number;
+      targetLabel: string;
+      targetHref: string;
+      stateVersion: string;
+    }
+  | {
+      sourceType: 'work_artifact_correction';
+      sourceId: string;
+      artifactTitle: string;
+      artifactKind: Database['public']['Enums']['work_artifact_kind'];
+      revisionNumber: number;
+      targetLabel: string;
+      targetHref: string;
+      stateVersion: string;
+    }
+  | {
+      sourceType: 'work_defect_due';
+      sourceId: string;
+      artifactTitle: string;
+      targetLabel: string;
+      targetHref: string;
+      dueDate: string;
+      severity: Database['public']['Enums']['work_artifact_defect_severity'];
       stateVersion: string;
     };
 

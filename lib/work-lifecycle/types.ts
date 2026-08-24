@@ -1,5 +1,6 @@
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { ReadinessResult } from "@/lib/dispatch/types";
+import { WORK_ARTIFACT_KINDS, WORK_ARTIFACT_STATUSES } from "@/lib/work-artifacts/types";
 import { z } from "zod";
 
 export type WorkTargetType = "job" | "project";
@@ -18,6 +19,15 @@ export type WorkDependency =
   };
 export type WorkExecutionEvent =
   Database["public"]["Tables"]["work_execution_events"]["Row"];
+export type WorkArtifactFact = {
+  artifactId: string;
+  version: number;
+  revisionId: string;
+  status: Database["public"]["Enums"]["work_artifact_status"];
+  kind: Database["public"]["Enums"]["work_artifact_kind"];
+  latestActionId: string | null;
+  defectState: Database["public"]["Enums"]["work_artifact_defect_state"] | null;
+};
 
 export const WORK_EXECUTION_STATES = [
   "not_started",
@@ -54,11 +64,18 @@ export const WORK_DECLARED_DEPENDENCY_KINDS = [
 export type WorkGateSnapshot = {
   incompleteRequiredInstructions: number;
   reopenedInstructionPredecessors: number;
+  incompleteInstructionEvidence: number;
   openBlockers: number;
   openStartDependencies: number;
   openCompletionDependencies: number;
   activeJobClocks: number;
   incompleteProjectChildren: number;
+  measurementArtifacts: number;
+  openDefects: number;
+  pendingFormalApprovals: number;
+  requiredCustomerDecisions: number;
+  requiredSignatures: number;
+  artifactFacts: WorkArtifactFact[];
   notAssessable: string[];
 };
 
@@ -247,6 +264,7 @@ const workDependencySchema: z.ZodType<WorkDependency> = z.object({
   predecessor_job_id: nullableUuidSchema,
   predecessor_project_id: nullableUuidSchema,
   predecessor_instruction_item_id: nullableUuidSchema,
+  artifact_approval_action_id: nullableUuidSchema,
   declared_kind: z.enum(WORK_DECLARED_DEPENDENCY_KINDS).nullable(),
   description: z.string().nullable(),
   effect: z.enum(WORK_DEPENDENCY_EFFECTS),
@@ -288,11 +306,26 @@ const databaseWorkLifecycleSnapshotSchema: z.ZodType<DatabaseWorkLifecycleSnapsh
     gates: z.object({
       incompleteRequiredInstructions: z.number().int().nonnegative(),
       reopenedInstructionPredecessors: z.number().int().nonnegative(),
+      incompleteInstructionEvidence: z.number().int().nonnegative(),
       openBlockers: z.number().int().nonnegative(),
       openStartDependencies: z.number().int().nonnegative(),
       openCompletionDependencies: z.number().int().nonnegative(),
       activeJobClocks: z.number().int().nonnegative(),
       incompleteProjectChildren: z.number().int().nonnegative(),
+      measurementArtifacts: z.number().int().nonnegative(),
+      openDefects: z.number().int().nonnegative(),
+      pendingFormalApprovals: z.number().int().nonnegative(),
+      requiredCustomerDecisions: z.number().int().nonnegative(),
+      requiredSignatures: z.number().int().nonnegative(),
+      artifactFacts: z.array(z.object({
+        artifactId: z.string().uuid(),
+        version: z.number().int().positive(),
+        revisionId: z.string().uuid(),
+        status: z.enum(WORK_ARTIFACT_STATUSES),
+        kind: z.enum(WORK_ARTIFACT_KINDS),
+        latestActionId: nullableUuidSchema,
+        defectState: z.enum(["open", "in_progress", "resolved"]).nullable(),
+      })),
       notAssessable: z.array(z.string()),
     }),
     blockers: z.array(workBlockerSchema),

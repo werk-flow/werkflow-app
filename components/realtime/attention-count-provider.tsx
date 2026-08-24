@@ -176,6 +176,9 @@ export function AttentionCountProvider({
   useRealtimeEvent('work_blockers', () => {
     scheduleRefresh();
   });
+  useRealtimeEvent('work_artifacts', () => {
+    scheduleRefresh();
+  });
   useRealtimeEvent('attention_read_states', () => {
     scheduleRefresh();
   });

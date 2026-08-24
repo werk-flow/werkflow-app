@@ -53,6 +53,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   clearProjectWorkExecutionOverride,
   getWorkLifecycleSnapshot,
+  getApprovedArtifactActionsForTarget,
+  linkWorkDependencyArtifactApproval,
   parkWorkTarget,
   removeWorkDependency,
   reopenWorkBlocker,
@@ -684,6 +686,52 @@ function DependencyDialog({
   );
 }
 
+function ArtifactApprovalDependencyDialog({
+  snapshot,
+  dependency,
+  onClose,
+  onChanged,
+}: {
+  snapshot: WorkLifecycleSnapshot;
+  dependency: WorkDependency;
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+}) {
+  const [options, setOptions] = useState<WorkEntityOption[] | null>(null);
+  const [actionId, setActionId] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  useEffect(() => {
+    let active = true;
+    void getApprovedArtifactActionsForTarget({ targetType: snapshot.targetType, targetId: snapshot.targetId })
+      .then((result) => {
+        if (!active) return;
+        if (result.success) setOptions(result.options);
+        else {
+          setOptions([]);
+          setError(ERROR_MESSAGES.work_action_failed);
+        }
+      }).catch(() => {
+        if (!active) return;
+        setOptions([]);
+        setError(ERROR_MESSAGES.work_action_failed);
+      });
+    return () => { active = false; };
+  }, [snapshot.targetId, snapshot.targetType]);
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    startTransition(async () => {
+      const result = await linkWorkDependencyArtifactApproval({ dependencyId: dependency.id,
+        expectedVersion: dependency.version, actionId, reason });
+      if (!result.success) { setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed); return; }
+      await onChanged();
+      onClose();
+    });
+  }
+  return <Dialog open onOpenChange={(open) => !open && !pending && onClose()}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Freigabe verknüpfen</DialogTitle><DialogDescription>Nur eine aktuelle, intern freigegebene Version dieses Auftrags oder Projekts erfüllt die Voraussetzung.</DialogDescription></DialogHeader><DialogBody className="space-y-4 py-1"><div className="space-y-2"><Label htmlFor="dependency-artifact-approval">Freigegebener Arbeitsnachweis</Label>{options === null ? <p className="text-sm text-muted-foreground">Freigaben werden geladen…</p> : <SearchableSelect id="dependency-artifact-approval" options={options} value={actionId} onChange={setActionId} placeholder="Freigabe auswählen" searchPlaceholder="Arbeitsnachweis suchen…" emptyMessage="Keine aktuelle Freigabe vorhanden" />}</div><div className="space-y-2"><Label htmlFor="dependency-artifact-reason">Begründung</Label><Textarea id="dependency-artifact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} /></div><ErrorText>{error}</ErrorText></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={pending}>Abbrechen</Button><Button type="submit" disabled={pending || !actionId || reason.trim().length < 3}>{pending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter></form></DialogContent></Dialog>;
+}
+
 type DialogState =
   | { type: "transition"; state: WorkExecutionState }
   | { type: "blocker"; blocker?: WorkBlocker }
@@ -692,6 +740,7 @@ type DialogState =
   | { type: "reopen-blocker"; blocker: WorkBlocker }
   | { type: "unpark"; blocker: WorkBlocker }
   | { type: "dependency" }
+  | { type: "artifact-approval-dependency"; dependency: WorkDependency }
   | {
       type: "dependency-state";
       dependency: WorkDependency;
@@ -1070,7 +1119,11 @@ export function WorkLifecycleCard({
                   </div>
                   {isManager && (
                     <div className="flex gap-1">
-                      {dependency.declared_kind && (
+                      {dependency.declared_kind === "approval" && !dependency.artifact_approval_action_id && !dependency.is_satisfied ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ type: "artifact-approval-dependency", dependency })}>
+                          Freigabe verknüpfen
+                        </Button>
+                      ) : dependency.declared_kind && (
                         <Button
                           type="button"
                           size="sm"
@@ -1156,9 +1209,27 @@ export function WorkLifecycleCard({
               {snapshot.gates.incompleteProjectChildren} nicht abgeschlossene
               Aufträge
             </p>
+            <p>
+              {snapshot.gates.incompleteInstructionEvidence} erforderliche
+              Nachweise offen
+            </p>
+            <p>{snapshot.gates.measurementArtifacts} Aufmaße erfasst</p>
+            <p>{snapshot.gates.openDefects} offene Mängel</p>
+            <p>
+              {snapshot.gates.pendingFormalApprovals} formale Freigaben offen
+            </p>
+            <p>
+              {snapshot.gates.requiredCustomerDecisions} erforderliche
+              Kundenentscheidungen offen
+            </p>
+            <p>
+              {snapshot.gates.requiredSignatures} erforderliche Unterschriften
+              offen
+            </p>
             <p className="text-muted-foreground">
-              Weitere Nachweis-, Übergabe-, Material- und Werkzeugprüfungen sind
-              in diesem Slice noch nicht prüfbar.
+              {snapshot.gates.notAssessable.length > 0
+                ? `${snapshot.gates.notAssessable.length} weitere Prüfpunkte sind noch nicht bewertbar.`
+                : "Alle bekannten Prüfpunkte sind bewertbar."}
             </p>
           </div>
           <div className="space-y-2">
@@ -1229,6 +1300,10 @@ export function WorkLifecycleCard({
           onClose={() => setDialog(null)}
           onChanged={() => changed("Voraussetzung wurde hinzugefügt.")}
         />
+      )}
+      {dialog?.type === "artifact-approval-dependency" && (
+        <ArtifactApprovalDependencyDialog snapshot={snapshot} dependency={dialog.dependency}
+          onClose={() => setDialog(null)} onChanged={() => changed("Freigabe wurde mit der Voraussetzung verknüpft.")} />
       )}
       {dialog?.type === "resolve-blocker" && (
         <ReasonDialog
