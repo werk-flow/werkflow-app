@@ -15,35 +15,41 @@ function createAdminClient(): SupabaseClient {
   });
 }
 
-async function listTestUserIds(admin: SupabaseClient): Promise<string[]> {
+async function withTransientAuthRetry<T>(
+  label: string,
+  operation: () => Promise<{ data: T | null; error: { message: string } | null }>
+): Promise<T> {
   // The sb_secret keys are exchanged for a gateway-minted JWT per request;
   // Supabase-side clock skew between nodes intermittently rejects one with
   // "JWT issued at future" (environment class, observed 2026-08-21 killing
   // global setup twice). A bounded retry rides over the skewed node.
   const MAX_ATTEMPTS = 3;
   for (let attempt = 1; ; attempt += 1) {
+    const result = await operation();
+    if (!result.error) {
+      if (result.data === null) throw new Error(`${label} returned no data.`);
+      return result.data;
+    }
+    if (attempt >= MAX_ATTEMPTS || !result.error.message.includes('JWT')) {
+      throw new Error(`${label} failed: ${result.error.message}`);
+    }
+    console.warn(
+      `[golden] transient auth error during ${label} (attempt ${attempt}/${MAX_ATTEMPTS}): ${result.error.message}`
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+async function listTestUserIds(admin: SupabaseClient): Promise<string[]> {
+  const profiles = await withTransientAuthRetry('test user lookup', async () => {
     const [goldenDomainResult, resendResult] = await Promise.all([
       admin.from('profiles').select('id').like('email', '%@werkflow-golden.test'),
       admin.from('profiles').select('id').like('email', 'delivered+gg-%@resend.dev'),
     ]);
     const error = goldenDomainResult.error ?? resendResult.error;
-    if (!error) {
-      return [
-        ...new Set(
-          [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])].map(
-            (profile) => profile.id as string
-          )
-        ),
-      ];
-    }
-    if (attempt >= MAX_ATTEMPTS || !error.message.includes('JWT')) {
-      throw new Error(`Test user lookup failed: ${error.message}`);
-    }
-    console.warn(
-      `[golden] transient auth error during leftover sweep (attempt ${attempt}/${MAX_ATTEMPTS}): ${error.message}`
-    );
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }
+    return { data: [...(goldenDomainResult.data ?? []), ...(resendResult.data ?? [])], error };
+  });
+  return [...new Set(profiles.map((profile) => profile.id as string))];
 }
 
 // Mailbox stand-in for UI signup tests. The production flow requires the user
@@ -309,20 +315,21 @@ export async function createTestWorld(): Promise<TestWorld> {
   };
 }
 
+export function worldUserIds(world: TestWorld): string[] {
+  return [
+    ...Object.values(world.users).map((user) => user.id),
+    world.invitee.id,
+    world.removableEmployee.id,
+    world.personnelInvitee.id,
+    world.outsider.admin.id,
+  ];
+}
+
 export async function destroyTestWorld(world: TestWorld): Promise<void> {
   const admin = createAdminClient();
   const failures: string[] = [];
 
-  const users = [
-    world.users.admin,
-    world.users.buero,
-    world.users.employee,
-    world.invitee,
-    world.removableEmployee,
-    world.personnelInvitee,
-    world.outsider.admin,
-  ];
-  const userIds = users.map((user) => user.id);
+  const userIds = worldUserIds(world);
   const { data: ownedTestOrganizations, error: ownedOrganizationsError } = await admin
     .from('organizations')
     .select('id')
@@ -394,18 +401,28 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
 
 // Safety valve: remove leftover worlds from crashed runs. Only touches
 // organizations whose name matches the unmistakable test prefix.
-export async function destroyLeftoverTestWorlds(): Promise<number> {
+export async function destroyLeftoverTestWorlds(excludedWorlds: TestWorld[] = []): Promise<number> {
   const admin = createAdminClient();
+  const excludedOrganizationIds = new Set(
+    excludedWorlds.flatMap((world) => [world.orgId, world.outsider.orgId])
+  );
+  const excludedUserIds = new Set(excludedWorlds.flatMap(worldUserIds));
 
   // Resolve users before deleting auth-owned profile rows.
-  const testUserIds = await listTestUserIds(admin);
+  const testUserIds = (await listTestUserIds(admin)).filter(
+    (userId) => !excludedUserIds.has(userId)
+  );
 
-  const { data: leftoverOrgs } = await admin
-    .from('organizations')
-    .select('id')
-    .or('name.like.Golden Test SHK %,name.like.Fremde Firma %');
+  const leftoverOrgs = await withTransientAuthRetry('leftover organization lookup', async () =>
+    admin
+      .from('organizations')
+      .select('id')
+      .or('name.like.Golden Test SHK %,name.like.Fremde Firma %')
+  );
 
-  const orgIds = (leftoverOrgs ?? []).map((org) => org.id as string);
+  const orgIds = leftoverOrgs
+    .map((org) => org.id as string)
+    .filter((organizationId) => !excludedOrganizationIds.has(organizationId));
   for (const orgId of orgIds) {
     try {
       const paths = await listStorageObjectPaths(`${orgId}/`);

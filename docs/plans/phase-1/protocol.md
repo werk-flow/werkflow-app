@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -127,6 +127,7 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
 - Add focused tests at the domain boundary and end-to-end tests for the slice outcome. Concretely: extend the golden-gate harness (`docs/technical/testing.md`) — add the slice's business actions to `tests/golden/support/steps.ts` and cover the slice outcome in the gate spec named by its slice index row (or a dedicated spec if no gate is due yet). A slice without an automated end-to-end check of its own outcome is not done.
+- Use the browser runner's iteration lane while implementation changes. A long serial spec must expose independently greppable stages at stable persisted boundaries. Failed worlds are retained for focused diagnosis; diagnostic reuse is never substituted for the final clean-world certification.
 - **Ship the slice's audit coverage with the slice** (since Wave 2): a spec in `tests/audit/wave-N/` that maps every one of the slice's catalog flow IDs with full clause evidence under testing rule 12, plus the ledger rows in the wave's audit doc (`docs/plans/wave-2-audit.md` for Wave 2). Golden gates stay lean cross-slice scenarios; the audit spec is where exhaustive flow coverage lives. The wave-end audit is a thin certification gate, not a discovery phase — discovery already happened here.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
 - Record a decision in `docs/decisions/` when future agents must understand why a durable choice was made.
@@ -149,7 +150,8 @@ The slice is not complete until all applicable items are satisfied:
 - connected feature contracts and open decisions are updated;
 - conceptual data-model and technical docs are updated if ownership or architecture changed;
 - the slice's acceptance is recorded in its owning files: the slice record under `slices/` closes with the full acceptance evidence, completion date, follow-up work, and any split/superseding slices (the record is the canonical home for the slice's facts); [roadmap.md](roadmap.md) updates the index-row status, the checkpoint table, the accepted counter, and the recomputed `ready` set; [log.md](log.md) gains one short appended entry linking the record;
-- appropriate lint, type, test, and build validation passes — including the slice's golden-gate spec run against a production build (`bun run build` + `bun start`, then `bunx playwright test --grep @GG-XX`), with the run recorded in `docs/plans/golden-gate-log.md`;
+- appropriate lint, type, test, and build validation passes — including the slice's focused runner command against the fresh production build, followed by the required certification battery, with the run recorded in `docs/plans/golden-gate-log.md`;
+- every failed certification is classified in [`../../technical/test-incident-log.md`](../../technical/test-incident-log.md), proven with a focused run on the current source before retry, and cleaned after diagnosis; two consecutive full failures of the same class require investigation and an explicit rerun-budget reason;
 - a separate review finds no unresolved correctness, security, data-loss, or documentation issue.
 
 ## Cross-Cutting Invariants
@@ -317,4 +319,3 @@ Phase 1 is complete only when all of the following are true:
 8. The complete product works with practical SHK defaults and does not require extensive configuration to perform the golden workflows.
 9. Training, onboarding, support, packaging, integration entitlement, and data-exit expectations are explainable.
 10. Phase 2 work begins from an accepted inventory of reliable events/actions/sources rather than bypassing incomplete Phase 1 domains.
-

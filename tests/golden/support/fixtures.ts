@@ -1,5 +1,6 @@
-import { expect, test as base, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test as base, type Browser, type Page } from '@playwright/test';
 
+import { createRolePage, type SessionRole } from './sessions';
 import { loadWorld, storageStatePath, type TestWorld } from './world';
 
 type GoldenFixtures = {
@@ -10,60 +11,63 @@ type GoldenFixtures = {
   outsiderPage: Page;
 };
 
-export async function ensureOutsiderSession(
-  context: BrowserContext,
-  page: Page
-): Promise<void> {
-  const world = loadWorld();
-  await context.clearCookies();
-  let loggedIn = false;
-  for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
-    await page.goto('/login');
-    await page.waitForLoadState('networkidle');
-    await page.locator('input[autocomplete="email"]').fill(world.outsider.admin.email);
-    await page
-      .locator('input[autocomplete="current-password"]')
-      .fill(world.outsider.admin.password);
-    await page.getByRole('button', { name: 'Anmelden' }).click();
-    loggedIn = await page
-      .waitForURL('**/dashboard', { timeout: 20_000 })
-      .then(() => true)
-      .catch(() => false);
-  }
-  if (!loggedIn) throw new Error('Outsider fixture could not restore its session.');
-  await expect
-    .poll(
-      async () =>
-        (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value,
-      { timeout: 20_000 }
-    )
-    .toBe(world.outsider.orgId);
-}
+const DEFAULT_BASE_URL = process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000';
 
-// Playwright fixture callbacks receive a `use` continuation; it is renamed to
-// `provide` here so the react-hooks lint rule does not mistake it for a Hook.
 async function rolePage(
-  browser: import('@playwright/test').Browser,
-  role: 'admin' | 'buero' | 'employee' | 'outsider',
+  browser: Browser,
+  baseUrl: string,
+  role: SessionRole,
   provide: (page: Page) => Promise<void>
 ): Promise<void> {
-  const context: BrowserContext = await browser.newContext({
-    storageState: storageStatePath(role),
+  const { context, page } = await createRolePage({
+    browser,
+    baseUrl,
+    world: loadWorld(),
+    role,
   });
-  const page = await context.newPage();
-  if (role === 'outsider') await ensureOutsiderSession(context, page);
-  await provide(page);
-  await context.close();
+  let provideError: unknown;
+  try {
+    await provide(page);
+  } catch (error) {
+    provideError = error;
+  }
+
+  let cleanupError: unknown;
+  if (!provideError) {
+    try {
+      // Protected-route middleware can rotate Supabase cookies while a role
+      // fixture is in use. Persist only a successful fixture's final state;
+      // global setup force-refreshes every role before retained diagnostics.
+      await context.storageState({ path: storageStatePath(role) });
+    } catch (error) {
+      cleanupError = error;
+    }
+  }
+  try {
+    await context.close();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  if (provideError) {
+    if (cleanupError) console.warn(`[golden] ${role} fixture cleanup also failed: ${String(cleanupError)}`);
+    throw provideError;
+  }
+  if (cleanupError) throw cleanupError;
 }
 
 export const test = base.extend<GoldenFixtures>({
   world: async ({}, provide) => {
     await provide(loadWorld());
   },
-  adminPage: async ({ browser }, provide) => rolePage(browser, 'admin', provide),
-  bueroPage: async ({ browser }, provide) => rolePage(browser, 'buero', provide),
-  employeePage: async ({ browser }, provide) => rolePage(browser, 'employee', provide),
-  outsiderPage: async ({ browser }, provide) => rolePage(browser, 'outsider', provide),
+  adminPage: async ({ browser, baseURL }, provide) =>
+    rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'admin', provide),
+  bueroPage: async ({ browser, baseURL }, provide) =>
+    rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'buero', provide),
+  employeePage: async ({ browser, baseURL }, provide) =>
+    rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'employee', provide),
+  outsiderPage: async ({ browser, baseURL }, provide) =>
+    rolePage(browser, baseURL ?? DEFAULT_BASE_URL, 'outsider', provide),
 });
 
 export { expect };

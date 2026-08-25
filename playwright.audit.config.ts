@@ -1,8 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
 import { loadEnvLocal } from './tests/golden/support/env';
+import { configureRunEnvironment } from './tests/golden/support/run-state';
 
 loadEnvLocal();
+configureRunEnvironment('audit');
+
+const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
+const listingTests = process.argv.includes('--list');
 
 // Wave-audit battery (docs/plans/wave-1-audit.md, wave-2-audit.md, …). Runs
 // the exhaustive user-flow audit specs against a locally running app and the
@@ -25,7 +30,15 @@ export default defineConfig({
   // Audit specs share one world per run; sessions run serially by design.
   workers: 1,
   retries: 0,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'tests/audit/.report' }]],
+  // Preserve the first useful failure instead of emitting dependent cascades.
+  maxFailures: 1,
+  reporter: listingTests
+    ? 'list'
+    : [
+        ...(quietReporter ? [] : ([['list']] as const)),
+        ['./tests/golden/support/run-reporter.ts'],
+        ['html', { open: 'never', outputFolder: 'tests/audit/.report' }],
+      ],
   outputDir: 'tests/audit/.results',
   use: {
     baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',

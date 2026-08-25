@@ -2,7 +2,6 @@ import { expect, test } from './support/fixtures';
 import {
   getCommitmentState,
   getDispatchState,
-  getOrganizationTimeEntryCount,
   getParkingState,
   getPlanningState,
   getVisibleDispatchStateAs,
@@ -66,15 +65,12 @@ function batchJobNumber(runId: string): string {
   return `AUF-${runId}-P112-BATCH`;
 }
 
-let actualTimeBaseline: number | null = null;
-
 test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, and commitments @GG-03', () => {
   test('parked backlog work gains context and an honest unscheduled dispatch', async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    actualTimeBaseline = await getOrganizationTimeEntryCount(world.orgId);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const title = `P1-12 Rückstau ${world.runId}`;
     await createJob(adminPage, {
@@ -395,19 +391,38 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     employeePage,
     world,
   }) => {
-    const batchTitle = `P1-12 Serienbesuch ${world.runId}`;
+    const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
+    const liveSuffix = (process.env.WERKFLOW_RUN_KEY ?? world.runId).slice(-6);
+    const liveJobNumber = `AUF-${world.runId}-P112-LIVE-${liveSuffix}`;
+    const liveTitle = `P1-12 Echtzeit ${world.runId} ${liveSuffix}`;
+
+    // This terminal stage creates its own run-scoped occurrence so retained
+    // diagnostics can reconstruct the pre-dispatch state without replaying
+    // the five preceding scenarios.
+    await createJob(adminPage, {
+      jobNumber: liveJobNumber,
+      title: liveTitle,
+    });
+    await createPlannedCalendarEntry(adminPage, {
+      kind: 'job_visit',
+      jobSearch: liveJobNumber,
+      date: BATCH_DATE,
+      time: '08:00',
+      employeeNames: [employeeName],
+      overrideReason: OVERRIDE_REASON,
+    });
 
     // A second office user's open panel learns about a new dispatch live.
     await openDispatchPanel(bueroPage);
     const bueroRow = bueroPage
       .locator('[data-dispatch-occurrence]')
-      .filter({ hasText: batchTitle })
+      .filter({ hasText: liveTitle })
       .first();
     await expect(bueroRow).toBeVisible({ timeout: 20_000 });
     await expect(bueroRow.locator('[data-recipient-state]')).toHaveCount(0);
 
     await openDispatchPanel(adminPage);
-    await issueDispatchForOccurrence(adminPage, batchTitle);
+    await issueDispatchForOccurrence(adminPage, liveTitle);
     await expect(
       bueroRow.locator('[data-recipient-state]').first()
     ).toBeVisible({ timeout: 20_000 });
@@ -442,10 +457,15 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     expect(employeeView.work_blockers).toBe(1);
     for (const count of Object.values(outsiderView)) expect(count).toBe(0);
 
-    // Dispatch, acknowledgement, and commitments never created actual time.
-    expect(actualTimeBaseline).not.toBeNull();
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(
-      actualTimeBaseline!
-    );
+    // Dispatch, acknowledgement, commitments, and rescheduling never created
+    // job-linked actual time. This persisted-state proof is independently
+    // replayable and does not depend on an earlier test's process memory.
+    const planningStates = await Promise.all([
+      getPlanningState(world.orgId, { jobNumber: parkJobNumber(world.runId) }),
+      getPlanningState(world.orgId, { jobNumber: mainJobNumber(world.runId) }),
+      getPlanningState(world.orgId, { jobNumber: batchJobNumber(world.runId) }),
+      getPlanningState(world.orgId, { jobNumber: liveJobNumber }),
+    ]);
+    expect(planningStates.map((state) => state.actualTimeCount)).toEqual([0, 0, 0, 0]);
   });
 });

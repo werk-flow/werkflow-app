@@ -1,121 +1,84 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { chromium, expect, type FullConfig } from '@playwright/test';
+
+import { chromium, type FullConfig } from '@playwright/test';
 
 import { loadEnvLocal } from './support/env';
-import { createTestWorld, destroyLeftoverTestWorlds } from './support/seed';
 import {
-  ARTIFACTS_DIR,
-  saveWorld,
-  storageStatePath,
-  type TestWorld,
-} from './support/world';
+  archiveActiveState,
+  attachWorldToRun,
+  clearActiveRunState,
+  currentRunKey,
+  ensureRunManifest,
+  listRetainedWorlds,
+  markRunFailed,
+  restoreArchivedState,
+  updateRunManifest,
+} from './support/run-state';
+import { createTestWorld, destroyLeftoverTestWorlds } from './support/seed';
+import { ensureFreshRoleSession, type SessionRole } from './support/sessions';
+import { ARTIFACTS_DIR, saveWorld, type TestWorld } from './support/world';
 
-async function loginAndSaveState(
-  baseURL: string,
-  email: string,
-  password: string,
-  expectedOrgId: string,
-  statePath: string
-): Promise<void> {
-  const browser = await chromium.launch();
-  try {
-    const context = await browser.newContext({ locale: 'de-DE' });
-    const page = await context.newPage();
+const SESSION_ROLES: SessionRole[] = ['admin', 'buero', 'employee', 'outsider'];
 
-    // Clicking before React hydration attaches the submit handler falls back
-    // to a native form submission that reloads /login; retry when that happens.
-    let loggedIn = false;
-    for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
-      await page.goto(`${baseURL}/login`);
-      await page.waitForLoadState('networkidle');
-      await page.locator('input[autocomplete="email"]').fill(email);
-      await page.locator('input[autocomplete="current-password"]').fill(password);
-      await page.getByRole('button', { name: 'Anmelden' }).click();
-      loggedIn = await page
-        .waitForURL('**/dashboard', { timeout: 20_000 })
-        .then(() => true)
-        .catch(() => false);
-    }
-    if (!loggedIn) {
-      throw new Error(`Login did not reach the dashboard for ${email}`);
-    }
-
-    let organizationSelected = false;
-    for (let attempt = 1; attempt <= 3 && !organizationSelected; attempt++) {
-      organizationSelected = await expect
-        .poll(
-          async () =>
-            (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value,
-          { timeout: 20_000 }
-        )
-        .toBe(expectedOrgId)
-        .then(() => true)
-        .catch(() => false);
-      if (!organizationSelected) {
-        await page.reload({ waitUntil: 'networkidle' });
-      }
-    }
-    if (!organizationSelected) {
-      throw new Error(`Dashboard did not select the expected organization for ${email}`);
-    }
-    await context.storageState({ path: statePath });
-    await context.close();
-  } finally {
-    await browser.close();
-  }
+function createUploadFixture(): void {
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  const largePdfPath = resolve(ARTIFACTS_DIR, 'upload-fixture.pdf');
+  const sixMegabytes = 6 * 1024 * 1024;
+  if (existsSync(largePdfPath) && statSync(largePdfPath).size === sixMegabytes) return;
+  const buffer = Buffer.alloc(sixMegabytes, 'WerkFlow golden gate upload fixture. ');
+  buffer.write('%PDF-1.4\n', 0);
+  writeFileSync(largePdfPath, buffer);
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
   loadEnvLocal();
-  const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
+  const baseUrl = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000';
+  const reuseRunKey = process.env.WERKFLOW_REUSE_RUN_KEY;
+  ensureRunManifest();
 
-  // Clean up any worlds a crashed previous run left behind.
-  const removed = await destroyLeftoverTestWorlds();
-  if (removed > 0) {
-    console.log(`[golden] removed ${removed} leftover test records from earlier runs`);
+  let world: TestWorld | null = null;
+  try {
+    if (reuseRunKey) {
+      world = restoreArchivedState(reuseRunKey);
+      console.log(`[golden] reusing retained world ${world.runId} from ${reuseRunKey}`);
+    } else {
+      const retainedWorlds = listRetainedWorlds();
+      clearActiveRunState();
+      const removed = await destroyLeftoverTestWorlds(retainedWorlds);
+      if (removed > 0) {
+        console.log(`[golden] removed ${removed} unretained leftover test records`);
+      }
+      world = await createTestWorld();
+      saveWorld(world);
+      console.log(`[golden] seeded world ${world.runId} (org ${world.orgId})`);
+    }
+
+    attachWorldToRun(world);
+    createUploadFixture();
+    const browser = await chromium.launch();
+    try {
+      for (const role of SESSION_ROLES) {
+        await ensureFreshRoleSession({ browser, baseUrl, world, role, force: true });
+      }
+    } finally {
+      await browser.close();
+    }
+    console.log('[golden] all four role sessions refreshed and protected-route checked');
+  } catch (error) {
+    const failure = {
+      title: 'Global setup',
+      file: 'tests/golden/global-setup.ts',
+      message: error instanceof Error ? error.message : String(error),
+    };
+    markRunFailed(failure);
+    updateRunManifest(currentRunKey(), (current) => ({
+      status: world ? 'failed_retained' : 'failed',
+      completedAt: new Date().toISOString(),
+      failures: [...current.failures, failure],
+      retainedAt: world ? new Date().toISOString() : current.retainedAt,
+    }));
+    if (world) archiveActiveState();
+    throw error;
   }
-
-  const world: TestWorld = await createTestWorld();
-  saveWorld(world);
-  console.log(`[golden] seeded world ${world.runId} (org ${world.orgId})`);
-
-  mkdirSync(ARTIFACTS_DIR, { recursive: true });
-  // A 6 MB upload fixture proves the old 4.5 MB Vercel body limit is gone.
-  const largePdfPath = resolve(ARTIFACTS_DIR, 'upload-fixture.pdf');
-  const sixMegabytes = 6 * 1024 * 1024;
-  const buffer = Buffer.alloc(sixMegabytes, 'WerkFlow golden gate upload fixture. ');
-  buffer.write('%PDF-1.4\n', 0);
-  writeFileSync(largePdfPath, buffer);
-
-  await loginAndSaveState(
-    baseURL,
-    world.users.admin.email,
-    world.users.admin.password,
-    world.orgId,
-    storageStatePath('admin')
-  );
-  await loginAndSaveState(
-    baseURL,
-    world.users.buero.email,
-    world.users.buero.password,
-    world.orgId,
-    storageStatePath('buero')
-  );
-  await loginAndSaveState(
-    baseURL,
-    world.users.employee.email,
-    world.users.employee.password,
-    world.orgId,
-    storageStatePath('employee')
-  );
-  await loginAndSaveState(
-    baseURL,
-    world.outsider.admin.email,
-    world.outsider.admin.password,
-    world.outsider.orgId,
-    storageStatePath('outsider')
-  );
-
-  console.log('[golden] all four role sessions saved');
 }

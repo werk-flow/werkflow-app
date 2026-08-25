@@ -19,6 +19,7 @@ const eslintConfig = defineConfig([
     "tests/golden/.artifacts/**",
     "tests/audit/.report/**",
     "tests/audit/.results/**",
+    ".agent-logs/**",
   ]),
   // UI/UX consolidation canon (docs/plans/uiux-consolidation.md): registry
   // components own date/time/number entry, entity selection, and feedback.

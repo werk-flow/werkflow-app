@@ -1,8 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
 import { loadEnvLocal } from './tests/golden/support/env';
+import { configureRunEnvironment } from './tests/golden/support/run-state';
 
 loadEnvLocal();
+configureRunEnvironment('golden');
+
+const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
+const listingTests = process.argv.includes('--list');
 
 // Golden-gate harness (docs/plans/phase-1/gates.md). Runs the GG-XX
 // business scenarios against a locally running app and the live Supabase
@@ -16,7 +21,15 @@ export default defineConfig({
   // The world is shared, mutable state; gates run serially by design.
   workers: 1,
   retries: 0,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'tests/golden/.report' }]],
+  // Later shared-world results are not meaningful after the first failure.
+  maxFailures: 1,
+  reporter: listingTests
+    ? 'list'
+    : [
+        ...(quietReporter ? [] : ([['list']] as const)),
+        ['./tests/golden/support/run-reporter.ts'],
+        ['html', { open: 'never', outputFolder: 'tests/golden/.report' }],
+      ],
   outputDir: 'tests/golden/.results',
   use: {
     baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',

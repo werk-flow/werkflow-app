@@ -727,18 +727,11 @@ export async function removeJobAssignment(
 // P1-01: customer contact and work-site management on the customer detail.
 
 // The customer detail refreshes itself after each save, but under suite load
-// that refresh has repeatedly landed only after 15-30s (or been superseded by
-// a concurrent Realtime-triggered refresh). One manual reload keeps the
-// business assertion strict — the saved row must exist and render — without
-// making the gate a latency lottery. GG-00's dedicated Realtime test remains
-// the freshness guard.
+// that refresh has repeatedly landed only after 15-30s. Stay on the original
+// route while waiting: reloading during a concurrent router refresh can replace
+// the useful projection assertion with an unrelated navigation failure.
 export async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
-  try {
-    await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
-  } catch {
-    await page.reload();
-    await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
-  }
+  await expect(visibleText(page, text)).toBeVisible({ timeout: 30_000 });
 }
 
 export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
