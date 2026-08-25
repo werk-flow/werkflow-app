@@ -1,6 +1,6 @@
 # Realtime And Caching
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
@@ -88,6 +88,11 @@ The provider subscribes to tables that affect active operational views, includin
 - `work_dependencies`
 - `work_artifacts`
 - `job_instruction_evidence_fulfillments`
+- `documents`
+- `document_links`
+- `inventory_stock_levels`
+- `job_material_lines`
+- `inventory_movements`
 
 Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
 
@@ -108,6 +113,8 @@ P1-13 publishes the mutable template/version/content/application/origin tables w
 P1-14 publishes `work_blockers` and `work_dependencies` with replica identity full. Their append-only event tables and `work_execution_events`/instruction-completion events stay unpublished. Job/project detail cards subscribe through the central provider and preserve open dialogs by surfacing a catch-up control instead of replacing input. Blocker changes also refresh the one attention-count and `/aufgaben` pipeline. Mutations reuse the existing organization-scoped jobs/projects tags and revalidate `/auftraege`, `/kalender`, `/aufgaben`, and `/mitarbeiter`; no lifecycle-specific cache duplicates the work sources.
 
 P1-15 publishes only current `work_artifacts` and active `job_instruction_evidence_fulfillments`, both with replica identity full. Immutable revisions, type details, document/source relations and action ledgers stay unpublished. Job/project detail uses the central dialog-safe catch-up behavior; artifact review, correction and due-defect changes also refresh the unified attention pipeline. Mutations reuse jobs/projects, documents and responsibilities tags and routes rather than adding an artifact cache.
+
+P1-16 composes the assigned worker's field pack from these existing live sources without adding a cache, copied pack, or publication member. Server rendering loads the independent customer/site, dispatch, lifecycle, instruction, artifact, document, time, material, blocker, and bounded project projections in parallel. Route refresh covers assignment, planning, dispatch-root, instruction, document, artifact-root, time, blocker, and dependency changes. The employee material section performs a narrower debounced refetch for `job_material_lines`, `inventory_movements`, and `inventory_stock_levels`, keeps the last confirmed state during a transient failure, and ignores an older response after a newer generation starts. Open dialogs use the shared suspension and queued catch-up behavior so Realtime cannot discard typed input. Immutable `planning_dispatch_revisions`, `work_artifact_revisions`, and `work_artifact_actions` remain unpublished because their owning root-row mutations already signal the required refresh.
 
 ## Refresh Patterns
 
@@ -143,7 +150,7 @@ Before adding a new table to Realtime:
 - Debounce or batch reactions if one user action changes multiple rows.
 - Keep field-worker views simple and avoid noisy UI changes.
 
-Inventory will likely need Realtime once implemented because stock counts and job materials may be edited by multiple users.
+Inventory stock levels, job material lines, and inventory movements already use Realtime because several users may change the same operational material state.
 
 ## Freshness Principles
 

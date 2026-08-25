@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
@@ -34,10 +34,13 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import {
   createJobMaterialLine,
   createProjectMaterialLine,
   deleteJobMaterialLine,
+  getInventoryPickerOptionsForJob,
+  getJobMaterialLines,
   returnJobMaterial,
   takeJobMaterial,
   takeProjectMaterial,
@@ -86,6 +89,7 @@ type JobMaterialsSectionProps = {
   isAdminOrManager: boolean;
   inheritedJobGroups?: ProjectMaterialSummary['jobGroups'];
   totals?: ProjectMaterialSummary['totals'];
+  readOnly?: boolean;
 };
 
 const NO_LOCATION_VALUE = '__no_location__';
@@ -252,6 +256,24 @@ function buildDialogRow(
   };
 }
 
+function itemFromLine(line: JobMaterialLine): InventoryPickerOption {
+  return {
+    id: line.itemId,
+    itemType: line.itemType,
+    name: line.itemName,
+    unit: line.unit,
+    internalSku: null,
+    manufacturer: null,
+    supplierName: null,
+    supplierArticleNumber: null,
+    primaryBarcode: null,
+    categoryName: line.categoryName,
+    isBillable: line.isBillable,
+    availableQuantity: line.availableQuantity,
+    stockByLocation: [],
+  };
+}
+
 function MovementPill({
   tone,
   children,
@@ -285,31 +307,158 @@ export function JobMaterialsSection({
   isAdminOrManager,
   inheritedJobGroups = [],
   totals = [],
-}: JobMaterialsSectionProps) {
+  readOnly = false,
+}: JobMaterialsSectionProps): ReactElement {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [dialog, setDialog] = useState<MaterialDialogState | null>(null);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pickerItems, setPickerItems] = useState(inventoryItems);
+  const [pickerLocations, setPickerLocations] = useState(locations);
+  const [isPickerLoading, setIsPickerLoading] = useState(false);
+  const loadedFieldSearchesRef = useRef(new Set<string>());
+  const [isFieldSaving, setIsFieldSaving] = useState(false);
+  const [serverBackedFieldLines, setServerBackedFieldLines] = useState(initialLines);
   const isProjectContext = Boolean(projectId && !jobId);
-
-  const itemMap = useMemo(
-    () => new Map(inventoryItems.map((item) => [item.id, item])),
-    [inventoryItems]
+  const displayedLines = isAdminOrManager ? initialLines : serverBackedFieldLines;
+  const fieldRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldRefreshGenerationRef = useRef(0);
+  const refreshFieldLines = useCallback(async () => {
+    if (isAdminOrManager || !jobId) return;
+    const generation = ++fieldRefreshGenerationRef.current;
+    try {
+      const result = await getJobMaterialLines(jobId);
+      if (generation !== fieldRefreshGenerationRef.current) return;
+      if (result.success) {
+        setServerBackedFieldLines(result.lines);
+        setSectionError(null);
+      } else {
+        setSectionError('Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar.');
+      }
+    } catch {
+      if (generation !== fieldRefreshGenerationRef.current) return;
+      setSectionError('Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar.');
+    }
+  }, [isAdminOrManager, jobId]);
+  const scheduleFieldRefresh = useCallback(() => {
+    if (isAdminOrManager || !jobId) return;
+    if (fieldRefreshTimerRef.current) clearTimeout(fieldRefreshTimerRef.current);
+    fieldRefreshTimerRef.current = setTimeout(() => {
+      fieldRefreshTimerRef.current = null;
+      void refreshFieldLines();
+    }, 150);
+  }, [isAdminOrManager, jobId, refreshFieldLines]);
+  useRealtimeEvent('job_material_lines', scheduleFieldRefresh);
+  useRealtimeEvent('inventory_movements', scheduleFieldRefresh);
+  useRealtimeEvent('inventory_stock_levels', scheduleFieldRefresh);
+  useEffect(
+    () => () => {
+      if (fieldRefreshTimerRef.current) clearTimeout(fieldRefreshTimerRef.current);
+    },
+    []
   );
 
-  function openDialog(mode: MaterialDialogMode, line?: JobMaterialLine) {
+  async function loadPickerOptions(): Promise<{
+    items: InventoryPickerOption[];
+    locations: InventoryLocation[];
+  } | null> {
+    if (isAdminOrManager || !jobId) {
+      return { items: pickerItems, locations: pickerLocations };
+    }
+
+    setIsPickerLoading(true);
+    try {
+      loadedFieldSearchesRef.current.clear();
+      const result = await getInventoryPickerOptionsForJob(jobId);
+      if (!result.success) {
+        setSectionError('Material und Lagerorte konnten nicht geladen werden. Bitte versuche es erneut.');
+        return null;
+      }
+      setPickerItems(result.items);
+      setPickerLocations(result.locations);
+      loadedFieldSearchesRef.current.add('');
+      return result;
+    } catch {
+      setSectionError('Material und Lagerorte konnten nicht geladen werden. Bitte versuche es erneut.');
+      return null;
+    } finally {
+      setIsPickerLoading(false);
+    }
+  }
+
+  const fieldSearch = dialog?.search.trim() ?? '';
+  const isDialogOpen = dialog !== null;
+  useEffect(() => {
+    if (isAdminOrManager || !jobId || !isDialogOpen || fieldSearch.length < 2) return;
+    const searchKey = fieldSearch.toLocaleLowerCase('de-DE');
+    if (loadedFieldSearchesRef.current.has(searchKey)) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setIsPickerLoading(true);
+      try {
+        const result = await getInventoryPickerOptionsForJob(jobId, fieldSearch);
+        if (cancelled) return;
+        if (!result.success) {
+          setDialog((current) => current
+            ? { ...current, error: 'Die Artikelsuche ist fehlgeschlagen. Bitte versuche es erneut.' }
+            : current);
+          return;
+        }
+        loadedFieldSearchesRef.current.add(searchKey);
+        setPickerItems((current) => {
+          const merged = new Map(current.map((item) => [item.id, item]));
+          for (const item of result.items) merged.set(item.id, item);
+          return Array.from(merged.values());
+        });
+        setPickerLocations(result.locations);
+      } catch {
+        if (!cancelled) {
+          setDialog((current) => current
+            ? { ...current, error: 'Die Artikelsuche ist fehlgeschlagen. Bitte versuche es erneut.' }
+            : current);
+        }
+      } finally {
+        if (!cancelled) setIsPickerLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setIsPickerLoading(false);
+    };
+  }, [fieldSearch, isAdminOrManager, isDialogOpen, jobId]);
+
+  async function openDialog(mode: MaterialDialogMode, line?: JobMaterialLine) {
     setSectionError(null);
+    const picker = await loadPickerOptions();
+    if (!picker) return;
 
     if (line) {
-      const item = itemMap.get(line.itemId);
+      let item = picker.items.find((entry) => entry.id === line.itemId);
+      if (!item && jobId && !isAdminOrManager) {
+        const targeted = await getInventoryPickerOptionsForJob(jobId, '', line.itemId);
+        if (targeted.success) {
+          const targetedItem = targeted.items[0];
+          if (targetedItem) {
+            item = targetedItem;
+            setPickerItems((current) => [
+              ...current.filter((entry) => entry.id !== targetedItem.id),
+              targetedItem,
+            ]);
+          }
+        }
+      }
+      item ??= mode === 'return' || mode === 'edit' ? itemFromLine(line) : undefined;
       if (!item) {
         setSectionError('Der Artikel zu dieser Materialposition wurde nicht gefunden.');
         return;
       }
       setDialog({
         mode,
-        rows: [buildDialogRow(item, locations, mode, line)],
+        rows: [buildDialogRow(item, picker.locations, mode, line)],
         search: '',
         error: null,
       });
@@ -336,8 +485,10 @@ export function JobMaterialsSection({
     if (!dialog) return;
 
     setDialog({ ...dialog, error: null });
+    if (!isAdminOrManager) setIsFieldSaving(true);
     startTransition(async () => {
       if (dialog.rows.length === 0) {
+        setIsFieldSaving(false);
         updateDialogError('item_required', dialog.mode);
         return;
       }
@@ -347,14 +498,17 @@ export function JobMaterialsSection({
       for (const row of dialog.rows) {
         const quantity = decimalFromInput(row.quantity);
         if (!row.itemId) {
+          setIsFieldSaving(false);
           updateDialogError('item_required', dialog.mode);
           return;
         }
         if (quantity <= 0) {
+          setIsFieldSaving(false);
           updateDialogError('quantity_required', dialog.mode);
           return;
         }
         if ((dialog.mode === 'take' || dialog.mode === 'return') && !row.locationId) {
+          setIsFieldSaving(false);
           updateDialogError('location_required', dialog.mode);
           return;
         }
@@ -368,8 +522,9 @@ export function JobMaterialsSection({
             ? row.locationId
             : null;
 
-        const result =
-          dialog.mode === 'plan' && jobId
+        let result: { success: true } | { success: false; error: string };
+        try {
+          result = dialog.mode === 'plan' && jobId
             ? await createJobMaterialLine({
                 jobId,
                 itemId: row.itemId,
@@ -417,8 +572,12 @@ export function JobMaterialsSection({
                         plannedQuantity: quantity,
                         notes: row.notes,
                       });
+        } catch {
+          result = { success: false, error: 'unexpected_error' };
+        }
 
         if (!result.success) {
+          setIsFieldSaving(false);
           setDialog((current) =>
             current
               ? {
@@ -430,8 +589,23 @@ export function JobMaterialsSection({
           );
           return;
         }
+
       }
 
+      if (!isAdminOrManager && jobId) {
+        try {
+          const refreshedLines = await getJobMaterialLines(jobId);
+          if (refreshedLines.success) {
+            setServerBackedFieldLines(refreshedLines.lines);
+          } else {
+            setSectionError('Die Buchung wurde gespeichert, aber der aktuelle Materialstand konnte nicht geladen werden.');
+          }
+        } catch {
+          setSectionError('Die Buchung wurde gespeichert, aber der aktuelle Materialstand konnte nicht geladen werden.');
+        }
+      }
+
+      setIsFieldSaving(false);
       setDialog(null);
       showBanner({
         variant: 'success',
@@ -442,7 +616,9 @@ export function JobMaterialsSection({
               ? 'Das Material wurde zurückgelegt.'
               : 'Die Materialplanung wurde gespeichert.',
       });
-      router.refresh();
+      if (isAdminOrManager) {
+        router.refresh();
+      }
     });
   }
 
@@ -462,7 +638,7 @@ export function JobMaterialsSection({
     });
   }
 
-  const hasDirectLines = initialLines.length > 0;
+  const hasDirectLines = displayedLines.length > 0;
   const hasInheritedLines = inheritedJobGroups.length > 0;
 
   return (
@@ -485,23 +661,30 @@ export function JobMaterialsSection({
               variant="ghost"
               size="sm"
               className="h-8 gap-1 text-xs"
-              onClick={() => openDialog('plan')}
+              onClick={() => void openDialog('plan')}
               disabled={inventoryItems.length === 0}
             >
               <Plus className="size-3.5" />
               Material planen
             </Button>
           )}
-          <Button
+          {!readOnly && <Button
             variant="ghost"
             size="sm"
-            className="h-8 gap-1 text-xs"
-            onClick={() => openDialog('take')}
-            disabled={inventoryItems.length === 0}
+            className={cn('gap-1 text-xs', isAdminOrManager ? 'h-8' : 'min-h-11')}
+            onClick={() => void openDialog('take')}
+            aria-busy={isPickerLoading || isFieldSaving}
+            disabled={
+              isPickerLoading ||
+              isFieldSaving ||
+              (isAdminOrManager && inventoryItems.length === 0)
+            }
           >
-            <PackagePlus className="size-3.5" />
-            Aus Lager entnehmen
-          </Button>
+            {isPickerLoading
+              ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+              : <PackagePlus className="size-3.5" aria-hidden="true" />}
+            {isPickerLoading ? 'Material wird geladen…' : 'Aus Lager entnehmen'}
+          </Button>}
         </div>
       </div>
 
@@ -519,16 +702,17 @@ export function JobMaterialsSection({
         </div>
       ) : (
         <div className="space-y-3">
-          {initialLines.map((line) => (
+          {displayedLines.map((line) => (
             <MaterialLineRow
               key={line.id}
               line={line}
               isAdminOrManager={isAdminOrManager}
-              isPending={isPending}
-              locations={locations}
-              onTake={() => openDialog('take', line)}
-              onReturn={() => openDialog('return', line)}
-              onEdit={() => openDialog('edit', line)}
+              isPending={isAdminOrManager ? isPending : isPickerLoading || isFieldSaving}
+              locations={pickerLocations}
+              readOnly={readOnly}
+              onTake={() => void openDialog('take', line)}
+              onReturn={() => void openDialog('return', line)}
+              onEdit={() => void openDialog('edit', line)}
               onDelete={() => handleDelete(line.id)}
             />
           ))}
@@ -557,6 +741,7 @@ export function JobMaterialsSection({
                     key={line.id}
                     line={line}
                     isAdminOrManager={false}
+                    showBillableData={isAdminOrManager}
                     isPending={isPending}
                     locations={locations}
                     readOnly
@@ -598,7 +783,7 @@ export function JobMaterialsSection({
                       +{formatInventoryQuantity(total.returnedQuantity, total.unit)}
                     </MovementPill>
                   )}
-                  {total.billableQuantity > 0 && (
+                  {isAdminOrManager && total.billableQuantity > 0 && (
                     <MovementPill tone="planned">
                       Abrechenbar {formatInventoryQuantity(total.billableQuantity, total.unit)}
                     </MovementPill>
@@ -615,9 +800,10 @@ export function JobMaterialsSection({
       <MaterialSelectionDialog
         dialog={dialog}
         setDialog={setDialog}
-        items={inventoryItems}
-        locations={locations}
-        isSaving={isPending}
+        items={pickerItems}
+        locations={pickerLocations}
+        isSaving={isAdminOrManager ? isPending : isFieldSaving}
+        isSearching={!isAdminOrManager && isPickerLoading}
         onSave={handleDialogSave}
       />
     </div>
@@ -627,6 +813,7 @@ export function JobMaterialsSection({
 function MaterialLineRow({
   line,
   isAdminOrManager,
+  showBillableData = isAdminOrManager,
   isPending,
   locations,
   readOnly = false,
@@ -637,6 +824,7 @@ function MaterialLineRow({
 }: {
   line: JobMaterialLine;
   isAdminOrManager: boolean;
+  showBillableData?: boolean;
   isPending: boolean;
   locations: InventoryLocation[];
   readOnly?: boolean;
@@ -646,10 +834,10 @@ function MaterialLineRow({
   onDelete: () => void;
 }) {
   const stillOut = Math.max(0, line.takenQuantity - line.returnedQuantity);
-  const canReturn = stillOut > 0 && locations.length > 0;
+  const canReturn = stillOut > 0 && (locations.length > 0 || !isAdminOrManager);
 
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div className="rounded-md border bg-background p-3" data-testid="job-material-line">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -682,7 +870,7 @@ function MaterialLineRow({
                 +{formatInventoryQuantity(line.returnedQuantity, line.unit)}
               </MovementPill>
             )}
-            {line.billableQuantity > 0 && (
+            {showBillableData && line.billableQuantity > 0 && (
               <MovementPill tone="planned">
                 Abrechenbar {formatInventoryQuantity(line.billableQuantity, line.unit)}
               </MovementPill>
@@ -704,9 +892,9 @@ function MaterialLineRow({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1"
+              className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onTake}
-              disabled={locations.length === 0}
+              disabled={isPending || (isAdminOrManager && locations.length === 0)}
             >
               <CheckCircle2 className="size-3.5" />
               Entnahme buchen
@@ -714,9 +902,9 @@ function MaterialLineRow({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1"
+              className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onReturn}
-              disabled={!canReturn}
+              disabled={isPending || !canReturn}
             >
               <RotateCcw className="size-3.5" />
               Zurücklegen
@@ -760,6 +948,7 @@ function MaterialSelectionDialog({
   items,
   locations,
   isSaving,
+  isSearching,
   onSave,
 }: {
   dialog: MaterialDialogState | null;
@@ -767,6 +956,7 @@ function MaterialSelectionDialog({
   items: InventoryPickerOption[];
   locations: InventoryLocation[];
   isSaving: boolean;
+  isSearching: boolean;
   onSave: () => void;
 }) {
   const mode = dialog?.mode ?? 'plan';
@@ -898,7 +1088,11 @@ function MaterialSelectionDialog({
                 />
               </div>
               <div className="max-h-[420px] overflow-auto rounded-md border">
-                {filteredItems.length === 0 ? (
+                {isSearching && filteredItems.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground" role="status">
+                    Material wird gesucht…
+                  </p>
+                ) : filteredItems.length === 0 ? (
                   <p className="px-3 py-6 text-center text-sm text-muted-foreground">
                     Keine passenden Artikel gefunden.
                   </p>

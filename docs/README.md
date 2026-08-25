@@ -80,6 +80,7 @@ Phase 1 execution lives in `phase-1/`, split by change rate:
 | [p1-13-work-templates-implementation-plan.md](plans/p1-13-work-templates-implementation-plan.md) | Closed — `P1-13` confirmed contract, flow list, and ledger (record: `phase-1/slices/p1-13-work-templates.md`). |
 | [p1-14-work-lifecycle-implementation-plan.md](plans/p1-14-work-lifecycle-implementation-plan.md) | Closed — `P1-14` confirmed contract and verification record (record: `phase-1/slices/p1-14-work-lifecycle.md`). |
 | [p1-15-structured-site-evidence-implementation-plan.md](plans/p1-15-structured-site-evidence-implementation-plan.md) | Closed — `P1-15` owner-confirmed artifact, revision, decision, export, lifecycle and rollout contract. |
+| [p1-16-field-work-pack.md](plans/phase-1/slices/p1-16-field-work-pack.md) | Closed — canonical `P1-16` role, projection, field-action, privacy, failure-recovery and acceptance record. |
 
 ### Decision records (`docs/decisions/`)
 

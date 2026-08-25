@@ -1011,12 +1011,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // Refresh all listeners when the tab becomes visible again.
     // Browsers (especially Edge) may throttle or drop WebSocket connections
     // for background tabs; this ensures data is fresh when the user returns.
+    let catchUpTimer: ReturnType<typeof setTimeout> | null = null;
+    function scheduleCatchUp() {
+      if (catchUpTimer) clearTimeout(catchUpTimer);
+      catchUpTimer = setTimeout(() => {
+        catchUpTimer = null;
+        dispatchAll();
+      }, 50);
+    }
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
-        dispatchAll();
+        scheduleCatchUp();
       }
     }
+    function handleWindowFocus() {
+      scheduleCatchUp();
+    }
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
     const debounceTimers = debounceTimersRef.current;
     const pendingEvents = pendingEventsRef.current;
 
@@ -1024,6 +1036,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       authListener.unsubscribe();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      if (catchUpTimer) clearTimeout(catchUpTimer);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;

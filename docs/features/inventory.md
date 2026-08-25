@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
@@ -49,6 +49,7 @@ The implemented V1 is a useful native WerkFlow foundation, not the complete oper
 - Managers can plan existing catalog items for a job or project. Planning does not change physical stock.
 - Managers and authorized users can explicitly take existing items from a location or return them. These actions create physical movements immediately.
 - An assigned employee can see material for an assigned job, take planned material, take an unplanned existing item, and return material. The employee cannot create a catalog item, see the central inventory route, or use project-level inventory workflows.
+- Since P1-16, those employee actions appear inside the focused field work pack. Unplanned search is server-bounded to 50 matches across name, SKU, manufacturer and barcode; planned lines outside that cap resolve by exact item identity. Supplier, price, valuation and billability stay hidden, and pack Realtime refreshes only reread authoritative material/movement facts.
 - Direct project material and material inherited from jobs inside the project are kept visible separately, with an aggregate project total.
 - Planned, taken, returned, unplanned, preferred-location, billable, and status information exists on material lines. There is not yet a reservation, picking, approval, procurement, invoice, or full post-calculation workflow.
 - Since P1-12, the calendar's dispatch-readiness view consumes these facts read-only and honestly: open demand (geplant − entnommen) is compared against current on-hand stock and always labeled „nicht reserviert"; a shortfall warns, a failed lookup shows as unknown, and tool availability is always „nicht bewertet" until `P1-32`. No calendar action reserves, moves, or repairs stock.

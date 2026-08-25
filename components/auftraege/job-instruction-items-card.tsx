@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -45,6 +45,7 @@ type JobInstructionItemsCardProps = {
   isAdminOrManager: boolean;
   currentUserActor: JobInstructionActor | null;
   refreshSignal?: number;
+  readOnly?: boolean;
 };
 
 type DraftInstructionItem = {
@@ -106,7 +107,8 @@ export function JobInstructionItemsCard({
   isAdminOrManager,
   currentUserActor,
   refreshSignal = 0,
-}: JobInstructionItemsCardProps) {
+  readOnly = false,
+}: JobInstructionItemsCardProps): ReactElement {
   const [items, setItems] = useState<RenderedInstructionItem[]>(initialItems);
   const [draft, setDraft] = useState<DraftInstructionItem | null>(
     isAdminOrManager
@@ -125,7 +127,8 @@ export function JobInstructionItemsCard({
   const reorderInFlightRef = useRef(false);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const itemTextareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
-  const toggleMutationSequenceRef = useRef<Map<string, number>>(new Map());
+  const togglesInFlightRef = useRef(new Set<string>());
+  const [toggleIdsInFlight, setToggleIdsInFlight] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setItems(initialItems);
@@ -333,10 +336,10 @@ export function JobInstructionItemsCard({
   }
 
   async function handleToggleItem(item: JobInstructionItemWithDetails) {
+    if (togglesInFlightRef.current.has(item.id)) return;
+    togglesInFlightRef.current.add(item.id);
+    setToggleIdsInFlight((current) => new Set(current).add(item.id));
     const optimisticTimestamp = new Date().toISOString();
-    const nextSequence =
-      (toggleMutationSequenceRef.current.get(item.id) ?? 0) + 1;
-    toggleMutationSequenceRef.current.set(item.id, nextSequence);
 
     replaceItem({
       ...item,
@@ -348,22 +351,32 @@ export function JobInstructionItemsCard({
       updatedAt: optimisticTimestamp,
     });
 
-    const result = await toggleJobInstructionItemCompletion({
-      itemId: item.id,
-      isCompleted: !item.isCompleted,
-    });
+    try {
+      const result = await toggleJobInstructionItemCompletion({
+        itemId: item.id,
+        isCompleted: !item.isCompleted,
+      });
 
-    if (toggleMutationSequenceRef.current.get(item.id) !== nextSequence) {
-      return;
-    }
+      if (!result.success) {
+        replaceItem(item);
+        await syncItemsFromServer();
+        showErrorBanner(getErrorMessage(result.error));
+        return;
+      }
 
-    if (!result.success) {
+      replaceItem(result.item);
+    } catch {
+      replaceItem(item);
       await syncItemsFromServer();
-      showErrorBanner(getErrorMessage(result.error));
-      return;
+      showErrorBanner(ERROR_MESSAGES.toggle_failed);
+    } finally {
+      togglesInFlightRef.current.delete(item.id);
+      setToggleIdsInFlight((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
     }
-
-    replaceItem(result.item);
   }
 
   async function handleDeleteItem(item: JobInstructionItemWithDetails) {
@@ -435,7 +448,9 @@ export function JobInstructionItemsCard({
             <p className="mt-1 text-sm text-muted-foreground">
               {isAdminOrManager
                 ? 'Erfasse Anweisungen direkt als Checkliste. Mit Enter entsteht der nächste Punkt.'
-                : 'Du kannst die Punkte lesen und als erledigt oder offen markieren.'}
+                : readOnly
+                  ? 'Die Arbeit ist abgeschlossen. Die Aufgaben bleiben als Verlauf sichtbar.'
+                  : 'Du kannst die Punkte lesen und als erledigt oder offen markieren.'}
             </p>
           </div>
         </div>
@@ -497,6 +512,7 @@ export function JobInstructionItemsCard({
               const itemIndex = items.findIndex((currentItem) => currentItem.id === item.id);
               const editingValue = editingValues[item.id] ?? item.content;
               const isDeleting = deletingItemId === item.id;
+              const isToggling = toggleIdsInFlight.has(item.id);
               const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatDateTime(item.createdAt)}`;
               const statusLabel = item.lastStatusChangedAt
                 ? `Zuletzt ${item.isCompleted ? 'erledigt' : 'offen'} von ${getActorName(item.lastStatusChangedByProfile)} · ${formatDateTime(item.lastStatusChangedAt)}`
@@ -505,6 +521,7 @@ export function JobInstructionItemsCard({
               return (
                 <div
                   key={item.id}
+                  data-testid="job-instruction-item"
                   className={cn(
                     'min-w-0 w-full rounded-md border px-3 py-3 transition-colors',
                     item.isCompleted && 'border-orange-200 bg-orange-50/50 dark:border-orange-900/40 dark:bg-orange-950/10',
@@ -514,14 +531,21 @@ export function JobInstructionItemsCard({
                   <div className="flex min-w-0 items-start gap-3">
                     <button
                       type="button"
-                      onClick={() => handleToggleItem(item)}
+                      onClick={() => {
+                        if (!readOnly) void handleToggleItem(item);
+                      }}
+                      disabled={readOnly || isToggling}
+                      aria-busy={isToggling}
                       aria-label={
-                        item.isCompleted
-                          ? 'Punkt als offen markieren'
-                          : 'Punkt als erledigt markieren'
+                        readOnly
+                          ? item.isCompleted ? 'Punkt erledigt' : 'Punkt offen'
+                          : item.isCompleted
+                            ? 'Punkt als offen markieren'
+                            : 'Punkt als erledigt markieren'
                       }
                       className={cn(
-                        'mt-1 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                        'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors sm:size-8',
+                        readOnly && 'cursor-default opacity-70',
                         item.isCompleted
                           ? 'border-orange-500 bg-orange-500 text-white'
                           : 'border-muted-foreground/40 bg-background text-transparent'

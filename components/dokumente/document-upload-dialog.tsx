@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactElement } from 'react';
 import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   type DocumentCategory,
+  type OrganizationDocument,
 } from '@/lib/documents/types';
 
 export type DocumentUploadItem = {
@@ -52,7 +53,10 @@ type DocumentUploadDialogProps = {
   items: DocumentUploadItem[];
   target: UploadTarget;
   allowFolderCreation?: boolean;
-  onComplete: (failedCount: number) => void;
+  onComplete: (
+    failedCount: number,
+    uploadedDocuments: OrganizationDocument[]
+  ) => void;
 };
 
 function formatFileSize(sizeBytes: number): string {
@@ -76,7 +80,7 @@ export function DocumentUploadDialog({
   target,
   allowFolderCreation = false,
   onComplete,
-}: DocumentUploadDialogProps) {
+}: DocumentUploadDialogProps): ReactElement {
   const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
@@ -185,6 +189,7 @@ export function DocumentUploadDialog({
 
     startTransition(async () => {
       let failures = initialRows.filter((row) => row.status === 'error').length;
+      const uploadedDocuments: OrganizationDocument[] = [];
       const folderCache = new Map<string, string | null>();
 
       for (const row of initialRows) {
@@ -216,6 +221,7 @@ export function DocumentUploadDialog({
             continue;
           }
 
+          uploadedDocuments.push(result.document);
           updateRow(row.id, { status: 'done' });
         } catch {
           failures++;
@@ -226,7 +232,7 @@ export function DocumentUploadDialog({
         }
       }
 
-      onComplete(failures);
+      onComplete(failures, uploadedDocuments);
       if (failures === 0) {
         clearCloseTimeout();
         closeTimeoutRef.current = window.setTimeout(() => {

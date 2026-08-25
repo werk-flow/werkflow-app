@@ -12,13 +12,26 @@ import { deleteStorageObjects, putStorageObject } from '@/lib/storage/r2';
 import { DOCUMENT_STORAGE_BUCKET } from '@/lib/documents/types';
 import { saveWorkArtifactSchema, voidWorkArtifactSchema, workArtifactActionSchema } from './validation';
 import { buildWorkArtifactExport } from './export';
+import { redactWorkArtifactActionForField } from './field-visibility';
 import type {
   SaveWorkArtifactInput, WorkArtifactActionInput, WorkArtifactDetail,
-  WorkArtifactMutationResult, WorkArtifactStatus, WorkArtifactSummary,
+  WorkArtifactActionType, WorkArtifactMutationResult, WorkArtifactStatus, WorkArtifactSummary,
 } from './types';
 
 type Failure = { success: false; error: string };
 type Target = { targetType: 'job' | 'project'; targetId: string };
+
+const FIELD_DISCLOSING_ARTIFACT_ACTIONS = new Set<WorkArtifactActionType>([
+  'review_requested',
+  'internal_approved',
+  'internal_rejected',
+  'correction_requested',
+  'customer_acknowledged',
+  'customer_refused',
+  'customer_reserved',
+  'signature_captured',
+  'voided',
+]);
 
 function revalidateArtifacts(organizationId: string): void {
   updateTag(CACHE_TAGS.jobs(organizationId));
@@ -88,7 +101,12 @@ export async function getWorkArtifacts(target: Target): Promise<
     success: true,
     artifacts: (artifacts ?? []).flatMap((artifact) => {
       const revision = artifact.current_revision_id ? revisionById.get(artifact.current_revision_id) : null;
-      return revision ? [{ ...artifact, currentRevision: revision }] : [];
+      if (!revision) return [];
+      const isHiddenCoworkerDraft = !auth.context.isManagerOrAbove
+        && artifact.status === 'draft'
+        && revision.visibility === 'internal_only'
+        && revision.created_by !== auth.context.userId;
+      return isHiddenCoworkerDraft ? [] : [{ ...artifact, currentRevision: revision }];
     }),
   };
 }
@@ -106,6 +124,17 @@ export async function getWorkArtifactDetail(artifactId: string): Promise<
     ? { targetType: 'job', targetId: artifact.job_id }
     : { targetType: 'project', targetId: artifact.project_id! };
   if (!await authorizeTarget(auth, target)) return { success: false, error: 'not_authorized' };
+  if (!auth.context.isManagerOrAbove && artifact.status === 'draft' && artifact.current_revision_id) {
+    const { data: currentRevision, error: currentRevisionError } = await admin.from('work_artifact_revisions')
+      .select('visibility, created_by').eq('id', artifact.current_revision_id).maybeSingle();
+    if (currentRevisionError || !currentRevision) {
+      return { success: false, error: 'work_artifact_load_failed' };
+    }
+    if (currentRevision?.visibility === 'internal_only'
+      && currentRevision.created_by !== auth.context.userId) {
+      return { success: false, error: 'not_authorized' };
+    }
+  }
   const [revisions, actions, lines, defects, changes, documents, sources] = await Promise.all([
     admin.from('work_artifact_revisions').select('*').eq('artifact_id', artifactId)
       .order('revision_number', { ascending: false }),
@@ -125,6 +154,26 @@ export async function getWorkArtifactDetail(artifactId: string): Promise<
   if ([revisions, actions, lines, defects, changes, documents, sources].some((result) => result.error)) {
     return { success: false, error: 'work_artifact_load_failed' };
   }
+  const disclosedRevisionIds = new Set(
+    (actions.data ?? [])
+      .filter((action) => FIELD_DISCLOSING_ARTIFACT_ACTIONS.has(action.action_type))
+      .map((action) => action.revision_id)
+  );
+  const visibleRevisions = auth.context.isManagerOrAbove
+    ? revisions.data ?? []
+    : (revisions.data ?? []).filter((revision) =>
+        revision.visibility !== 'internal_only'
+        || revision.created_by === auth.context.userId
+        || disclosedRevisionIds.has(revision.id)
+      );
+  const visibleRevisionIds = new Set(visibleRevisions.map((revision) => revision.id));
+  const visibleActions = (actions.data ?? []).filter(
+    (action) => auth.context.isManagerOrAbove || visibleRevisionIds.has(action.revision_id)
+  );
+  const onlyVisibleRevisionRows = <T extends { revision_id: string }>(rows: T[]): T[] =>
+    auth.context.isManagerOrAbove
+      ? rows
+      : rows.filter((row) => visibleRevisionIds.has(row.revision_id));
   const stripJoin = <T extends object>(rows: T[]): T[] => rows.map((row) =>
     Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'work_artifact_revisions')) as T
   );
@@ -132,17 +181,21 @@ export async function getWorkArtifactDetail(artifactId: string): Promise<
     success: true,
     artifact: {
       ...artifact,
-      revisions: revisions.data ?? [],
+      revisions: visibleRevisions.map((revision) =>
+        revision.corrects_revision_id && !visibleRevisionIds.has(revision.corrects_revision_id)
+          ? { ...revision, corrects_revision_id: null }
+          : revision
+      ),
       actions: auth.context.isManagerOrAbove
-        ? actions.data ?? []
-        : (actions.data ?? []).map((action) => action.created_by === auth.context.userId
-          ? { ...action, responsibility_snapshot: null }
-          : { ...action, responsibility_snapshot: null, signer_name: null, signer_role: null,
-              signer_relationship: null, signer_company_context: null, capture_method: null,
-              wording_snapshot: null, witness_context: null, signature_document_id: null }),
-      measurementLines: stripJoin(lines.data ?? []), defectDetails: stripJoin(defects.data ?? []),
-      changeDetails: stripJoin(changes.data ?? []), documents: stripJoin(documents.data ?? []),
-      sources: stripJoin(sources.data ?? []),
+        ? visibleActions
+        : visibleActions.map((action) =>
+            redactWorkArtifactActionForField(action, auth.context.userId)
+          ),
+      measurementLines: stripJoin(onlyVisibleRevisionRows(lines.data ?? [])),
+      defectDetails: stripJoin(onlyVisibleRevisionRows(defects.data ?? [])),
+      changeDetails: stripJoin(onlyVisibleRevisionRows(changes.data ?? [])),
+      documents: stripJoin(onlyVisibleRevisionRows(documents.data ?? [])),
+      sources: stripJoin(onlyVisibleRevisionRows(sources.data ?? [])),
     },
   };
 }

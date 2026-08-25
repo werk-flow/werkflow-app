@@ -1182,6 +1182,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       employeeNames: ['Emil'],
       overrideReason: 'A1 Ausgangsplanung ohne Wochenplan',
     });
+    await adminPage.reload();
     await showPlanningMonth(adminPage, sourceDate);
     const event = adminPage.locator('.fc-event-job').filter({ hasText: title });
     const targetCell = adminPage.locator(`.fc-daygrid-day[data-date="${targetDate}"]`);
@@ -1294,12 +1295,21 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       .click();
     await expect(parkingContextDialog).toHaveCount(0, { timeout: 20_000 });
     await expect(visibleText(adminPage, 'Auftrag wurde geparkt.')).toBeVisible({ timeout: 20_000 });
+    await adminPage.reload();
+    await showPlanningMonth(adminPage, plannedDate);
+    await adminPage.locator(`.fc-daygrid-day[data-date="${plannedDate}"]`).click();
     await parkplatzButton.click();
     const parkedPill = adminPage.locator('[data-parkplatz-pill]').filter({ hasText: title });
     await expect(parkedPill).toBeVisible();
+    await expect(parkedPill.locator('[data-parking-context]')).toHaveAttribute(
+      'data-parking-context',
+      'set',
+      { timeout: 20_000 }
+    );
     const timeline = adminPage.locator('[data-timeline-scroll]');
     await parkedPill.dragTo(timeline, { targetPosition: { x: 620, y: 105 } });
     await confirmPlanningWarning(adminPage, 'A1 Auftrag aus Parkplatz eingeplant', false);
+    await expect(visibleText(adminPage, 'Auftrag wurde eingeplant.')).toBeVisible({ timeout: 20_000 });
     await expect(parkedPill).toHaveCount(0, { timeout: 20_000 });
     await expect(adminPage.locator(`div.absolute[title="${title}"]`).first()).toBeVisible();
   });
@@ -2286,8 +2296,9 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       .then(() => true).catch(() => false);
     if (!returnReachedUi) await employeePage.reload();
     await expect(worldMaterialLine).toContainText(/\+1/);
-    await expect(worldMaterialLine).toContainText(/Abrechenbar\s+1/);
-    await takeMaterialOnJobPage(employeePage, jobNumber, inventoryItemName, 1);
+    await expect(worldMaterialLine).toContainText(world.inventory.itemName);
+    await expect(worldMaterialLine).not.toContainText(/Abrechenbar/);
+    await takeMaterialOnJobPage(employeePage, jobNumber, world.inventory.itemName, 1);
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     const stockBeforeDirectPlan = await getInventoryLedgerState(

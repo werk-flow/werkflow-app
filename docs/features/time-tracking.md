@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
@@ -23,13 +23,14 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated through `P1-08`) includes:
+The implemented baseline (updated through `P1-16`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
 - Live clocked-out, working, and on-break states; clock-in/out; manual break start/end; and current-day work/break totals.
 - An organization-level choice between manually stamped breaks and one automatic break threshold/duration. Admins can change the rule, Büro can view it, and policy history prevents later settings from silently rewriting closed history.
 - Job-linked clock-in, job switching during an active session, assigned-job selection for employees, and job/project time views.
+- Since `P1-16`, the assigned-worker job pack shows only the viewer's own job time history and exposes the existing start, stop and switch actions in context. It creates no job-local timer and does not build the P1-21 work/travel/break/standby segmentation early.
 - Protection against an employee being actively clocked in in more than one organization.
 - A current-week view with daily presence, work, break, and overtime display; since `P1-04` the overtime boundary and the weekly `Soll` come from each date's resolved schedule/holiday target instead of a fixed 480 minutes.
 - Manual same-day work or break entries with sequence/overlap validation. Employees can add their own entries for approval; admins and Büro can add records within their management scope. Since `P1-05`, a Büro user's own new manual entries are pending rather than silently self-approved; admin-owned additions remain auto-approved as the owner recovery path.

@@ -41,13 +41,24 @@ async function loginAndSaveState(
       throw new Error(`Login did not reach the dashboard for ${email}`);
     }
 
-    await expect
-      .poll(
-        async () =>
-          (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value,
-        { timeout: 10_000 }
-      )
-      .toBe(expectedOrgId);
+    let organizationSelected = false;
+    for (let attempt = 1; attempt <= 3 && !organizationSelected; attempt++) {
+      organizationSelected = await expect
+        .poll(
+          async () =>
+            (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value,
+          { timeout: 20_000 }
+        )
+        .toBe(expectedOrgId)
+        .then(() => true)
+        .catch(() => false);
+      if (!organizationSelected) {
+        await page.reload({ waitUntil: 'networkidle' });
+      }
+    }
+    if (!organizationSelected) {
+      throw new Error(`Dashboard did not select the expected organization for ${email}`);
+    }
     await context.storageState({ path: statePath });
     await context.close();
   } finally {

@@ -409,3 +409,100 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-15-F76` — Änderungen an Arbeitsnachweisen und aktiven Nachweiserfüllungen aktualisieren Detail-, Aufgaben-, Dokument- und Lebenszyklusansichten über bestehende Cache-Tags und zentrale Realtime-Abonnements; unveränderliche Ledger bleiben unveröffentlicht.
 - `P1-15-F77` — Erstellen, Ändern, Entscheiden, Signieren, Verknüpfen und Exportieren eines Arbeitsnachweises verändert weder Planung, Versand, Ist-Zeit, Bestand, Preis, Rechnung, Kundenpaket noch Nachricht.
 - `P1-15-F78` — P1-15 baut weder einen vollständigen Außendienst-Arbeitspack noch Übergabepaket, Geräteakte, Abrechnung, Dokumenten-Pipeline, Rechtsarchiv, Kundenportal oder generischen Formular-/Workflow-Designer; die vorgesehenen späteren Slices bleiben Eigentümer.
+
+### `P1-16` — Fokussierter Arbeitspack für zugewiesene Handwerker (2026-08-25)
+
+- `P1-16-F01` — Ein zugewiesener Handwerker öffnet am Auftrag einen fokussierten Arbeitspack mit den für den Einsatz nötigen Informationen und Aktionen.
+- `P1-16-F02` — Einzelauftrag und Projekt-Unterauftrag verwenden dieselbe rollenabhängige Arbeitspack-Komposition ohne doppelte Lader oder Fachlogik.
+- `P1-16-F03` — Beim Projekt-Unterauftrag sieht der Handwerker nur Nummer und Titel des übergeordneten Projekts, nicht Geschwisteraufträge oder die Projektgesamtansicht.
+- `P1-16-F04` — Admin behält die vollständige bestehende Auftragsansicht mit Planung, Zuweisung, Qualifikation, Projekt-, Dokument- und Verwaltungskontrollen.
+- `P1-16-F05` — Büro behält die vollständige bestehende Auftragsansicht mit seinen bisherigen Berechtigungen und Arbeitswegen.
+- `P1-16-F06` — Ein nicht zugewiesener Handwerker erhält weder Arbeitspack noch Auftragsdaten und wird zur eigenen Auftragsliste zurückgeführt.
+- `P1-16-F07` — Ein Mitglied einer fremden Organisation erhält weder Arbeitspack noch Auftragsdaten und bleibt auf die eigene Organisation begrenzt.
+- `P1-16-F08` — Wird eine Zuweisung während einer geöffneten Seite entfernt, verschwinden geschützte Inhalte beim aktuellen Realtime-/Fokusabgleich und weitere Aktionen werden serverseitig abgewiesen.
+- `P1-16-F09` — Jede Arbeitspack-Lese- und Schreibaktion prüft aktive Organisation, Rolle und aktuelle Auftragszuweisung auf dem Server; ausgeblendete Schaltflächen ersetzen keine Autorisierung.
+- `P1-16-F10` — Das bloße Öffnen oder Aktualisieren des Arbeitspacks erzeugt oder verändert keinen Termin, Versand, keine Bestätigung, Zeit, Bestandsbewegung, Datei, Evidenz, keinen Status, Blocker, keine Nachricht oder Übergabe.
+- `P1-16-F11` — Bestehende zugewiesene Aufträge liefern den Arbeitspack sofort aus ihren aktuellen Fachdaten; es sind weder Backfill noch kopierte Arbeitspack-Zeilen erforderlich.
+- `P1-16-F12` — Auf kleinen Bildschirmen folgt der Arbeitspack der festen Reihenfolge Vor dem Einsatz, aktueller Arbeitsstand, Anweisungen, Nachweise, Dokumente, eigene Zeit, Material, offene Punkte und weitere Angaben.
+- `P1-16-F13` — Der Kopf zeigt Auftragsnummer, Titel und verständlichen aktuellen Arbeitsstand ohne Büro-Metadaten zu überladen.
+- `P1-16-F14` — Geplanter Tag und Zeitraum bleiben klar als Planung gekennzeichnet und werden nicht mit tatsächlicher Arbeitszeit vermischt.
+- `P1-16-F15` — Der angeforderte Arbeitszweck beziehungsweise die Auftragsbeschreibung erscheint vor dem Einsatz, wenn er vorhanden ist.
+- `P1-16-F16` — Der zugehörige Kunde erscheint als Arbeitskontext, ohne interne Kundenbewertung oder kaufmännische Daten.
+- `P1-16-F17` — Der korrekte Einsatzort erscheint mit seiner gespeicherten Auftragsadresse und bleibt historisch vom später veränderten Kundenstamm getrennt.
+- `P1-16-F18` — Praktische Zugangshinweise zum Einsatzort erscheinen vor dem Einsatz; interne Standortnotizen bleiben im Büro.
+- `P1-16-F19` — Der relevante Ansprechpartner erscheint mit Name, Funktion und benötigter Telefonnummer.
+- `P1-16-F20` — Ein mindestens 44 Pixel hohes Telefonziel startet den Anruf über einen unmittelbaren `tel:`-Link.
+- `P1-16-F21` — Ein mindestens 44 Pixel hohes Navigationsziel öffnet die Geräte-Navigation über die vorhandene Adresse; Adresse kopieren bleibt möglich, ohne einen Anbieter, GPS-Verlauf oder Geocoding einzuführen.
+- `P1-16-F22` — Fehlender Kunde, Einsatzort, Zugangshinweis, Ansprechpartner oder Termin erscheint als ruhige, eindeutige Lücke und nicht als erfundener Wert.
+- `P1-16-F23` — Interne Kunden-, Kontakt- und Standortnotizen sowie E-Mail-Adressen bleiben aus dem Arbeitspack ausgeschlossen.
+- `P1-16-F24` — Namen, E-Mails, Personal-, Zeit- oder Zuständigkeitsdetails anderer Beschäftigter bleiben ausgeschlossen, soweit sie nicht unmittelbar für die Arbeit nötig sind.
+- `P1-16-F25` — Preise, Margen, Einkauf, Verkauf, Bewertung und Abrechenbarkeit bleiben vollständig Büro-Sache.
+- `P1-16-F26` — Dokumentverwaltung, interne Entwürfe anderer Urheber, zentrale Bestandsverwaltung und sonstige Governance-Flächen bleiben aus dem Arbeitspack ausgeschlossen.
+- `P1-16-F27` — Eine aktuelle noch unbestätigte Einsatzanweisung erhält vor dem Arbeitsstand die höchste Aktionspriorität.
+- `P1-16-F28` — Der Arbeitspack zeigt gleichzeitig genau eine hervorgehobene nächste Hauptaktion.
+- `P1-16-F29` — Ohne vorrangige Einsatzanweisung stammen nächste Aktion und erlaubte Übergänge ausschließlich aus dem P1-14-Lebenszyklus.
+- `P1-16-F30` — Einsatzbereitschaft wird ausschließlich durch die bestehende `composeReadiness`-Projektion aus aktuellen Fachdaten gebildet.
+- `P1-16-F31` — Kapazität, Qualifikation, Einsatzort, Fahrzeit, Material und Werkzeuge bleiben getrennt und verwenden ihre bestehenden ehrlichen Zustände.
+- `P1-16-F32` — Fehlende, nicht bewertete oder fehlgeschlagene Bereitschaft wird nie grün dargestellt; eine kompakte Ausnahme führt zur zuständigen Quelle.
+- `P1-16-F33` — „Bestätigen“ bestätigt genau die aktuelle Einsatzrevision über die bestehende Versandaktion und gilt weder als Anwesenheit noch Arbeitsbeginn.
+- `P1-16-F34` — „Rückfrage senden“ verlangt den vorhandenen Grund und verwendet die bestehende Versand-Herausforderung, ohne selbst eine Nachricht an den Kunden zu senden.
+- `P1-16-F35` — Bestätigung, Rückfrage oder Ansicht ändern weder Ausführungsstand, Arbeitszeit, Bestand, Kundenversprechen noch Kommunikation stillschweigend.
+- `P1-16-F36` — Ein berechtigter Handwerker startet „In Ausführung“ über den bestehenden P1-14-Übergang.
+- `P1-16-F37` — „Unterbrechen“ verlangt den bestehenden Grund und speichert denselben versionierten Lebenszyklusübergang.
+- `P1-16-F38` — „Fortsetzen“ verwendet den bestehenden Übergang zurück zu „In Ausführung“ und erzeugt keinen neuen Auftrag oder Zeitabschnitt.
+- `P1-16-F39` — „Ausführung abgeschlossen“ bleibt durch die aktuellen Aufgaben-, Nachweis-, Blocker- und sonstigen P1-14-Prüfungen begrenzt und scheitert atomar bei einer offenen Pflicht.
+- `P1-16-F40` — „Ausführung abgeschlossen“ bedeutet nur, dass die Feldarbeit beendet ist; „Übergeben“ bleibt ein eigener späterer Bürostand.
+- `P1-16-F41` — Abgeschlossene, übergebene, stornierte oder sonst terminale Arbeit ist für Handwerker im Arbeitspack schreibgeschützt.
+- `P1-16-F42` — Wiedereröffnung, begründete Übergabeausnahme, Büroprüfung und Kundenpaket bleiben P1-17 vorbehalten.
+- `P1-16-F43` — Arbeitsanweisungen erscheinen in ihrer materialisierten Reihenfolge mit Art, Pflicht/optional, Gruppe und praktischen Notizen.
+- `P1-16-F44` — Strukturelle Aufgabenabhängigkeiten und noch nicht erfüllte Vorgänger bleiben sichtbar und verwenden das vorhandene P1-13-Modell.
+- `P1-16-F45` — Ein zugewiesener Handwerker markiert eine erlaubte Anweisung erledigt oder wieder offen; Akteur und Zeitpunkt bleiben im vorhandenen Datensatz.
+- `P1-16-F46` — Schnelle, veraltete oder wegen eines Vorgängers abgewiesene Aufgabenaktionen werden serialisiert, sichtbar zurückgesetzt und aus dem aktuellen Serverstand nachgeladen.
+- `P1-16-F47` — Erwartete Nachweiskategorien und ihre aktuelle Erfüllung erscheinen an der bestehenden Anweisung und werden nur über die P1-15-Erfüllungsaktion geändert.
+- `P1-16-F48` — Der Arbeitspack kopiert weder Aufgaben noch Nachweiserwartungen in ein eigenes Modell.
+- `P1-16-F49` — Zugewiesene Handwerker erfassen die fünf vorhandenen strukturierten Arbeitsnachweisarten in der bestehenden P1-15-Oberfläche.
+- `P1-16-F50` — Erstellen, neue Version, Einreichen, Zurückziehen und sonstige sichtbare Nachweisaktionen verwenden ausschließlich die P1-15-Serveraktionen und deren exakte Versionen.
+- `P1-16-F51` — Der Handwerker sieht und bearbeitet den eigenen internen Entwurf am zugewiesenen Auftrag.
+- `P1-16-F52` — Interne Entwürfe anderer Urheber und deren Signaturkontext bleiben für den Handwerker verborgen.
+- `P1-16-F53` — Bei veralteter oder fehlgeschlagener Nachweisspeicherung bleibt die lokale Eingabe erhalten; der aktuelle Serverstand kann bewusst geladen und erneut gespeichert werden.
+- `P1-16-F54` — Bereits vorhandene P1-15-Kundenreaktionen und Unterschriften bleiben exakt versionsgebunden; P1-16 fügt keine zweite Feldentscheidung hinzu.
+- `P1-16-F55` — Der Arbeitspack erzeugt keinen Übergabebericht, kein Kundenpaket und keine kundenöffentliche Ausgabe.
+- `P1-16-F56` — Dokumente und Bilder erscheinen ausschließlich im vorhandenen kontextbezogenen Auftragsbereich.
+- `P1-16-F57` — Ein Upload überträgt die Datei direkt über den vorhandenen signierten Browser-zu-R2-Pfad und registriert nur die bestehende Dokumentmetadaten-Verknüpfung.
+- `P1-16-F58` — Berechtigte Handwerker können zugängliche Auftragsdateien ansehen und herunterladen.
+- `P1-16-F59` — Handwerker erhalten keine zentrale Dokumentbibliothek, Verknüpfen-vorhanden-, Papierkorb-, Versions-, Audit- oder Governance-Oberfläche.
+- `P1-16-F60` — Der Arbeitspack speichert keine private Dateikopie nur für seine Anzeige.
+- `P1-16-F61` — Teilweise oder fehlgeschlagene Uploads bleiben pro Datei sichtbar und erneut versuchbar; fertig hochgeladene Dateien bleiben beim Metadatenfehler erhalten und verwaiste Retention läuft begrenzt aus.
+- `P1-16-F62` — Der Zeitbereich zeigt dem Handwerker nur die eigenen auftragsbezogenen Einträge und Summen.
+- `P1-16-F63` — Zeiten, E-Mails und Personalangaben von Kollegen bleiben aus dem Feldbereich ausgeschlossen.
+- `P1-16-F64` — „Arbeitszeit starten“ verwendet die bestehende Clock-Oberfläche und erzeugt einen normalen auftragsbezogenen Zeiteintrag.
+- `P1-16-F65` — „Arbeitszeit beenden“ beendet den vorhandenen laufenden Eintrag über die Zeitdomäne.
+- `P1-16-F66` — Bei laufender Zeit auf einem anderen Auftrag bietet der Arbeitspack den vorhandenen bewussten Wechsel an.
+- `P1-16-F67` — Zuweisung beweist keine Anwesenheit, Auftragsbezug macht Zeit nicht automatisch abrechenbar und archivierte Arbeit behält ihre Zeitbezüge.
+- `P1-16-F68` — Planung und Ist-Zeit bleiben getrennt; nur das bestehende erste Einstempeln darf den P1-14-Arbeitsstand atomar starten.
+- `P1-16-F69` — P1-16 baut keine Arbeits-, Fahrt-, Pause-, Bereitschafts- oder Rufbereitschaftssegmentierung aus P1-21 vor.
+- `P1-16-F70` — Der Materialbereich zeigt vorhandenen Bedarf, offene Menge, Bestandshinweis und tatsächliche Bewegungen, ohne Reservierung zu erfinden.
+- `P1-16-F71` — Ein zugewiesener Handwerker entnimmt geplantes vorhandenes Material über die bestehende Inventaraktion.
+- `P1-16-F72` — Ein zugewiesener Handwerker sucht ein ungeplantes vorhandenes Teil in einem serverseitig begrenzten Bestandssuchergebnis und entnimmt es über dieselbe Inventaraktion.
+- `P1-16-F73` — Ein zugewiesener Handwerker legt zuvor entnommenes Material über die bestehende Rückgabeaktion zurück.
+- `P1-16-F74` — Der Handwerker kann keinen Artikel oder Lagerort anlegen und erreicht weder zentrale Inventarroute noch Projekt-Inventarabläufe.
+- `P1-16-F75` — Lieferant, Einkauf, Verkauf, Bewertung und Abrechenbarkeit bleiben im Materialbereich verborgen.
+- `P1-16-F76` — Geplant, reserviert, entnommen, verbraucht/installiert und abrechenbar bleiben getrennte Zustände; entnommene Menge wird nicht als Verbrauch oder Rechnung interpretiert.
+- `P1-16-F77` — Abschluss kann auf offenen Bedarf, ausstehendes Material oder Werkzeuge hinweisen, repariert diese Zustände aber nie stillschweigend.
+- `P1-16-F78` — Ein zugewiesener Handwerker meldet einen eigenen Blocker mit dem bestehenden Grund-, Detail- und Prüfkontext.
+- `P1-16-F79` — Der Handwerker bearbeitet oder löst nur den eigenen erlaubten Blocker; Manager behalten ihre bestehenden erweiterten Kontrollen.
+- `P1-16-F80` — Zusätzliche Voraussetzungen und ihre aktuelle Erfüllung erscheinen lesbar im vorhandenen P1-14-Modell.
+- `P1-16-F81` — P1-16 erstellt weder ein zweites Blocker- noch ein zweites Fragen- oder Aufmerksamkeitssystem.
+- `P1-16-F82` — Kompakte Bereitschafts- und Problemzusammenfassungen stehen früh im Arbeitspack; seltene Details bleiben über progressive Offenlegung erreichbar.
+- `P1-16-F83` — Der Server lädt unabhängige Arbeitspack-Quellen parallel und begrenzt Listen und Suchergebnisse; es entsteht keine serielle Karten-Wasserfallkette.
+- `P1-16-F84` — Schlägt eine Quelle beim ersten Laden fehl, zeigt ihr Abschnitt eine sichtbare Ausnahme und eine konkrete Wiederholen-Aktion statt einen falschen Leerzustand.
+- `P1-16-F85` — Schlägt eine spätere Aktualisierung fehl, bleibt der letzte erfolgreiche Stand sichtbar, wird als möglicherweise veraltet gekennzeichnet und lässt keine betroffene Mutation zu.
+- `P1-16-F86` — Veraltete Versionen, doppelte Anfragen und mehrdeutige Materialantworten führen zu einem bewussten Nachladen und sicheren erneuten Versuch statt zu einem Teilstand.
+- `P1-16-F87` — Zuweisungsänderung, Fokus- oder Sichtbarkeitsrückkehr und relevante Realtime-Ereignisse gleichen geschützte Arbeitspack-Daten zeitnah mit dem Server ab.
+- `P1-16-F88` — Der Arbeitspack verwendet die vorhandenen zentralen Abonnements und veröffentlicht keine unveränderlichen Versand- oder Arbeitsnachweis-Ledger reflexartig; Root-Ereignisse lösen den Nachladeweg aus.
+- `P1-16-F89` — Geöffnete Dialoge behalten ihre Eingabe, während störende Router-Aktualisierungen angehalten und nach dem Schließen einmal nachgeholt werden.
+- `P1-16-F90` — Primäraktionen, Anruf und Navigation bieten mindestens 44 Pixel Zielhöhe, sichtbaren Fokus, Tastaturbedienung, deutsche Beschriftung und verständliche Screenreader-Namen.
+- `P1-16-F91` — Die Web-Oberfläche verspricht keine Offline-Verfügbarkeit und führt keine Offline-Warteschlange ein.
+- `P1-16-F92` — P1-16 führt keinen Navigationsanbieter, Geocoder, GPS- oder Routenverlauf und kein kostenpflichtiges externes Konto ein.
+- `P1-16-F93` — P1-16 sendet keine Nachricht oder Kundenaktualisierung und baut weder Geräte-/Servicehistorie, kaufmännische Freigabe noch kundenöffentliche Übergabe vor.
+- `P1-16-F94` — Jede sichtbare Aktion bleibt beim zuständigen Fachgebiet; Rendern und Ausführen erzeugen keine fachfremde Mutation und der Arbeitspack bleibt eine Projektion statt einer neuen Domäne.

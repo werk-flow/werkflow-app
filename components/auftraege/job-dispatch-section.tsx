@@ -5,7 +5,8 @@
 // that this person saw this exact work instruction revision — never
 // attendance, time, or a customer promise.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useRouter } from 'next/navigation';
 import { CalendarCheck, Loader2, MessageSquare, Send } from 'lucide-react';
 
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
@@ -31,6 +32,7 @@ import {
   dispatchErrorMessage,
   type EmployeeDispatchCard,
 } from '@/lib/dispatch/types';
+import type { FieldDispatchState } from '@/lib/dispatch/field-state';
 
 function formatCardSchedule(card: EmployeeDispatchCard): string {
   if (card.startAt) {
@@ -63,9 +65,22 @@ function formatCardSchedule(card: EmployeeDispatchCard): string {
   return 'Ohne festen Termin – bitte Rücksprache mit dem Büro.';
 }
 
-export function JobDispatchSection({ jobId }: { jobId: string }) {
-  const [cards, setCards] = useState<EmployeeDispatchCard[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function JobDispatchSection({
+  jobId,
+  initialCards,
+  initialError = null,
+  readOnly = false,
+  onStateChange,
+}: {
+  jobId: string;
+  initialCards?: EmployeeDispatchCard[];
+  initialError?: string | null;
+  readOnly?: boolean;
+  onStateChange?: (state: FieldDispatchState) => void;
+}): ReactElement | null {
+  const router = useRouter();
+  const [cards, setCards] = useState<EmployeeDispatchCard[] | null>(initialCards ?? null);
+  const [error, setError] = useState<string | null>(initialError);
   const [busyDispatchId, setBusyDispatchId] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] =
     useState<EmployeeDispatchCard | null>(null);
@@ -73,7 +88,14 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
   const generationRef = useRef(0);
   // Ref instead of a state dependency: keep-last-known must read the CURRENT
   // loaded state without changing the refresh identity on every result.
-  const hasCardsRef = useRef(false);
+  const hasCardsRef = useRef(initialCards !== undefined);
+
+  useEffect(() => {
+    onStateChange?.({
+      status: cards === null ? (error ? 'error' : 'loading') : 'ready',
+      hasPending: cards?.some((card) => card.myState === 'ausstehend') ?? false,
+    });
+  }, [cards, error, onStateChange]);
 
   const refresh = useCallback(async () => {
     const generation = ++generationRef.current;
@@ -81,20 +103,26 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
       const result = await getJobDispatchCards(jobId);
       if (generation !== generationRef.current) return;
       if (result.success) {
+        onStateChange?.({
+          status: 'ready',
+          hasPending: result.cards.some((card) => card.myState === 'ausstehend'),
+        });
         hasCardsRef.current = true;
         setCards(result.cards);
         setError(null);
       } else if (!hasCardsRef.current) {
+        onStateChange?.({ status: 'error', hasPending: false });
         // Initial load failed; transient later failures keep last-known cards.
         setError(dispatchErrorMessage(result.error));
       }
     } catch {
       if (generation !== generationRef.current) return;
       if (!hasCardsRef.current) {
+        onStateChange?.({ status: 'error', hasPending: false });
         setError(dispatchErrorMessage('load_failed'));
       }
     }
-  }, [jobId]);
+  }, [jobId, onStateChange]);
 
   // Shared debounce: one mutation touches several published tables and must
   // produce one refetch.
@@ -114,9 +142,11 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
   );
 
   useEffect(() => {
-    hasCardsRef.current = false;
-    void refresh();
-  }, [refresh]);
+    if (initialCards === undefined) {
+      hasCardsRef.current = false;
+      void refresh();
+    }
+  }, [initialCards, refresh]);
   useRealtimeEvent('planning_dispatches', scheduleRefresh);
   useRealtimeEvent('planning_dispatch_recipients', scheduleRefresh);
   useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefresh);
@@ -132,15 +162,23 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
       setBusyDispatchId(null);
       if (!result.success) {
         setError(dispatchErrorMessage(result.error));
+      } else {
+        router.refresh();
       }
       await refresh();
     },
-    [refresh]
+    [refresh, router]
   );
 
   const [challengeError, setChallengeError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!readOnly) return;
+    setChallengeTarget(null);
+    setChallengeError(null);
+  }, [readOnly]);
+
   const handleChallenge = useCallback(async () => {
-    if (!challengeTarget) return;
+    if (readOnly || !challengeTarget) return;
     setBusyDispatchId(challengeTarget.dispatchId);
     setChallengeError(null);
     try {
@@ -156,13 +194,14 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
       }
       setChallengeTarget(null);
       setChallengeReason('');
+      router.refresh();
       await refresh();
     } catch {
       setChallengeError(dispatchErrorMessage('unexpected_error'));
     } finally {
       setBusyDispatchId(null);
     }
-  }, [challengeTarget, challengeReason, refresh]);
+  }, [challengeTarget, challengeReason, readOnly, refresh, router]);
 
   // An initial load failure must stay visible instead of silently reading as
   // "kein Einsatz".
@@ -185,6 +224,7 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
     );
   }
   if (!cards || cards.length === 0) return null;
+  const primaryPendingDispatchId = cards.find((card) => card.myState === 'ausstehend')?.dispatchId;
 
   return (
     <section
@@ -232,9 +272,11 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
               </p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {card.myState === 'ausstehend' ? (
+              {card.myState === 'ausstehend' && !readOnly ? (
                 <>
                   <Button
+                    data-testid={card.dispatchId === primaryPendingDispatchId ? 'field-primary-next-action' : undefined}
+                    variant={card.dispatchId === primaryPendingDispatchId ? 'default' : 'outline'}
                     className="min-h-11 flex-1 sm:flex-none"
                     disabled={busyDispatchId === card.dispatchId}
                     onClick={() => void handleAcknowledge(card)}
@@ -323,6 +365,7 @@ export function JobDispatchSection({ jobId }: { jobId: string }) {
               <Button
                 type="submit"
                 disabled={
+                  readOnly ||
                   challengeReason.trim().length < 8 ||
                   busyDispatchId === challengeTarget?.dispatchId
                 }

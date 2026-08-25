@@ -750,33 +750,57 @@ export async function getInventoryOverview(): Promise<ActionResult<{ overview: I
   };
 }
 
-export async function getInventoryPickerOptions(): Promise<
-  ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>
-> {
-  const auth = await getAuthContext();
-  if (!auth.success) return auth;
+async function loadInventoryPickerOptions(
+  admin: SupabaseAdminClient,
+  orgId: string,
+  includeOfficeDetails: boolean,
+  options?: { searchTerm?: string; itemLimit?: number; exactItemId?: string }
+): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
+  const searchTerm = options?.searchTerm?.trim().slice(0, 80) ?? '';
+  const itemLimit = options?.itemLimit;
+  let itemIds: string[] | null = options?.exactItemId ? [options.exactItemId] : null;
+  const matchedBarcodeByItem = new Map<string, string>();
 
-  const admin = createSupabaseAdminClient();
-  const { orgId } = auth.context;
-  await ensureInventoryDefaults(admin, auth.context);
+  if (!options?.exactItemId && searchTerm) {
+    const pattern = `%${searchTerm}%`;
+    const [names, skus, manufacturers, barcodes] = await Promise.all([
+      admin.from('inventory_items').select('id').eq('organization_id', orgId)
+        .eq('is_active', true).ilike('name', pattern).limit(itemLimit ?? 50),
+      admin.from('inventory_items').select('id').eq('organization_id', orgId)
+        .eq('is_active', true).ilike('internal_sku', pattern).limit(itemLimit ?? 50),
+      admin.from('inventory_items').select('id').eq('organization_id', orgId)
+        .eq('is_active', true).ilike('manufacturer', pattern).limit(itemLimit ?? 50),
+      admin.from('inventory_item_barcodes').select('item_id, barcode_value').eq('organization_id', orgId)
+        .ilike('barcode_value', pattern).limit(itemLimit ?? 50),
+    ]);
+    if ([names, skus, manufacturers, barcodes].some((result) => result.error)) {
+      return { success: false, error: 'items_failed' };
+    }
+    for (const barcode of barcodes.data ?? []) {
+      if (!matchedBarcodeByItem.has(barcode.item_id)) {
+        matchedBarcodeByItem.set(barcode.item_id, barcode.barcode_value);
+      }
+    }
+    itemIds = Array.from(new Set([
+      ...(barcodes.data ?? []).map((row) => row.item_id),
+      ...(skus.data ?? []).map((row) => row.id),
+      ...(names.data ?? []).map((row) => row.id),
+      ...(manufacturers.data ?? []).map((row) => row.id),
+    ])).slice(0, itemLimit ?? 50);
+  }
 
-  const [
-    itemsResult,
-    categoriesResult,
-    suppliersResult,
-    stockResult,
-    locationsResult,
-    barcodesResult,
-  ] = await Promise.all([
-    admin
+  let itemsQuery = admin
       .from('inventory_items')
       .select('*')
       .eq('organization_id', orgId)
       .eq('is_active', true)
-      .order('name', { ascending: true }),
-    admin.from('inventory_categories').select('*').eq('organization_id', orgId),
-    admin.from('inventory_suppliers').select('*').eq('organization_id', orgId),
-    admin.from('inventory_stock_levels').select('*').eq('organization_id', orgId),
+      .order('name', { ascending: true });
+  if (itemIds) itemsQuery = itemsQuery.in('id', itemIds);
+  if (itemLimit) itemsQuery = itemsQuery.limit(itemLimit);
+  const [itemsResult, locationsResult] = await Promise.all([
+    itemIds?.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : itemsQuery,
     admin
       .from('inventory_locations')
       .select('*')
@@ -784,18 +808,33 @@ export async function getInventoryPickerOptions(): Promise<
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true }),
-    admin
-      .from('inventory_item_barcodes')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('is_primary', { ascending: false }),
   ]);
 
   if (itemsResult.error) return { success: false, error: 'items_failed' };
+  if (locationsResult.error) return { success: false, error: 'locations_failed' };
+
+  const itemRows = asRows<InventoryItemRow>(itemsResult.data);
+  const loadedItemIds = itemRows.map((item) => item.id);
+  const categoryIds = Array.from(new Set(itemRows.flatMap((item) => item.category_id ? [item.category_id] : [])));
+  const supplierIds = Array.from(new Set(itemRows.flatMap((item) => item.supplier_id ? [item.supplier_id] : [])));
+  const [categoriesResult, suppliersResult, stockResult, barcodesResult] = await Promise.all([
+    categoryIds.length > 0
+      ? admin.from('inventory_categories').select('*').eq('organization_id', orgId).in('id', categoryIds)
+      : Promise.resolve({ data: [], error: null }),
+    includeOfficeDetails && supplierIds.length > 0
+      ? admin.from('inventory_suppliers').select('*').eq('organization_id', orgId).in('id', supplierIds)
+      : Promise.resolve({ data: [], error: null }),
+    loadedItemIds.length > 0
+      ? admin.from('inventory_stock_levels').select('*').eq('organization_id', orgId).in('item_id', loadedItemIds)
+      : Promise.resolve({ data: [], error: null }),
+    loadedItemIds.length > 0
+      ? admin.from('inventory_item_barcodes').select('*').eq('organization_id', orgId)
+          .in('item_id', loadedItemIds).order('is_primary', { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
   if (categoriesResult.error) return { success: false, error: 'categories_failed' };
   if (suppliersResult.error) return { success: false, error: 'suppliers_failed' };
   if (stockResult.error) return { success: false, error: 'stock_failed' };
-  if (locationsResult.error) return { success: false, error: 'locations_failed' };
   if (barcodesResult.error) return { success: false, error: 'barcodes_failed' };
 
   const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
@@ -819,7 +858,7 @@ export async function getInventoryPickerOptions(): Promise<
     stockByItem.set(stock.item_id, list);
   }
 
-  const pickerItems = asRows<InventoryItemRow>(itemsResult.data).map((row) => {
+  const pickerItems = itemRows.map((row) => {
     const item = toInventoryItem(row);
     const stockByLocation = (stockByItem.get(item.id) ?? []).map((stock) => ({
       locationId: stock.location_id,
@@ -833,17 +872,18 @@ export async function getInventoryPickerOptions(): Promise<
       unit: item.unit,
       internalSku: item.internalSku,
       manufacturer: item.manufacturer,
-      supplierName: item.supplierId
+      supplierName: includeOfficeDetails && item.supplierId
         ? supplierMap.get(item.supplierId)?.name ?? null
         : null,
-      supplierArticleNumber: item.supplierArticleNumber,
+      supplierArticleNumber: includeOfficeDetails ? item.supplierArticleNumber : null,
       primaryBarcode:
+        matchedBarcodeByItem.get(item.id) ??
         barcodesByItem.get(item.id)?.find((barcode) => barcode.is_primary)
           ?.barcode_value ??
         barcodesByItem.get(item.id)?.[0]?.barcode_value ??
         null,
       categoryName: item.categoryId ? categoryMap.get(item.categoryId)?.name ?? null : null,
-      isBillable: item.isBillable,
+      isBillable: includeOfficeDetails && item.isBillable,
       availableQuantity: stockByLocation.reduce(
         (sum, stock) => sum + stock.quantityOnHand,
         0
@@ -853,6 +893,42 @@ export async function getInventoryPickerOptions(): Promise<
   });
 
   return { success: true, items: pickerItems, locations };
+}
+
+export async function getInventoryPickerOptions(): Promise<
+  ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>
+> {
+  const auth = await requireInventoryManager();
+  if (!auth.success) return auth;
+
+  const admin = createSupabaseAdminClient();
+  await ensureInventoryDefaults(admin, auth.context);
+  return loadInventoryPickerOptions(admin, auth.context.orgId, true);
+}
+
+/**
+ * Loads the existing catalog only after an assigned worker starts a material
+ * action. Unlike the office picker, reading an assigned job never creates
+ * inventory defaults and never exposes supplier or billability details.
+ */
+export async function getInventoryPickerOptionsForJob(
+  jobId: string,
+  searchTerm = '',
+  exactItemId?: string
+): Promise<ActionResult<{ items: InventoryPickerOption[]; locations: InventoryLocation[] }>> {
+  const auth = await getAuthContext();
+  if (!auth.success) return auth;
+
+  const admin = createSupabaseAdminClient();
+  const jobContext = await getJobContext(admin, auth.context, jobId);
+  if (!jobContext.success) return jobContext;
+
+  return loadInventoryPickerOptions(
+    admin,
+    auth.context.orgId,
+    auth.context.isManagerOrAbove,
+    { searchTerm, itemLimit: 50, exactItemId }
+  );
 }
 
 export async function createInventoryLocation(
@@ -1330,7 +1406,12 @@ export async function getJobMaterialLines(
     asRows<JobMaterialLineRow>(data)
   );
 
-  return { success: true, lines };
+  return {
+    success: true,
+    lines: auth.context.isManagerOrAbove
+      ? lines
+      : lines.map((line) => ({ ...line, billableQuantity: 0, isBillable: false })),
+  };
 }
 
 export async function getProjectMaterialSummary(

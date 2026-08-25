@@ -37,6 +37,19 @@ export const WORK_EXECUTION_STATES = [
   "handed_over",
   "cancelled",
 ] as const satisfies readonly WorkExecutionState[];
+
+const TERMINAL_WORK_EXECUTION_STATES: Record<WorkExecutionState, boolean> = {
+  not_started: false,
+  in_progress: false,
+  interrupted: false,
+  execution_complete: true,
+  handed_over: true,
+  cancelled: true,
+};
+
+export function isTerminalWorkExecutionState(state: WorkExecutionState): boolean {
+  return TERMINAL_WORK_EXECUTION_STATES[state];
+}
 export const WORK_BLOCKER_REASONS = [
   "customer",
   "material",
@@ -165,8 +178,7 @@ export function getAllowedWorkTransitions(
   isManager: boolean,
 ): WorkExecutionState[] {
   if (isManager) return WORK_TRANSITIONS[state];
-  if (["execution_complete", "handed_over", "cancelled"].includes(state))
-    return [];
+  if (isTerminalWorkExecutionState(state)) return [];
   return WORK_TRANSITIONS[state].filter(
     (next) => next !== "cancelled" && next !== "handed_over",
   );

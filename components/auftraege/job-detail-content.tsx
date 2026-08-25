@@ -1410,6 +1410,7 @@ export function JobDetailContent({
                           variant="ghost"
                           size="icon"
                           className="size-6 shrink-0"
+                          aria-label={`Zuweisung für ${getSessionPersonName(a)} entfernen`}
                           onClick={() => handleUnassign(a.userId)}
                           disabled={unassigningUserId === a.userId}
                         >

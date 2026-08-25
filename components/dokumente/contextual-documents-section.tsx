@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useTransition, type DragEvent } from 'react';
+import { useEffect, useRef, useState, useTransition, type DragEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight,
@@ -75,6 +75,8 @@ type ContextualDocumentsSectionProps = {
   contextLabel?: string;
   canUpload: boolean;
   canManage: boolean;
+  emphasizeUpload?: boolean;
+  keepUploadedDocumentsVisible?: boolean;
 };
 
 function formatFileSize(sizeBytes: number): string {
@@ -250,7 +252,9 @@ export function ContextualDocumentsSection({
   contextLabel,
   canUpload,
   canManage,
-}: ContextualDocumentsSectionProps) {
+  emphasizeUpload = true,
+  keepUploadedDocumentsVisible = false,
+}: ContextualDocumentsSectionProps): ReactElement {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
@@ -264,15 +268,33 @@ export function ContextualDocumentsSection({
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadItems, setUploadItems] = useState<DocumentUploadItem[]>([]);
+  const [recentlyUploadedDocuments, setRecentlyUploadedDocuments] = useState<
+    OrganizationDocument[]
+  >([]);
   const [viewerDocument, setViewerDocument] = useState<OrganizationDocument | null>(null);
   const [renameDocument, setRenameDocument] = useState<OrganizationDocument | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteDocumentTarget, setDeleteDocumentTarget] =
     useState<OrganizationDocument | null>(null);
 
+  useEffect(() => {
+    if (recentlyUploadedDocuments.length === 0) return;
+    const timer = window.setTimeout(() => setRecentlyUploadedDocuments([]), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [recentlyUploadedDocuments]);
+
   const context = { jobId, projectId, clientId, employeeId, requestId };
+  const displayedDocuments = keepUploadedDocumentsVisible
+    ? [
+        ...recentlyUploadedDocuments.filter(
+          (recentDocument) =>
+            !documents.some((document) => document.id === recentDocument.id)
+        ),
+        ...documents,
+      ]
+    : documents;
   const totalDocumentCount =
-    documents.length +
+    displayedDocuments.length +
     jobDocumentGroups.reduce((total, group) => total + group.documents.length, 0);
 
   useRealtimeRouterRefresh({
@@ -314,7 +336,15 @@ export function ContextualDocumentsSection({
       });
       if (!result.success) {
         showFeedback('error', 'Die Datei konnte nicht umbenannt werden.');
+        return;
       }
+      setRecentlyUploadedDocuments((current) =>
+        current.map((recentDocument) =>
+          recentDocument.id === renameDocument.id
+            ? { ...recentDocument, displayName: nextName }
+            : recentDocument
+        )
+      );
       setRenameDocument(null);
       router.refresh();
     });
@@ -330,6 +360,9 @@ export function ContextualDocumentsSection({
         showFeedback('error', 'Die Verknüpfung konnte nicht entfernt werden.');
         return;
       }
+      setRecentlyUploadedDocuments((current) =>
+        current.filter((recentDocument) => recentDocument.id !== document.id)
+      );
       showFeedback('success', 'Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.');
       router.refresh();
     });
@@ -378,12 +411,12 @@ export function ContextualDocumentsSection({
   function renderGroupedProjectView() {
     return (
       <div className="space-y-3">
-        {documents.length > 0 && (
+        {displayedDocuments.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Projektdateien
             </p>
-            {renderFlatList(documents)}
+            {renderFlatList(displayedDocuments)}
           </div>
         )}
 
@@ -474,6 +507,8 @@ export function ContextualDocumentsSection({
             <Button
               type="button"
               size="sm"
+              variant={emphasizeUpload ? 'default' : 'outline'}
+              className={emphasizeUpload ? undefined : 'min-h-11'}
               onClick={() => fileInputRef.current?.click()}
               disabled={isPending}
             >
@@ -496,14 +531,22 @@ export function ContextualDocumentsSection({
           <p className="text-sm font-medium">Noch keine Dokumente vorhanden.</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {canUpload
-              ? 'Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage.'
+              ? canManage
+                ? 'Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage.'
+                : jobId
+                  ? 'Lade Dateien direkt zu diesem Auftrag hoch.'
+                  : projectId
+                    ? 'Lade Dateien direkt zu diesem Projekt hoch.'
+                    : contextLabel
+                      ? `Lade Dateien direkt zu ${contextLabel} hoch.`
+                      : 'Lade Dateien direkt in diesem Bereich hoch.'
               : 'Sobald Dokumente vorhanden sind, erscheinen sie hier.'}
           </p>
         </div>
       ) : projectId ? (
         renderGroupedProjectView()
       ) : (
-        renderFlatList(documents)
+        renderFlatList(displayedDocuments)
       )}
 
       <DocumentUploadDialog
@@ -511,7 +554,7 @@ export function ContextualDocumentsSection({
         onOpenChange={setUploadDialogOpen}
         items={uploadItems}
         target={{ jobId, projectId, clientId, employeeId, requestId }}
-        onComplete={(failedCount) => {
+        onComplete={(failedCount, uploadedDocuments) => {
           if (failedCount > 0) {
             showFeedback(
               'error',
@@ -519,6 +562,15 @@ export function ContextualDocumentsSection({
             );
           }
           if (fileInputRef.current) fileInputRef.current.value = '';
+          if (keepUploadedDocumentsVisible) {
+            setRecentlyUploadedDocuments((current) => [
+              ...uploadedDocuments,
+              ...current.filter(
+                (document) =>
+                  !uploadedDocuments.some((uploaded) => uploaded.id === document.id)
+              ),
+            ]);
+          }
           router.refresh();
         }}
       />
@@ -603,6 +655,9 @@ export function ContextualDocumentsSection({
                     showFeedback('error', 'Die Datei konnte nicht gelöscht werden.');
                     return;
                   }
+                  setRecentlyUploadedDocuments((current) =>
+                    current.filter((recentDocument) => recentDocument.id !== target.id)
+                  );
                   showFeedback('success', 'Datei wurde in den Papierkorb verschoben.');
                   router.refresh();
                 });

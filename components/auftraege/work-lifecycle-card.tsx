@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type ReactElement,
 } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -50,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { isFieldWorkPackReadOnly } from "@/lib/jobs/field-work-pack";
 import {
   clearProjectWorkExecutionOverride,
   getWorkLifecycleSnapshot,
@@ -69,6 +71,7 @@ import {
 import {
   getAllowedWorkTransitions,
   getWorkNextAction,
+  isTerminalWorkExecutionState,
   WORK_BLOCKER_REASON_LABELS,
   WORK_DEPENDENCY_EFFECT_LABELS,
   WORK_EXECUTION_LABELS,
@@ -753,9 +756,12 @@ type WorkLifecycleCardProps = {
   initialSnapshot: WorkLifecycleSnapshot;
   targetLabel: string;
   isManager: boolean;
+  fieldMode?: boolean;
+  hasPendingDispatch?: boolean;
+  readOnly?: boolean;
 };
 
-export function WorkLifecycleLoadError() {
+export function WorkLifecycleLoadError(): ReactElement {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   return (
@@ -785,7 +791,11 @@ export function WorkLifecycleCard({
   initialSnapshot,
   targetLabel,
   isManager,
-}: WorkLifecycleCardProps) {
+  fieldMode = false,
+  hasPendingDispatch = false,
+  readOnly = false,
+}: WorkLifecycleCardProps): ReactElement {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [remoteUpdate, setRemoteUpdate] = useState(false);
@@ -850,9 +860,9 @@ export function WorkLifecycleCard({
   ).length;
   const canStart =
     !parking &&
-    !snapshot.readinessLoadFailed &&
     blockingCount === 0 &&
     snapshot.gates.openStartDependencies === 0;
+  const startReadinessKnown = canStart && !snapshot.readinessLoadFailed;
   const nextAction = getWorkNextAction(snapshot);
   const ownerNames = useMemo(
     () =>
@@ -860,14 +870,49 @@ export function WorkLifecycleCard({
     [snapshot.ownerOptions],
   );
   const ownOwnerId = isManager ? null : snapshot.ownOwnerId;
+  const primaryFieldTransition = snapshot.executionState === "not_started"
+    || snapshot.executionState === "interrupted"
+    ? "in_progress"
+    : snapshot.executionState === "in_progress"
+      ? "execution_complete"
+      : null;
+  const canCompleteExecution =
+    snapshot.gates.incompleteRequiredInstructions === 0 &&
+    snapshot.gates.reopenedInstructionPredecessors === 0 &&
+    snapshot.gates.incompleteInstructionEvidence === 0 &&
+    snapshot.gates.openBlockers === 0 &&
+    snapshot.gates.openCompletionDependencies === 0 &&
+    snapshot.gates.activeJobClocks === 0 &&
+    snapshot.gates.incompleteProjectChildren === 0;
+  const isFieldTransitionBlocked = (state: WorkExecutionState): boolean => fieldMode && (
+    (state === "in_progress" && !canStart) ||
+    (state === "execution_complete" && !canCompleteExecution)
+  );
+  const hasAvailablePrimaryFieldTransition = transitions.some(
+    (state) => state === primaryFieldTransition && !isFieldTransitionBlocked(state),
+  );
 
-  const changed = async (message?: string) => {
+  const changed = async (
+    message?: string,
+    nextExecutionState?: WorkExecutionState,
+  ) => {
+    if (
+      fieldMode &&
+      nextExecutionState &&
+      isFieldWorkPackReadOnly(nextExecutionState)
+    ) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("field_transition", "updated");
+      window.location.assign(url.toString());
+      return;
+    }
     await refresh();
+    if (fieldMode) router.refresh();
     if (message) showBanner({ variant: "success", message });
   };
 
   return (
-    <Card className="gap-4 p-4" data-testid="work-lifecycle-card">
+    <Card id="arbeitsstand" className="gap-4 p-4" data-testid="work-lifecycle-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -885,8 +930,12 @@ export function WorkLifecycleCard({
           <Badge variant="outline">
             {snapshot.isPlanned ? "Geplant" : "Nicht geplant"}
           </Badge>
-          <Badge variant={canStart ? "secondary" : "outline"}>
-            {canStart ? "Startbereit" : "Nicht startbereit"}
+          <Badge variant={startReadinessKnown ? "secondary" : "outline"}>
+            {snapshot.readinessLoadFailed
+              ? "Startbereitschaft unbekannt"
+              : canStart
+                ? "Startbereit"
+                : "Nicht startbereit"}
           </Badge>
           {parking && <Badge variant="secondary">Geparkt</Badge>}
           {blockingCount > 0 && (
@@ -913,18 +962,42 @@ export function WorkLifecycleCard({
           </Button>
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
-        {transitions.map((state) => (
+      {!readOnly && <div className="flex flex-wrap gap-2">
+        {transitions.map((state) => {
+          const isBlockedFieldTransition = isFieldTransitionBlocked(state);
+          const isPrimaryFieldAction = fieldMode
+            && !hasPendingDispatch
+            && !isBlockedFieldTransition
+            && state === primaryFieldTransition;
+          return (
           <Button
             key={state}
+            data-testid={isPrimaryFieldAction ? "field-primary-next-action" : undefined}
             type="button"
             size="sm"
-            variant={state === "cancelled" ? "destructive" : "outline"}
+            variant={state === "cancelled"
+              ? "destructive"
+              : isPrimaryFieldAction
+                ? "default"
+                : "outline"}
+            className={fieldMode ? "min-h-11" : undefined}
+            disabled={isBlockedFieldTransition}
+            aria-describedby={isBlockedFieldTransition ? "field-transition-blocked-reason" : undefined}
+            title={isBlockedFieldTransition
+              ? "Kläre zuerst die angezeigten offenen Punkte."
+              : undefined}
             onClick={() => setDialog({ type: "transition", state })}
           >
             {WORK_EXECUTION_LABELS[state]}
           </Button>
-        ))}
+          );
+        })}
+        {fieldMode && !hasPendingDispatch && !readOnly && transitions.length > 0
+          && !hasAvailablePrimaryFieldTransition && (
+            <Button asChild size="sm" className="min-h-11" data-testid="field-primary-next-action">
+              <a href="#offene-punkte">Offene Punkte prüfen</a>
+            </Button>
+          )}
         {isManager &&
           snapshot.targetType === "project" &&
           !snapshot.isLegacy && (
@@ -939,9 +1012,7 @@ export function WorkLifecycleCard({
           )}
         {isManager &&
           !parking &&
-          !["execution_complete", "handed_over", "cancelled"].includes(
-            snapshot.executionState,
-          ) && (
+          !isTerminalWorkExecutionState(snapshot.executionState) && (
             <Button
               type="button"
               size="sm"
@@ -952,7 +1023,12 @@ export function WorkLifecycleCard({
               Parken
             </Button>
           )}
-      </div>
+      </div>}
+      {!readOnly && fieldMode && transitions.some(isFieldTransitionBlocked) && (
+        <p id="field-transition-blocked-reason" className="text-sm text-muted-foreground">
+          Kläre zuerst die angezeigten offenen Punkte.
+        </p>
+      )}
       <section className="space-y-2">
         <h3 className="text-sm font-medium">Einsatzbereitschaft</h3>
         {snapshot.readinessLoadFailed ? (
@@ -990,11 +1066,11 @@ export function WorkLifecycleCard({
           </p>
         )}
       </section>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div id="offene-punkte" className="grid scroll-mt-28 gap-4 lg:grid-cols-2">
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">Blocker & Parkplatz</h3>
-            {(isManager || snapshot.targetType === "job") && (
+            {!readOnly && (isManager || snapshot.targetType === "job") && (
               <Button
                 type="button"
                 size="sm"
@@ -1035,7 +1111,7 @@ export function WorkLifecycleCard({
                       · Wiedervorlage: {formatDate(blocker.next_review_date)}
                     </p>
                   </div>
-                  {(isManager ||
+                  {!readOnly && (isManager ||
                     (blocker.kind === "blocker" &&
                       ownOwnerId !== null &&
                       blocker.responsible_employee_record_id ===
@@ -1272,7 +1348,9 @@ export function WorkLifecycleCard({
           transition={dialog.state}
           isManager={isManager}
           onClose={() => setDialog(null)}
-          onChanged={() => changed("Arbeitsstand wurde aktualisiert.")}
+          onChanged={() =>
+            changed("Arbeitsstand wurde aktualisiert.", dialog.state)
+          }
         />
       )}
       {dialog?.type === "blocker" && (

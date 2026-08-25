@@ -109,9 +109,9 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
   }) => {
     await employeePage.goto(`/auftraege/P101-${world.runId}-1`);
     await expect(visibleText(employeePage, 'Gebäude B')).toBeVisible();
-    await expect(
-      visibleText(employeePage, 'Sabine Krause (Hausverwaltung)')
-    ).toBeVisible();
+    const contact = employeePage.getByTestId('field-work-pack-contact');
+    await expect(contact.getByText('Sabine Krause', { exact: true })).toBeVisible();
+    await expect(contact.getByText('Hausverwaltung', { exact: true })).toBeVisible();
     // The contact's phone number is a click-to-call link (normalized href).
     await expect(
       employeePage.locator('a[href="tel:0301234567"]').first()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Download, Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -123,14 +123,15 @@ function contentFromDetail(detail: WorkArtifactDetail): WorkArtifactContentInput
 export function WorkArtifactsSection({
   targetType, targetId, initialArtifacts, isManager, canApprove, currentUserId, documents, evidenceRequirements = [],
   timeEntryOptions = [],
-  instructionOptions = [], defaultSiteId,
+  instructionOptions = [], defaultSiteId, readOnly = false,
 }: Target & {
   initialArtifacts: WorkArtifactSummary[]; isManager: boolean; canApprove: boolean; currentUserId: string;
   documents: OrganizationDocument[]; evidenceRequirements?: EvidenceRequirement[];
   timeEntryOptions?: Array<{ id: string; label: string }>;
   instructionOptions?: Array<{ id: string; label: string }>;
   defaultSiteId?: string;
-}) {
+  readOnly?: boolean;
+}): ReactElement {
   const searchParams = useSearchParams();
   const [artifacts, setArtifacts] = useState(initialArtifacts);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -172,9 +173,9 @@ export function WorkArtifactsSection({
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">Bautagebuch, Arbeitsbericht, Aufmaß, Mangel und Regiearbeit versionssicher erfassen.</p>
         </div>
-        <Button size="sm" className="min-h-11 sm:min-h-0" onClick={() => setCreating(true)}>
+        {!readOnly && <Button size="sm" variant={isManager ? 'default' : 'outline'} className="min-h-11" onClick={() => setCreating(true)}>
           <Plus className="size-4" />Neu
-        </Button>
+        </Button>}
       </div>
       {artifacts.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
@@ -204,6 +205,7 @@ export function WorkArtifactsSection({
           isManager={isManager} canApprove={canApprove} currentUserId={currentUserId} documents={documents}
           evidenceRequirements={evidenceRequirements} timeEntryOptions={timeEntryOptions}
           instructionOptions={instructionOptions} defaultSiteId={defaultSiteId}
+          readOnly={readOnly}
           hasRemoteUpdate={hasRemoteUpdate}
           onRemoteUpdateHandled={() => setHasRemoteUpdate(false)}
           onClose={() => { setCreating(false); setSelectedId(null); setHasRemoteUpdate(false); refresh(); }}
@@ -219,6 +221,7 @@ function WorkArtifactDialog({
   timeEntryOptions,
   instructionOptions, defaultSiteId,
   hasRemoteUpdate, onRemoteUpdateHandled,
+  readOnly,
 }: Target & {
   artifactId: string | null; initialSummary: WorkArtifactSummary | null; isManager: boolean; canApprove: boolean;
   currentUserId: string; documents: OrganizationDocument[]; evidenceRequirements: EvidenceRequirement[];
@@ -228,11 +231,12 @@ function WorkArtifactDialog({
   hasRemoteUpdate: boolean;
   onRemoteUpdateHandled: () => void;
   onClose: () => void;
+  readOnly: boolean;
 }) {
   const { showBanner } = useBanner();
   const [detail, setDetail] = useState<WorkArtifactDetail | null>(null);
   const [loading, setLoading] = useState(Boolean(artifactId));
-  const [editing, setEditing] = useState(!artifactId);
+  const [editing, setEditing] = useState(!artifactId && !readOnly);
   const [kind, setKind] = useState<WorkArtifactKind>(initialSummary?.kind ?? 'work_report');
   const [visibility, setVisibility] = useState<WorkArtifactVisibility>(initialSummary?.currentRevision.visibility ?? 'internal_only');
   const [title, setTitle] = useState(initialSummary?.currentRevision.title ?? '');
@@ -491,7 +495,7 @@ function WorkArtifactDialog({
             <ArtifactDetail detail={detail} currentRevision={currentRevision} currentUserId={currentUserId} />
           ) : null}
 
-          {!editing && detail && currentRevision && detail.status !== 'voided' && (
+          {!readOnly && !editing && detail && currentRevision && detail.status !== 'voided' && (
             <div className="space-y-4 border-t pt-4">
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>Neue Version</Button>
@@ -553,7 +557,7 @@ function WorkArtifactDialog({
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => void closeDialog()} disabled={isPending}>Schließen</Button>
-          {editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="button" onClick={() => save(true)} disabled={isPending}>Zur Prüfung einreichen</Button></>}
+          {!readOnly && editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="button" onClick={() => save(true)} disabled={isPending}>Zur Prüfung einreichen</Button></>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

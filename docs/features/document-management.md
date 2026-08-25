@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
@@ -37,6 +37,8 @@ Document management is **substantially implemented**, not a placeholder anymore.
 Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual file capture remains owned by this document system.
 
 Since P1-15, an existing document can be deliberately related to one exact work-artifact revision as supporting evidence, closure proof, signature mark or rendered export. The structured record and document metadata remain separate sources of truth connected by that relation; ordinary uploads never become evidence automatically. Instruction evidence is fulfilled only by an explicit document or artifact-revision relation and can be removed only with an attributable reason. Deterministic HTML exports retain the revision, renderer and content hash. P1-17 still owns the customer-visible handover package.
+
+Since P1-16, assigned employees reach contextual documents from the focused job work pack only. View, download and direct signed R2 upload remain the same document operations; the pack does not expose the central library, attach-existing, trash, version governance or audit history and creates no duplicate file. Completed direct uploads survive a recoverable metadata failure, retain synchronized names and expire after the bounded retention window if registration is abandoned.
 
 Implementation was delivered in four stages:
 

@@ -3084,14 +3084,21 @@ export async function getTimeEntriesForJob(
       }
     }
 
-    const { data: jobClockIns, error: jobClockInsError } = await admin
+    const isManager = callerRole === 'admin' || callerRole === 'buero';
+    let jobClockInsQuery = admin
       .from('time_entries')
       .select('*')
       .eq('organization_id', job.organization_id)
       .eq('entry_type', 'clock_in')
       .eq('job_id', jobId)
-      .neq('status', 'rejected')
-      .order('timestamp', { ascending: true });
+      .neq('status', 'rejected');
+
+    if (!isManager) {
+      jobClockInsQuery = jobClockInsQuery.eq('user_id', user.id);
+    }
+
+    const { data: jobClockIns, error: jobClockInsError } =
+      await jobClockInsQuery.order('timestamp', { ascending: true });
 
     if (jobClockInsError) {
       console.error('Error fetching clock-ins for job:', jobClockInsError);
@@ -3176,7 +3183,7 @@ export async function getTimeEntriesForJob(
     ];
     let participants: JobTimeParticipant[] = [];
 
-    if (participantUserIds.length > 0) {
+    if (isManager && participantUserIds.length > 0) {
       const { data: participantProfiles, error: participantProfilesError } = await admin
         .from('profiles')
         .select('id, first_name, last_name, email, avatar_path')

@@ -164,7 +164,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     expect(afterTake.movementTotal).toBe(afterTake.quantityOnHand);
     expect(afterTake.lastQuantityAfter).toBe(afterTake.quantityOnHand);
 
-    await returnMaterialOnJobPage(employeePage, jobNumber, 3);
+    await returnMaterialOnJobPage(employeePage, jobNumber, itemName, 3);
     await expect(visibleText(employeePage, 'Noch draußen: 0 Stück')).toBeVisible();
 
     // Ledger consistency: stock level, sum of movement deltas, and the last

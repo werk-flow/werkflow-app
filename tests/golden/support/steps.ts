@@ -36,6 +36,7 @@ export async function createJob(
   options: {
     jobNumber: string;
     title: string;
+    description?: string;
     assignEmployeeName?: string;
     // P1-01: pick the customer and its site/contact through the dialog.
     clientName?: string;
@@ -58,6 +59,7 @@ export async function createJob(
 
   await page.locator('#job-number').fill(options.jobNumber);
   await page.locator('#job-title').fill(options.title);
+  if (options.description) await page.locator('#job-description').fill(options.description);
 
   if (options.workTemplateName) {
     await expect(page.locator('#work-template-job')).toBeVisible({ timeout: 15_000 });
@@ -526,7 +528,7 @@ export async function takeMaterialOnJobPage(
   quantity: number
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(page.getByText('Material & Inventar')).toBeVisible();
+  await expect(page.getByText('Material & Inventar')).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: 'Aus Lager entnehmen' }).click();
   await expect(page.getByRole('heading', { name: 'Entnahme buchen' })).toBeVisible();
 
@@ -543,16 +545,183 @@ export async function takeMaterialOnJobPage(
 export async function returnMaterialOnJobPage(
   page: Page,
   jobNumber: string,
+  itemName: string,
   quantity: number
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(page.getByText('Material & Inventar')).toBeVisible();
-  await page.getByRole('button', { name: 'Zurücklegen' }).first().click();
+  await expect(page.getByText('Material & Inventar')).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId('job-material-line')
+    .filter({ hasText: itemName })
+    .locator('button:enabled')
+    .filter({ hasText: 'Zurücklegen' })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'Material zurücklegen' })).toBeVisible();
 
   await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
   await page.getByRole('dialog').getByRole('button', { name: 'Zurücklegen' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function planMaterialOnJobPage(
+  page: Page,
+  jobNumber: string,
+  itemName: string,
+  locationName: string,
+  quantity: number
+): Promise<void> {
+  await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
+  await page.getByRole('button', { name: 'Material planen' }).click();
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Material planen' }),
+  });
+  await dialog.getByLabel('Artikel suchen').fill(itemName);
+  await dialog.getByRole('button').filter({ hasText: itemName }).first().click();
+  await dialog.locator('input[id$="-quantity"]').first().fill(String(quantity));
+  await selectFromSearchable(
+    page,
+    dialog.locator('button[id$="-location"]').first(),
+    locationName
+  );
+  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+// P1-16: employee work-pack actions. These keep the audit and Golden specs on
+// business language while the shared components retain their own selectors.
+export async function openFieldWorkPack(
+  page: Page,
+  jobNumber: string,
+  projectNumber?: string
+): Promise<Locator> {
+  const path = projectNumber
+    ? `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`
+    : `/auftraege/${encodeURIComponent(jobNumber)}`;
+  await page.goto(path);
+  const pack = page.getByTestId('field-work-pack');
+  await expect(pack).toBeVisible({ timeout: 20_000 });
+  await expect(pack.getByTestId('field-work-pack-overview')).toHaveAttribute(
+    'data-realtime-ready',
+    'true',
+    { timeout: 20_000 }
+  );
+  return pack;
+}
+
+export async function setInstructionCompletionOnJobPage(
+  page: Page,
+  label: string,
+  completed: boolean
+): Promise<void> {
+  const actionName = completed
+    ? 'Punkt als erledigt markieren'
+    : 'Punkt als offen markieren';
+  const item = page.getByTestId('job-instruction-item').filter({
+    has: page.getByText(label, { exact: true }),
+  });
+  const action = item.getByRole('button', { name: actionName });
+  await expect(action).toBeEnabled({ timeout: 20_000 });
+  await action.click();
+  await expect(item.getByRole('button', {
+    name: completed ? 'Punkt als offen markieren' : 'Punkt als erledigt markieren',
+  })).toBeEnabled({ timeout: 20_000 });
+}
+
+export async function transitionWorkOnJobPage(
+  page: Page,
+  label: string,
+  reason?: string
+): Promise<void> {
+  const lifecycle = page.getByTestId('work-lifecycle-card');
+  await lifecycle.getByRole('button', { name: label, exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  if (reason) await dialog.locator('#work-transition-reason').fill(reason);
+  await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+export async function changeTimeOnWorkPack(
+  page: Page,
+  action: 'start' | 'stop' | 'switch'
+): Promise<void> {
+  const pack = page.getByTestId('field-work-pack');
+  const label = action === 'start'
+    ? 'Arbeitszeit starten'
+    : action === 'stop'
+      ? 'Arbeitszeit beenden'
+      : 'Zu diesem Auftrag wechseln';
+  await pack.getByRole('button', { name: label, exact: true }).click();
+  const expected = action === 'stop' ? 'Arbeitszeit starten' : 'Arbeitszeit beenden';
+  await expect(pack.getByRole('button', { name: label, exact: true })).toHaveCount(0, { timeout: 20_000 });
+  await expect(pack.getByRole('button', { name: expected, exact: true })).toBeVisible({ timeout: 20_000 });
+}
+
+export async function reportOwnBlockerOnJobPage(
+  page: Page,
+  details: string
+): Promise<void> {
+  const lifecycle = page.getByTestId('work-lifecycle-card');
+  await lifecycle.getByRole('button', { name: 'Blocker', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#work-blocker-reason').click();
+  await page.getByRole('option', { name: 'Zugang zum Einsatzort' }).click();
+  await dialog.locator('#work-blocker-details').fill(details);
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+export async function resolveOwnBlockerOnJobPage(
+  page: Page,
+  reason: string
+): Promise<void> {
+  const lifecycle = page.getByTestId('work-lifecycle-card');
+  await lifecycle.getByRole('button', { name: 'Lösen', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#work-reason').fill(reason);
+  await dialog.getByRole('button', { name: 'Lösen', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+export async function parkJobOnJobPage(
+  page: Page,
+  jobNumber: string,
+  details: string,
+  responsibleName: string,
+  reviewDate: string
+): Promise<void> {
+  await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
+  const lifecycle = page.getByTestId('work-lifecycle-card');
+  await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('#work-blocker-reason').click();
+  await page.getByRole('option', { name: 'Material', exact: true }).click();
+  await dialog.locator('#work-blocker-details').fill(details);
+  await selectFromSearchable(
+    page,
+    dialog.locator('#work-blocker-owner'),
+    responsibleName
+  );
+  await typeIntoDatePickerById(
+    dialog,
+    'work-blocker-review',
+    reviewDate
+  );
+  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
+export async function removeJobAssignment(
+  page: Page,
+  jobNumber: string,
+  employeeName: string
+): Promise<void> {
+  await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
+  await page.getByRole('button', {
+    name: `Zuweisung für ${employeeName} entfernen`,
+  }).click();
+  await expect(page.getByRole('button', {
+    name: `Zuweisung für ${employeeName} entfernen`,
+  })).toHaveCount(0, { timeout: 20_000 });
 }
 
 // P1-01: customer contact and work-site management on the customer detail.
@@ -2706,6 +2875,7 @@ export async function assignJobWithQualificationWarning(
     .click();
   await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
   if (options.employeeName) {
+    await page.reload();
     await expect(visibleText(page, options.employeeName)).toBeVisible({
       timeout: 15_000,
     });
@@ -3024,8 +3194,11 @@ export async function setPlannedCalendarOccurrenceStatus(
 
 // P1-12: dispatch, Parkplatz context, customer commitments, batch moves.
 
-export async function openDispatchPanel(page: Page): Promise<void> {
-  await page.goto('/kalender');
+export async function openDispatchPanel(
+  page: Page,
+  calendarDate?: string
+): Promise<void> {
+  await showPlanningMonth(page, calendarDate);
   await page.getByTestId('dispatch-panel-toggle').click();
   await expect(page.locator('[data-dispatch-panel]')).toBeVisible({
     timeout: 15_000,

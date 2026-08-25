@@ -17,7 +17,7 @@ This is a **living implementation index**, not a substitute for feature specific
 
 > **Roadmap established:** 4 August 2026  
 > **Current phase:** Phase 1 — Complete Operational Core  
-> **Formally accepted roadmap slices:** 17 of 56 (`P1-00` and `P1-00a` through `P1-54`)
+> **Formally accepted roadmap slices:** 18 of 56 (`P1-00` and `P1-00a` through `P1-54`)
 > **Phase 2 implementation:** Not authorized by this roadmap
 >
 > The current position lives in the **Current Checkpoint** table below — one home, updated on every status change.
@@ -39,15 +39,15 @@ They do not make later roadmap slices complete automatically. `P1-00` verified t
 
 | Field | Current value |
 | --- | --- |
-| Active slice | None; `P1-15` is accepted complete |
+| Active slice | None; `P1-16` accepted complete |
 | Task / branch owner | None |
-| Slice gate | P1-15 per-slice gate accepted; next named gate: `GG-04` after `P1-17` |
-| Next slice | `P1-16` is `ready` |
+| Slice gate | Next named gate: `GG-04` after `P1-17` |
+| Next slice | `P1-17` is `ready` |
 | Other ready slices | None |
-| Current implementation wave | Wave 2 — awaiting owner-confirmed P1-16 start |
-| Latest completed golden gate | P1-15 per-slice gate: focused `@AUDIT-W2-P1-15` 4/4 (world `mt73hwm5`, 5.9m) followed by full Golden 102/102 (world `mt73pl6q`, 35.2m) on frozen build `pa2j4ys53RN4VqROc1u6O`, 2026-08-24 (`docs/plans/golden-gate-log.md`) |
+| Current implementation wave | Wave 2 awaits an owner-confirmed P1-17 start |
+| Latest completed golden gate | P1-16 per-slice acceptance (no named gate): focused `@AUDIT-W2-P1-16` 5/5 (world `mt8iebdd`, 6.7m) followed by full Golden 103/103 (world `mt8in5zd`, 41.1m) on frozen build `S1k-LMhdA2gFr0i4BelNw`, 2026-08-25 (`docs/plans/golden-gate-log.md`) |
 | Known execution blocker | None |
-| Last roadmap review | 24 August 2026 |
+| Last roadmap review | 25 August 2026 |
 
 Agents must update this table whenever a slice enters `in_progress`, `verification`, `complete`, or `decision_blocked`.
 
@@ -106,8 +106,8 @@ The dependency column lists direct prerequisites. All transitive prerequisites a
 | `P1-13` | `complete` | Organizations can create versioned SHK work templates that produce editable job/project tasks, checklists, required evidence, planned roles/material, and dependencies without committing stock or schedule | `P1-02`, `P1-07` | Jobs/projects; documents; inventory; calendar | **Accepted `complete` 2026-08-23.** Full acceptance evidence: [P1-13 record](slices/p1-13-work-templates.md) |
 | `P1-14` | `complete` | Work exposes clear planned/ready/in-progress/interrupted/blocked/execution-complete/handover/cancelled states, blockers, owners, dependencies, and readiness gates | `P1-09`, `P1-11`, `P1-12`, `P1-13` | Jobs/projects; calendar; inventory; documents | **Accepted `complete` 2026-08-23.** Full acceptance evidence: [P1-14 record](slices/p1-14-work-lifecycle.md) |
 | `P1-15` | `complete` | Field/office users can create structured site diaries, reports, measurements, defects, change-work evidence, approvals, and signatures linked to exact artifact versions | `P1-07`, `P1-13`, `P1-14` | Jobs/projects; documents; commercial; service | Revision, refusal/reservation, internal-vs-customer approval, permission, and exportable artifact tests pass; [record](slices/p1-15-structured-site-evidence.md) |
-| `P1-16` | `ready` | Assigned field workers receive one focused work pack and can execute tasks, capture progress/evidence, time/material context, and unresolved issues without office-only clutter | `P1-01`, `P1-13`, `P1-14`, `P1-15` | Jobs/projects; time; inventory; documents; calendar | Assigned/unassigned role matrix, work-pack completeness, progress, and failure recovery pass |
-| `P1-17` | `planned` | Field execution can become office-reviewed handover/commercial readiness with missing-item gates, customer-visible package, reasoned override, and traceable reopening | `P1-14`, `P1-15`, `P1-16` | Jobs/projects; documents; inventory; time; commercial | Execution-complete versus handover distinction, reopen history, unresolved exceptions, and package visibility pass; `GG-04` passes |
+| `P1-16` | `complete` | Assigned field workers receive one focused work pack and can execute tasks, capture progress/evidence, time/material context, and unresolved issues without office-only clutter | `P1-01`, `P1-13`, `P1-14`, `P1-15` | Jobs/projects; time; inventory; documents; calendar | **Accepted `complete` 2026-08-25.** Full acceptance evidence: [P1-16 record](slices/p1-16-field-work-pack.md) |
+| `P1-17` | `ready` | Field execution can become office-reviewed handover/commercial readiness with missing-item gates, customer-visible package, reasoned override, and traceable reopening | `P1-14`, `P1-15`, `P1-16` | Jobs/projects; documents; inventory; time; commercial | Execution-complete versus handover distinction, reopen history, unresolved exceptions, and package visibility pass; `GG-04` passes |
 | `P1-18` | `planned` | Customer sites can hold installed equipment/components, identifiers, documents, warranty/commissioning data, installation origin, lifecycle state, and searchable service history | `P1-01`, `P1-15`, `P1-17` | Service/maintenance; CRM; jobs; documents | Installed equipment remains distinct from business inventory; replacement/decommission/history tests pass |
 | `P1-19` | `planned` | Office users can triage reactive service/warranty demand against customer, site, equipment, contract/charge context and dispatch a field-ready service visit | `P1-02`, `P1-12`, `P1-16`, `P1-18` | Service/maintenance; CRM; jobs; calendar; inventory | Duplicate request, urgency, access, warranty/non-billable, escalation, visit report, and follow-up cases pass; `GG-05` passes |
 | `P1-20` | `planned` | Authorized users can define maintenance plans and operational contract coverage that generate understandable due work, exceptions, visit evidence, next due dates, and renewal-risk signals | `P1-11`, `P1-18`, `P1-19` | Service/maintenance; calendar; commercial; jobs | Generation horizon, occurrence/series edits, skipped/combined/cancelled visits, scope evidence, and next-due calculation pass; `GG-06` passes |

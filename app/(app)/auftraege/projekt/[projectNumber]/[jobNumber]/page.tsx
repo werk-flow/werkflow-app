@@ -12,6 +12,7 @@ import { toClient } from '@/lib/jobs/types';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { JobDetailContent } from '@/components/auftraege/job-detail-content';
+import { FieldWorkPackPage } from '@/components/auftraege/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
@@ -45,6 +46,15 @@ async function NestedJobDetailData({
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
+  if (!isAdminOrManager) {
+    return (
+      <FieldWorkPackPage
+        jobNumber={jobNumber}
+        expectedProjectNumber={projectNumber}
+        currentUserId={user.id}
+      />
+    );
+  }
   const supabase = await createSupabaseServerClient();
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
   const instructionItemsResultPromise = jobResultPromise.then((result) =>

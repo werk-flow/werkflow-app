@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pencil, Loader2, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -79,7 +79,7 @@ export function MetadataSection({
   const [pendingSaveConfirmation, setPendingSaveConfirmation] =
     useState<PendingSaveConfirmation | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   const currentEditingField = useMemo(
     () => fields.find((field) => field.label === editingFieldLabel) ?? null,
@@ -134,7 +134,8 @@ export function MetadataSection({
 
   const persistFieldValue = (value: string, onSave: (newValue: string) => Promise<void>) => {
     setSaveError(null);
-    startTransition(async () => {
+    setIsPending(true);
+    void (async () => {
       try {
         await onSave(value);
         setEditingFieldLabel(null);
@@ -149,8 +150,10 @@ export function MetadataSection({
           `Failed to save metadata field "${currentEditingField?.label ?? 'unknown'}"`,
           error
         );
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   };
 
   const handleSave = () => {

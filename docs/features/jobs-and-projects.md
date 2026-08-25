@@ -1,6 +1,6 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-25
 
 Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central operational work objects. A job represents work that a team can plan, perform, document, and complete. A project groups related work when the business needs a larger delivery context, but it must never be required for a simple service visit or small order.
 
@@ -51,6 +51,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Assignment And Field Context
 
 - Managers assign one or more organization members to a job. Employees see work through their assignments; project access is reached through assigned work.
+- **Focused field work pack (P1-16):** assigned employees now receive one mobile-first composition on both standalone and project-child job routes. It orders pre-arrival customer/site/contact context, one dispatch-or-lifecycle next action, instructions, structured evidence, contextual documents, own time, operational material and unresolved issues. The projection excludes sibling/project-wide detail, coworker/internal drafts, document governance and commercial/valuation facts; all actions remain with their existing domain owners. Admin and Büro retain the full established detail composition.
 - Assigned employees can open the relevant job detail, see operational context, record job-linked time, complete instruction items, upload/view documents and photos, and book inventory take/return actions available to them.
 - Managers retain control over work creation, editing, assignment, cancellation, handover, parking, dependencies, gate exceptions and project overrides. Assigned employees receive only start/interruption/resume/execution-complete actions plus their own blocker report/resolution path.
 - Since `P1-09`, managers can attach organization-curated skill/certification requirements to a job. The job detail explains whether the selected people cover each requirement (`covered`, internally unconfirmed, expired, not yet valid, or missing) and attributes the strongest matching person. Assignment changes across create, edit, detail, and calendar paths are assessed atomically on the planned date; uncovered selections remain possible only through a reasoned, fingerprinted assessment record. Requirements guide planning and do not claim legal authorization.
@@ -75,7 +76,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Important Current Limitations
 
 - Request intake and once-only conversion exist (P1-02), but the work record does not yet show what changed during qualification, and converting a request into an update of existing work is deferred to the service slices.
-- P1-14 distinguishes execution completion from handover; P1-15 now supplies the structured evidence and exact-version decision facts consumed by its gates. The complete field work pack remains P1-16 and office-reviewed/customer-visible handover depth remains P1-17.
+- P1-14 distinguishes execution completion from handover; P1-15 supplies the structured evidence and exact-version decision facts consumed by its gates; P1-16 supplies the complete web field work pack. Office-reviewed/customer-visible handover depth remains P1-17.
 - P1-15 artifacts are operational evidence, not a handover package, service equipment history, commercial acceptance, invoice basis or qualified electronic signature.
 - Planned-versus-actual comparison now has a reliable visit-level planning source (`P1-11`) and separate actual time records, but there is still no complete operational variance or profitability view.
 - Structured offers, contracts, invoices, payments, and accounting remain outside the current implementation.
