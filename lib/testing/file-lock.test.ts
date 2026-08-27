@@ -43,7 +43,11 @@ describe('cross-process file lock', () => {
       Array.from({ length: 4 }, () => ({ exitCode: 0, stderr: '' }))
     );
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ count: 200 });
-  }, 15_000);
+    // This test proves lossless serialization, not speed: four spawned Bun
+    // workers can be slow to start under host load (it intermittently crossed
+    // 15s on 2026-08-27), and a latency-tripped failure here reads as a lock
+    // bug. Generous budget on purpose; the count assertion is the contract.
+  }, 60_000);
 
   test('never steals an old lock from another operation', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'werkflow-file-lock-'));

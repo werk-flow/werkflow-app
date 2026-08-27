@@ -58,23 +58,43 @@ export function withFileLock<T>(
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'EEXIST') throw error;
+      // EEXIST: another process holds the lock. EPERM/EACCES/EBUSY: Windows
+      // rejects creating a file whose previous incarnation is delete-pending
+      // (racing another holder's release) — observed verbatim in the
+      // four-process stress test. Both are transient contention; a genuinely
+      // broken path surfaces as the timeout below, which names it.
+      if (!['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(code ?? '')) throw error;
       if (Date.now() >= deadline) {
         throw new Error(
           `Timed out waiting for file lock ${path}. Locks are never stolen automatically; if no test process is running, a killed process left this lock behind — delete that file manually to recover.`
         );
       }
-      sleepSynchronously(25);
+      // Jittered retry: a fixed sleep convoys competing processes into
+      // lock-step reacquisition attempts and pathological serialization
+      // latency (observed in the four-process stress test on Windows).
+      sleepSynchronously(15 + Math.floor(Math.random() * 20));
     }
   }
   try {
     return operation();
   } finally {
     closeSync(descriptor);
-    try {
-      if (readFileSync(path, 'utf8') === token) rmSync(path);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    // Windows can briefly deny deleting a freshly-closed file (antivirus or
+    // indexer handles) — same bounded retry as the atomic rename above. The
+    // final failure still throws: silently leaving the lock behind would turn
+    // into unexplained 10s timeouts for every later writer.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        if (readFileSync(path, 'utf8') === token) rmSync(path);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT') break;
+        if (attempt >= 20 || (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY')) {
+          throw error;
+        }
+        sleepSynchronously(25);
+      }
     }
   }
 }

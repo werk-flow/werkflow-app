@@ -53,7 +53,7 @@ export async function generateUniqueOrgCode(): Promise<string> {
     }
 
     // Code exists, retry
-    console.log(`Code collision on attempt ${attempt + 1}, retrying...`);
+    console.warn(`Code collision on attempt ${attempt + 1}, retrying...`);
   }
 
   throw new Error(

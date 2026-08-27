@@ -231,6 +231,35 @@ export async function getEmployeeRecordEventStates(
   }));
 }
 
+// Enforcement ladder Tier 1 (decision 0005): every RLS proof that signs in
+// with a role's real credentials goes through this wrapper. Cleanup is always
+// scope-local, so a proof can never revoke the user's sessions in the browser
+// fixtures — the bare global default did exactly that at test 102 and failed
+// four full certifications at the P1-16 boundary (test-incident-log.md,
+// 2026-08-27). New as-credentials helpers use this instead of hand-rolling
+// createClient + signInWithPassword; the pre-existing hand-rolled helpers
+// below migrate here during the Realtime/testing consolidation.
+export async function withRoleClient<T>(
+  user: { email: string; password: string },
+  operation: (client: SupabaseClient) => Promise<T>
+): Promise<T> {
+  const client = createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+  const { error } = await client.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (error) throw new Error(`RLS sign-in failed for ${user.email}: ${error.message}`);
+  try {
+    return await operation(client);
+  } finally {
+    await client.auth.signOut({ scope: 'local' });
+  }
+}
+
 // P1-04: which work-schedule rows a real signed-in user can see under RLS.
 // The UI never shows foreign schedules, so the self-or-manager SELECT policy
 // (managers all org rows, a person exactly their own) is proved here.
@@ -2247,11 +2276,7 @@ export async function getVisibleWorkArtifactCountsAs(
   user: { email: string; password: string },
   orgId: string
 ) {
-  const client = createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-    { auth: { persistSession: false, autoRefreshToken: false } });
-  const { error: signInError } = await client.auth.signInWithPassword(user);
-  if (signInError) throw new Error(`Artifact RLS sign-in failed: ${signInError.message}`);
-  try {
+  return withRoleClient(user, async (client) => {
     const tables = ['work_artifacts', 'work_artifact_revisions', 'work_artifact_actions',
       'work_artifact_measurement_lines', 'work_artifact_defect_details', 'work_artifact_change_details',
       'work_artifact_revision_documents', 'work_artifact_revision_sources',
@@ -2263,13 +2288,7 @@ export async function getVisibleWorkArtifactCountsAs(
       counts[table] = count ?? 0;
     }
     return counts;
-  } finally {
-    // Local scope only: the default global scope revokes the user's OTHER
-    // sessions too — it killed the outsider fixture's session two tests later
-    // and failed four full certifications at the final boundary (see the
-    // "deliberately no signOut" notes above for the same hazard).
-    await client.auth.signOut({ scope: 'local' });
-  }
+  });
 }
 
 export async function getCommitmentState(

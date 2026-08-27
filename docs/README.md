@@ -28,6 +28,7 @@ Every doc carries a `Status:` header under its title (`living` with a last-revie
 | [realtime-and-caching.md](technical/realtime-and-caching.md) | You change cache tags, Realtime subscriptions, or data freshness behavior. |
 | [testing.md](technical/testing.md) | You run or extend the Playwright harness: the 13 operational rules, audit battery, failure classes, left-behind-state registry. |
 | [test-incident-log.md](technical/test-incident-log.md) | A browser failure consumes a rerun or reveals a reusable lesson: required evidence, classification and the P1-16 retrospective. |
+| [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You fix a diagnosed defect, keep a review finding, or plan the consolidation phase: the open Tier 1/2 conversion candidates under decision 0005. |
 | [coderabbit.md](technical/coderabbit.md) | You run a CodeRabbit review: CLI invocation (WSL path!), config, per-slice review protocol. |
 
 ### Feature specifications (`docs/features/`)
@@ -93,6 +94,7 @@ Short ADR-style records: why a durable choice was made. Immutable once accepted;
 | [0002-dispatch-revision-acknowledgement-identity.md](decisions/0002-dispatch-revision-acknowledgement-identity.md) | Dispatch revision/acknowledgement identity model (`P1-12`). |
 | [0003-dev-prod-environment-split.md](decisions/0003-dev-prod-environment-split.md) | The dev/prod two-project split, migration-history materialization, repair migrations. |
 | [0004-documentation-structure.md](decisions/0004-documentation-structure.md) | Why this docs tree looks the way it does: graph discipline over a knowledge graph, and what agent memory may hold. |
+| [0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md) | The enforcement ladder: every learned lesson climbs Tier 1 (unwritable) or Tier 2 (checked) before resting as prose. |
 
 ## Skills
 

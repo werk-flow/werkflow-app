@@ -1,3 +1,8 @@
+// Enforcement ladder Tier 1 (decision 0005): the service-role client bypasses
+// RLS — importing it from a client component must be a build error, not a
+// prose rule.
+import 'server-only';
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseUrl } from '@/lib/env/public';
 import { getSupabaseSecretKey } from '@/lib/env/server';

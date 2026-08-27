@@ -47,8 +47,9 @@ export function DeleteAccountButton() {
         return;
       }
 
-      // Sign out locally and redirect to login
-      await supabase.auth.signOut();
+      // Sign out locally and redirect to login — the deleted account's other
+      // sessions are already gone server-side.
+      await supabase.auth.signOut({ scope: 'local' });
       window.location.href = '/login?message=account_deleted';
     } catch (err) {
       console.error('Error deleting account:', err);

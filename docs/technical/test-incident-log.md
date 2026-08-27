@@ -17,7 +17,7 @@ Record each failed certification and any focused failure that changes shared har
 | Root cause | The smallest explanation supported by that evidence |
 | Correction | Product, harness or environment change made |
 | Focused proof | Later focused run key on the current source fingerprint |
-| Prevention | Enforced check, shared helper, spec boundary or documented rule that prevents recurrence |
+| Prevention | Enforced check, shared helper, spec boundary or documented rule that prevents recurrence — with its enforcement-ladder tier ([decision 0005](../decisions/0005-enforcement-ladder.md)); a Tier-3 prose-only prevention states why Tier 1 and 2 are unreachable |
 | Cleanup | Retained-world cleanup result and whether another full certification is authorized |
 
 The run manifest receives the classification, cause and prevention through `bun run test:runs classify`. Add the concise durable entry here before closing the slice. Do not call an unexplained retry a transient.

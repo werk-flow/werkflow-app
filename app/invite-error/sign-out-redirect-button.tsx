@@ -34,8 +34,9 @@ export function SignOutAndRedirectButton({
         console.error('Failed to clear email change challenge before sign out.');
       }
 
-      // Sign out the current user
-      await supabase.auth.signOut();
+      // Sign out the current user (explicit global preserves the pre-existing
+      // default behavior of this flow).
+      await supabase.auth.signOut({ scope: 'global' });
 
       // Redirect based on whether the invited user exists
       if (isExistingUser) {

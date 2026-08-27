@@ -282,7 +282,8 @@ export function PasswordChangeCard() {
       console.error('Failed to clear email change challenge before sign out.');
     }
 
-    const { error } = await supabase.auth.signOut();
+    // Global on purpose: a password change ends every existing session.
+    const { error } = await supabase.auth.signOut({ scope: 'global' });
 
     if (error) {
       setFormError(

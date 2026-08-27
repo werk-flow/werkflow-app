@@ -260,8 +260,9 @@ export function ResetPasswordForm() {
         console.error('Failed to clear email change challenge before sign out.');
       }
 
-      // Immediately sign out the user for security
-      await supabase.auth.signOut();
+      // Immediately sign out the user for security — global on purpose: a
+      // password reset must end every existing session.
+      await supabase.auth.signOut({ scope: 'global' });
 
       let loginRedirectHref = '/login';
 

@@ -1,0 +1,8 @@
+# Enforcement ladder Tier 1 (decision 0005): a bare `bun test` used to match
+# the Playwright *.spec.ts files and execute browser suites outside the
+# repository runner (testing.md forbade this as prose only). Scoping Bun's
+# test root to lib/ makes the footgun physically absent: `bun test` and
+# `bun run test:unit` are now the same thing, and browser specs run only
+# through scripts/run-playwright.ts.
+[test]
+root = "lib"

@@ -36,7 +36,10 @@ export function useSignOut() {
         console.error('Failed to clear email change challenge before sign out.');
       }
 
-      await supabase.auth.signOut();
+      // Explicit global: the menu sign-out currently ends the user's sessions
+      // on every device (pre-existing behavior, made explicit by the scope
+      // lint from decision 0005).
+      await supabase.auth.signOut({ scope: 'global' });
       await fetch('/auth/callback', {
         method: 'POST',
         headers: {
