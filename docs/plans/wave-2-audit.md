@@ -42,7 +42,7 @@ The full Wave 1 battery does NOT rerun at every slice — the full Golden suite 
 2. **Focused, iterating:** the slice's own audit spec (`--grep @AUDIT-W2-P1-XX`) and the slice's golden spec/gate tag until green.
 3. **Affected Wave 1 audit tags:** if the slice materially changed a surface a Wave 1 session owns (e.g. anything under `/kalender` → `@AUDIT-W1-A6`/`A7`; job/checklist surfaces → `@AUDIT-W1-A1`), run those focused tags. Name the chosen tags and the reasoning in the acceptance evidence; "none affected" is a claim that needs a sentence, not silence.
 4. **CodeRabbit review** with fixes, then re-freeze (statics + focused greens).
-5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run** (currently 102). Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
+5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run** (currently 105). Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
 
 The full multi-wave audit batteries run at the **wave-end certification gate only** (below) — that is where cross-wave flow regressions get their exhaustive sweep. Never run two Playwright batteries concurrently (shared world artifacts).
 
