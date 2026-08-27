@@ -11,7 +11,7 @@ const DEV_BUCKET = 'werkflow-documents-dev';
 
 type ListenerDetails = {
   processId: number;
-  commandLine: string;
+  commandLine: string | null;
   creationDate: string;
 };
 
@@ -134,6 +134,13 @@ async function assertCertificationServer(repositoryRoot: string): Promise<void> 
     );
   }
   const listener = getWindowsListener();
+  // CommandLine is null for processes this user cannot inspect (elevated or
+  // protected) — refuse with a directive message instead of a TypeError.
+  if (!listener.commandLine) {
+    throw new Error(
+      `Port 3000 PID ${listener.processId} has no inspectable command line (elevated or protected process). Stop it and start the server from this workspace.`
+    );
+  }
   const commandLine = listener.commandLine.toLowerCase();
   if (!commandLine.includes('next') || !commandLine.includes('werkflow-app')) {
     throw new Error(

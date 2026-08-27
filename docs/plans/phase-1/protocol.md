@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-08-25
+Status: living — last reviewed 2026-08-27
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -115,7 +115,7 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 4. Inspect current code, generated types, migrations, RLS, Realtime/cache behavior, and live Supabase state where relevant.
 5. Restate the bounded outcome, non-goals, affected roles, direct dependencies, and acceptance criteria.
 5a. **Propose the slice's complete user-flow list** (since Wave 2, per the per-slice audit model): draft the slice's catalog bullets as German flows with provisional `P1-XX-FNN` IDs and include them in the pre-implementation report, so the owner confirms product behavior and the flow inventory in one gate. Flows discovered during implementation are added; the catalog is finalized at acceptance.
-6. Identify unresolved decisions. Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
+6. Identify unresolved decisions. Resolve them with the owner using the `grilling` skill's frontier method (numbered questions with recommended answers, in rounds). Move the slice to `decision_blocked` if a decision would materially change ownership, data migration, permissions, legal/commercial behavior, or downstream contracts.
 7. Create a slice-specific implementation plan under `docs/plans/` when the work spans multiple sessions, schema migrations, or several coordinated rollout steps.
 
 ### During Implementation
@@ -127,7 +127,7 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 - Use backward-compatible migrations and preserve historical meaning.
 - Make failures and partial external states visible with a recovery path.
 - Add focused tests at the domain boundary and end-to-end tests for the slice outcome. Concretely: extend the golden-gate harness (`docs/technical/testing.md`) — add the slice's business actions to `tests/golden/support/steps.ts` and cover the slice outcome in the gate spec named by its slice index row (or a dedicated spec if no gate is due yet). A slice without an automated end-to-end check of its own outcome is not done.
-- Use the browser runner's iteration lane while implementation changes. A long serial spec must expose independently greppable stages at stable persisted boundaries. Failed worlds are retained for focused diagnosis; diagnostic reuse is never substituted for the final clean-world certification.
+- Use the browser runner's iteration lane while implementation changes. Every new Golden slice spec ships stage-split: separate greppable stage tests at stable persisted boundaries per the testing conventions (`docs/technical/testing.md`), each later stage verifying its persisted precondition; one monolithic slice test is a review flag. Failed worlds are retained for focused diagnosis; diagnostic reuse is never substituted for the final clean-world certification.
 - **Ship the slice's audit coverage with the slice** (since Wave 2): a spec in `tests/audit/wave-N/` that maps every one of the slice's catalog flow IDs with full clause evidence under testing rule 12, plus the ledger rows in the wave's audit doc (`docs/plans/wave-2-audit.md` for Wave 2). Golden gates stay lean cross-slice scenarios; the audit spec is where exhaustive flow coverage lives. The wave-end audit is a thin certification gate, not a discovery phase — discovery already happened here.
 - Keep field-worker paths simpler than office paths and use natural German for user-facing language.
 - Record a decision in `docs/decisions/` when future agents must understand why a durable choice was made.
@@ -246,7 +246,7 @@ Create or use a slice-specific plan with this minimum structure when more detail
 
 ## Standard New-Task Prompt
 
-Use this as a starting point; replace the placeholders with the actual slice row.
+Use this as a starting point; replace the placeholders with the actual slice row. Draft and revise any task prompt for another agent with the `writing-for-agents` and `unslop` skills loaded.
 
 > Implement Phase 1 vertical slice `[P1-XX — name]`.
 >

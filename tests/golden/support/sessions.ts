@@ -67,6 +67,10 @@ export async function loginAndSaveRoleSession(input: {
         .waitForURL('**/dashboard', { timeout: 20_000 })
         .then(() => true)
         .catch(() => false);
+      // A timed-out attempt can leave a half-established session whose stale
+      // client later emits SIGNED_OUT during the next attempt. Start the retry
+      // from clean cookies instead of racing the abandoned login.
+      if (!loggedIn) await context.clearCookies();
     }
     if (!loggedIn) throw new Error(`Login did not reach the dashboard for ${input.user.email}`);
 
@@ -161,14 +165,31 @@ export async function createRolePage(input: {
   role: SessionRole;
 }): Promise<{ context: BrowserContext; page: Page }> {
   await ensureFreshRoleSession(input);
-  const context = await input.browser.newContext({
-    storageState: storageStatePath(input.role),
-    locale: 'de-DE',
-  });
-  try {
-    return { context, page: await context.newPage() };
-  } catch (error) {
+  // Middleware token rotation can strand a saved state whose refresh token the
+  // server already superseded (GoTrue then revokes the session family and every
+  // later request gets 403 "Session not found"). The file's age cannot reveal
+  // that, so verify at use: probe one protected route and force a real
+  // re-login when the stored state bounces to /login. Tests navigate first
+  // thing anyway, so the pre-navigated page costs one route load.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const context = await input.browser.newContext({
+      storageState: storageStatePath(input.role),
+      locale: 'de-DE',
+    });
+    let bounced = false;
+    try {
+      const page = await context.newPage();
+      await page.goto(`${input.baseUrl}/auftraege`, { waitUntil: 'domcontentloaded' });
+      bounced = new URL(page.url()).pathname.startsWith('/login');
+      if (!bounced) return { context, page };
+    } catch (error) {
+      await context.close();
+      throw error;
+    }
     await context.close();
-    throw error;
+    await ensureFreshRoleSession({ ...input, force: true });
   }
+  throw new Error(
+    `Stored ${input.role} session kept bouncing to /login after a forced re-login.`
+  );
 }

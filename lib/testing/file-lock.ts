@@ -59,7 +59,11 @@ export function withFileLock<T>(
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline) throw new Error(`Timed out waiting for file lock ${path}.`);
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Timed out waiting for file lock ${path}. Locks are never stolen automatically; if no test process is running, a killed process left this lock behind — delete that file manually to recover.`
+        );
+      }
       sleepSynchronously(25);
     }
   }

@@ -15,6 +15,7 @@ import {
   createAndPublishWorkTemplate,
   createCustomer,
   createJob,
+  loginViaUi,
   openCustomerDetail,
   openFieldWorkPack,
   returnMaterialOnJobPage,
@@ -227,6 +228,12 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     await employeePage.goto(`/auftraege/${fixture.unassignedJobNumber}`);
     await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
     await expect(employeePage.getByTestId('field-work-pack')).toHaveCount(0);
+    // The isolation assertion must not depend on the outsider context created
+    // minutes earlier surviving whatever earlier specs did to that user's
+    // sessions: establish a freshly authenticated outsider at action time,
+    // then assert the denial.
+    await outsiderPage.context().clearCookies();
+    await loginViaUi(outsiderPage, world.outsider.admin);
     await outsiderPage.goto(`/auftraege/${fixture.jobNumber}`);
     await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
     await expect(outsiderPage.getByTestId('field-work-pack')).toHaveCount(0);

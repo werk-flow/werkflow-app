@@ -2264,7 +2264,11 @@ export async function getVisibleWorkArtifactCountsAs(
     }
     return counts;
   } finally {
-    await client.auth.signOut();
+    // Local scope only: the default global scope revokes the user's OTHER
+    // sessions too — it killed the outsider fixture's session two tests later
+    // and failed four full certifications at the final boundary (see the
+    // "deliberately no signOut" notes above for the same hazard).
+    await client.auth.signOut({ scope: 'local' });
   }
 }
 

@@ -1,6 +1,6 @@
 # CodeRabbit Reviews
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-27
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -217,6 +217,7 @@ Key rules the prompt encodes:
 3. **Scope to the slice's diff**: `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
 4. Findings are verified against the code before fixing; invalid findings are skipped with a stated reason; after fixes, lint/typecheck and the slice's golden-gate spec are rerun.
 5. **Every intended review pass happens before the confirmation gate run** — CodeRabbit fixes, self-review, and any quality/skill checklists (React patterns, design review) included. Once the post-review full suite is green, only documentation may change; a later application-code change invalidates that evidence and forces another build + full run (this cost the P1-05 cycle an extra build and two full-suite runs).
+6. **Post-freeze review fixes are batched, not ping-ponged.** The pre-freeze review phase has no pass cap — run review-fix-review until the findings converge; the passes pay for themselves. But once the confirmation phase has begun and browser evidence forces an application fix, do not launch a review pass per individual fix: first prove the fix at the failed stage (focused or diagnostic lane), accumulate any further fixes from the same investigation, then run ONE delta-scoped CodeRabbit pass over all of them before freezing the next build. The only exception is a fix that touches authorization or data integrity — that warrants an immediate, non-batched pass. Everything still gets reviewed before the commit; this rule only removes the review↔rebuild↔rerun oscillation that dominated the P1-16 cycle (six interleaved passes, each restarting the browser ladder).
 
 ## WerkFlow-Specific Review Priorities
 

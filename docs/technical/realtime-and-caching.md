@@ -1,6 +1,6 @@
 # Realtime And Caching
 
-Status: living — last reviewed 2026-08-25
+Status: living — last reviewed 2026-08-27
 
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
@@ -126,6 +126,19 @@ The app uses two main Realtime response patterns:
 Use `hooks/use-realtime-router-refresh.ts` when a component should refresh the current route after one of several Realtime table changes.
 
 Use `useRealtimeEvent()` directly when a component can update a narrower local state without refreshing the entire route.
+
+## Client Freshness Contract
+
+Standardized 2026-08-27 from the race classes P1-16 exposed and fixed one by one. New surfaces follow these rules instead of re-deriving refresh behavior; a surface that deviates recreates a documented defect class (see the refresh-race notes in [testing.md](testing.md)).
+
+1. **The provider owns subscriptions.** Components consume `useRealtimeEvent()` or `hooks/use-realtime-router-refresh.ts`; they do not open their own channels. Table events are debounced 150 ms in the provider. A component with a narrower refetch uses the same 150 ms boundary, never a shorter one — a shorter debounce raced server cache invalidation in P1-16 and produced stale reads.
+2. **Focus and visibility catch-up are provider concerns.** Returning to a tab or window triggers one coalesced catch-up refresh; components must not register competing focus/visibility listeners.
+3. **Server props are mount-time data for live components.** A component that maintains live client state from its own reader treats route-refresh payloads as initial data only; after mount, its subscriptions and explicit refetches are authoritative, and a later stale route payload must not overwrite a newer client read. Key such components by entity id so navigation remounts them cleanly.
+4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with the authoritative client refetch; the reverse order let a stale server payload overwrite the fresh read (the P1-16 dispatch-challenge race).
+5. **Refetches use generation guards and keep-last-known.** An older response never overwrites a newer generation; a transient failure marks content visibly stale — and non-interactive where actions depend on it — instead of clearing it.
+6. **Dialogs suspend, then catch up once.** Open dialogs suspend disruptive route refreshes through the shared open-dialog context (`components/ui/open-dialog-context.tsx`) and receive exactly one queued catch-up after close. Pending/double-submit state binds to the actual server call, never to a router transition — a router-entangled `useTransition` kept controls disabled after unrelated refreshes (the P1-16 `MetadataSection` fix).
+
+Legacy surfaces that predate this contract are brought onto it opportunistically. During slice work, treat a deviation that produces one of these races as a candidate product defect, not test flakiness.
 
 ## Mutation Guidelines
 

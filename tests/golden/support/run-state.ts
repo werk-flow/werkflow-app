@@ -37,8 +37,7 @@ export type ArchivedRunStatus =
   | 'timedout'
   | 'interrupted'
   | 'failed_retained'
-  | 'diagnostic_passed'
-  | 'cleaned';
+  | 'diagnostic_passed';
 
 export type RunFailure = {
   title: string;

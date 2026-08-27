@@ -25,13 +25,30 @@ export type CertificationAttempt = {
   startedAt: string;
   classification: IncidentClass | null;
   classifiedAt: string | null;
+  failedSpecFile: string | null;
 };
 
 export type FocusedVerification = {
   status: 'passed' | 'failed';
   startedAt: string;
   sourceFingerprint: string;
+  grep: string;
 };
+
+// "tests/golden/p1-16.spec.ts" -> "p1-16"; null when the failure has no spec
+// file (runner or setup failures), in which case any focused proof qualifies.
+export function focusedProofToken(failedSpecFile: string | null): string | null {
+  if (!failedSpecFile) return null;
+  const match = /([^\\/]+)\.spec\.ts$/.exec(failedSpecFile);
+  return match ? match[1].toLowerCase() : null;
+}
+
+// Token-boundary match: "@P1-16-stage-boundaries" covers token "p1-16", but a
+// bare substring must not let "p1-1" cover "@P1-16".
+export function focusedGrepCoversToken(grep: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escaped}(?![a-z0-9])`, 'i').test(grep);
+}
 
 export function validateRunRequest(request: RunRequest): string[] {
   const errors: string[] = [];
@@ -84,16 +101,19 @@ export function evaluateFullCertificationRerun(input: {
   }
 
   const classifiedAt = Date.parse(latestFailure.classifiedAt);
+  const requiredToken = focusedProofToken(latestFailure.failedSpecFile);
   const focusedProofExists = Number.isFinite(classifiedAt) && input.focusedVerifications.some(
     (verification) =>
       verification.status === 'passed' &&
       verification.sourceFingerprint === input.currentSourceFingerprint &&
-      Date.parse(verification.startedAt) > classifiedAt
+      Date.parse(verification.startedAt) > classifiedAt &&
+      (requiredToken === null || focusedGrepCoversToken(verification.grep, requiredToken))
   );
   if (!focusedProofExists) {
+    const scope = requiredToken ? ` covering ${requiredToken} (grep must match the failed spec)` : '';
     return {
       allowed: false,
-      reason: `Run a focused verification on the current source after classifying ${latestFailure.runKey}.`,
+      reason: `Run a focused verification${scope} on the current source after classifying ${latestFailure.runKey}.`,
     };
   }
 

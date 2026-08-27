@@ -351,7 +351,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (event === 'SIGNED_OUT') {
-    await supabase.auth.signOut();
+    // Local scope: this endpoint only syncs THIS browser's cookies with a
+    // client-side event. The default global scope revoked every session the
+    // user had on other devices whenever one stale tab emitted SIGNED_OUT.
+    // Deliberate everywhere-sign-out stays with the explicit flows that own it.
+    await supabase.auth.signOut({ scope: 'local' });
   }
 
   return res;

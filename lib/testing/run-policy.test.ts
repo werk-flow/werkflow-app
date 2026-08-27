@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   evaluateFullCertificationRerun,
+  focusedGrepCoversToken,
+  focusedProofToken,
   shouldRefreshStoredSession,
   validateRunRequest,
 } from './run-policy';
@@ -61,6 +63,7 @@ describe('Playwright run policy', () => {
           startedAt: '2026-08-25T10:00:00Z',
           classification: null,
           classifiedAt: null,
+          failedSpecFile: null,
         },
       ],
       focusedVerifications: [],
@@ -80,6 +83,7 @@ describe('Playwright run policy', () => {
           startedAt: '2026-08-25T10:00:00Z',
           classification: 'harness',
           classifiedAt: '2026-08-25T10:30:00Z',
+          failedSpecFile: null,
         },
       ],
       focusedVerifications: [
@@ -87,6 +91,7 @@ describe('Playwright run policy', () => {
           status: 'passed',
           startedAt: '2026-08-25T11:00:00Z',
           sourceFingerprint: 'old-source',
+          grep: '@P1-16',
         },
       ],
       currentSourceFingerprint: 'source-a',
@@ -94,6 +99,63 @@ describe('Playwright run policy', () => {
     });
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('focused verification');
+  });
+
+  test('derives the proof token from the failed spec file', () => {
+    expect(focusedProofToken('tests/golden/p1-16.spec.ts')).toBe('p1-16');
+    expect(focusedProofToken('tests\\golden\\gg-00.spec.ts')).toBe('gg-00');
+    expect(focusedProofToken('scripts/run-playwright.ts')).toBe(null);
+    expect(focusedProofToken(null)).toBe(null);
+  });
+
+  test('matches proof tokens at boundaries, not as bare substrings', () => {
+    expect(focusedGrepCoversToken('@P1-16', 'p1-16')).toBe(true);
+    expect(focusedGrepCoversToken('@P1-16-stage-boundaries', 'p1-16')).toBe(true);
+    expect(focusedGrepCoversToken('@P1-16', 'p1-1')).toBe(false);
+    expect(focusedGrepCoversToken('@P1-01', 'p1-16')).toBe(false);
+  });
+
+  test('requires the focused proof to cover the failed spec', () => {
+    const base = {
+      attemptsSinceLastPass: [
+        {
+          runKey: 'failed-1',
+          status: 'failed' as const,
+          startedAt: '2026-08-25T10:00:00Z',
+          classification: 'harness' as const,
+          classifiedAt: '2026-08-25T10:30:00Z',
+          failedSpecFile: 'tests/golden/p1-16.spec.ts',
+        },
+      ],
+      currentSourceFingerprint: 'source-a',
+      overrideReason: null,
+    };
+    const unrelatedProof = evaluateFullCertificationRerun({
+      ...base,
+      focusedVerifications: [
+        {
+          status: 'passed',
+          startedAt: '2026-08-25T11:00:00Z',
+          sourceFingerprint: 'source-a',
+          grep: '@GG-00',
+        },
+      ],
+    });
+    expect(unrelatedProof.allowed).toBe(false);
+    expect(unrelatedProof.reason).toContain('covering p1-16');
+
+    const scopedProof = evaluateFullCertificationRerun({
+      ...base,
+      focusedVerifications: [
+        {
+          status: 'passed',
+          startedAt: '2026-08-25T11:00:00Z',
+          sourceFingerprint: 'source-a',
+          grep: '@P1-16-stage-boundaries',
+        },
+      ],
+    });
+    expect(scopedProof.allowed).toBe(true);
   });
 
   test('allows one classified retry after focused proof and stops a repeated class', () => {
@@ -104,6 +166,7 @@ describe('Playwright run policy', () => {
         startedAt: '2026-08-25T10:00:00Z',
         classification: 'harness' as const,
         classifiedAt: '2026-08-25T10:30:00Z',
+        failedSpecFile: null,
       },
     ];
     const focusedVerifications = [
@@ -111,6 +174,7 @@ describe('Playwright run policy', () => {
         status: 'passed' as const,
         startedAt: '2026-08-25T11:00:00Z',
         sourceFingerprint: 'source-a',
+        grep: '@P1-16',
       },
     ];
     expect(
@@ -148,11 +212,13 @@ function repeatedInput(
     startedAt: string;
     classification: 'harness';
     classifiedAt: string;
+    failedSpecFile: string | null;
   }>,
   focusedVerifications: Array<{
     status: 'passed';
     startedAt: string;
     sourceFingerprint: string;
+    grep: string;
   }>
 ) {
   return {
@@ -171,6 +237,7 @@ function repeatedInput(
         status: 'passed' as const,
         startedAt: '2026-08-25T13:00:00Z',
         sourceFingerprint: 'source-a',
+        grep: '@P1-16',
       },
     ],
     currentSourceFingerprint: 'source-a',

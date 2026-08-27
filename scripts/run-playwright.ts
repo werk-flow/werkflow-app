@@ -41,12 +41,14 @@ function removeOption(args: string[], name: string): string[] {
 }
 
 function certificationAttemptsSinceLastPass() {
+  // timedout and interrupted attempts count toward the budget: a Ctrl+C'd or
+  // hung full run is still a consumed attempt, not a free retry.
   const attempts = listRunManifests().filter(
     (manifest) =>
       manifest.lane === 'certification' &&
       manifest.suite === 'golden' &&
       !manifest.grep &&
-      ['passed', 'failed', 'failed_retained', 'cleaned'].includes(manifest.status)
+      ['passed', 'failed', 'failed_retained', 'timedout', 'interrupted'].includes(manifest.status)
   );
   const lastPassedIndex = attempts.findLastIndex((manifest) => manifest.status === 'passed');
   return attempts.slice(lastPassedIndex + 1).map((manifest) => ({
@@ -55,6 +57,7 @@ function certificationAttemptsSinceLastPass() {
     startedAt: manifest.startedAt,
     classification: manifest.classification,
     classifiedAt: manifest.classifiedAt,
+    failedSpecFile: manifest.failures.find((failure) => failure.file)?.file ?? null,
   }));
 }
 
@@ -87,6 +90,7 @@ async function main(): Promise<number> {
         status: manifest.status === 'passed' ? ('passed' as const) : ('failed' as const),
         startedAt: manifest.startedAt,
         sourceFingerprint: manifest.sourceFingerprint,
+        grep: manifest.grep ?? '',
       }));
     const policy = evaluateFullCertificationRerun({
       attemptsSinceLastPass: certificationAttemptsSinceLastPass(),

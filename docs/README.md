@@ -94,6 +94,23 @@ Short ADR-style records: why a durable choice was made. Immutable once accepted;
 | [0003-dev-prod-environment-split.md](decisions/0003-dev-prod-environment-split.md) | The dev/prod two-project split, migration-history materialization, repair migrations. |
 | [0004-documentation-structure.md](decisions/0004-documentation-structure.md) | Why this docs tree looks the way it does: graph discipline over a knowledge graph, and what agent memory may hold. |
 
+## Skills
+
+Skills live in `.claude/skills/` and are mirrored byte-identically in `.agents/skills/` for Codex (`docs:check` enforces the sync; `coderabbit-review` is the recorded `.claude`-only exception because Codex ships its own CodeRabbit skill). Load a skill at the start of the matching task, not after the work is drafted.
+
+| Skill | Load when |
+| --- | --- |
+| `unslop` | Always, for every piece of prose you produce. The slop-pattern catalog. |
+| `writing-for-agents` | You write anything an agent will consume: a skill, a prompt or meta prompt for another agent, `AGENTS.md`/`CLAUDE.md`, or a routing doc. Pair with `unslop`. |
+| `technical-writing` | You write, restructure, or review developer documentation, decision records, plans, PR descriptions, or commit messages. Structure and sentence craft; `unslop` owns the tells. |
+| `werkflow-design` | Any UI work: components, styling, forms, dialogs, feedback, loading states, colors, dark mode, accessibility. The binding canon and component registry. |
+| `frontend-design` | New UI needing aesthetic direction beyond the canon — always subordinate to `werkflow-design` (see its precedence note). |
+| `typescript-best-practices` | You design types, validation boundaries, or non-trivial logic in `.ts`/`.tsx`. |
+| `diagnosing-bugs` | A non-trivial defect or performance regression needs diagnosis. Harness failures classify first via [testing.md](technical/testing.md). |
+| `grilling` | You resolve open product or design decisions with the owner — including slice pre-implementation report rounds. |
+| `supabase-live-workflow` | Any Supabase work: schema, SQL, RLS, storage, edge functions, migrations, generated types. |
+| `coderabbit-review` (`.claude` only) | The user asks for a CodeRabbit review or a fix-review cycle. |
+
 ## Document Types And Conventions
 
 ### Where a new doc goes
