@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Palmtree, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ import {
   VACATION_STATUS_LABELS,
   type VacationRequestStatus,
 } from '@/lib/vacation/types';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { cn, toLocalDateString } from '@/lib/utils';
 
 const REQUEST_ERROR_MESSAGES: Record<string, string> = {
@@ -92,51 +92,26 @@ function formatRange(startDate: string, endDate: string): string {
 }
 
 export function VacationSection() {
-  const [overview, setOverview] = useState<OwnVacationOverview | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const generationRef = useRef(0);
 
-  const hasDataRef = useRef(false);
-  const refetch = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<OwnVacationOverview>({
+    tables: ['vacation_requests', 'employment_conditions'],
+    read: async (): Promise<LiveViewResult<OwnVacationOverview>> => {
       const result = await getOwnVacationOverview();
-      if (generation !== generationRef.current) return;
-      if (result.success) {
-        hasDataRef.current = true;
-        setOverview(result.overview);
-        setLoadFailed(false);
-      } else if (!hasDataRef.current) {
-        // Keep last-known data on transient failure; only an initial load
-        // failure shows the error state.
-        setLoadFailed(true);
-      }
-    } catch (error) {
-      console.error('Error fetching vacation overview:', error);
-      if (generation === generationRef.current && !hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } finally {
-      if (generation === generationRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  useRealtimeEvent('vacation_requests', () => {
-    void refetch();
+      return result.success
+        ? { ok: true, data: result.overview }
+        : { ok: false };
+    },
   });
-  useRealtimeEvent('employment_conditions', () => {
-    void refetch();
-  });
+
+  const overview = view.data ?? null;
+  const isLoading = view.isLoading;
+  // Keep last-known data on transient failure; only an initial load that
+  // never produced data shows the error state.
+  const loadFailed = !isLoading && overview === null;
+  const refetch = view.refresh;
 
   const handleWithdraw = async (request: VacationRequestListItem) => {
     if (withdrawingId) return;

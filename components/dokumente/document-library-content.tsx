@@ -105,6 +105,7 @@ import { cn } from '@/lib/utils';
 import { useBanner } from '@/components/ui/banner';
 import { DokumenteTabContentSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   DocumentUploadDialog,
   type DocumentUploadItem,
@@ -839,7 +840,7 @@ export function DocumentLibraryContent({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
   const suppressNextSelectionClearRef = useRef(false);
-  const [isPending, startTransition] = useTransition();
+  const { run: runDocumentTask, isPending } = usePendingTask();
   const [isNavigationPending, startNavigationTransition] = useTransition();
   const { showBanner } = useBanner();
   const [isMoveCopySubmitting, setIsMoveCopySubmitting] = useState(false);
@@ -900,7 +901,6 @@ export function DocumentLibraryContent({
       'document_folders',
       'document_links',
     ],
-    debounceMs: 250,
   });
 
   useEffect(() => {
@@ -1204,7 +1204,7 @@ export function DocumentLibraryContent({
     setDetailsData(null);
     setIsDetailsLoading(true);
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await getDocumentDetails(document.id);
       if (!result.success) {
         showFeedback('error', 'Die Dateidetails konnten nicht geladen werden.');
@@ -1212,6 +1212,13 @@ export function DocumentLibraryContent({
         return;
       }
 
+      // The table row that seeded this dialog is mount-time data; the fetch
+      // is the authority (freshness contract rule 3). Reopening right after
+      // a mutation must not show the pre-mutation row while the route
+      // refresh is still rendering.
+      if (detailsDialogIdRef.current === document.id) {
+        setDetailsDialog(result.document);
+      }
       setDetailsData(result);
       setIsDetailsLoading(false);
     });
@@ -1252,7 +1259,7 @@ export function DocumentLibraryContent({
         ? currentFolderId
         : folderDialogParentFolderId;
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await createDocumentFolder({
         name,
         parentFolderId,
@@ -1339,7 +1346,7 @@ export function DocumentLibraryContent({
       return;
     }
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result =
         renameDialog.kind === 'folder'
           ? await renameDocumentFolder({
@@ -1369,7 +1376,7 @@ export function DocumentLibraryContent({
       description: `Der Ordner „${folder.name}“ und alle enthaltenen Dateien werden in den Papierkorb verschoben.`,
       confirmLabel: 'Ordner löschen',
       onConfirm: () => {
-        startTransition(async () => {
+        void runDocumentTask(async () => {
           const result = await deleteDocumentFolder(folder.id);
           if (!result.success) {
             showFeedback('error', 'Der Ordner konnte nicht gelöscht werden.');
@@ -1387,7 +1394,7 @@ export function DocumentLibraryContent({
 
   function handleUpdateCategory(document: OrganizationDocument, category: DocumentCategory) {
     if (isTrashView) return;
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await updateDocumentCategory({
         documentId: document.id,
         category,
@@ -1408,7 +1415,7 @@ export function DocumentLibraryContent({
       description: `„${document.displayName}“ wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
       confirmLabel: 'Datei löschen',
       onConfirm: () => {
-        startTransition(async () => {
+        void runDocumentTask(async () => {
           const result = await deleteDocument(document.id);
           if (!result.success) {
             showFeedback('error', 'Die Datei konnte nicht gelöscht werden.');
@@ -1425,7 +1432,7 @@ export function DocumentLibraryContent({
   }
 
   function handleRestoreDocument(document: OrganizationDocument) {
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await restoreDocument(document.id);
       if (!result.success) {
         showFeedback('error', 'Die Datei konnte nicht wiederhergestellt werden.');
@@ -1447,7 +1454,7 @@ export function DocumentLibraryContent({
       description: `„${document.displayName}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
       confirmLabel: 'Endgültig löschen',
       onConfirm: () => {
-        startTransition(async () => {
+        void runDocumentTask(async () => {
           const result = await permanentlyDeleteDocument(document.id);
           if (!result.success) {
             showFeedback('error', 'Die Datei konnte nicht endgültig gelöscht werden.');
@@ -1525,7 +1532,7 @@ export function DocumentLibraryContent({
     });
   }
   function handleDownload(document: OrganizationDocument) {
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await getDocumentSignedUrl(document.id);
       if (!result.success) {
         showFeedback('error', 'Die Datei konnte nicht geöffnet werden.');
@@ -1543,7 +1550,7 @@ export function DocumentLibraryContent({
     const activeDocument = detailsDialog;
     const documentId = activeDocument.id;
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await uploadDocumentVersionDirect({
         documentId,
         file,
@@ -1589,7 +1596,7 @@ export function DocumentLibraryContent({
   }
 
   function handleDownloadVersion(versionId: string) {
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await getDocumentVersionSignedUrl(versionId, { download: true });
       if (!result.success) {
         showFeedback('error', 'Die Version konnte nicht geöffnet werden.');
@@ -1667,7 +1674,7 @@ export function DocumentLibraryContent({
 
     if (documentsToUse.length === 0 && filteredFoldersToMove.length === 0) return;
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       let failedCount = 0;
 
       for (const document of documentsToUse) {
@@ -1807,7 +1814,7 @@ export function DocumentLibraryContent({
       } in den Papierkorb verschoben.`,
       confirmLabel: 'Einträge löschen',
       onConfirm: () => {
-        startTransition(async () => {
+        void runDocumentTask(async () => {
           let failedCount = 0;
           for (const folder of foldersToDelete) {
             const result = await deleteDocumentFolder(folder.id);
@@ -1845,7 +1852,7 @@ export function DocumentLibraryContent({
   function handleBatchRestore() {
     if (selectedDocuments.length === 0) return;
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       let failedCount = 0;
       for (const document of selectedDocuments) {
         const result = await restoreDocument(document.id);

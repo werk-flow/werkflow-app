@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -98,7 +99,7 @@ import {
   formatMinutesAsHoursInput,
   parseHoursInputToMinutes,
 } from '@/lib/jobs/planned-working';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView } from '@/hooks/use-live-view';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
   getJobDisplayTitle,
@@ -265,7 +266,7 @@ export function JobDetailContent({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [isDeleting, startDeleteTransition] = useTransition();
+  const { run: runDeleteTask, isPending: isDeleting } = usePendingTask();
   const isDeletingRef = useRef(false);
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
@@ -284,18 +285,24 @@ export function JobDetailContent({
   const [pendingAssignmentIds, setPendingAssignmentIds] = useState<string[]>([]);
   const [isQualificationOverrideSaving, setIsQualificationOverrideSaving] =
     useState(false);
-  const [isAssigning, startAssignTransition] = useTransition();
-  const [isUpdatingClient, startClientUpdateTransition] = useTransition();
-  const [isUpdatingProject, startProjectUpdateTransition] = useTransition();
+  const { run: runAssignTask, isPending: isAssigning } = usePendingTask();
+  const { run: runClientUpdateTask, isPending: isUpdatingClient } = usePendingTask();
+  const { run: runProjectUpdateTask, isPending: isUpdatingProject } = usePendingTask();
   const [dialogClients, setDialogClients] = useState(clients);
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogProjects, setDialogProjects] = useState(projects);
   const dialogOptionsRequestInFlightRef = useRef(false);
   const [isLoadingDialogOptions, setIsLoadingDialogOptions] = useState(false);
-  const [suspendRealtimeRefresh, setSuspendRealtimeRefresh] = useState(false);
+  // Suppresses route refreshes while a delete or a URL-changing project move
+  // is mid-flight — a refresh landing then would remount a page that is
+  // about to navigate away. Dialog suspension itself comes from the shared
+  // open-dialog context.
+  const suppressRefreshRef = useRef(false);
+  // The shared open-dialog context suspends Realtime refreshes while the
+  // edit dialog is open; the close refresh picks up the dialog's own edits
+  // (freshness contract rule 4).
   const handleEditDialogOpenChange = (open: boolean) => {
     setShowEditDialog(open);
-    setSuspendRealtimeRefresh(open);
     if (!open) router.refresh();
   };
   const {
@@ -325,17 +332,6 @@ export function JobDetailContent({
     [liveJob.id, requestInlineEditApproval]
   );
 
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  const [timeParticipants, setTimeParticipants] = useState<
-    Array<{
-      userId: string;
-      firstName: string | null;
-      lastName: string | null;
-      email: string | null;
-      avatarPath: string | null;
-    }>
-  >([]);
-  const [isLoadingTime, setIsLoadingTime] = useState(true);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -416,23 +412,36 @@ export function JobDetailContent({
   ]);
   const [showAllSessions, setShowAllSessions] = useState(false);
 
-  const fetchTimeEntries = useCallback(async () => {
-    try {
+  const timeView = useLiveView<{
+    entries: TimeEntry[];
+    participants: Array<{
+      userId: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+      avatarPath: string | null;
+    }>;
+  }>({
+    tables: ['time_entries'],
+    read: async () => {
       const result = await getTimeEntriesForJob(liveJob.id);
-      if (result.success) {
-        setTimeEntries(result.entries);
-        setTimeParticipants(result.participants ?? []);
-      }
-    } catch (err) {
-      console.error('Error fetching time entries for job:', err);
-    } finally {
-      setIsLoadingTime(false);
-    }
-  }, [liveJob.id]);
-
-  useEffect(() => {
-    fetchTimeEntries();
-  }, [fetchTimeEntries]);
+      if (!result.success) return { ok: false };
+      return {
+        ok: true,
+        data: { entries: result.entries, participants: result.participants ?? [] },
+      };
+    },
+    resetKey: liveJob.id,
+  });
+  const timeEntries = useMemo(
+    () => timeView.data?.entries ?? [],
+    [timeView.data]
+  );
+  const timeParticipants = useMemo(
+    () => timeView.data?.participants ?? [],
+    [timeView.data]
+  );
+  const isLoadingTime = timeView.isLoading;
 
   useRealtimeRouterRefresh({
     tables: [
@@ -446,10 +455,8 @@ export function JobDetailContent({
       'inventory_items',
       'inventory_locations',
     ],
-    enabled: !suspendRealtimeRefresh,
-    eventFilter: () => !isDeletingRef.current,
+    eventFilter: () => !isDeletingRef.current && !suppressRefreshRef.current,
   });
-  useRealtimeEvent('time_entries', () => fetchTimeEntries());
 
   const sessionPeople = useMemo(() => {
     const people = new Map<string, SessionPerson>();
@@ -516,6 +523,7 @@ export function JobDetailContent({
   useEffect(() => {
     if (activeWorkSessions.length === 0) return;
 
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = window.setInterval(() => {
       setNowTick(Date.now());
     }, 1000);
@@ -651,8 +659,8 @@ export function JobDetailContent({
   const handleDelete = () => {
     setDeleteError(null);
     isDeletingRef.current = true;
-    setSuspendRealtimeRefresh(true);
-    startDeleteTransition(async () => {
+    suppressRefreshRef.current = true;
+    void runDeleteTask(async () => {
       const result = await deleteJob(liveJob.id);
       if (result.success) {
         const deletedParam = `?deleted_job=${encodeURIComponent(displayTitle)}`;
@@ -666,7 +674,7 @@ export function JobDetailContent({
         }
       } else {
         isDeletingRef.current = false;
-        setSuspendRealtimeRefresh(false);
+        suppressRefreshRef.current = false;
         setDeleteError(
           result.error === 'planning_history_exists'
             ? JOB_DELETE_HISTORY_MESSAGE
@@ -677,7 +685,7 @@ export function JobDetailContent({
   };
 
   const handleAssignEmployees = () => {
-    startAssignTransition(async () => {
+    void runAssignTask(async () => {
       const newIds = assignSelectedIds.filter(
         (id) => !liveJob.assignments.some((a) => a.userId === id)
       );
@@ -829,7 +837,7 @@ export function JobDetailContent({
   };
 
   const handleClientSave = async (clientId: string) => {
-    startClientUpdateTransition(async () => {
+    void runClientUpdateTask(async () => {
       if (parentProject?.id) {
         await updateProject(parentProject.id, { clientId });
       } else {
@@ -854,12 +862,12 @@ export function JobDetailContent({
   };
 
   const handleProjectSave = async (projectId: string) => {
-    startProjectUpdateTransition(async () => {
-      setSuspendRealtimeRefresh(true);
+    void runProjectUpdateTask(async () => {
+      suppressRefreshRef.current = true;
       const result = await updateJob(liveJob.id, { projectId });
       if (!result.success && result.error !== 'no_changes') {
         // The dialog stays open and the failure is visible (no silent close).
-        setSuspendRealtimeRefresh(false);
+        suppressRefreshRef.current = false;
         showBanner({
           variant: 'error',
           message: 'Das Projekt konnte nicht gespeichert werden.',
@@ -893,7 +901,7 @@ export function JobDetailContent({
 
       const nextJobNumber = result.success ? result.job.jobNumber : liveJob.jobNumber;
       if (!nextJobNumber) {
-        setSuspendRealtimeRefresh(false);
+        suppressRefreshRef.current = false;
         return;
       }
 
@@ -905,7 +913,7 @@ export function JobDetailContent({
 
       const nextProject = projects.find((entry) => entry.id === nextProjectId);
       if (!nextProject?.projectNumber) {
-        setSuspendRealtimeRefresh(false);
+        suppressRefreshRef.current = false;
         router.refresh();
         return;
       }

@@ -1,4 +1,5 @@
 import { expect, test } from './support/fixtures';
+import { expectLiveWithin } from './support/live';
 import {
   getCommitmentState,
   getDispatchState,
@@ -423,9 +424,9 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     await openDispatchPanel(adminPage);
     await issueDispatchForOccurrence(adminPage, liveTitle);
-    await expect(
-      bueroRow.locator('[data-recipient-state]').first()
-    ).toBeVisible({ timeout: 20_000 });
+    await expectLiveWithin(bueroRow.locator('[data-recipient-state]').first(), {
+      label: 'p1-12 dispatch state cross-session',
+    });
 
     // Employees never see the office dispatch surface.
     await employeePage.goto('/kalender');

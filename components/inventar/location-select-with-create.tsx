@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+
+import { useServerAction } from '@/hooks/use-server-action';
 
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import type { SearchableSelectOption } from '@/components/ui/searchable-select';
@@ -98,12 +100,14 @@ function CreateLocationDialog({
   const [description, setDescription] = useState('');
   const [locationType, setLocationType] = useState<InventoryLocationType>('room');
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runCreateLocation, isPending } = useServerAction(
+    createInventoryLocation
+  );
 
   function handleSave() {
     setError(null);
-    startTransition(async () => {
-      const result = await createInventoryLocation({
+    void (async () => {
+      const result = await runCreateLocation({
         name,
         description,
         locationType,
@@ -119,7 +123,7 @@ function CreateLocationDialog({
       setDescription('');
       setLocationType('room');
       onOpenChange(false);
-    });
+    })();
   }
 
   return (

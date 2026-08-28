@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Download, Eye, Loader2, RotateCcw, Save } from 'lucide-react';
@@ -13,6 +13,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { getDocumentSignedUrl } from '@/lib/documents/actions';
 import {
   previewWorkHandover,
@@ -155,7 +156,7 @@ export function WorkHandoverSection({
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runHandoverTask, isPending: pending } = usePendingTask();
   const workspaceAuthorityIdentity = JSON.stringify({
     targetId: initialWorkspace.targetId,
     executionVersion: initialWorkspace.executionVersion,
@@ -170,7 +171,16 @@ export function WorkHandoverSection({
       value: initialWorkspace.packageVersion,
     });
     setDirty(false);
-    setPreview(null);
+    // A preview stays valid when the fresh authoritative props confirm the
+    // exact package version it was created against — a route refresh landing
+    // right after the save (whose bump the client already adopted) must not
+    // permanently disable the release button. Any other version change
+    // invalidates the preview as before.
+    setPreview((current) =>
+      current && current.packageVersion === initialWorkspace.packageVersion
+        ? current
+        : null
+    );
     // This key represents every authoritative prop read above. Keeping typed
     // reasons outside the reset avoids losing reviewer input on refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,7 +208,7 @@ export function WorkHandoverSection({
   const saveDraft = (): void => {
     setError(null);
     setMessage(null);
-    startTransition(async () => {
+    void runHandoverTask(async () => {
       const result = await saveWorkHandoverDraft({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -235,7 +245,7 @@ export function WorkHandoverSection({
       releaseId: crypto.randomUUID(), requestId: crypto.randomUUID(),
       documentId: crypto.randomUUID(), documentLinkId: crypto.randomUUID(),
     };
-    startTransition(async () => {
+    void runHandoverTask(async () => {
       const result = await previewWorkHandover({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -259,7 +269,7 @@ export function WorkHandoverSection({
     if (!preview || preview.packageVersion !== packageVersion) return;
     setError(null);
     setMessage(null);
-    startTransition(async () => {
+    void runHandoverTask(async () => {
       const result = await releaseWorkHandover({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -289,7 +299,7 @@ export function WorkHandoverSection({
   const reopen = (operation: 'withdraw' | 'correction'): void => {
     setError(null);
     setMessage(null);
-    startTransition(async () => {
+    void runHandoverTask(async () => {
       const action = operation === 'withdraw'
         ? withdrawWorkHandover
         : returnWorkHandoverForCorrection;
@@ -471,7 +481,7 @@ export function WorkHandoverSection({
               {initialWorkspace.currentReleaseDocumentId && (
                 <Button type="button" size="sm" variant="outline" onClick={() => {
                   const openPromise = openDocument(initialWorkspace.currentReleaseDocumentId!);
-                  startTransition(async () => {
+                  void runHandoverTask(async () => {
                     const downloadError = await openPromise;
                     if (downloadError) setError(downloadError);
                   });
@@ -564,7 +574,7 @@ export function FieldWorkHandoverStatus({
   status: WorkHandoverFieldStatus;
 }): ReactElement {
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runDocumentTask, isPending: pending } = usePendingTask();
   return (
     <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5" aria-labelledby="field-handover-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -578,7 +588,7 @@ export function FieldWorkHandoverStatus({
         <Button type="button" size="sm" variant="outline" className="mt-3"
           disabled={pending} onClick={() => {
             const openPromise = openDocument(status.documentId!);
-            startTransition(async () => setError(await openPromise));
+            void runDocumentTask(async () => setError(await openPromise));
           }}>
           {pending ? <Loader2 className="animate-spin" /> : <Download />}
           Übergabedokument

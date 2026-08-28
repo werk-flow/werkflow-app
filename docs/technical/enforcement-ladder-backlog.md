@@ -6,6 +6,8 @@ The open conversion candidates from the 2026-08-27 three-part audit (code commen
 
 Stage A of that phase (2026-08-28) added its own protections directly rather than through this backlog: run-policy pins the canary suite to the cloud target and the preflight refuses any run whose `.env.local` routing does not match the requested target (Tier 1); retained-world cleanup refuses a backend mismatch (Tier 1); the untracked-file fingerprint uses NUL-separated git output (Tier 1); local-stack health probes carry named remedies and the canary pins the HIBP copy and migration-history parity (Tier 2). The owner review after Stage A extended the rerun budget to every certification suite — it was golden-only, which let eight same-class audit certification retries run ungated during the Stage A campaign (Tier 2, `scripts/run-playwright.ts`).
 
+Stage B (2026-08-28) retired four Tier 1 rows and two Tier 2 rows by landing them, and added its own protections: the `RealtimeTable` type derives from the one `REALTIME_TABLES` list and the provider generates every binding from it, so a table cannot subscribe without its organization filter (Tier 1 by construction); `useLiveView`/`useRealtimeRouterRefresh` expose no debounce option, so the 150 ms floor cannot be undercut (Tier 1 by construction); `bun run realtime:check` — also part of the local preflight — diffs the list against the database publication and replica-identity state (Tier 2); ESLint bans async `startTransition` callbacks, `setInterval` (named wall-clock exceptions), and `useRealtimeEvent` imports outside the live-view family (Tier 2); replica identity `USING INDEX` makes the DELETE payload leak unwritable at the schema level (Tier 1).
+
 ## Tier 1 candidates (make it unwritable)
 
 | Rule (prose home) | Mechanism |
@@ -13,16 +15,12 @@ Stage A of that phase (2026-08-28) added its own protections directly rather tha
 | Admin client only after `getUser()` validation (architecture.md; `lib/data/cached.ts` comment) | Branded `AuthenticatedActor` minted only by `getAuthenticatedUser()`; `createSupabaseAdminClient(actor)` requires it; or one `authorizedAction({role})` factory as the only admin-client export path |
 | Organization scoping is hand-written per query (protocol invariant 2) | `orgScoped(client, orgId)` builder injecting the `organization_id` filter; lint-forbid bare `.from(` outside `lib/data/**` |
 | Append-only event/revision/action tables must never be rewritten (protocol invariant 4) | Migration: `REVOKE UPDATE, DELETE` on every `*_events`/`*_revisions`/`*_actions` table |
-| Dialog pending state binds to the server call, never a router transition (freshness contract rule 6) | A `useServerAction()` hook owning pending/disabled state as the only sanctioned submit path |
-| The 150 ms Realtime debounce floor (freshness contract rule 1) | Export `REALTIME_DEBOUNCE_MS` from the provider; the five current 150-literals import it |
-| Generation guards + keep-last-known re-derived per surface (freshness contract rule 5; six duplicated sites) | One `useGuardedRefetch(reader)`/live-view primitive — the centerpiece of the Realtime consolidation |
 | Spec date-ownership windows live as prose (testing.md conventions) | `tests/golden/support/date-ownership.ts` claiming per-spec offset windows, throwing on overlap |
 | `RegisterOpenDialog` placement (open-dialog-context comment) | Stop exporting the hook; primitives render the registration themselves |
 | Signed-download disposition can be forced inline for unsafe types (documents/actions comment) | Compute disposition inside `createSignedDownloadUrl` from the MIME type; drop the parameter |
 | Client-supplied storage paths (documents/actions comment) | Branded `StoragePath` produced only by the path builders |
 | File bytes through Server Actions (decision 0001; r2.ts comment) | Move `putStorageObject` out of app reach (scripts-only module); ban `@aws-sdk/client-s3` imports outside `lib/storage/` + `scripts/` |
 | PENDING time entries filtered as if only `approved` counts (time-tracking comments, 3 sites) | `getEffectiveTimeEntries()` as the single filter; validation.ts calls it |
-| `job_assignments` Realtime events reach every org (provider comment) | Add `organization_id` to the table and filter server-side |
 | Status colors semantic-only (AGENTS.md styling) | `statusVariant(status)` registry helper; ban raw `bg-green-*`/`bg-red-*`/`bg-yellow-*` |
 | Hardcoded German UI strings buried in logic (AGENTS.md) | A `de` message catalog + lint on string literals in JSX text/aria positions |
 | Harness mutation helpers can return the optimistic echo (testing rule 13) | Step helpers return the persisted row (db.ts read or reload) |
@@ -43,9 +41,7 @@ Stage A of that phase (2026-08-28) added its own protections directly rather tha
 | Raw selectors / `page.getByText` / `.nth()`/`.first()` in specs (testing conventions) | Spec-scoped lint: page-locator calls allowed only under `tests/*/support/**` |
 | Stage-split per new slice spec; serial mode; ≥1 negative check (testing conventions) | Meta-test over `tests/golden/p1-*.spec.ts` |
 | Golden-marker identities outside the seeder (testing conventions) | Lint ban on `werkflow-golden.test`/`Golden Test SHK`/`Fremde Firma` literals outside `seed.ts` |
-| Publication/`TABLES`/replica-identity drift (realtime doc, restated per slice) | Unit test diffing dev `pg_publication_tables` + `relreplident` against the provider's `TABLES` union |
 | Mutations must invalidate their cache tags (realtime doc) | Static scan: `'use server'` mutation files must call `updateTag()` via a table→tag registry |
-| No polling without a named exception (realtime doc; `use-member-status-polling` is unnamed today) | Ban `setInterval` in product dirs with a named allowlist |
 | Radix dialog imports bypassing the suspension wrapper (freshness rule 6) | Ban `@radix-ui/react-dialog`/`react-alert-dialog` imports outside `components/ui/**` |
 | Purple/violet/amber palette bans; ring offsets; heavy shadows; hex in components (2 files to clean first) | Styling selector additions after the small cleanups |
 | Generated-types drift; auth-config posture; advisors clean (environments.md, supabase skill) | `types:check`, sync script `--check` mode, `advisors:check`. Migration-history alignment landed in Stage A: canary C9 fails on any divergence between DEV's `schema_migrations` and the committed files, and every local `supabase db reset` validates the history itself |

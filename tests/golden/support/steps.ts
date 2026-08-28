@@ -285,9 +285,33 @@ export async function uploadIntoDocumentsSection(
     .filter({ has: page.getByText('Dokumente & Bilder') });
   await section.locator('input[type="file"]').first().setInputFiles(filePath);
 
-  // Direct-to-R2 upload dialog: wait for completion and require actual success —
-  // "abgeschlossen" alone also counts failed files.
-  await expect(page.getByText('1 von 1 abgeschlossen')).toBeVisible({ timeout: 60_000 });
+  // Direct-to-R2 upload dialog: the dialog closes itself 650 ms after a fully
+  // successful upload, so the completion counter is a transient flash on a
+  // fast backend under load (missed once in the Stage B campaign, incident
+  // 2026-08-28T184856310Z-a28019). Completion is either the counter or the
+  // self-close; a failed upload keeps the dialog open, and the error check
+  // plus the persisted file-name assertion below stay strict.
+  let uploadDialogSeen = false;
+  await expect
+    .poll(
+      async () => {
+        if (await page.getByText('1 von 1 abgeschlossen').isVisible()) {
+          return 'complete';
+        }
+        const dialogOpen =
+          (await page
+            .getByRole('dialog')
+            .filter({ hasText: 'abgeschlossen' })
+            .count()) > 0;
+        if (dialogOpen) {
+          uploadDialogSeen = true;
+          return 'uploading';
+        }
+        return uploadDialogSeen ? 'closed' : 'starting';
+      },
+      { timeout: 60_000 }
+    )
+    .toMatch(/^(complete|closed)$/);
   await expect(page.getByText('Upload fehlgeschlagen.')).toHaveCount(0);
 
   const closeButton = page.getByRole('button', { name: 'Schließen' });

@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useState, useTransition, type ReactElement } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
+import { usePendingTask } from '@/hooks/use-server-action';
 import { Archive, ArrowDown, ArrowUp, History, Loader2, Plus, RotateCcw, Save, Send, Trash2 } from 'lucide-react'
 
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create'
@@ -18,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SelectWithCreate } from '@/components/ui/select-with-create'
 import { Textarea } from '@/components/ui/textarea'
 import { useBanner } from '@/components/ui/banner'
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider'
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view'
 import { upsertInventoryItem } from '@/lib/inventory/actions'
 import type { InventoryLocation, InventoryPickerOption } from '@/lib/inventory/types'
 import { createCapability } from '@/lib/qualifications/actions'
@@ -64,14 +65,24 @@ function move<T>(items: T[], index: number, direction: -1 | 1): T[] {
 }
 
 export function WorkTemplatesContent({ initialTemplates, inventoryItems, inventoryLocations, capabilities }: Props): ReactElement {
-  const [templates, setTemplates] = useState(initialTemplates)
   const [search, setSearch] = useState('')
   const [targetFilter, setTargetFilter] = useState<'all' | WorkTemplateTargetType>('all')
   const [statusFilter, setStatusFilter] = useState<'active' | 'draft' | 'published' | 'archived'>('active')
   const [createOpen, setCreateOpen] = useState(false)
   const [editing, setEditing] = useState<WorkTemplateDetail | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner()
+
+  const view = useLiveView<WorkTemplateSummary[]>({
+    tables: ['work_templates', 'work_template_versions', 'work_template_applications'],
+    read: async (): Promise<LiveViewResult<WorkTemplateSummary[]>> => {
+      const result = await getWorkTemplates()
+      return result.success ? { ok: true, data: result.data } : { ok: false }
+    },
+    initialData: initialTemplates,
+  })
+  const templates = view.data ?? initialTemplates
+  const reload = view.refresh
 
   const filtered = useMemo(() => templates.filter((template) => {
     const query = search.trim().toLocaleLowerCase('de')
@@ -84,16 +95,8 @@ export function WorkTemplatesContent({ initialTemplates, inventoryItems, invento
     return true
   }), [search, statusFilter, targetFilter, templates])
 
-  const reload = useCallback(async () => {
-    const result = await getWorkTemplates()
-    if (result.success) setTemplates(result.data)
-  }, [])
-  useRealtimeEvent('work_templates', reload)
-  useRealtimeEvent('work_template_versions', reload)
-  useRealtimeEvent('work_template_applications', reload)
-
   function openEditor(templateId: string) {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await getWorkTemplate(templateId)
       if (!result.success) {
         showBanner({ variant: 'error', message: 'Die Arbeitsvorlage konnte nicht geladen werden.' })
@@ -104,7 +107,7 @@ export function WorkTemplatesContent({ initialTemplates, inventoryItems, invento
   }
 
   function changeArchive(template: WorkTemplateSummary) {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const archived = !template.archivedAt
       const result = await setWorkTemplateArchived(template.id, archived)
       if (!result.success) {
@@ -157,11 +160,11 @@ function CreateTemplateDialog({ open, onOpenChange, onCreated }: { open: boolean
   const [description, setDescription] = useState('')
   const [targetType, setTargetType] = useState<WorkTemplateTargetType>('job')
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const { run: runPendingTask, isPending } = usePendingTask();
   function submit(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await createWorkTemplate({ name, description, targetType })
       if (!result.success) { setError(ERROR_MESSAGES[result.error] ?? 'Die Arbeitsvorlage konnte nicht erstellt werden.'); return }
       setName(''); setDescription(''); setTargetType('job'); onCreated(result.data.templateId)
@@ -173,7 +176,7 @@ function CreateTemplateDialog({ open, onOpenChange, onCreated }: { open: boolean
 function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryLocations, capabilities, onChanged }: { detail: WorkTemplateDetail | null; onOpenChange: (open: boolean) => void; inventoryItems: InventoryPickerOption[]; inventoryLocations: InventoryLocation[]; capabilities: CapabilityDefinition[]; onChanged: (message: string) => Promise<void> }) {
   const [draft, setDraft] = useState<WorkTemplateDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const { run: runPendingTask, isPending } = usePendingTask();
   const [localInventoryItems, setLocalInventoryItems] = useState(inventoryItems)
   const [localCapabilities, setLocalCapabilities] = useState(capabilities)
   const activeDraft = draft ?? detail?.draft ?? null
@@ -183,7 +186,7 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
   function close(open: boolean) { if (!open) { setDraft(null); setError(null) }; onOpenChange(open) }
   function save() {
     if (!detail || !activeDraft) return
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await saveWorkTemplateDraft({ templateId: detail.id, draft: { ...activeDraft, items: activeDraft.items.map((item, index) => ({ ...item, sortOrder: index })), materials: activeDraft.materials.map((item, index) => ({ ...item, sortOrder: index })), capabilities: activeDraft.capabilities.map((item, index) => ({ ...item, sortOrder: index })) } })
       if (!result.success) { setError(ERROR_MESSAGES[result.error] ?? 'Der Entwurf konnte nicht gespeichert werden.'); return }
       await onChanged('Entwurf gespeichert.')
@@ -191,7 +194,7 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
   }
   function publish() {
     if (!detail) return
-    startTransition(async () => {
+    void runPendingTask(async () => {
       if (draft) {
         const saveResult = await saveWorkTemplateDraft({ templateId: detail.id, draft: { ...draft, items: draft.items.map((item, index) => ({ ...item, sortOrder: index })), materials: draft.materials.map((item, index) => ({ ...item, sortOrder: index })), capabilities: draft.capabilities.map((item, index) => ({ ...item, sortOrder: index })) } })
         if (!saveResult.success) { setError(ERROR_MESSAGES[saveResult.error] ?? 'Der Entwurf konnte nicht gespeichert werden.'); return }
@@ -203,7 +206,7 @@ function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryL
   }
   function createNextDraft() {
     if (!detail) return
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await createNextWorkTemplateDraft(detail.id)
       if (!result.success) { setError('Die nächste Version konnte nicht angelegt werden.'); return }
       close(false); await onChanged('Ein neuer Entwurf wurde angelegt.')
@@ -252,8 +255,8 @@ function MaterialsEditor({ draft, editable, onChange, inventoryItems, inventoryL
 }
 
 function CreateMaterialDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (item: InventoryPickerOption) => void }) {
-  const [name, setName] = useState(''); const [unit, setUnit] = useState('Stk.'); const [error, setError] = useState<string | null>(null); const [isPending, startTransition] = useTransition()
-  function submit(event: React.FormEvent) { event.preventDefault(); event.stopPropagation(); setError(null); startTransition(async () => { const result = await upsertInventoryItem({ name, unit, itemType: 'material', isBillable: true, trackQuantity: true, initialQuantity: 0 }); if (!result.success) { setError('Der Artikel konnte nicht erstellt werden.'); return }; onCreated({ id: result.item.id, itemType: result.item.itemType, name: result.item.name, unit: result.item.unit, internalSku: result.item.internalSku, manufacturer: result.item.manufacturer, supplierName: null, supplierArticleNumber: result.item.supplierArticleNumber, primaryBarcode: null, categoryName: null, isBillable: result.item.isBillable, availableQuantity: 0, stockByLocation: [] }); setName(''); onOpenChange(false) }) }
+  const [name, setName] = useState(''); const [unit, setUnit] = useState('Stk.'); const [error, setError] = useState<string | null>(null); const { run: runPendingTask, isPending } = usePendingTask();
+  function submit(event: React.FormEvent) { event.preventDefault(); event.stopPropagation(); setError(null); void runPendingTask(async () => { const result = await upsertInventoryItem({ name, unit, itemType: 'material', isBillable: true, trackQuantity: true, initialQuantity: 0 }); if (!result.success) { setError('Der Artikel konnte nicht erstellt werden.'); return }; onCreated({ id: result.item.id, itemType: result.item.itemType, name: result.item.name, unit: result.item.unit, internalSku: result.item.internalSku, manufacturer: result.item.manufacturer, supplierName: null, supplierArticleNumber: result.item.supplierArticleNumber, primaryBarcode: null, categoryName: null, isBillable: result.item.isBillable, availableQuantity: 0, stockByLocation: [] }); setName(''); onOpenChange(false) }) }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Artikel erstellen</DialogTitle><DialogDescription>Der Artikel wird ohne Bestand angelegt.</DialogDescription></DialogHeader><div className="space-y-4"><div><Label htmlFor="quick-item-name">Name</Label><Input id="quick-item-name" value={name} onChange={(event) => setName(event.target.value)} /></div><div><Label htmlFor="quick-item-unit">Einheit</Label><Input id="quick-item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} /></div><ErrorText>{error}</ErrorText></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit" disabled={isPending}>Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
@@ -263,7 +266,7 @@ function CapabilitiesEditor({ draft, editable, onChange, capabilities, onCapabil
 }
 
 function CreateCapabilityDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (item: CapabilityDefinition) => void }) {
-  const [name, setName] = useState(''); const [kind, setKind] = useState<CapabilityKind>('skill'); const [error, setError] = useState<string | null>(null); const [isPending, startTransition] = useTransition()
-  function submit(event: React.FormEvent) { event.preventDefault(); event.stopPropagation(); startTransition(async () => { const result = await createCapability({ name, kind }); if (!result.success || !result.capabilityId) { setError('Die Qualifikation konnte nicht erstellt werden.'); return }; onCreated({ id: result.capabilityId, organizationId: '', kind, name: name.trim(), description: null, defaultExpiryWarningDays: kind === 'certification' ? 30 : 0, retiredAt: null }); setName(''); onOpenChange(false) }) }
+  const [name, setName] = useState(''); const [kind, setKind] = useState<CapabilityKind>('skill'); const [error, setError] = useState<string | null>(null); const { run: runPendingTask, isPending } = usePendingTask();
+  function submit(event: React.FormEvent) { event.preventDefault(); event.stopPropagation(); void runPendingTask(async () => { const result = await createCapability({ name, kind }); if (!result.success || !result.capabilityId) { setError('Die Qualifikation konnte nicht erstellt werden.'); return }; onCreated({ id: result.capabilityId, organizationId: '', kind, name: name.trim(), description: null, defaultExpiryWarningDays: kind === 'certification' ? 30 : 0, retiredAt: null }); setName(''); onOpenChange(false) }) }
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Qualifikation erstellen</DialogTitle><DialogDescription>Erweitert den gemeinsamen Qualifikationskatalog der Organisation.</DialogDescription></DialogHeader><div className="space-y-4"><div><Label htmlFor="quick-capability-name">Name</Label><Input id="quick-capability-name" value={name} onChange={(event) => setName(event.target.value)} /></div><Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}><SelectTrigger aria-label="Art der Qualifikation"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="skill">Fähigkeit</SelectItem><SelectItem value="certification">Zertifizierung</SelectItem></SelectContent></Select><ErrorText>{error}</ErrorText></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit" disabled={isPending}>Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { createDocumentFolder } from '@/lib/documents/actions';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import {
   DOCUMENT_CATEGORY_LABELS,
@@ -81,7 +82,7 @@ export function DocumentUploadDialog({
   allowFolderCreation = false,
   onComplete,
 }: DocumentUploadDialogProps): ReactElement {
-  const [isPending, startTransition] = useTransition();
+  const { run: runUploadTask, isPending } = usePendingTask();
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
   const closeTimeoutRef = useRef<number | null>(null);
@@ -187,7 +188,7 @@ export function DocumentUploadDialog({
     startedItemsKeyRef.current = itemsKey;
     clearCloseTimeout();
 
-    startTransition(async () => {
+    void runUploadTask(async () => {
       let failures = initialRows.filter((row) => row.status === 'error').length;
       const uploadedDocuments: OrganizationDocument[] = [];
       const folderCache = new Map<string, string | null>();

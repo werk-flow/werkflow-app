@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   BriefcaseBusiness,
   Check,
@@ -28,6 +28,7 @@ import {
 import type { DocumentEmployee, OrganizationDocument } from '@/lib/documents/types';
 import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
 import { cn } from '@/lib/utils';
+import { useServerAction } from '@/hooks/use-server-action';
 
 type LinkTargetType = 'job' | 'project' | 'client' | 'employee';
 type LinkTarget = Job | ProjectWithDetails | Client | DocumentEmployee;
@@ -159,8 +160,9 @@ export function DocumentLinkDialog({
   employees: employeesProp,
   onComplete,
 }: DocumentLinkDialogProps) {
-  const [isSaving, startSaveTransition] = useTransition();
-  const [isCatalogPending, startCatalogTransition] = useTransition();
+  const { run: runSaveLinks, isPending: isSaving } = useServerAction(updateDocumentLinks);
+  const { run: runCatalogFetch, isPending: isCatalogPending } =
+    useServerAction(getDocumentLinkCatalog);
   const [targetType, setTargetType] = useState<LinkTargetType>('job');
   const [searchQuery, setSearchQuery] = useState('');
   const [fetchedCatalog, setFetchedCatalog] = useState<{
@@ -226,8 +228,8 @@ export function DocumentLinkDialog({
 
     let cancelled = false;
 
-    startCatalogTransition(async () => {
-      const result = await getDocumentLinkCatalog();
+    void (async () => {
+      const result = await runCatalogFetch();
       if (cancelled) return;
 
       if (result.success) {
@@ -243,12 +245,12 @@ export function DocumentLinkDialog({
           'Aufträge, Projekte, Kunden und Mitarbeiter konnten nicht geladen werden.'
         );
       }
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [needsCatalogFetch, onComplete]);
+  }, [needsCatalogFetch, onComplete, runCatalogFetch]);
 
   const isLoadingCatalog = needsCatalogFetch && isCatalogPending;
 
@@ -371,8 +373,8 @@ export function DocumentLinkDialog({
   function handleSave() {
     if (!document || changeCount === 0) return;
 
-    startSaveTransition(async () => {
-      const result = await updateDocumentLinks({
+    void (async () => {
+      const result = await runSaveLinks({
         documentId: document.id,
         addJobIds,
         addProjectIds,
@@ -387,7 +389,7 @@ export function DocumentLinkDialog({
       if (result.success || (result.addedCount ?? 0) + (result.removedCount ?? 0) > 0) {
         onOpenChange(false);
       }
-    });
+    })();
   }
 
   return (

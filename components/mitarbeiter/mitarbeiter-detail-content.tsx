@@ -309,7 +309,12 @@ export function MitarbeiterDetailContent({
     setActionError(null);
     const result = await removeMember(member.userId);
     if (result.success) {
-      router.push(`/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`);
+      // Hard navigation: the refresh of this now-removed member's detail
+      // redirects to plain /mitarbeiter and can land after a soft push,
+      // dropping the banner param (documented post-delete race).
+      window.location.assign(
+        `/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`
+      );
     } else {
       setActionError(getMemberActionErrorMessage(result.error));
       setIsRemoving(false);
@@ -330,6 +335,7 @@ export function MitarbeiterDetailContent({
       setLiveTotalMinutes(base);
     };
     compute();
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = setInterval(compute, 60000);
     return () => clearInterval(interval);
   }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);

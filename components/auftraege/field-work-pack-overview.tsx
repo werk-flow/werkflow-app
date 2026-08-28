@@ -36,7 +36,6 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
   const duration = formatDuration(job.plannedWorkingMinutes);
 
   useRealtimeRouterRefresh({
-    debounceMs: 150,
     tables: [
       'jobs',
       'projects',

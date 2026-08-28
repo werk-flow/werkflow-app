@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Briefcase, Undo2 } from 'lucide-react';
 import { CalendarHeader } from './calendar-header';
 import { CalendarViewTabs } from './calendar-view-tabs';
@@ -30,7 +30,8 @@ import {
 } from '@/lib/planning/actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
 import { useQualificationWarningConfirmation } from '@/components/auftraege/qualification-warning-dialog';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView } from '@/hooks/use-live-view';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { ParkplatzPanel } from './parkplatz-panel';
 import { DispatchPanel } from './dispatch-panel';
@@ -132,7 +133,6 @@ export function CalendarContainer({
   initialJobs
 }: CalendarContainerProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { requestApproval, warningDialog } =
     useQualificationWarningConfirmation();
   const {
@@ -410,8 +410,6 @@ export function CalendarContainer({
   const entriesRequestIdRef = useRef(0);
   const jobsRequestIdRef = useRef(0);
   const parkedJobsRequestIdRef = useRef(0);
-  const jobsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const serverPropsRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const parkedJobsLoadedRef = useRef(false);
   const previousMemberIdsRef = useRef(new Set(members.map((member) => member.user_id)));
 
@@ -728,110 +726,90 @@ export function CalendarContainer({
   useEffect(() => {
     void fetchParkingContexts();
   }, [fetchParkingContexts, organizationId]);
-  useRealtimeEvent('work_blockers', (event) => {
-    const kind = (event.new ?? event.old)?.kind;
-    if (kind !== undefined && kind !== 'parking') return;
-    void fetchParkingContexts();
-  });
-
-  const scheduleJobsRefresh = useCallback(() => {
-    if (jobsRefreshTimerRef.current) {
-      clearTimeout(jobsRefreshTimerRef.current);
-    }
-
-    jobsRefreshTimerRef.current = setTimeout(() => {
-      jobsRefreshTimerRef.current = null;
-      fetchJobs();
-      if (isAdminOrManager) {
-        fetchParkedJobs();
-      }
-    }, 150);
-  }, [fetchJobs, fetchParkedJobs, isAdminOrManager]);
-
-  const scheduleServerPropsRefresh = useCallback(() => {
-    if (serverPropsRefreshTimerRef.current) {
-      clearTimeout(serverPropsRefreshTimerRef.current);
-    }
-
-    serverPropsRefreshTimerRef.current = setTimeout(() => {
-      serverPropsRefreshTimerRef.current = null;
-      router.refresh();
-    }, 200);
-  }, [router]);
-
   useEffect(() => {
     return () => {
-      if (jobsRefreshTimerRef.current) {
-        clearTimeout(jobsRefreshTimerRef.current);
-      }
-      if (serverPropsRefreshTimerRef.current) {
-        clearTimeout(serverPropsRefreshTimerRef.current);
-      }
       if (silentRefreshTimerRef.current) {
         clearTimeout(silentRefreshTimerRef.current);
       }
     };
   }, []);
 
-  // Realtime events always refetch (data changed, bypass range check).
-  // During optimistic DnD operations the Realtime-triggered refetch would
-  // overwrite the optimistic state with stale server data, causing a visible
-  // flicker. The paused-until ref suppresses those refetches; the handler's
-  // own handleSilentRefresh() at the end brings in the final correct state.
-  useRealtimeEvent('time_entries', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    fetchEntries(true);
+  // Realtime consumption goes through the live-view primitive: shared
+  // debounce, dialog suspension with one catch-up, and focus/visibility
+  // catch-up. The calendar keeps its own fetchers (range cache, optimistic
+  // drag-and-drop), so the readers just invoke them. During optimistic DnD
+  // operations a Realtime refetch would overwrite the optimistic state with
+  // stale server data; the paused-until filter drops those events and the
+  // handler's own handleSilentRefresh() at the end brings in the final
+  // correct state.
+  const notPausedForRealtime = useCallback(
+    () => Date.now() >= realtimePausedUntilRef.current,
+    []
+  );
+  useLiveView<null>({
+    tables: ['time_entries', 'entry_change_requests'],
+    read: async () => {
+      await fetchEntries(true);
+      return { ok: true, data: null };
+    },
+    initialData: null,
+    eventFilter: notPausedForRealtime,
   });
-  useRealtimeEvent('entry_change_requests', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    fetchEntries(true);
+  useLiveView<null>({
+    tables: [
+      'jobs',
+      'projects',
+      'clients',
+      'job_assignments',
+      'planning_series',
+      'planning_occurrences',
+      'planning_occurrence_assignments',
+      'organization_members',
+    ],
+    read: async () => {
+      await fetchJobs();
+      if (isAdminOrManager) {
+        await fetchParkedJobs();
+      }
+      return { ok: true, data: null };
+    },
+    initialData: null,
+    eventFilter: notPausedForRealtime,
   });
-  useRealtimeEvent('jobs', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
+  useRealtimeRouterRefresh({
+    tables: ['organization_members', 'profiles', 'organization_settings'],
+    eventFilter: notPausedForRealtime,
   });
-  useRealtimeEvent('projects', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
+  useLiveView<null>({
+    tables: ['work_blockers'],
+    read: async () => {
+      await fetchParkingContexts();
+      return { ok: true, data: null };
+    },
+    initialData: null,
+    enabled: isAdminOrManager,
+    eventFilter: (event) => {
+      const kind = (event.new ?? event.old)?.kind;
+      return kind == null || kind === 'parking';
+    },
   });
-  useRealtimeEvent('clients', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
+  // Absence entries refetch without the DnD pause: dragging never touches
+  // vacation or sickness facts.
+  useLiveView<null>({
+    tables: ['vacation_requests'],
+    read: async () => {
+      await refetchVacationEntries();
+      return { ok: true, data: null };
+    },
+    initialData: null,
   });
-  useRealtimeEvent('job_assignments', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
-  });
-  useRealtimeEvent('planning_series', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
-  });
-  useRealtimeEvent('planning_occurrences', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
-  });
-  useRealtimeEvent('planning_occurrence_assignments', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
-  });
-  useRealtimeEvent('organization_members', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleJobsRefresh();
-    scheduleServerPropsRefresh();
-  });
-  useRealtimeEvent('profiles', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleServerPropsRefresh();
-  });
-  useRealtimeEvent('organization_settings', () => {
-    if (Date.now() < realtimePausedUntilRef.current) return;
-    scheduleServerPropsRefresh();
-  });
-  useRealtimeEvent('vacation_requests', () => {
-    void refetchVacationEntries();
-  });
-  useRealtimeEvent('sickness_reports', () => {
-    void refetchSicknessEntries();
+  useLiveView<null>({
+    tables: ['sickness_reports'],
+    read: async () => {
+      await refetchSicknessEntries();
+      return { ok: true, data: null };
+    },
+    initialData: null,
   });
 
   // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)

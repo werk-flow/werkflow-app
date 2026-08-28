@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Archive,
@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
+import { usePendingTask } from '@/hooks/use-server-action';
 
 import {
   createClientContact,
@@ -115,7 +116,7 @@ export function ClientRelationsSection({
   onRequestContact,
 }: ClientRelationsSectionProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { run: runRelationTask, isPending } = usePendingTask();
   const [sectionError, setSectionError] = useState<string | null>(null);
   const { showBanner } = useBanner();
 
@@ -137,7 +138,7 @@ export function ClientRelationsSection({
 
   function saveContact() {
     if (!contactDialog) return;
-    startTransition(async () => {
+    void runRelationTask(async () => {
       const { contactId, draft } = contactDialog;
       const result = contactId
         ? await updateClientContact(contactId, draft)
@@ -157,7 +158,7 @@ export function ClientRelationsSection({
 
   function saveSite() {
     if (!siteDialog) return;
-    startTransition(async () => {
+    void runRelationTask(async () => {
       const { siteId, draft } = siteDialog;
       const result = siteId
         ? await updateClientSite(siteId, draft)
@@ -177,7 +178,7 @@ export function ClientRelationsSection({
 
   function toggleContactActive(contact: ClientContact) {
     setSectionError(null);
-    startTransition(async () => {
+    void runRelationTask(async () => {
       const result = await updateClientContact(contact.id, {
         isActive: !contact.isActive,
       });
@@ -191,7 +192,7 @@ export function ClientRelationsSection({
 
   function toggleSiteActive(site: ClientSite) {
     setSectionError(null);
-    startTransition(async () => {
+    void runRelationTask(async () => {
       const result = await updateClientSite(site.id, { isActive: !site.isActive });
       if (!result.success) {
         setSectionError(errorMessage(result.error));

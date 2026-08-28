@@ -295,6 +295,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
   }, [emailForm, initialState]);
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 1000);

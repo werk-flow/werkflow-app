@@ -1,10 +1,9 @@
 'use client';
 
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   useState,
-  useTransition,
-  useEffect,
-  useCallback,
+    useEffect,
   useMemo,
   useRef,
 } from 'react';
@@ -72,19 +71,16 @@ import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { useLiveView } from '@/hooks/use-live-view';
 import {
   getJobDisplayTitle,
-  toJob,
-  toProject,
   calculateProjectProgress,
   calculateTrafficLight,
   getEffectiveProjectStatus,
   type Project,
-  type ProjectRow,
   type Client,
   type Job,
   type JobInstructionItemWithDetails,
-  type JobRow,
   type DerivedProjectStatus,
   type ProjectStatus,
   type JobStatus,
@@ -219,13 +215,13 @@ export function ProjectDetailContent({
   const router = useRouter();
   const { showBanner } = useBanner();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, startDeleteTransition] = useTransition();
+  const { run: runDeleteTask, isPending: isDeleting } = usePendingTask();
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showAssignJobsDialog, setShowAssignJobsDialog] = useState(false);
-  const [isUpdatingClient, startClientUpdateTransition] = useTransition();
-  const [isAssigningJobs, startAssignJobsTransition] = useTransition();
+  const { run: runClientUpdateTask, isPending: isUpdatingClient } = usePendingTask();
+  const { run: runAssignJobsTask, isPending: isAssigningJobs } = usePendingTask();
   const [dialogClients, setDialogClients] = useState(clients);
   const [dialogMembers, setDialogMembers] = useState(members);
   const [dialogAvailableJobs, setDialogAvailableJobs] = useState<Job[]>([]);
@@ -237,12 +233,7 @@ export function ProjectDetailContent({
   const [liveProject, setLiveProject] = useState(project);
   const [liveJobs, setLiveJobs] = useState(jobs);
   const [instructionRefreshSignal, setInstructionRefreshSignal] = useState(0);
-  const repairTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [projectTimeEntries, setProjectTimeEntries] = useState<
-    { jobId: string; jobTitle: string; entries: TimeEntry[] }[]
-  >([]);
-  const [isLoadingTime, setIsLoadingTime] = useState(true);
   const [showTimeDetails, setShowTimeDetails] = useState(false);
 
   useEffect(() => {
@@ -260,25 +251,6 @@ export function ProjectDetailContent({
   useEffect(() => {
     setDialogMembers(members);
   }, [members]);
-
-  useEffect(() => {
-    return () => {
-      if (repairTimerRef.current) {
-        clearTimeout(repairTimerRef.current);
-      }
-    };
-  }, []);
-
-  const scheduleRepair = useCallback(() => {
-    if (repairTimerRef.current) {
-      clearTimeout(repairTimerRef.current);
-    }
-
-    repairTimerRef.current = setTimeout(() => {
-      repairTimerRef.current = null;
-      router.refresh();
-    }, 150);
-  }, [router]);
 
   useEffect(() => {
     if (
@@ -353,8 +325,11 @@ export function ProjectDetailContent({
     [clients, liveProject.clientId]
   );
 
-  const fetchProjectTime = useCallback(async () => {
-    try {
+  const timeView = useLiveView<
+    { jobId: string; jobTitle: string; entries: TimeEntry[] }[]
+  >({
+    tables: ['time_entries'],
+    read: async () => {
       const results = await Promise.all(
         liveJobs.map(async (job) => {
           const result = await getTimeEntriesForJob(job.id);
@@ -365,17 +340,25 @@ export function ProjectDetailContent({
           };
         })
       );
-      setProjectTimeEntries(results);
-    } catch (err) {
-      console.error('Error fetching project time entries:', err);
-    } finally {
-      setIsLoadingTime(false);
-    }
-  }, [liveJobs]);
+      return { ok: true, data: results };
+    },
+    resetKey: liveJobs
+      .map((job) => job.id)
+      .sort()
+      .join(','),
+  });
+  const projectTimeEntries = useMemo(
+    () => timeView.data ?? [],
+    [timeView.data]
+  );
+  const isLoadingTime = timeView.isLoading;
 
-  useEffect(() => {
-    fetchProjectTime();
-  }, [fetchProjectTime]);
+  // Server props are the authority for project and job facts: Realtime
+  // changes trigger a debounced route refresh, and the sync effects above
+  // adopt the fresh props.
+  useRealtimeRouterRefresh({
+    tables: ['projects', 'jobs', 'job_assignments'],
+  });
 
   useRealtimeRouterRefresh({
     tables: [
@@ -388,48 +371,14 @@ export function ProjectDetailContent({
     enabled: isAdminOrManager,
   });
 
-  useRealtimeEvent('time_entries', () => fetchProjectTime());
+  // Deliberate narrow event consumer: leaving the page of a project another
+  // session just deleted needs the event itself (DELETE payloads carry the
+  // id), not a refetch.
   useRealtimeEvent('projects', (event) => {
-    if (!event.new && !event.old) {
-      scheduleRepair();
-      return;
-    }
-
-    const newId = (event.new as { id?: string } | null)?.id;
     const oldId = (event.old as { id?: string } | null)?.id;
-
     if (event.eventType === 'DELETE' && oldId === liveProject.id) {
       router.push('/auftraege');
-      return;
     }
-
-    if (newId !== liveProject.id) return;
-    setLiveProject(toProject(event.new as ProjectRow));
-  });
-  useRealtimeEvent('jobs', (event) => {
-    if (!event.new && !event.old) {
-      scheduleRepair();
-      return;
-    }
-
-    if (event.eventType === 'DELETE') {
-      const oldRow = event.old as { id?: string; project_id?: string | null } | null;
-      if (!oldRow?.id || oldRow.project_id !== liveProject.id) return;
-      setLiveJobs((prev) => prev.filter((job) => job.id !== oldRow.id));
-      return;
-    }
-
-    if (!event.new) return;
-    const nextJob = toJob(event.new as JobRow);
-
-    setLiveJobs((prev) => {
-      const withoutJob = prev.filter((job) => job.id !== nextJob.id);
-      if (nextJob.projectId !== liveProject.id) {
-        return withoutJob;
-      }
-
-      return [...withoutJob, nextJob];
-    });
   });
 
   const projectTimeSummary = useMemo(() => {
@@ -507,7 +456,7 @@ export function ProjectDetailContent({
   }, [liveJobs, liveProject]);
 
   const handleDelete = () => {
-    startDeleteTransition(async () => {
+    void runDeleteTask(async () => {
       const result = await deleteProject(project.id);
       if (result.success) {
         // Hard navigation — see the deletion-stall note in kunden-detail-content.
@@ -524,7 +473,7 @@ export function ProjectDetailContent({
   };
 
   const handleClientSave = async (clientId: string) => {
-    startClientUpdateTransition(async () => {
+    void runClientUpdateTask(async () => {
       const result = await updateProject(project.id, {
         clientId,
       });
@@ -548,7 +497,7 @@ export function ProjectDetailContent({
   );
 
   const handleAssignJobsSave = async (jobIds: string[]) => {
-    startAssignJobsTransition(async () => {
+    void runAssignJobsTask(async () => {
       setAssignJobsError(null);
       const results = await Promise.allSettled(
         jobIds.map((jobId) => updateJob(jobId, { projectId: project.id }))

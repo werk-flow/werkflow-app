@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type DragEvent, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronRight,
@@ -53,6 +53,7 @@ import {
 } from '@/lib/documents/types';
 import { useBanner } from '@/components/ui/banner';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
 import { AttachDocumentDialog } from './attach-document-dialog';
 import { DocumentLinkDialog } from './document-link-dialog';
@@ -258,7 +259,7 @@ export function ContextualDocumentsSection({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
-  const [isPending, startTransition] = useTransition();
+  const { run: runDocumentTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [linkDialogDocument, setLinkDialogDocument] = useState<OrganizationDocument | null>(
@@ -299,7 +300,6 @@ export function ContextualDocumentsSection({
 
   useRealtimeRouterRefresh({
     tables: ['documents', 'document_links', 'document_audit_events', 'document_versions'],
-    debounceMs: 250,
   });
 
   function showFeedback(variant: 'success' | 'error', message: string) {
@@ -329,7 +329,7 @@ export function ContextualDocumentsSection({
       return;
     }
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await renameDocumentAction({
         documentId: renameDocument.id,
         displayName: nextName,
@@ -354,7 +354,7 @@ export function ContextualDocumentsSection({
     const link = getContextLink(document, context);
     if (!link) return;
 
-    startTransition(async () => {
+    void runDocumentTask(async () => {
       const result = await unlinkDocument({ linkId: link.id });
       if (!result.success) {
         showFeedback('error', 'Die Verknüpfung konnte nicht entfernt werden.');
@@ -649,7 +649,7 @@ export function ContextualDocumentsSection({
                 const target = deleteDocumentTarget;
                 setDeleteDocumentTarget(null);
                 if (!target) return;
-                startTransition(async () => {
+                void runDocumentTask(async () => {
                   const result = await deleteDocument(target.id);
                   if (!result.success) {
                     showFeedback('error', 'Die Datei konnte nicht gelöscht werden.');

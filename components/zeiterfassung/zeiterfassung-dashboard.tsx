@@ -168,6 +168,7 @@ export function ZeiterfassungDashboard({
 
     updateLiveValues();
 
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = setInterval(updateLiveValues, 1000);
     return () => clearInterval(interval);
   }, [

@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { useRouter } from 'next/navigation';
 import { CalendarCheck, Loader2, MessageSquare, Send } from 'lucide-react';
 
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import {
@@ -79,89 +79,68 @@ export function JobDispatchSection({
   onStateChange?: (state: FieldDispatchState) => void;
 }): ReactElement | null {
   const router = useRouter();
-  const [cards, setCards] = useState<EmployeeDispatchCard[] | null>(initialCards ?? null);
-  const [error, setError] = useState<string | null>(initialError);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busyDispatchId, setBusyDispatchId] = useState<string | null>(null);
   const [challengeTarget, setChallengeTarget] =
     useState<EmployeeDispatchCard | null>(null);
   const [challengeReason, setChallengeReason] = useState('');
-  const generationRef = useRef(0);
-  // Ref instead of a state dependency: keep-last-known must read the CURRENT
-  // loaded state without changing the refresh identity on every result.
-  const hasCardsRef = useRef(initialCards !== undefined);
 
-  useEffect(() => {
-    onStateChange?.({
-      status: cards === null ? (error ? 'error' : 'loading') : 'ready',
-      hasPending: cards?.some((card) => card.myState === 'ausstehend') ?? false,
-    });
-  }, [cards, error, onStateChange]);
-
-  const refresh = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<EmployeeDispatchCard[]>({
+    tables: [
+      'planning_dispatches',
+      'planning_dispatch_recipients',
+      'planning_dispatch_acknowledgements',
+    ],
+    read: async (): Promise<LiveViewResult<EmployeeDispatchCard[]>> => {
       const result = await getJobDispatchCards(jobId);
-      if (generation !== generationRef.current) return;
-      if (result.success) {
-        onStateChange?.({
-          status: 'ready',
-          hasPending: result.cards.some((card) => card.myState === 'ausstehend'),
-        });
-        hasCardsRef.current = true;
-        setCards(result.cards);
-        setError(null);
-      } else if (!hasCardsRef.current) {
-        onStateChange?.({ status: 'error', hasPending: false });
-        // Initial load failed; transient later failures keep last-known cards.
-        setError(dispatchErrorMessage(result.error));
-      }
-    } catch {
-      if (generation !== generationRef.current) return;
-      if (!hasCardsRef.current) {
-        onStateChange?.({ status: 'error', hasPending: false });
-        setError(dispatchErrorMessage('load_failed'));
-      }
-    }
-  }, [jobId, onStateChange]);
-
-  // Shared debounce: one mutation touches several published tables and must
-  // produce one refetch.
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = null;
-      void refresh();
-    }, 150);
-  }, [refresh]);
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      return result.success
+        ? { ok: true, data: result.cards }
+        : { ok: false, error: dispatchErrorMessage(result.error) };
     },
-    []
-  );
+    initialData: initialCards,
+    resetKey: jobId,
+  });
+  const { refresh } = view;
+  const cards = view.data ?? null;
+  // An initial load failure must stay visible; transient later failures keep
+  // last-known cards (the primitive's keep-last-known).
+  const loadError =
+    view.data !== undefined
+      ? null
+      : view.isLoading
+        ? initialError
+        : (view.error ?? dispatchErrorMessage('load_failed'));
 
+  // Latest-callback ref: an inline parent callback must not refire this
+  // effect (its own setState would re-render the parent every time).
+  const onStateChangeRef = useRef(onStateChange);
   useEffect(() => {
-    if (initialCards === undefined) {
-      hasCardsRef.current = false;
-      void refresh();
-    }
-  }, [initialCards, refresh]);
-  useRealtimeEvent('planning_dispatches', scheduleRefresh);
-  useRealtimeEvent('planning_dispatch_recipients', scheduleRefresh);
-  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefresh);
+    onStateChangeRef.current = onStateChange;
+  });
+  useEffect(() => {
+    onStateChangeRef.current?.({
+      status:
+        view.data !== undefined
+          ? 'ready'
+          : view.isLoading && !initialError
+            ? 'loading'
+            : 'error',
+      hasPending:
+        view.data?.some((card) => card.myState === 'ausstehend') ?? false,
+    });
+  }, [view.data, view.isLoading, initialError]);
 
   const handleAcknowledge = useCallback(
     async (card: EmployeeDispatchCard) => {
       setBusyDispatchId(card.dispatchId);
-      setError(null);
+      setActionError(null);
       const result = await acknowledgeDispatch(
         card.dispatchId,
         card.revisionNumber
       );
       setBusyDispatchId(null);
       if (!result.success) {
-        setError(dispatchErrorMessage(result.error));
+        setActionError(dispatchErrorMessage(result.error));
       } else {
         router.refresh();
       }
@@ -205,7 +184,7 @@ export function JobDispatchSection({
 
   // An initial load failure must stay visible instead of silently reading as
   // "kein Einsatz".
-  if (error && (!cards || cards.length === 0)) {
+  if (loadError) {
     return (
       <section
         className="rounded-lg border bg-card p-4 sm:p-5"
@@ -219,7 +198,7 @@ export function JobDispatchSection({
           <Send className="size-4" />
           Mein Einsatz
         </h3>
-        <ErrorText>{error}</ErrorText>
+        <ErrorText>{loadError}</ErrorText>
       </section>
     );
   }
@@ -239,7 +218,7 @@ export function JobDispatchSection({
         <Send className="size-4" />
         Mein Einsatz
       </h3>
-      <ErrorText className="mb-3">{error}</ErrorText>
+      <ErrorText className="mb-3">{actionError}</ErrorText>
       <div className="space-y-3">
         {cards.map((card) => (
           <div

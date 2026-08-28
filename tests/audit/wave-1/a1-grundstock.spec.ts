@@ -62,13 +62,22 @@ async function bookMaterialDialog(
   for (let attempt = 1; ; attempt += 1) {
     await openButton.click();
     try {
+      // Every step inside the attempt is bounded: a refresh commit that
+      // removes the dialog (or its Radix popover) must fall through to the
+      // retry instead of hanging until the test budget (this hung 287 s on
+      // the option click in the 2026-08-28 Stage B campaign).
       await dialog.locator('input[id$="-quantity"]').fill(quantity, { timeout: 15_000 });
-      await selectFromSearchable(
-        page,
-        dialog.locator('button[id$="-location"]'),
-        'Hauptlager (Golden)'
-      );
-      await dialog.getByRole('button', { name: submitLabel }).click();
+      const locationTrigger = dialog.locator('button[id$="-location"]');
+      await locationTrigger.click({ timeout: 15_000 });
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible({ timeout: 15_000 });
+      await listbox.locator('..').getByRole('textbox').fill('Hauptlager (Golden)', { timeout: 15_000 });
+      await listbox
+        .getByRole('button')
+        .filter({ hasText: 'Hauptlager (Golden)' })
+        .first()
+        .click({ timeout: 15_000 });
+      await dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 });
       break;
     } catch (error) {
       if (attempt >= 2 || (await dialog.count()) > 0) throw error;

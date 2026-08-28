@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import {
   Check,
@@ -28,7 +28,7 @@ import type {
   WorkSession
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { toLocalDateString } from '@/lib/utils';
 
 const EntryDetailsDialog = dynamic(
@@ -155,128 +155,112 @@ export function PendingApprovals({
   currentUserRole,
   currentUserId,
 }: PendingApprovalsProps) {
-  // Use separate states for initial load vs refresh to preserve UI during refresh
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sessions, setSessions] = useState<PendingSession[]>([]);
-  const [changeRequests, setChangeRequests] = useState<
-    ChangeRequestWithDetails[]
-  >([]);
-  const [error, setError] = useState<string | null>(null);
+  // Errors from approve/reject actions; read errors come from view.error.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<{
     id: string;
     action: 'approve' | 'reject';
   } | null>(null);
-  const fetchGenerationRef = useRef(0);
 
-  const fetchPendingItems = useCallback(
-    async (isRefresh = false) => {
-      const generation = ++fetchGenerationRef.current;
-      if (isRefresh) {
-        setIsRefreshing(true);
-      }
-      setError(null);
-
+  const view = useLiveView<{
+    sessions: PendingSession[];
+    changeRequests: ChangeRequestWithDetails[];
+  }>({
+    tables: ['time_entries', 'entry_change_requests'],
+    read: async (): Promise<
+      LiveViewResult<{
+        sessions: PendingSession[];
+        changeRequests: ChangeRequestWithDetails[];
+      }>
+    > => {
       try {
         // Fetch pending sessions (for all admin/manager)
         const sessionsResult = await getPendingSessions(organizationId);
         if (!sessionsResult.success) {
-          if (generation === fetchGenerationRef.current) {
-            setError(getApprovalErrorMessage(sessionsResult.error));
-          }
-          return;
+          return {
+            ok: false,
+            error: getApprovalErrorMessage(sessionsResult.error)
+          };
         }
 
-        const newSessions = sessionsResult.sessions;
-
         // Fetch change requests (admin only)
-        let newChangeRequests: ChangeRequestWithDetails[] = [];
+        let changeRequests: ChangeRequestWithDetails[] = [];
         if (isAdmin) {
           const changeRequestsResult = await getPendingChangeRequests(
             organizationId
           );
-          if (changeRequestsResult.success) {
-            newChangeRequests = changeRequestsResult.requests;
-          } else {
-            if (generation === fetchGenerationRef.current) {
-              setError(getApprovalErrorMessage(changeRequestsResult.error));
-            }
-            return;
+          if (!changeRequestsResult.success) {
+            return {
+              ok: false,
+              error: getApprovalErrorMessage(changeRequestsResult.error)
+            };
           }
+          changeRequests = changeRequestsResult.requests;
         }
 
-        if (generation === fetchGenerationRef.current) {
-          setSessions(newSessions);
-          setChangeRequests(newChangeRequests);
-        }
+        return {
+          ok: true,
+          data: { sessions: sessionsResult.sessions, changeRequests }
+        };
       } catch (err) {
         console.error('Error fetching pending items:', err);
-        if (generation === fetchGenerationRef.current) {
-          setError('Die ausstehenden Anträge konnten nicht geladen werden.');
-        }
-      } finally {
-        if (generation === fetchGenerationRef.current) {
-          setIsInitialLoading(false);
-          setIsRefreshing(false);
-        }
+        return {
+          ok: false,
+          error: 'Die ausstehenden Anträge konnten nicht geladen werden.'
+        };
       }
     },
-    [organizationId, isAdmin]
-  );
+    resetKey: `${organizationId}:${isAdmin ? 'admin' : 'manager'}`
+  });
 
-  useEffect(() => {
-    fetchPendingItems(false);
-  }, [fetchPendingItems]);
-
-  // Realtime: refetch when time entries or change requests change
-  useRealtimeEvent('time_entries', () => fetchPendingItems(true));
-  useRealtimeEvent('entry_change_requests', () => fetchPendingItems(true));
+  const sessions = view.data?.sessions ?? [];
+  const changeRequests = view.data?.changeRequests ?? [];
+  const isInitialLoading = view.isLoading;
+  const error = actionError ?? view.error;
 
   const handleRefresh = () => {
-    fetchPendingItems(true);
+    void view.refresh();
   };
 
   const handleApproveSession = async (session: PendingSession) => {
+    setActionError(null);
     setProcessingAction({ id: session.id, action: 'approve' });
     try {
       const pairedEntryId =
         session.clockIn && session.clockOut ? session.clockOut.id : undefined;
 
       const result = await reviewSession(session.id, 'approved', pairedEntryId);
-      if (result.success) {
-        // Remove from list immediately
-        setSessions((prev) => prev.filter((s) => s.id !== session.id));
-      } else {
+      // Refresh while the buttons are still disabled so the reviewed item is
+      // gone (or the view corrected) before the next action is possible.
+      await view.refresh();
+      if (!result.success) {
         console.error('Failed to approve session:', result.error);
-        await fetchPendingItems(true);
-        setError(getApprovalErrorMessage(result.error));
+        setActionError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error approving session:', err);
-      setError('Ein Fehler ist aufgetreten.');
+      setActionError('Ein Fehler ist aufgetreten.');
     } finally {
       setProcessingAction(null);
     }
   };
 
   const handleRejectSession = async (session: PendingSession) => {
+    setActionError(null);
     setProcessingAction({ id: session.id, action: 'reject' });
     try {
       const pairedEntryId =
         session.clockIn && session.clockOut ? session.clockOut.id : undefined;
 
       const result = await reviewSession(session.id, 'rejected', pairedEntryId);
-      if (result.success) {
-        // Remove from list immediately
-        setSessions((prev) => prev.filter((s) => s.id !== session.id));
-      } else {
+      await view.refresh();
+      if (!result.success) {
         console.error('Failed to reject session:', result.error);
-        await fetchPendingItems(true);
-        setError(getApprovalErrorMessage(result.error));
+        setActionError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error rejecting session:', err);
-      setError('Ein Fehler ist aufgetreten.');
+      setActionError('Ein Fehler ist aufgetreten.');
     } finally {
       setProcessingAction(null);
     }
@@ -285,19 +269,19 @@ export function PendingApprovals({
   const handleApproveChangeRequest = async (
     request: ChangeRequestWithDetails
   ) => {
+    setActionError(null);
     setProcessingAction({ id: request.id, action: 'approve' });
     try {
       const result = await reviewChangeRequest(request.id, 'approve');
       if (result.success) {
-        // Remove from list immediately
-        setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
+        await view.refresh();
       } else {
         console.error('Failed to approve change request:', result.error);
-        setError(getApprovalErrorMessage(result.error));
+        setActionError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error approving change request:', err);
-      setError('Ein Fehler ist aufgetreten.');
+      setActionError('Ein Fehler ist aufgetreten.');
     } finally {
       setProcessingAction(null);
     }
@@ -306,19 +290,19 @@ export function PendingApprovals({
   const handleRejectChangeRequest = async (
     request: ChangeRequestWithDetails
   ) => {
+    setActionError(null);
     setProcessingAction({ id: request.id, action: 'reject' });
     try {
       const result = await reviewChangeRequest(request.id, 'reject');
       if (result.success) {
-        // Remove from list immediately
-        setChangeRequests((prev) => prev.filter((r) => r.id !== request.id));
+        await view.refresh();
       } else {
         console.error('Failed to reject change request:', result.error);
-        setError(getApprovalErrorMessage(result.error));
+        setActionError(getApprovalErrorMessage(result.error));
       }
     } catch (err) {
       console.error('Error rejecting change request:', err);
-      setError('Ein Fehler ist aufgetreten.');
+      setActionError('Ein Fehler ist aufgetreten.');
     } finally {
       setProcessingAction(null);
     }
@@ -376,8 +360,8 @@ export function PendingApprovals({
             variant="outline"
             size="sm"
             onClick={() => {
-              setError(null);
-              fetchPendingItems(false);
+              setActionError(null);
+              void view.refresh();
             }}
             className="mt-4"
           >
@@ -440,7 +424,7 @@ export function PendingApprovals({
                 }
                 onApprove={() => handleApproveSession(item.data)}
                 onReject={() => handleRejectSession(item.data)}
-                onRefresh={() => fetchPendingItems(true)}
+                onRefresh={() => void view.refresh()}
                 currentUserRole={currentUserRole}
                 currentUserId={currentUserId}
                 disabled={processingAction !== null}
@@ -493,11 +477,11 @@ export function PendingApprovals({
           size="sm"
           onClick={handleRefresh}
           disabled={
-            isRefreshing || isInitialLoading || processingAction !== null
+            view.isRefreshing || isInitialLoading || processingAction !== null
           }
         >
           <RefreshCw
-            className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+            className={`mr-2 h-4 w-4 ${view.isRefreshing ? 'animate-spin' : ''}`}
           />
           Aktualisieren
         </Button>
@@ -510,7 +494,7 @@ export function PendingApprovals({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setError(null)}
+            onClick={() => setActionError(null)}
             className="h-auto p-1 text-destructive hover:text-destructive"
           >
             <X className="h-4 w-4" />

@@ -77,6 +77,7 @@ export function HoursDisplay({
     }, 0);
 
     // Then update every minute for smoother progress
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = setInterval(() => {
       setNowMs(Date.now());
     }, 60000); // Update every minute

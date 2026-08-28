@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   CalendarClock,
@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import {
   getAttentionOverview,
@@ -40,6 +39,7 @@ import {
   REQUEST_URGENCY_LABELS,
 } from '@/lib/requests/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 
 const MARK_READ_ERROR =
@@ -121,89 +121,45 @@ function certificationNotificationText(
 
 export function AufgabenContent() {
   const { showBanner } = useBanner();
-  const [overview, setOverview] = useState<AttentionOverview | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const generationRef = useRef(0);
-  const hasDataRef = useRef(false);
   const { refreshAttentionCounts } = useAttentionCounts();
 
-  const refetch = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  // Keep last-known data on transient failures; only a failed initial
+  // load shows the visible failure state.
+  const view = useLiveView<AttentionOverview>({
+    tables: [
+      'time_entries',
+      'entry_change_requests',
+      'vacation_requests',
+      'sickness_reports',
+      'employee_capabilities',
+      'organization_capabilities',
+      'client_requests',
+      'client_follow_ups',
+      'planning_dispatches',
+      'planning_dispatch_recipients',
+      'planning_dispatch_acknowledgements',
+      'work_blockers',
+      'work_artifacts',
+      'jobs',
+      'projects',
+      'work_handover_packages',
+      'attention_read_states',
+      'organization_responsibility_configurations',
+      'organization_responsibility_assignments',
+      'organization_responsibility_delegations',
+    ],
+    read: async (): Promise<LiveViewResult<AttentionOverview>> => {
       const result = await getAttentionOverview();
-      if (generation !== generationRef.current) return;
-      // Keep last-known data on transient failures; only a failed initial
-      // load shows the visible failure state.
-      if (result.success) {
-        setOverview(result.overview);
-        hasDataRef.current = true;
-        setLoadFailed(false);
-      } else if (!hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } catch (error) {
-      console.error('Error fetching attention overview:', error);
-      if (generation === generationRef.current && !hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } finally {
-      if (generation === generationRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
+      return result.success
+        ? { ok: true, data: result.overview }
+        : { ok: false };
+    },
+  });
+  useBusinessDayRefresh(view.refresh);
 
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  // One shared 150ms debounce for all Realtime triggers (mirrors the count
-  // provider): a burst of related row changes causes one refetch, not eight.
-  const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRefetch = useCallback((delay = 150) => {
-    if (refetchTimerRef.current) {
-      clearTimeout(refetchTimerRef.current);
-    }
-    refetchTimerRef.current = setTimeout(() => {
-      refetchTimerRef.current = null;
-      void refetch();
-    }, delay);
-  }, [refetch]);
-  const scheduleDefaultRefetch = useCallback(() => {
-    scheduleRefetch();
-  }, [scheduleRefetch]);
-
-  useEffect(() => {
-    return () => {
-      if (refetchTimerRef.current) {
-        clearTimeout(refetchTimerRef.current);
-      }
-    };
-  }, []);
-
-  useRealtimeEvent('time_entries', scheduleDefaultRefetch);
-  useRealtimeEvent('entry_change_requests', scheduleDefaultRefetch);
-  useRealtimeEvent('vacation_requests', scheduleDefaultRefetch);
-  useRealtimeEvent('sickness_reports', scheduleDefaultRefetch);
-  useRealtimeEvent('employee_capabilities', scheduleDefaultRefetch);
-  useRealtimeEvent('organization_capabilities', scheduleDefaultRefetch);
-  useRealtimeEvent('client_requests', scheduleDefaultRefetch);
-  useRealtimeEvent('client_follow_ups', scheduleDefaultRefetch);
-  useRealtimeEvent('planning_dispatches', scheduleDefaultRefetch);
-  useRealtimeEvent('planning_dispatch_recipients', scheduleDefaultRefetch);
-  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleDefaultRefetch);
-  useRealtimeEvent('work_blockers', scheduleDefaultRefetch);
-  useRealtimeEvent('work_artifacts', scheduleDefaultRefetch);
-  useRealtimeEvent('jobs', () => scheduleRefetch(500));
-  useRealtimeEvent('projects', () => scheduleRefetch(500));
-  useRealtimeEvent('work_handover_packages', scheduleDefaultRefetch);
-  useRealtimeEvent('attention_read_states', scheduleDefaultRefetch);
-  useRealtimeEvent('organization_responsibility_configurations', scheduleDefaultRefetch);
-  useRealtimeEvent('organization_responsibility_assignments', scheduleDefaultRefetch);
-  useRealtimeEvent('organization_responsibility_delegations', scheduleDefaultRefetch);
-  useBusinessDayRefresh(scheduleDefaultRefetch);
+  const overview = view.data ?? null;
+  const refetch = view.refresh;
 
   const handleMarkRead = async (notification: AttentionNotification) => {
     if (busyKey) return;
@@ -245,7 +201,7 @@ export function AufgabenContent() {
     void refreshAttentionCounts();
   };
 
-  if (isLoading) {
+  if (view.isLoading) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Skeleton className="h-24 w-full" />
@@ -254,15 +210,14 @@ export function AufgabenContent() {
     );
   }
 
-  if (loadFailed && !overview) {
+  // Settled without any data: the first load failed.
+  if (!overview) {
     return (
       <p role="alert" className="mx-auto max-w-3xl text-sm text-destructive">
         Die Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
       </p>
     );
   }
-
-  if (!overview) return null;
 
   const timeTasks = overview.tasks.filter(
     (task) =>

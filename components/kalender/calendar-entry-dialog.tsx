@@ -14,7 +14,7 @@ import { CreateJobFormContent } from '@/components/auftraege/create-job-form-con
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
 import { getCalendarEntryDialogOptions } from '@/lib/jobs/actions';
 import { useOrganization } from '@/components/organization/organization-context';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView } from '@/hooks/use-live-view';
 import type {
   CalendarEntryDialogJobOption,
   CalendarEntryDialogMember,
@@ -237,12 +237,24 @@ export function CalendarEntryDialog({
     }
   }, [activeOrgId, hydrateDialogData, isAdminOrManager, open]);
 
-  useRealtimeEvent('jobs', invalidateDialogData);
-  useRealtimeEvent('projects', invalidateDialogData);
-  useRealtimeEvent('clients', invalidateDialogData);
-  useRealtimeEvent('job_assignments', invalidateDialogData);
-  useRealtimeEvent('organization_members', invalidateDialogData);
-  useRealtimeEvent('profiles', invalidateDialogData);
+  // Signal-only view: an event drops the cached dialog options so the next
+  // open (or the queued catch-up after this one closes) hydrates fresh.
+  useLiveView<null>({
+    tables: [
+      'jobs',
+      'projects',
+      'clients',
+      'job_assignments',
+      'organization_members',
+      'profiles',
+    ],
+    read: async () => {
+      invalidateDialogData();
+      return { ok: true, data: null };
+    },
+    initialData: null,
+    enabled: isAdminOrManager && Boolean(activeOrgId),
+  });
 
   useEffect(() => {
     if (!activeOrgId || !isAdminOrManager) {

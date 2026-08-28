@@ -138,8 +138,13 @@ export function MemberActionsMenu({
       setShowRemoveDialog(false);
       // Keep isRemoving true - component unmounts after navigation
       // and the destination page shows the success banner.
-      router.push(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
-      // Don't set isRemoving to false on success - component will unmount
+      // Hard navigation: a Realtime-triggered refresh of the removed
+      // member's surface can redirect to plain /mitarbeiter and land after a
+      // soft push, dropping the banner param (the documented post-delete
+      // race; same remedy as the customer delete).
+      window.location.assign(
+        `/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`
+      );
     } else {
       setError(getMemberActionErrorMessage(result.error));
       setIsRemoving(false);

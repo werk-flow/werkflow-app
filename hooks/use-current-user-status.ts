@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import {
   calculateBreakMinutes,
   calculateBreakSessions,
@@ -9,7 +8,7 @@ import {
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 export type CurrentUserStatus = {
   status: 'clocked_out' | 'working' | 'on_break';
@@ -20,6 +19,17 @@ export type CurrentUserStatus = {
   todayMinutes: number;
   workMinutes: number;
   breakMinutes: number;
+};
+
+const CLOCKED_OUT_STATUS: CurrentUserStatus = {
+  status: 'clocked_out',
+  isClockedIn: false,
+  isOnBreak: false,
+  clockInTime: null,
+  statusStartedAt: null,
+  todayMinutes: 0,
+  workMinutes: 0,
+  breakMinutes: 0
 };
 
 interface UseCurrentUserStatusOptions {
@@ -39,33 +49,18 @@ export function useCurrentUserStatus({
   error: string | null;
   refetch: () => Promise<void>;
 } {
-  const [status, setStatus] = useState<CurrentUserStatus>({
-    status: 'clocked_out',
-    isClockedIn: false,
-    isOnBreak: false,
-    clockInTime: null,
-    statusStartedAt: null,
-    todayMinutes: 0,
-    workMinutes: 0,
-    breakMinutes: 0
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const view = useLiveView<CurrentUserStatus>({
+    tables: ['time_entries'],
+    read: async (): Promise<LiveViewResult<CurrentUserStatus>> => {
+      if (!organizationId || !userId) {
+        return { ok: true, data: CLOCKED_OUT_STATUS };
+      }
 
-  const fetchStatus = useCallback(async () => {
-    if (!organizationId || !userId) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // Get today's date range
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Fetch entries via server action (same as useMemberStatusPolling)
       const result = await getTimeEntries({
         organizationId,
         from: today.toISOString(),
@@ -74,8 +69,7 @@ export function useCurrentUserStatus({
       });
 
       if (!result.success) {
-        setError(result.error);
-        return;
+        return { ok: false, error: result.error };
       }
 
       const userEntries = result.entries || [];
@@ -87,39 +81,28 @@ export function useCurrentUserStatus({
       const breakMinutes = calculateBreakMinutes(breakSessions);
       const todayMinutes = workMinutes + breakMinutes;
 
-      setStatus({
-        status: currentState.status,
-        isClockedIn: currentState.isClockedIn,
-        isOnBreak: currentState.isOnBreak,
-        clockInTime: currentState.clockInTime,
-        statusStartedAt: currentState.statusStartedAt,
-        todayMinutes,
-        workMinutes,
-        breakMinutes
-      });
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching user status:', err);
-      setError('Failed to fetch status');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId, userId]);
-
-  // Initial fetch
-  useEffect(() => {
-    if (enabled) {
-      fetchStatus();
-    }
-  }, [fetchStatus, enabled]);
-
-  // Realtime: refetch when time entries change
-  useRealtimeEvent('time_entries', fetchStatus);
+      return {
+        ok: true,
+        data: {
+          status: currentState.status,
+          isClockedIn: currentState.isClockedIn,
+          isOnBreak: currentState.isOnBreak,
+          clockInTime: currentState.clockInTime,
+          statusStartedAt: currentState.statusStartedAt,
+          todayMinutes,
+          workMinutes,
+          breakMinutes
+        }
+      };
+    },
+    enabled,
+    resetKey: `${organizationId}:${userId}`
+  });
 
   return {
-    status,
-    isLoading,
-    error,
-    refetch: fetchStatus
+    status: view.data ?? CLOCKED_OUT_STATUS,
+    isLoading: view.isLoading,
+    error: view.error,
+    refetch: view.refresh
   };
 }

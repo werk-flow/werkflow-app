@@ -5,22 +5,13 @@
 // server-side derivation as the /aufgaben surface, so a badge can never count
 // an item its viewer cannot act on.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { getAttentionCounts } from '@/lib/attention/actions';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 const ZERO_COUNTS: AttentionCounts = {
   actionableCount: 0,
@@ -45,169 +36,58 @@ export function AttentionCountProvider({
   initialOrganizationId?: string | null;
 }) {
   const { activeOrgId } = useOrganization();
-  const [counts, setCounts] = useState<AttentionCounts>(
-    initialCounts ?? ZERO_COUNTS
-  );
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refreshGenerationRef = useRef(0);
-  const skippedInitialRefreshRef = useRef(false);
-  const lastOrgIdRef = useRef<string | null | undefined>(
-    initialOrganizationId
-  );
 
-  const refreshAttentionCounts = useCallback(async () => {
-    const generation = ++refreshGenerationRef.current;
-    if (!activeOrgId) {
-      setCounts(ZERO_COUNTS);
-      return;
-    }
-
-    try {
+  const view = useLiveView<AttentionCounts>({
+    tables: [
+      'time_entries',
+      'entry_change_requests',
+      'vacation_requests',
+      'sickness_reports',
+      'employee_capabilities',
+      'organization_capabilities',
+      'client_requests',
+      'client_follow_ups',
+      'planning_dispatches',
+      'planning_dispatch_acknowledgements',
+      'work_blockers',
+      'work_artifacts',
+      'jobs',
+      'projects',
+      'work_handover_packages',
+      'attention_read_states',
+      'organization_responsibility_configurations',
+      'organization_responsibility_assignments',
+      'organization_responsibility_delegations',
+    ],
+    read: async (): Promise<LiveViewResult<AttentionCounts>> => {
+      if (!activeOrgId) return { ok: true, data: ZERO_COUNTS };
       const result = await getAttentionCounts();
       // Keep the last-known counts on transient failures (documented rule
       // since P1-04/P1-05): a badge briefly showing stale numbers is better
       // than one that silently claims "nothing to do".
-      if (result.success && generation === refreshGenerationRef.current) {
-        setCounts(result.counts);
-      }
-    } catch (error) {
-      console.error('Error fetching attention counts:', error);
-    }
-  }, [activeOrgId]);
-
-  const scheduleRefresh = useCallback((delay = 150) => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = null;
-      void refreshAttentionCounts();
-    }, delay);
-  }, [refreshAttentionCounts]);
-
-  useEffect(() => {
-    // A pending debounced refresh from the previous organization must never
-    // fire into the new one.
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-
-    if (
-      activeOrgId &&
-      activeOrgId === initialOrganizationId &&
-      initialCounts !== undefined &&
-      !skippedInitialRefreshRef.current
-    ) {
-      skippedInitialRefreshRef.current = true;
-      return;
-    }
-
+      return result.success
+        ? { ok: true, data: result.counts }
+        : { ok: false };
+    },
+    initialData:
+      activeOrgId && activeOrgId === initialOrganizationId
+        ? initialCounts
+        : undefined,
     // Switching organizations resets to zero immediately: the previous
     // organization's numbers are wrong for the new one, and an honest zero
     // beats a stale claim while the fetch is in flight. Keep-last-known
     // stays reserved for transient failures within the SAME organization.
-    if (lastOrgIdRef.current !== activeOrgId) {
-      lastOrgIdRef.current = activeOrgId;
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting on org change is the core responsibility of this provider effect
-      setCounts(ZERO_COUNTS);
-    }
+    resetKey: activeOrgId,
+  });
 
-    void refreshAttentionCounts();
-  }, [
-    activeOrgId,
-    initialOrganizationId,
-    initialCounts,
-    refreshAttentionCounts,
-  ]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        scheduleRefresh();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [scheduleRefresh]);
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
-  }, []);
-
-  useRealtimeEvent('time_entries', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('entry_change_requests', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('vacation_requests', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('sickness_reports', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('employee_capabilities', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('organization_capabilities', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('client_requests', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('client_follow_ups', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('planning_dispatches', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('planning_dispatch_acknowledgements', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('work_blockers', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('work_artifacts', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('jobs', () => {
-    scheduleRefresh(500);
-  });
-  useRealtimeEvent('projects', () => {
-    scheduleRefresh(500);
-  });
-  useRealtimeEvent('work_handover_packages', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('attention_read_states', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('organization_responsibility_configurations', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('organization_responsibility_assignments', () => {
-    scheduleRefresh();
-  });
-  useRealtimeEvent('organization_responsibility_delegations', () => {
-    scheduleRefresh();
-  });
-  useBusinessDayRefresh(scheduleRefresh);
+  useBusinessDayRefresh(view.refresh);
 
   const value = useMemo<AttentionCountContextValue>(
     () => ({
-      ...counts,
-      refreshAttentionCounts,
+      ...(view.data ?? ZERO_COUNTS),
+      refreshAttentionCounts: view.refresh,
     }),
-    [counts, refreshAttentionCounts]
+    [view.data, view.refresh]
   );
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useTransition, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useRouter } from 'next/navigation'
 import { ClipboardPlus, Loader2 } from 'lucide-react'
 
@@ -35,7 +36,7 @@ export function ApplyWorkTemplateCard({
   const [allowAdditional, setAllowAdditional] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner()
   const router = useRouter()
 
@@ -72,7 +73,7 @@ export function ApplyWorkTemplateCard({
   function submit(approval?: AssignmentApproval) {
     if (!versionId || !preview) return
     setError(null)
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await applyWorkTemplate({ templateVersionId: versionId, ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }), allowAdditional, idempotencyKey: `apply-${targetType}-${targetId}-${versionId}`, assignmentApproval: approval ?? null })
       if (!result.success) {
         if ((result.error === 'qualification_warning' || result.error === 'stale_evaluation') && 'evaluation' in result && result.evaluation) { setQualificationWarning(result.evaluation); return }

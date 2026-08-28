@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { CalendarCheck, Loader2, Thermometer } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ import {
   type SicknessAbsenceType,
   type SicknessReport,
 } from '@/lib/sickness/types';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { cn, toLocalDateString } from '@/lib/utils';
 
 function formatDate(value: string): string {
@@ -51,48 +51,26 @@ function formatDate(value: string): string {
 }
 
 export function SicknessSection() {
-  const [overview, setOverview] = useState<OwnSicknessOverview | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [endReport, setEndReport] = useState<SicknessReport | null>(null);
   const [cancelReport, setCancelReport] = useState<SicknessReport | null>(null);
-  const generationRef = useRef(0);
-  const hasDataRef = useRef(false);
 
-  const refetch = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<OwnSicknessOverview>({
+    tables: ['sickness_reports'],
+    read: async (): Promise<LiveViewResult<OwnSicknessOverview>> => {
       const result = await getOwnSicknessReports();
-      if (generation !== generationRef.current) return;
-      if (result.success) {
-        hasDataRef.current = true;
-        setOverview(result.overview);
-        setLoadFailed(false);
-      } else if (!hasDataRef.current) {
-        // Keep last-known data on transient failure; only an initial load
-        // failure shows the error state.
-        setLoadFailed(true);
-      }
-    } catch (error) {
-      console.error('Error fetching sickness overview:', error);
-      if (generation === generationRef.current && !hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } finally {
-      if (generation === generationRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  useRealtimeEvent('sickness_reports', () => {
-    void refetch();
+      return result.success
+        ? { ok: true, data: result.overview }
+        : { ok: false };
+    },
   });
+
+  const overview = view.data ?? null;
+  const isLoading = view.isLoading;
+  // Keep last-known data on transient failure; only an initial load that
+  // never produced data shows the error state.
+  const loadFailed = !isLoading && overview === null;
+  const refetch = view.refresh;
 
   const activeReports = (overview?.reports ?? []).filter(
     (report) => report.status === 'reported'

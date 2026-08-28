@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { Loader2, Clock } from 'lucide-react';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -70,7 +71,7 @@ export function ManualEntryFormContent({
 }: ManualEntryFormContentProps) {
   const { activeOrgId, activeOrg } = useOrganization();
   const { profile } = useUserProfile();
-  const [isPending, startTransition] = useTransition();
+  const { run: runPendingTask, isPending } = usePendingTask();
 
   const [entryMode, setEntryMode] = useState<EntryMode>('both');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(
@@ -239,7 +240,7 @@ export function ManualEntryFormContent({
       entries.push({ entryType: 'clock_out', timestamp: clockOutTimestamp });
     }
 
-    startTransition(async () => {
+    void runPendingTask(async () => {
       try {
         const dayStart = new Date(dateIso);
         dayStart.setHours(0, 0, 0, 0);

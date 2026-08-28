@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Play,
   ArrowLeftRight,
@@ -22,7 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { filterByQuery } from '@/lib/ui/search';
 import { getJobsForPicker } from '@/lib/time-tracking/actions';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 type PickerJob = {
   id: string;
@@ -32,6 +32,8 @@ type PickerJob = {
   projectName: string | null;
   clientName: string | null;
 };
+
+const NO_JOBS: PickerJob[] = [];
 
 interface JobPickerModalProps {
   open: boolean;
@@ -61,47 +63,32 @@ export function JobPickerModal({
   currentJobId,
   isPending,
 }: JobPickerModalProps) {
-  const [jobs, setJobs] = useState<PickerJob[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const openRef = useRef(open);
-  openRef.current = open;
-
-  const fetchJobs = useCallback(async () => {
-    if (!organizationId) return;
-    setIsLoading(true);
-    try {
+  const view = useLiveView<PickerJob[]>({
+    tables: ['jobs', 'projects', 'job_assignments'],
+    read: async (): Promise<LiveViewResult<PickerJob[]>> => {
+      if (!organizationId) return { ok: true, data: [] };
       const result = await getJobsForPicker(organizationId);
-      if (result.success) {
-        setJobs(result.jobs);
-      }
-    } catch (err) {
-      console.error('Error fetching picker jobs:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId]);
-
-  // Only refetch on realtime events when the modal is actually open
-  const realtimeFetchJobs = useCallback(() => {
-    if (openRef.current) fetchJobs();
-  }, [fetchJobs]);
-
-  useRealtimeEvent('jobs', realtimeFetchJobs);
-  useRealtimeEvent('projects', realtimeFetchJobs);
-  useRealtimeEvent('job_assignments', realtimeFetchJobs);
+      return result.success ? { ok: true, data: result.jobs } : { ok: false };
+    },
+    // Only read while the modal is open; each open triggers a fresh read.
+    enabled: open,
+    resetKey: organizationId,
+  });
+  const jobs = view.data ?? NO_JOBS;
+  const isLoading = view.isLoading || view.isRefreshing;
 
   useEffect(() => {
     if (open) {
-      fetchJobs();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reopening the picker always starts from a clean search and the mode-appropriate selection
       setSearchQuery('');
       setSelectedJobId(mode === 'switch' ? currentJobId : null);
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
-  }, [open, fetchJobs, mode, currentJobId]);
+  }, [open, mode, currentJobId]);
 
   const filteredJobs = useMemo(
     () =>
@@ -236,9 +223,11 @@ export function JobPickerModal({
                 {filteredJobs.length === 0 && !isLoading && (
                   <div className="py-8 text-center">
                     <p className="text-sm text-muted-foreground">
-                      {searchQuery
-                        ? 'Keine Aufträge gefunden'
-                        : 'Keine Aufträge verfügbar'}
+                      {view.data === undefined
+                        ? 'Aufträge konnten nicht geladen werden. Bitte erneut öffnen.'
+                        : searchQuery
+                          ? 'Keine Aufträge gefunden'
+                          : 'Keine Aufträge verfügbar'}
                     </p>
                   </div>
                 )}

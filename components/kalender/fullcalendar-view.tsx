@@ -122,6 +122,7 @@ export function FullCalendarView({
   }, [onPointerOverParkplatzChange]);
 
   useEffect(() => {
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = window.setInterval(() => {
       setNowTick(Date.now());
     }, 60000);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Award, Loader2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   getJobQualificationDetail,
   setJobCapabilityRequirements,
@@ -27,51 +27,35 @@ export function JobQualificationSection({
   canEdit: boolean;
 }) {
   const { showBanner } = useBanner();
-  const [detail, setDetail] = useState<JobQualificationDetail | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
   const [requireConfirmation, setRequireConfirmation] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const loadRequestRef = useRef(0);
-  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(async () => {
-    const requestId = ++loadRequestRef.current;
-    try {
+  const view = useLiveView<JobQualificationDetail>({
+    tables: [
+      'job_capability_requirements',
+      'job_assignments',
+      'employee_capabilities',
+      'organization_capabilities',
+    ],
+    read: async (): Promise<LiveViewResult<JobQualificationDetail>> => {
       const result = await getJobQualificationDetail(jobId);
-      if (requestId !== loadRequestRef.current) return;
-      if (!result.success) {
-        setLoadFailed(true);
-        return;
-      }
-      setDetail(result.data);
-      setLoadFailed(false);
-    } catch {
-      if (requestId !== loadRequestRef.current) return;
-      setLoadFailed(true);
+      return result.success ? { ok: true, data: result.data } : { ok: false };
+    },
+    resetKey: jobId,
+  });
+  const { refresh } = view;
+  const detail = view.data;
+
+  if (detail === undefined) {
+    if (view.isLoading) {
+      return (
+        <Card className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Qualifikationsabdeckung wird geladen…
+        </Card>
+      );
     }
-  }, [jobId]);
-
-  useEffect(() => {
-    void load();
-    return () => {
-      loadRequestRef.current += 1;
-      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    };
-  }, [load]);
-  const scheduleLoad = useCallback(() => {
-    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    realtimeTimerRef.current = setTimeout(() => {
-      realtimeTimerRef.current = null;
-      void load();
-    }, 250);
-  }, [load]);
-  useRealtimeEvent('job_capability_requirements', scheduleLoad);
-  useRealtimeEvent('job_assignments', scheduleLoad);
-  useRealtimeEvent('employee_capabilities', scheduleLoad);
-  useRealtimeEvent('organization_capabilities', scheduleLoad);
-
-  if (loadFailed) {
     return (
       <Card className="p-4">
         <p role="alert" className="text-sm text-destructive">
@@ -81,18 +65,10 @@ export function JobQualificationSection({
           variant="outline"
           size="sm"
           className="mt-3"
-          onClick={() => void load()}
+          onClick={() => void refresh()}
         >
           Erneut versuchen
         </Button>
-      </Card>
-    );
-  }
-  if (!detail) {
-    return (
-      <Card className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Qualifikationsabdeckung wird geladen…
       </Card>
     );
   }
@@ -117,7 +93,7 @@ export function JobQualificationSection({
         showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });
         return false;
       }
-      await load();
+      await refresh();
       return true;
     } catch {
       showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });

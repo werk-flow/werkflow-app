@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { OrganizationProvider } from '@/components/organization/organization-context';
+import { OrganizationRealtimeBridge } from '@/components/organization/organization-realtime-bridge';
 import { UserProfileProvider } from '@/components/user/user-profile-context';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { BannerProvider } from '@/components/ui/banner';
@@ -98,6 +99,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
       <RealtimeProvider>
         <UserProfileProvider initialProfile={profile}>
           <OpenDialogProvider>
+            <OrganizationRealtimeBridge />
             <BannerProvider>
               <ActiveJobsProvider
                 initialActiveJobIds={initialRuntimeState.activeJobIds}

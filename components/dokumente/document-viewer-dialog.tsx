@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Download,
   ExternalLink,
@@ -24,6 +24,7 @@ import {
 } from '@/lib/documents/actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
+import { useServerAction } from '@/hooks/use-server-action';
 
 type DocumentViewerDialogProps = {
   document: OrganizationDocument | null;
@@ -72,7 +73,7 @@ export function DocumentViewerDialog({
     signedUrl: string | null;
     error: string | null;
   } | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runDownload, isPending } = useServerAction(getDocumentSignedUrl);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -107,8 +108,8 @@ export function DocumentViewerDialog({
   function handleDownload() {
     if (!document) return;
 
-    startTransition(async () => {
-      const result = await getDocumentSignedUrl(document.id);
+    void (async () => {
+      const result = await runDownload(document.id);
       if (!result.success) {
         setPreview({
           documentId: document.id,
@@ -118,7 +119,7 @@ export function DocumentViewerDialog({
         return;
       }
       window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
-    });
+    })();
   }
 
   const supportsPreview = document

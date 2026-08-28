@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   useTransition,
   type ReactElement,
@@ -23,7 +21,8 @@ import {
   Unlink,
 } from "lucide-react";
 
-import { useRealtimeEvent } from "@/components/realtime/realtime-provider";
+import { useLiveView } from "@/hooks/use-live-view";
+import { usePendingTask } from "@/hooks/use-server-action";
 import { useBanner } from "@/components/ui/banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,7 +148,7 @@ function TransitionDialog({
   const [reason, setReason] = useState("");
   const [override, setOverride] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runTransitionTask, isPending: pending } = usePendingTask();
   const needsReason =
     override ||
     snapshot.targetType === "project" ||
@@ -163,7 +162,7 @@ function TransitionDialog({
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    startTransition(async () => {
+    void runTransitionTask(async () => {
       const result = await transitionWorkExecution({
         targetType: snapshot.targetType,
         targetId: snapshot.targetId,
@@ -280,7 +279,7 @@ function BlockerDialog({
       : new Date(),
   );
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runBlockerTask, isPending: pending } = usePendingTask();
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (
@@ -295,7 +294,7 @@ function BlockerDialog({
       );
       return;
     }
-    startTransition(async () => {
+    void runBlockerTask(async () => {
       const input = {
         targetType: snapshot.targetType,
         targetId: snapshot.targetId,
@@ -443,10 +442,10 @@ function ReasonDialog({
 }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runReasonTask, isPending: pending } = usePendingTask();
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    startTransition(async () => {
+    void runReasonTask(async () => {
       const result = await onSubmit(reason.trim());
       if (!result.success) {
         setError(
@@ -523,7 +522,7 @@ function DependencyDialog({
   const [remoteOptions, setRemoteOptions] = useState<WorkEntityOption[] | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runDependencyTask, isPending: pending } = usePendingTask();
   useEffect(() => {
     if (type === "declared" || search.trim().length < 2) return;
     let cancelled = false;
@@ -545,7 +544,7 @@ function DependencyDialog({
   }, [search, type]);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    startTransition(async () => {
+    void runDependencyTask(async () => {
       const result = await saveWorkDependency({
         targetType: snapshot.targetType,
         targetId: snapshot.targetId,
@@ -704,7 +703,7 @@ function ArtifactApprovalDependencyDialog({
   const [actionId, setActionId] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const { run: runApprovalTask, isPending: pending } = usePendingTask();
   useEffect(() => {
     let active = true;
     void getApprovedArtifactActionsForTarget({ targetType: snapshot.targetType, targetId: snapshot.targetId })
@@ -724,7 +723,7 @@ function ArtifactApprovalDependencyDialog({
   }, [snapshot.targetId, snapshot.targetType]);
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    startTransition(async () => {
+    void runApprovalTask(async () => {
       const result = await linkWorkDependencyArtifactApproval({ dependencyId: dependency.id,
         expectedVersion: dependency.version, actionId, reason });
       if (!result.success) { setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed); return; }
@@ -796,55 +795,49 @@ export function WorkLifecycleCard({
   readOnly = false,
 }: WorkLifecycleCardProps): ReactElement {
   const router = useRouter();
-  const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const [remoteUpdate, setRemoteUpdate] = useState(false);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Holds the dialog the remote change arrived under: identity comparison
+  // hides the hint automatically once that dialog closes (the queued
+  // catch-up read runs then anyway), with no state cleanup effect.
+  const [remoteUpdateDialog, setRemoteUpdateDialog] = useState<DialogState | null>(null);
   const { showBanner } = useBanner();
-  const refresh = useCallback(async () => {
-    const result = await getWorkLifecycleSnapshot({
-      targetType: snapshot.targetType,
-      targetId: snapshot.targetId,
-    });
-    if (result.success) {
-      setSnapshot(result.snapshot);
-      setRemoteUpdate(false);
-    }
-  }, [snapshot.targetId, snapshot.targetType]);
-  const handleRealtime = useCallback(() => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    if (dialog) {
-      refreshTimerRef.current = null;
-      setRemoteUpdate(true);
-      return;
-    }
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = null;
-      void refresh();
-    }, 200);
-  }, [dialog, refresh]);
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  const view = useLiveView<WorkLifecycleSnapshot>({
+    tables: [
+      initialSnapshot.targetType === "job" ? "jobs" : "projects",
+      "work_blockers",
+      "work_dependencies",
+      "job_instruction_items",
+      "time_entries",
+      "job_assignments",
+      "planning_occurrence_assignments",
+      "planning_occurrences",
+      "job_capability_requirements",
+      "employee_capabilities",
+      "organization_capabilities",
+      "job_material_lines",
+      "inventory_stock_levels",
+    ],
+    read: async () => {
+      const result = await getWorkLifecycleSnapshot({
+        targetType: initialSnapshot.targetType,
+        targetId: initialSnapshot.targetId,
+      });
+      return result.success ? { ok: true, data: result.snapshot } : { ok: false };
     },
-    [],
-  );
-  useRealtimeEvent(
-    snapshot.targetType === "job" ? "jobs" : "projects",
-    handleRealtime,
-  );
-  useRealtimeEvent("work_blockers", handleRealtime);
-  useRealtimeEvent("work_dependencies", handleRealtime);
-  useRealtimeEvent("job_instruction_items", handleRealtime);
-  useRealtimeEvent("time_entries", handleRealtime);
-  useRealtimeEvent("job_assignments", handleRealtime);
-  useRealtimeEvent("planning_occurrence_assignments", handleRealtime);
-  useRealtimeEvent("planning_occurrences", handleRealtime);
-  useRealtimeEvent("job_capability_requirements", handleRealtime);
-  useRealtimeEvent("employee_capabilities", handleRealtime);
-  useRealtimeEvent("organization_capabilities", handleRealtime);
-  useRealtimeEvent("job_material_lines", handleRealtime);
-  useRealtimeEvent("inventory_stock_levels", handleRealtime);
+    initialData: initialSnapshot,
+    resetKey: `${initialSnapshot.targetType}:${initialSnapshot.targetId}`,
+    // The card's ReasonDialog flows suspend reads; the in-card hint offers
+    // an immediate refresh while typing continues.
+    suspend: dialog !== null,
+    eventFilter: () => {
+      if (dialog !== null) setRemoteUpdateDialog(dialog);
+      return true;
+    },
+  });
+  const snapshot = view.data ?? initialSnapshot;
+  const setSnapshot = view.setData;
+  const refresh = view.refresh;
+  const showRemoteUpdateHint = remoteUpdateDialog !== null && remoteUpdateDialog === dialog;
   const transitions = getAllowedWorkTransitions(
     snapshot.executionState,
     isManager,
@@ -949,14 +942,17 @@ export function WorkLifecycleCard({
           )}
         </div>
       </div>
-      {remoteUpdate && (
+      {showRemoteUpdateHint && (
         <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <span>Während der Eingabe hat sich der Arbeitsstand geändert.</span>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void refresh()}
+            onClick={() => {
+              setRemoteUpdateDialog(null);
+              void refresh();
+            }}
           >
             Aktualisieren
           </Button>
@@ -1453,19 +1449,20 @@ export function WorkLifecycleCard({
               reason,
             });
             if (result.success) {
-              setSnapshot((current) => ({
-                ...current,
-                dependencies: current.dependencies.map((dependency) =>
-                  dependency.id === dialog.dependency.id
-                    ? {
-                        ...dependency,
-                        manual_state: dialog.state,
-                        version: result.dependency.version,
-                        is_satisfied: dialog.state !== "open",
-                      }
-                    : dependency,
-                ),
-              }));
+              setSnapshot((current) =>
+                current && {
+                  ...current,
+                  dependencies: current.dependencies.map((dependency) =>
+                    dependency.id === dialog.dependency.id
+                      ? {
+                          ...dependency,
+                          manual_state: dialog.state,
+                          version: result.dependency.version,
+                          is_satisfied: dialog.state !== "open",
+                        }
+                      : dependency,
+                  ),
+                });
               await changed("Voraussetzung wurde aktualisiert.");
             }
             return result;
@@ -1485,12 +1482,13 @@ export function WorkLifecycleCard({
               reason,
             });
             if (result.success) {
-              setSnapshot((current) => ({
-                ...current,
-                dependencies: current.dependencies.filter(
-                  (dependency) => dependency.id !== dialog.dependency.id,
-                ),
-              }));
+              setSnapshot((current) =>
+                current && {
+                  ...current,
+                  dependencies: current.dependencies.filter(
+                    (dependency) => dependency.id !== dialog.dependency.id,
+                  ),
+                });
               await changed("Voraussetzung wurde entfernt.");
             }
             return result;

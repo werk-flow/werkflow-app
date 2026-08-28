@@ -18,6 +18,7 @@ import {
   visibleText,
 } from './support/steps';
 import { ARTIFACTS_DIR, storageStatePath } from './support/world';
+import { expectLiveWithin } from './support/live';
 
 // GG-00 — Existing Foundation Regression (@GG-00)
 // Verifies the roadmap's baseline scenario: role-scoped core flows, document
@@ -101,9 +102,10 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
 
     await createCustomer(adminPage, `Realtime Kunde ${world.runId}`);
 
-    // The Büro page must pick the new customer up via Realtime, without reload.
-    await expect(visibleText(bueroPage, `Realtime Kunde ${world.runId}`)).toBeVisible({
-      timeout: 30_000,
+    // The Büro page must pick the new customer up via Realtime, without
+    // reload, inside the latency contract (D4).
+    await expectLiveWithin(visibleText(bueroPage, `Realtime Kunde ${world.runId}`), {
+      label: 'gg-00 customer list cross-session',
     });
   });
 

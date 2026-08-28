@@ -23,6 +23,7 @@ import {
   visibleText,
 } from './support/steps';
 import { formatBerlinDateTimeInput } from '../../lib/customer-relationships/date-time';
+import { expectLiveWithin } from './support/live';
 
 // P1-10 sorts last. It owns no effective-date keys and uses run-scoped names,
 // so it can start on the fresh seed or inherit the complete P1-09 world.
@@ -225,7 +226,9 @@ test.describe('P1-10 customer relationships @P1-10', () => {
       title,
       dueAtLocal: berlinDateTime(2, 10),
     });
-    await expect(visibleText(bueroPage, title)).toBeVisible({ timeout: 15_000 });
+    await expectLiveWithin(visibleText(bueroPage, title), {
+      label: 'p1-10 follow-up cross-session',
+    });
   });
 
   test('employees and outside organizations cannot open customer relationships directly', async ({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
   RefreshCw,
   Clock,
@@ -29,7 +29,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 interface MemberInfo {
   user_id: string;
@@ -85,10 +85,6 @@ export function EntryHistory({
   organizationId,
   members = []
 }: EntryHistoryProps) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [entries, setEntries] = useState<EntryWithProfile[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
@@ -111,28 +107,31 @@ export function EntryHistory({
     return member.email;
   };
 
-  const fetchEntries = useCallback(async () => {
-    if (!dateFrom || !dateTo) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fromDate = new Date(dateFrom);
-      fromDate.setHours(0, 0, 0, 0);
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
+  const view = useLiveView<EntryWithProfile[]>({
+    tables: ['time_entries'],
+    read: async (): Promise<LiveViewResult<EntryWithProfile[]>> => {
+      // Without a complete date range there is nothing to read; keep whatever
+      // was shown last.
+      if (!dateFrom || !dateTo) return { ok: false };
+      try {
+        const fromDate = new Date(dateFrom);
+        fromDate.setHours(0, 0, 0, 0);
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
 
-      const result = await getTimeEntries({
-        organizationId,
-        from: fromDate.toISOString(),
-        to: toDate.toISOString(),
-        status:
-          statusFilter !== 'all'
-            ? (statusFilter as TimeEntryStatus)
-            : undefined,
-        userId: memberFilter !== 'all' ? memberFilter : undefined
-      });
+        const result = await getTimeEntries({
+          organizationId,
+          from: fromDate.toISOString(),
+          to: toDate.toISOString(),
+          status:
+            statusFilter !== 'all'
+              ? (statusFilter as TimeEntryStatus)
+              : undefined,
+          userId: memberFilter !== 'all' ? memberFilter : undefined
+        });
 
-      if (result.success) {
+        if (!result.success) return { ok: false, error: result.error };
+
         const userIds = [...new Set(result.entries.map((e) => e.userId))];
         const profileMap = await getProfilesByIds(userIds);
 
@@ -146,8 +145,9 @@ export function EntryHistory({
         );
 
         // Sort by reviewedAt descending (most recent first), fallback to createdAt
-        setEntries(
-          entriesWithProfiles.sort((a, b) => {
+        return {
+          ok: true,
+          data: entriesWithProfiles.sort((a, b) => {
             const dateA = a.reviewedAt
               ? new Date(a.reviewedAt).getTime()
               : new Date(a.createdAt).getTime();
@@ -156,24 +156,24 @@ export function EntryHistory({
               : new Date(b.createdAt).getTime();
             return dateB - dateA;
           })
-        );
-      } else {
-        setError(result.error);
+        };
+      } catch (err) {
+        console.error('Error fetching entries:', err);
+        return { ok: false, error: 'Fehler beim Laden' };
       }
-    } catch (err) {
-      console.error('Error fetching entries:', err);
-      setError('Fehler beim Laden');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId, dateFrom, dateTo, statusFilter, memberFilter]);
+    },
+    // A filter change is a new view of the data: discard and read fresh.
+    resetKey: [
+      organizationId,
+      statusFilter,
+      memberFilter,
+      dateFrom?.toISOString() ?? '',
+      dateTo?.toISOString() ?? ''
+    ].join('|')
+  });
 
-  useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
-
-  // Realtime: refetch when time entries change
-  useRealtimeEvent('time_entries', fetchEntries);
+  const entries = view.data ?? [];
+  const error = view.error;
 
   const getDisplayName = (entry: EntryWithProfile): string => {
     if (entry.firstName || entry.lastName) {
@@ -234,9 +234,13 @@ export function EntryHistory({
             </SelectContent>
           </Select>
         </div>
-        <Button variant="outline" onClick={fetchEntries} disabled={isLoading}>
+        <Button
+          variant="outline"
+          onClick={() => void view.refresh()}
+          disabled={view.isRefreshing}
+        >
           <RefreshCw
-            className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
+            className={`mr-2 h-4 w-4 ${view.isRefreshing ? 'animate-spin' : ''}`}
           />
           Laden
         </Button>
@@ -249,7 +253,7 @@ export function EntryHistory({
         </div>
       )}
 
-      {isLoading ? (
+      {view.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />

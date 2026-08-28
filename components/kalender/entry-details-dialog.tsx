@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
@@ -399,7 +400,7 @@ export function EntryDetailsDialog({
   jobName,
   entryUserRole
 }: EntryDetailsDialogProps) {
-  const [isPending, startTransition] = useTransition();
+  const { run: runPendingTask, isPending } = usePendingTask();
   const [isEditing, setIsEditing] = useState(startInEditMode);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -906,7 +907,7 @@ export function EntryDetailsDialog({
       return;
     }
 
-    startTransition(async () => {
+    void runPendingTask(async () => {
       let requestCreated = false;
       const appliedUpdates: Array<{
         entryId: string;
@@ -1174,7 +1175,7 @@ export function EntryDetailsDialog({
     setError(null);
     setSuccessMessage(null);
 
-    startTransition(async () => {
+    void runPendingTask(async () => {
       try {
         let requestCreated = false;
         const shouldConvertActiveBreakBoundaryToClockOut =
@@ -1257,7 +1258,7 @@ export function EntryDetailsDialog({
   };
 
   const handleApprove = async () => {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       try {
         for (const entry of pendingEntries) {
           const result = await reviewEntry(entry.id, 'approved');
@@ -1276,7 +1277,7 @@ export function EntryDetailsDialog({
   };
 
   const handleReject = async () => {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       try {
         for (const entry of pendingEntries) {
           const result = await reviewEntry(entry.id, 'rejected');

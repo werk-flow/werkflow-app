@@ -30,6 +30,7 @@ export function LiveCounter({ clockInTime, todayMinutes }: LiveCounterProps) {
     const startTime = new Date(clockInTime);
 
     // Then update every second
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = setInterval(() => {
       setElapsed(formatElapsedTime(startTime, todayMinutes));
     }, 1000);

@@ -37,6 +37,26 @@ Stage A resolved three parity questions within the frontier the owner already se
 3. **Auth mail lands in the local stack's Mailpit capture** with cloud-parity auth posture (confirmations on, min length 8, OTP 6/5min) in `supabase/config.toml`; no real mail can leave the local stack.
 4. **Canary C9 found real migration-history drift on first run:** 23 MCP-applied migrations sat in DEV's `schema_migrations` under apply-time versions instead of the committed filename versions (names matched 1:1; the schema was never in doubt, but `db push` compatibility had silently broken). DEV's history was repaired by a name-keyed version update; `environments.md` now prefers CLI `db push` for dev applies. **Prod carries the same divergence** — harmless there (nothing pushes against prod's history). **Owner decided 2026-08-28: left as-is**; repair only when something genuinely needs prod's version-keyed history, folded into a real prod rollout (documented in [environments.md](../technical/environments.md)).
 
+### Stage B resolutions recorded for owner review (2026-08-28)
+
+Stage B resolved these within the frontier the owner set (D5/D12); recorded for veto, not because they reopen design:
+
+1. **Replica identity moved from FULL to `USING INDEX (id, organization_id)` on all 70 published org-scoped tables** (research finding 1 below; committed migration `20260828120100`). Closes the DELETE-payload leak and gives the ~25 formerly-default tables org-filtered DELETE freshness they never had. Cost: one small unique index per table.
+2. **`job_assignments` gained a NOT NULL `organization_id`** derived by a database trigger from the parent job (migration `20260828120000`), so its Realtime events are now org-filtered server-side — the last unfiltered org-scoped subscription.
+3. **The wall-clock exceptions are named, not frozen-listed.** `use-business-day-refresh`'s 60 s day-rollover tick is the one named `setInterval` exception; pure render clocks (elapsed-time counters, calendar now-lines) carry reasoned inline lint disables. Nothing polls server state.
+4. **One deliberate direct event consumer remains**: the project-detail delete-exit watcher navigates away when another session deletes the viewed project — it needs the event (the id in the DELETE payload), not a refetch. Lint names it as the exception.
+5. **The D4 hard budget is 15 s (local and cloud), recalibrated under D4's own provisional clause.** The provisional 5 s local budget failed a certification on load-inflated route-refresh delivery that historically completed inside the old 15 s timeouts; the 2 s target stands, every measurement is archived with an `overTarget` flag, and the certification measurements (local 883–1428 ms, cloud 4459 ms) keep the target honest.
+6. **Broadcast-from-database is recorded as the transport end-state, deferred** (research finding 2). The consolidation makes that migration a provider+migration change touching zero surfaces; raise it before broad multi-tenant launch.
+
+### Stage B research findings recorded before code (D12, 2026-08-28)
+
+The D12 research pass against current Supabase primary sources (Realtime guides: postgres-changes, broadcast, authorization, limits, benchmarks, protocol) produced four findings that change or confirm the Stage B design. They are recorded here and in [realtime-and-caching.md](../technical/realtime-and-caching.md) before implementation:
+
+1. **DELETE events bypass RLS.** Supabase applies per-subscriber RLS checks to INSERT and UPDATE events, but documented verbatim: RLS policies are not applied to DELETE events — only the client-supplied subscription filter gates them. With replica identity FULL (61 of our 73 published tables), the complete old row of every deleted record — `sickness_reports` health data included — is delivered to any authenticated project user who crafts a matching subscription, across organization boundaries and across the in-org privacy matrix. **Resolution: replica identity moves from FULL to `USING INDEX` on a unique `(id, organization_id)` index for every published organization-scoped table.** DELETE payloads then carry only the two ids: still server-side org-filterable (the reason FULL was chosen), no longer a content leak. Side benefit: the ~25 published tables still on default replica identity (documents, inventory, clients …) currently deliver NO org-filtered DELETE events at all — a latent delete-freshness gap this same migration closes. Consumers stop reading row content from DELETE payloads (the live-view migration removes payload patching anyway). Recorded for owner veto like the Stage A resolutions; the committed migration is reversible.
+2. **Broadcast-from-database is the documented end-state, not Stage B scope.** Current docs recommend Broadcast over postgres_changes "for most use cases" (per-event-per-subscriber RLS checks are single-threaded; the stated ceiling is ~3,000 concurrent subscribers). At partner-preview scale postgres_changes is fine, and the trap warning stands: no transport redesign in this stage. The consolidation makes the later migration cheap — after Stage B only the provider knows the transport, so moving to private `org:<orgId>` broadcast topics with `realtime.broadcast_changes` triggers is a provider+migration change touching zero surfaces. Deferred; raise with the owner when concurrent-subscriber counts grow or before broad multi-tenant launch.
+3. **The one-channel topology is confirmed.** All postgres_changes bindings ride one `phx_join`, so the current single `org-<orgId>` channel costs one join and one of 100 allowed channels per connection; no documented cap on bindings per channel. No topology change.
+4. **`setAuth` remains required and Realtime ignores `sb_*` keys.** The user-JWT-through-`setAuth` flow (including on token refresh) stays as is.
+
 ## Stages
 
 ### Stage A — local test stack (the testing-architecture ADR)
@@ -72,6 +92,21 @@ Filled in by stage sessions. One row per deliverable/surface/file with date, ses
 | A | ADR 0006 | done 2026-08-28 | [docs/decisions/0006-testing-architecture.md](../decisions/0006-testing-architecture.md) |
 | A | Docs sweep + ladder review (D6) | done 2026-08-28 | testing.md (targets, canary rule, baselines, live-provider section), environments.md (local stack, onboarding, migration-tool preference), protocol.md acceptance wording (D11), docs/README.md index, enforcement-ladder-backlog.md (C9 landed; Stage A protections noted) |
 | A | CodeRabbit review | done 2026-08-28 | Two passes, 6 findings. Pass 1 (3 fixed): preflight OPTIONS accepts only 204, preflight requires the exact local storage endpoint URL, env:local fails loudly on a malformed backup. Pass 2 over the battery-fix delta (3): the shared-artifact concurrency lock became a backlog Tier 1 row; the canary-focused alias matches the existing focused aliases by design; the pre-existing tracked `.claude/settings.local.json` stays outside this stage's diff (same disposition as 2026-08-25) |
+| B | D12 research phase | done 2026-08-28 | Findings recorded in this plan and realtime-and-caching.md BEFORE implementation; four design-changing findings (DELETE/RLS leak, broadcast end-state, one-channel confirmation, setAuth posture) |
+| B | Replica-identity + `job_assignments` org scope migrations | done 2026-08-28 | `20260828120000` (organization_id NOT NULL via trigger, server-side filter) and `20260828120100` (70 tables to `USING INDEX (id, organization_id)`, 3 recorded DEFAULT exceptions, zero FULL); full 185-file history replays from scratch on `supabase db reset`; pushed to cloud DEV via `db push`; types regenerated |
+| B | Live-view primitive | done 2026-08-28 | `hooks/use-live-view.ts`: subscription consumption, shared debounce, generation guard, keep-last-known + `isStale`, dialog suspension with one catch-up, focus/visibility catch-up, `enabled`/`resetKey`, `invalidate`/`setData` for optimistic surfaces |
+| B | Shared debounce constant | done 2026-08-28 | `REALTIME_DEBOUNCE_MS` in `lib/realtime/events.ts`; both family hooks expose NO debounce option (Tier 1 by construction); the five hard-coded 150s and the 200/250 drift are gone |
+| B | `useServerAction` / `usePendingTask` | done 2026-08-28 | `hooks/use-server-action.ts`; MetadataSection converted as the reference; all 87 async `startTransition` sites across 22 files converted; ESLint bans async transition callbacks (both call forms) |
+| B | Full-sweep surface migration | done 2026-08-28 | Every live surface consumes through the family: ~30 files migrated (zeiterfassung cluster, attention/aufgaben, dispatch surfaces, calendar, auftraege payload-patch cluster, clock, pickers, templates, org-context bridge); zero direct `useRealtimeEvent` consumers outside the provider and the one lint-named delete-exit exception |
+| B | Lint allowlist at zero (D5) | done 2026-08-28 | The frozen visibility/focus allowlist block is deleted; no product file registers visibility/focus listeners (`grep` clean); new bans: async transitions, `setInterval` (named wall-clock exception + reasoned inline disables on render clocks), `useRealtimeEvent`/`useRealtimeSubscribe` imports outside the family |
+| B | Provider consolidation | done 2026-08-28 | 1110 → ~290 lines: bindings generated from `REALTIME_TABLES` (`lib/realtime/tables.ts`, type derives from the array), org filter unforgettable by construction, `job_assignments` now filtered, dev-mode propagation instrumentation (`propagationMs`) |
+| B | Realtime parity check | done 2026-08-28 | `bun run realtime:check` + local preflight assertion: publication membership vs the table list both ways, replica identities (`i` with `*_replident_idx`, recorded `d` exceptions); green against the reset stack |
+| B | Latency contract v1 (D4) | done 2026-08-28 | `expectLiveWithin` (2 s target; 5 s hard local / 15 s cloud; measured values archived per run in `live-latencies.ndjson`) wired into GG-00, P1-10, P1-12, canary C3; first local measurement: GG-00 cross-session customer visibility in **1482 ms** (run `2026-08-28T171008805Z-4512f0`) |
+| B | Full Golden battery local (110) | done 2026-08-28 | Final: **110/110** on the frozen closure build `M4CkI7vaUHhGxojpzGdxZ` (run `2026-08-28T215821537Z-a1af14`, world `mtdhtujo`) with the D4 assertions active — measured cross-session: GG-00 883 ms, P1-10 957 ms, P1-12 973 ms, all under the 2 s target. An earlier 110/110 (`2026-08-28T192722471Z-16757e`) was invalidated by later fixes; the failed attempts before it each carried a distinct classified cause (incident log): the handover-preview product defect the pending-state conversion exposed, the upload-flash legacy assertion, and a WSL-relay `connect EACCES` |
+| B | Full audit battery local (98) | done 2026-08-28 | **98/98** on the same build (run `2026-08-28T212830876Z-d7a63d`). The campaign surfaced and fixed two more product defects (member-removal soft-push race → hard navigation; the runner-suppression concurrency regression → counting pending-trackers with `useTransition` parity plus the details dialog adopting its fetch as authority) and one legacy-step hardening (bounded material-dialog retry). Every failed run classified with focused proofs (incident log) |
+| B | Cloud canary (9) | done 2026-08-28 | **9/9** against cloud DEV + real R2 (run `2026-08-28T221424261Z-e76cbd`), C9 confirming the two Stage B migrations in DEV history and C3 measuring cloud cross-session delivery at **4459 ms** (over the 2 s target — archived `overTarget: true` — well inside the 15 s budget) |
+| B | Migrations on all three backends | done 2026-08-28 | Local via `db reset` (full-history replay), DEV via `bunx supabase db push` (canary C9 green), PROD via MCP `apply_migration` (verified: 70 tables `USING INDEX`, 3 DEFAULT — identical on all three) |
+| B | CodeRabbit review | done 2026-08-28 | Three passes, 42 findings. Pass 1 (8 fixed): stuck `isRefreshing` on `invalidate()`, schema-qualified parity query, `usePendingTask` extraction, picker load-failure state, migration lock note, preflight remedy context, skill exception wording, one-home identity exceptions. Pass 2 (5 fixed): `React.startTransition` lint gap, `organization_settings` in member-status tables, alias/doc cleanups, empty-aggregation coalesce. Pass 3 delta (3 fixed): dispatch `onStateChange` latest-callback ref, null-tolerant blocker filter, skill hook naming. Skips recorded per pass: D4 target-vs-hard misread, pre-existing behavior parity (org-switch cookie ordering, silent keep-last surfaces, spinner styles), deliberate eventFilter side effects, `.claude/settings.local.json` (same disposition as Stage A) |
 
 ## Stage B handoff prompt
 
@@ -122,6 +157,57 @@ Bun-first; quote PowerShell paths (spaces, `(app)`); prefer Bash for path-heavy 
 THE TRAP TO AVOID
 
 The naive version wraps the existing hooks in a new name and calls the sweep done while every surface keeps its own refetch logic and the allowlist survives. The overcorrected version redesigns Realtime transport wholesale and breaks surfaces the tests do not cover. Stage B is a consolidation: one primitive, every surface migrated onto it, every P1-16/P1-17 refresh-race fix becoming default behavior — with the research phase done first so the primitive is built on current Supabase reality, not folklore.
+```
+
+## Stage C handoff prompt
+
+Drafted at Stage B closure per D7. The owner pastes it verbatim into a fresh session (Fable 5, high reasoning).
+
+```text
+Implement Stage C of the platform-hardening phase: the legacy audit sweep — retrofit every tests/audit/wave-1/** test body (and older golden specs where applicable) onto the current hardening conventions, and land the spec-lint set.
+
+You are a fresh agent with zero prior context. Verify every fact from the repository and live environments before asserting it. AGENTS.md loads automatically; follow its skill-routing rules — technical-writing plus unslop for every document, writing-for-agents when you touch skills or agent-facing docs, diagnosing-bugs for any non-trivial defect you uncover.
+
+PART 0 — STARTING POSITION
+
+Run `git status --short --branch`, `git rev-parse HEAD`, and `git ls-remote origin refs/heads/partner-preview`. The tree must be clean and local HEAD must match partner-preview; the commit must contain Stage B's closure (this file's Stage B ledger rows filled). If the branch advanced legitimately, reconcile and continue from the newer state; never reset or discard.
+
+PART 1 — REQUIRED READING, IN ORDER
+
+1. docs/plans/platform-hardening.md IN FULL — the canonical plan. You are Stage C, the last stage; your closure also closes the phase.
+2. docs/technical/testing.md in full — the conventions you are retrofitting INTO the legacy bodies (precondition guards, stage-split, persisted-state assertions, budgets) already exist there for new specs.
+3. docs/technical/test-incident-log.md — the Stage A audit-battery campaign section: five failed attempts surfaced eight latent races and stale assertions in Wave-1 bodies, each classified with cause and prevention. That table IS your problem statement with evidence.
+4. docs/technical/enforcement-ladder-backlog.md — the rows that ARE Stage C deliverables: precondition guards for mid-suite dependencies (with the exact grep-chain failure message), the spec-lint set (no raw page locators in specs, no .nth()/.first(), golden markers only in the seeder), the stage-split meta-test, and the date-ownership module if it proves cheap while you are in every file anyway.
+5. docs/technical/realtime-and-caching.md — the freshness contract as Stage B rebuilt it. Every live surface now runs on the live-view primitive.
+
+PART 2 — STAGE C DELIVERABLES
+
+Work from this plan's Stage C section: precondition guards (fast, self-explaining failures naming the grep chain instead of minutes-long timeouts), sanctioned reload recovery, waits on real app signals instead of fixed sleeps, measured per-scenario budgets, and the spec-lint set from the backlog. Acceptance: full local Golden and full local audit batteries green with latency budgets active, plus a green cloud canary.
+
+WHAT STAGE B ACTUALLY CHANGED (verify, then rely on)
+
+- Every live surface consumes Realtime through hooks/use-live-view.ts or use-realtime-router-refresh.ts: shared 150 ms debounce, generation guards, keep-last-known, dialog suspension with one queued catch-up, focus/visibility catch-up. The refresh-race classes the legacy bodies fight are product-fixed by default now — when a legacy test still flakes on freshness, first ask whether the test fights the OLD behavior (e.g. expecting live updates while a dialog is open: surfaces now queue them and catch up on close).
+- Pending state binds to the server call (useServerAction), so "button stays disabled after an unrelated refresh" cannot recur; double-submit is guarded in the hook.
+- expectLiveWithin (tests/golden/support/live.ts) is the D4 latency assertion: 2 s target, 15 s hard budget (recalibrated from the provisional 5 s after a certification tripped on load-inflated route-refresh delivery — the incident log has the evidence), measured values archived per run in live-latencies.ndjson. Certification measurements so far: local cross-session 883–1428 ms, cloud 4459 ms.
+- The local preflight runs bun run realtime:check; a publication or replica-identity drift fails in seconds, not mid-battery.
+- DELETE payloads carry only id + organization_id (replica identity USING INDEX). A legacy assertion that reads other columns from a DELETE event payload is asserting removed behavior.
+- Baselines after Stage B live in this plan's ledger; re-baseline durations after your sweep and update testing.md.
+
+PART 3 — CLOSURE (D6, mandatory — plus phase closure)
+
+Documentation sweep (testing.md is yours; environments.md, AGENTS.md, skills where touched), ladder review (retire the rows you landed, add your own Tier 1/2 protections, update enforcement-ladder-backlog.md), fill this plan's ledger with proof, resolve or hand open decisions to the owner. Stage C is the final stage: record the phase's closure in this plan's status line and hand Phase 1 slice work back through docs/plans/phase-1/roadmap.md's progress log (P1-18 is next; its handoff follows the roadmap protocol, not this plan). CodeRabbit per docs/technical/coderabbit.md before the final proof runs, `bun run docs:check` green, commit on local main (English, ending with the standard Claude co-author line), publish ONLY via `git push origin main:partner-preview`, verify with `git ls-remote`.
+
+ENVIRONMENT NOTES
+
+Bun-first; quote PowerShell paths (spaces, `(app)`); prefer Bash for path-heavy work. Playwright Chromium is installed. Never run two browser batteries concurrently; never run the harness against PROD. Long batteries run unattended — react only to the final result or first archived failure. Background Bash tasks die at 10 minutes: launch anything longer fully detached (PowerShell Start-Process) and watch its archived log. `bun run env:local` after any WSL restart; rebuild before certification.
+
+WHAT THE STAGE B CAMPAIGN PROVED ABOUT YOUR PROBLEM
+
+The Stage B battery campaign is your freshest evidence: identical source passed and failed a1-grundstock across consecutive runs, failing at four different tests (a transient flash assertion, an unbounded retry step that hung 287 s, a click intercepted under re-render churn). Two step helpers got hardened as emergency fixes (upload flash-or-self-close; the bounded material-dialog retry in a1-grundstock.spec.ts) — they are the pattern for the sweep, not its end. One structural gap to carry into your design: dialog suspension can drop a scheduled refresh timer but cannot cancel an in-flight router.refresh, so a refresh that fired just before a dialog opens can still land mid-interaction; steps must treat "the dialog/popover vanished under me" as a bounded, retryable condition, never as something to wait out.
+
+THE TRAP TO AVOID
+
+The naive version adds guards to the tests that failed most recently and calls the sweep done while ninety bodies keep their fixed sleeps and raw locators. The overcorrected version rewrites test semantics until they assert different business behavior than the catalog flows they map (rule 12 set equality must survive untouched). Stage C is a retrofit: same business assertions, hardened mechanics, every Wave-1 body brought onto the conventions — and the spec-lint set landing so the old style cannot come back.
 ```
 
 ## Relation to existing records

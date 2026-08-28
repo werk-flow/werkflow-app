@@ -27,7 +27,8 @@
     "test:preflight": "bun scripts/playwright-preflight.ts",
     "test:preflight:certification": "bun scripts/playwright-preflight.ts certification",
     "test:runs": "bun scripts/manage-playwright-runs.ts",
-    "docs:check": "bun scripts/check-docs.ts"
+    "docs:check": "bun scripts/check-docs.ts",
+    "realtime:check": "bun scripts/check-realtime-parity.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",

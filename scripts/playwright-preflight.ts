@@ -11,6 +11,7 @@ import {
 import { getR2Endpoint } from '../lib/storage/r2';
 import { loadEnvLocal, requireEnv } from '../tests/golden/support/env';
 import { listRetainedWorlds } from '../tests/golden/support/run-state';
+import { checkRealtimeParity } from './check-realtime-parity';
 
 const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
 const DEV_BUCKET = 'werkflow-documents-dev';
@@ -240,6 +241,27 @@ async function assertCertificationServer(repositoryRoot: string): Promise<void> 
   if (!response.ok) throw new Error(`Workspace server health check returned HTTP ${response.status}.`);
 }
 
+// Realtime parity (Stage B, Tier 2): the provider's table list must match
+// the local stack's publication and replica-identity state before a battery
+// certifies anything about live behavior.
+function assertRealtimeParity(): void {
+  let problems: string[];
+  try {
+    problems = checkRealtimeParity();
+  } catch (error) {
+    throw new Error(
+      `Could not inspect the local stack for Realtime parity: ${
+        error instanceof Error ? error.message : String(error)
+      }. ${LOCAL_REMEDY}`
+    );
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      ['Realtime parity check failed:', ...problems.map((problem) => `  - ${problem}`)].join('\n')
+    );
+  }
+}
+
 export async function runPlaywrightPreflight(input: {
   lane: PlaywrightLane;
   target: PlaywrightTarget;
@@ -249,7 +271,10 @@ export async function runPlaywrightPreflight(input: {
   assertRouting(input.target);
   await assertSupabaseReachable(input.target);
   await assertStorageReachable(input.target);
-  if (input.target === 'local') await assertLocalEdgeRuntimeReachable();
+  if (input.target === 'local') {
+    await assertLocalEdgeRuntimeReachable();
+    assertRealtimeParity();
+  }
   if (input.lane !== 'certification') return;
   const retainedWorlds = listRetainedWorlds();
   if (retainedWorlds.length > 0) {

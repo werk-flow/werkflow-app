@@ -25,7 +25,7 @@ import type {
   LiveClockState
 } from '@/lib/time-tracking/types';
 import { useOrganization } from '@/components/organization/organization-context';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView } from '@/hooks/use-live-view';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 
 type ClockStateContextValue = {
@@ -44,7 +44,7 @@ type ClockStateContextValue = {
 const ClockStateContext = createContext<ClockStateContextValue | null>(null);
 
 function getSegmentElapsedMinutes(
-  state: LiveClockState | null,
+  state: LiveClockState | null | undefined,
   endTimestamp = new Date().toISOString()
 ): number {
   if (!state?.isClockedIn || !state.statusStartedAt) {
@@ -57,14 +57,14 @@ function getSegmentElapsedMinutes(
 }
 
 function finalizePresenceMinutes(
-  state: LiveClockState | null,
+  state: LiveClockState | null | undefined,
   endTimestamp = new Date().toISOString()
 ): number {
   return (state?.todayMinutes ?? 0) + getSegmentElapsedMinutes(state, endTimestamp);
 }
 
 function finalizeWorkMinutes(
-  state: LiveClockState | null,
+  state: LiveClockState | null | undefined,
   endTimestamp = new Date().toISOString()
 ): number {
   const breakdown = resolveOptimisticBreakdown(state, endTimestamp)
@@ -72,7 +72,7 @@ function finalizeWorkMinutes(
 }
 
 function finalizeBreakMinutes(
-  state: LiveClockState | null,
+  state: LiveClockState | null | undefined,
   endTimestamp = new Date().toISOString()
 ): number {
   const breakdown = resolveOptimisticBreakdown(state, endTimestamp)
@@ -92,7 +92,7 @@ function appendTimelineSegment(
 }
 
 function resolveOptimisticBreakdown(
-  state: LiveClockState | null,
+  state: LiveClockState | null | undefined,
   endTimestamp = new Date().toISOString()
 ) {
   const totalMinutes = finalizePresenceMinutes(state, endTimestamp)
@@ -120,108 +120,85 @@ export function ClockStateProvider({
   initialState?: LiveClockState | null;
 }) {
   const { activeOrgId } = useOrganization();
-  const [state, setState] = useState<LiveClockState | null>(initialState);
-  const [isLoading, setIsLoading] = useState(!initialState);
   const [isPending, setIsPending] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  const requestIdRef = useRef(0);
-  const mutationVersionRef = useRef(0);
+  // One-shot suppression: a mutation just wrote the state locally, so the
+  // Realtime echo of the own write does not need a second fetch.
   const skipNextRealtimeRef = useRef(false);
+  const stateRef = useRef<LiveClockState | null>(null);
 
-  const hydrateJobInfo = useCallback(async (jobId: string | null) => {
-    if (!jobId) return;
-
-    try {
-      const result = await getJobInfoById(jobId);
-      if (!result.success || !result.job) return;
-
-      setState((prev) => {
-        if (!prev || prev.activeJobId !== jobId) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          activeJobInfo: result.job,
-          fetchedAt: new Date().toISOString(),
-        };
-      });
-    } catch {
-      // Keep optimistic title if the background metadata refresh fails.
-    }
-  }, []);
-
-  const refresh = useCallback(
-    async (options?: { background?: boolean }) => {
+  const view = useLiveView<LiveClockState | null>({
+    tables: ['time_entries', 'jobs'],
+    read: async () => {
       if (!activeOrgId) {
-        setState(null);
         setStatusError(null);
-        setIsLoading(false);
-        return;
+        return { ok: true, data: null };
       }
-
-      const requestId = ++requestIdRef.current;
-      const requestVersion = mutationVersionRef.current;
-
-      if (!options?.background) {
-        setIsLoading(true);
-      }
-
       try {
         const result = await getCurrentClockState(activeOrgId);
-        if (requestId !== requestIdRef.current) return;
-        if (requestVersion !== mutationVersionRef.current) return;
-
         if (result.success) {
-          setState(result.state);
           setStatusError(null);
-        } else {
-          setStatusError(result.error);
+          return { ok: true, data: result.state };
         }
+        setStatusError(result.error);
+        return { ok: false, error: result.error };
       } catch (error) {
         console.error('Error refreshing clock state:', error);
-        if (requestId !== requestIdRef.current) return;
-        if (requestVersion !== mutationVersionRef.current) return;
         setStatusError('fetch_failed');
-      } finally {
-        if (requestId === requestIdRef.current) {
-          setIsLoading(false);
-        }
+        return { ok: false, error: 'fetch_failed' };
       }
     },
-    [activeOrgId]
-  );
+    initialData:
+      initialState && initialState.organizationId === activeOrgId
+        ? initialState
+        : undefined,
+    resetKey: activeOrgId,
+    eventFilter: (event) => {
+      if (event.table === 'time_entries' && skipNextRealtimeRef.current) {
+        skipNextRealtimeRef.current = false;
+        return false;
+      }
+      if (event.table === 'jobs') {
+        return Boolean(stateRef.current?.activeJobId);
+      }
+      return true;
+    },
+  });
 
+  const state = view.data ?? null;
   useEffect(() => {
-    // A server-rendered snapshot can stream in after a local mutation: a
-    // revalidation triggered around page load delivers a tree rendered before
-    // the user clocked in/out, and applying it would silently revert the
-    // mutation in the UI. Once any mutation happened, ignore the snapshot and
-    // fetch the current server state instead.
-    if (initialState?.organizationId === activeOrgId && mutationVersionRef.current === 0) {
-      setState(initialState);
-      setStatusError(null);
-      setIsLoading(false);
-      return;
-    }
+    stateRef.current = state;
+  }, [state]);
 
-    void refresh();
-  }, [activeOrgId, initialState, refresh]);
+  const { setData: setState, invalidate: invalidateView, refresh: refreshView } = view;
+  const isLoading = view.isLoading;
 
-  useRealtimeEvent('time_entries', () => {
-    if (skipNextRealtimeRef.current) {
-      skipNextRealtimeRef.current = false;
-      return;
-    }
+  const hydrateJobInfo = useCallback(
+    async (jobId: string | null) => {
+      if (!jobId) return;
 
-    void refresh({ background: true });
-  });
+      try {
+        const result = await getJobInfoById(jobId);
+        if (!result.success || !result.job) return;
 
-  useRealtimeEvent('jobs', () => {
-    if (!state?.activeJobId) return;
-    void hydrateJobInfo(state.activeJobId);
-  });
+        setState((prev) => {
+          if (!prev || prev.activeJobId !== jobId) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            activeJobInfo: result.job,
+            fetchedAt: new Date().toISOString(),
+          };
+        });
+      } catch {
+        // Keep optimistic title if the background metadata refresh fails.
+      }
+    },
+    [setState]
+  );
 
   const clockIn = useCallback(
     async (jobId: string | null): Promise<ClockResult> => {
@@ -237,7 +214,7 @@ export function ClockStateProvider({
           return result;
         }
 
-        mutationVersionRef.current += 1;
+        invalidateView();
         skipNextRealtimeRef.current = true;
         setStatusError(null);
         setState((prev) => ({
@@ -273,7 +250,7 @@ export function ClockStateProvider({
         setIsPending(false);
       }
     },
-    [activeOrgId, hydrateJobInfo]
+    [activeOrgId, hydrateJobInfo, invalidateView, setState]
   );
 
   const clockOut = useCallback(async (): Promise<ClockResult> => {
@@ -289,7 +266,7 @@ export function ClockStateProvider({
         return result;
       }
 
-      mutationVersionRef.current += 1;
+      invalidateView();
       skipNextRealtimeRef.current = true;
       setStatusError(null);
       setState((prev) => ({
@@ -324,7 +301,7 @@ export function ClockStateProvider({
     } finally {
       setIsPending(false);
     }
-  }, [activeOrgId]);
+  }, [activeOrgId, invalidateView, setState]);
 
   const startBreak = useCallback(async (): Promise<ClockResult> => {
     if (!activeOrgId) {
@@ -339,7 +316,7 @@ export function ClockStateProvider({
         return result;
       }
 
-      mutationVersionRef.current += 1;
+      invalidateView();
       skipNextRealtimeRef.current = true;
       setStatusError(null);
       setState((prev) => ({
@@ -374,7 +351,7 @@ export function ClockStateProvider({
     } finally {
       setIsPending(false);
     }
-  }, [activeOrgId]);
+  }, [activeOrgId, invalidateView, setState]);
 
   const endBreak = useCallback(
     async (jobId: string | null): Promise<ClockResult> => {
@@ -390,7 +367,7 @@ export function ClockStateProvider({
           return result;
         }
 
-        mutationVersionRef.current += 1;
+        invalidateView();
         skipNextRealtimeRef.current = true;
         setStatusError(null);
         setState((prev) => ({
@@ -430,7 +407,7 @@ export function ClockStateProvider({
         setIsPending(false);
       }
     },
-    [activeOrgId, hydrateJobInfo]
+    [activeOrgId, hydrateJobInfo, invalidateView, setState]
   );
 
   const switchJob = useCallback(
@@ -447,7 +424,7 @@ export function ClockStateProvider({
           return result;
         }
 
-        mutationVersionRef.current += 1;
+        invalidateView();
         skipNextRealtimeRef.current = true;
         setStatusError(null);
         setState((prev) => ({
@@ -487,7 +464,7 @@ export function ClockStateProvider({
         setIsPending(false);
       }
     },
-    [activeOrgId, hydrateJobInfo]
+    [activeOrgId, hydrateJobInfo, invalidateView, setState]
   );
 
   const value = useMemo<ClockStateContextValue>(
@@ -496,7 +473,7 @@ export function ClockStateProvider({
       isLoading,
       isPending,
       statusError,
-      refresh: () => refresh({ background: true }),
+      refresh: refreshView,
       clockIn,
       clockOut,
       startBreak,
@@ -509,7 +486,7 @@ export function ClockStateProvider({
       endBreak,
       isLoading,
       isPending,
-      refresh,
+      refreshView,
       startBreak,
       state,
       statusError,

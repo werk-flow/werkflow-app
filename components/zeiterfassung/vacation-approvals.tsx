@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Check, Loader2, Palmtree, Undo2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -25,7 +25,7 @@ import {
 } from '@/lib/vacation/actions';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { VACATION_PORTION_LABELS } from '@/lib/vacation/types';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 const DECISION_ERROR_MESSAGES: Record<string, string> = {
   self_approval_not_allowed:
@@ -65,56 +65,45 @@ type ReasonDialogState =
   | { mode: 'reject'; item: ApproverVacationRequest }
   | { mode: 'cancel'; item: ApproverVacationRequest };
 
+type ApproverVacationLists = {
+  pending: ApproverVacationRequest[];
+  approved: ApproverVacationRequest[];
+};
+
 export function VacationApprovals() {
-  const [pending, setPending] = useState<ApproverVacationRequest[]>([]);
-  const [approved, setApproved] = useState<ApproverVacationRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [reasonDialog, setReasonDialog] = useState<ReasonDialogState>({
     mode: 'closed',
   });
-  const generationRef = useRef(0);
 
-  const hasDataRef = useRef(false);
-  const refetch = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<ApproverVacationLists>({
+    tables: ['vacation_requests'],
+    read: async (): Promise<LiveViewResult<ApproverVacationLists>> => {
       const [pendingResult, approvedResult] = await Promise.all([
         getPendingVacationRequestsForApprover(),
         getDecidableApprovedVacationRequests(),
       ]);
-      if (generation !== generationRef.current) return;
-      // Keep last-known data on transient failures; only an initial load
-      // that yields nothing shows the visible failure state.
-      if (pendingResult.success) setPending(pendingResult.requests);
-      if (approvedResult.success) setApproved(approvedResult.requests);
-      if (pendingResult.success && approvedResult.success) {
-        hasDataRef.current = true;
-        setLoadFailed(false);
-      } else if (!hasDataRef.current) {
-        setLoadFailed(true);
+      if (!pendingResult.success || !approvedResult.success) {
+        return { ok: false };
       }
-    } catch (error) {
-      console.error('Error fetching vacation approvals:', error);
-      if (generation === generationRef.current && !hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } finally {
-      if (generation === generationRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  useRealtimeEvent('vacation_requests', () => {
-    void refetch();
+      return {
+        ok: true,
+        data: {
+          pending: pendingResult.requests,
+          approved: approvedResult.requests,
+        },
+      };
+    },
   });
+
+  const pending = view.data?.pending ?? [];
+  const approved = view.data?.approved ?? [];
+  const isLoading = view.isLoading;
+  // Keep last-known data on transient failures; only an initial load that
+  // never produced data shows the visible failure state.
+  const loadFailed = !isLoading && view.data === undefined;
+  const refetch = view.refresh;
 
   // One failure, one surface: the section-level error survives the follow-up
   // refetch even when the acted-on card disappears (the section deliberately

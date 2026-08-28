@@ -114,13 +114,18 @@ export function OrganizationProvider({
 
   const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null
 
+  // Overlapping refreshes must not interleave: only the newest call commits.
+  const refreshGenerationRef = useRef(0)
   const refreshMemberships = useCallback(async () => {
+    const generation = ++refreshGenerationRef.current
     setIsLoading(true)
     try {
       const supabase = createSupabaseBrowserClient()
       const {
         data: { user },
       } = await supabase.auth.getUser()
+
+      if (generation !== refreshGenerationRef.current) return
 
       if (!user) {
         setMemberships([])
@@ -143,6 +148,8 @@ export function OrganizationProvider({
         `
         )
         .eq('user_id', user.id)
+
+      if (generation !== refreshGenerationRef.current) return
 
       if (error) {
         console.error('Error fetching memberships:', error)
@@ -172,7 +179,9 @@ export function OrganizationProvider({
         }
       }
     } finally {
-      setIsLoading(false)
+      if (generation === refreshGenerationRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [activeOrgId])
 
@@ -221,18 +230,9 @@ export function OrganizationProvider({
     }
   }, [initialActiveOrgId])
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshMemberships()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [refreshMemberships])
+  // Membership freshness (member added/removed/role changed, tab return) is
+  // handled by OrganizationRealtimeBridge, mounted below the Realtime
+  // provider — this provider sits above it and cannot subscribe itself.
 
   const value = useMemo<OrgContextValue>(
     () => ({

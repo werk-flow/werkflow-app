@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Download, Loader2, Plus, Trash2 } from 'lucide-react';
 
@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView } from '@/hooks/use-live-view';
+import { usePendingTask } from '@/hooks/use-server-action';
 import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import {
@@ -133,36 +134,37 @@ export function WorkArtifactsSection({
   readOnly?: boolean;
 }): ReactElement {
   const searchParams = useSearchParams();
-  const [artifacts, setArtifacts] = useState(initialArtifacts);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const requestedId = searchParams.get('arbeitsnachweis');
     return initialArtifacts.some((artifact) => artifact.id === requestedId) ? requestedId : null;
   });
   const [creating, setCreating] = useState(false);
-  const [isRefreshing, startRefresh] = useTransition();
   const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function refresh() {
-    startRefresh(async () => {
+  const editing = Boolean(selectedId || creating);
+  const view = useLiveView<WorkArtifactSummary[]>({
+    tables: ['work_artifacts'],
+    read: async () => {
       const result = await getWorkArtifacts({ targetType, targetId });
-      if (result.success) setArtifacts(result.artifacts);
-    });
-  }
-  useEffect(() => () => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-  }, []);
-  useRealtimeEvent('work_artifacts', (event) => {
-    const row = event.new ?? event.old;
-    const targetColumn = targetType === 'job' ? 'job_id' : 'project_id';
-    if (row?.[targetColumn] !== targetId) return;
-    if (selectedId || creating) {
-      setHasRemoteUpdate(true);
-      return;
-    }
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(refresh, 150);
+      return result.success ? { ok: true, data: result.artifacts } : { ok: false };
+    },
+    initialData: initialArtifacts,
+    resetKey: `${targetType}:${targetId}`,
+    // While the artifact dialog is open, reads queue (one catch-up after
+    // close); the in-dialog hint tells the editor a newer version exists.
+    suspend: editing,
+    eventFilter: (event) => {
+      const row = event.new ?? event.old;
+      const targetColumn = targetType === 'job' ? 'job_id' : 'project_id';
+      const rowTarget = row?.[targetColumn];
+      // DELETE payloads carry only id/organization_id — a missing column is relevant.
+      if (row && rowTarget !== undefined && rowTarget !== targetId) return false;
+      if (editing) setHasRemoteUpdate(true);
+      return true;
+    },
   });
+  const artifacts = view.data ?? initialArtifacts;
+  const refresh = view.refresh;
 
   return (
     <section id="arbeitsnachweise" data-testid="work-artifacts-section" className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
@@ -197,7 +199,7 @@ export function WorkArtifactsSection({
           ))}
         </div>
       )}
-      {isRefreshing && <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>}
+      {view.isRefreshing && <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>}
       {(creating || selectedId) && (
         <WorkArtifactDialog
           targetType={targetType} targetId={targetId} artifactId={selectedId}
@@ -208,7 +210,7 @@ export function WorkArtifactsSection({
           readOnly={readOnly}
           hasRemoteUpdate={hasRemoteUpdate}
           onRemoteUpdateHandled={() => setHasRemoteUpdate(false)}
-          onClose={() => { setCreating(false); setSelectedId(null); setHasRemoteUpdate(false); refresh(); }}
+          onClose={() => { setCreating(false); setSelectedId(null); setHasRemoteUpdate(false); void refresh(); }}
         />
       )}
     </section>
@@ -258,7 +260,7 @@ function WorkArtifactDialog({
   );
   const [removedFulfillmentIds, setRemovedFulfillmentIds] = useState(() => new Set<string>());
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runArtifactTask, isPending } = usePendingTask();
 
   async function load(id: string) {
     setLoading(true);
@@ -320,7 +322,7 @@ function WorkArtifactDialog({
 
   function save(submit: boolean) {
     setError(null);
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const id = detail?.id ?? draftArtifactIdRef.current;
       const result = await saveWorkArtifact({
         artifactId: id, revisionId: crypto.randomUUID(), expectedVersion: detail?.version ?? null,
@@ -344,7 +346,7 @@ function WorkArtifactDialog({
   function act(actionType: WorkArtifactActionType, reason?: string) {
     if (!detail || !currentRevision) return;
     setError(null);
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await recordWorkArtifactAction({ artifactId: detail.id, revisionId: currentRevision.id,
         actionId: crypto.randomUUID(), expectedVersion: detail.version, actionType, reason });
       if (await handleMutationFailure(result, 'Die Aktion konnte nicht gespeichert werden. Prüfe Berechtigung und aktuellen Stand.')) return;
@@ -355,7 +357,7 @@ function WorkArtifactDialog({
   function customerAction(actionType: 'customer_acknowledged' | 'customer_refused' | 'customer_reserved') {
     if (!detail || !currentRevision) return;
     setError(null);
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await recordWorkArtifactAction({
         artifactId: detail.id, revisionId: currentRevision.id, actionId: crypto.randomUUID(),
         expectedVersion: detail.version, actionType,
@@ -372,7 +374,7 @@ function WorkArtifactDialog({
   function captureSignature() {
     if (!detail || !currentRevision || !signatureFile) return;
     setError(null);
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
       if (!signatureDocumentId) {
         const uploaded = await uploadDocumentDirect({ file: signatureFile,
@@ -402,7 +404,7 @@ function WorkArtifactDialog({
 
   function linkDocument() {
     if (!detail || !currentRevision || !documentId) return;
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await linkWorkArtifactDocument({ artifactId: detail.id, revisionId: currentRevision.id,
         linkId: crypto.randomUUID(), expectedVersion: detail.version, documentId, relation: documentRelation });
       if (await handleMutationFailure(result, 'Das Dokument konnte nicht verknüpft werden.')) return;
@@ -412,7 +414,7 @@ function WorkArtifactDialog({
 
   function exportArtifact() {
     if (!detail) return;
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await exportWorkArtifact({ artifactId: detail.id, expectedVersion: detail.version,
         linkId: crypto.randomUUID(), actionId: crypto.randomUUID(), documentId: crypto.randomUUID() });
       if (await handleMutationFailure(result, 'Der Export konnte nicht erstellt werden.')) return;
@@ -422,7 +424,7 @@ function WorkArtifactDialog({
 
   function linkTimeEntry() {
     if (!detail || !currentRevision || !timeEntryId) return;
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await linkWorkArtifactSource({ artifactId: detail.id, revisionId: currentRevision.id,
         linkId: crypto.randomUUID(), expectedVersion: detail.version, timeEntryId,
         description: 'Arbeitszeitbezug' });
@@ -434,7 +436,7 @@ function WorkArtifactDialog({
 
   function fulfill(requirementId: string) {
     if (!currentRevision) return;
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const fulfillmentId = crypto.randomUUID();
       const result = await fulfillInstructionEvidence({ fulfillmentId,
         evidenceRequirementId: requirementId, artifactRevisionId: currentRevision.id });
@@ -446,7 +448,7 @@ function WorkArtifactDialog({
   }
 
   function removeFulfillment(requirement: EvidenceRequirement, fulfillment: { id: string; version: number }) {
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await removeInstructionEvidenceFulfillment({ fulfillmentId: fulfillment.id,
         expectedVersion: fulfillment.version, reason: actionReason });
       if (!result.success) { setError('Die Nachweiserfüllung konnte nicht entfernt werden.'); return; }
@@ -459,7 +461,7 @@ function WorkArtifactDialog({
 
   function setVoid() {
     if (!detail) return;
-    startTransition(async () => {
+    void runArtifactTask(async () => {
       const result = await voidWorkArtifact({ artifactId: detail.id, actionId: crypto.randomUUID(),
         expectedVersion: detail.version, reason: actionReason });
       if (await handleMutationFailure(result, 'Der Arbeitsnachweis konnte nicht ungültig gesetzt werden.')) return;

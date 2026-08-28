@@ -2330,6 +2330,7 @@ export type Database = {
           assigned_by: string
           id: string
           job_id: string
+          organization_id: string
           user_id: string
         }
         Insert: {
@@ -2337,6 +2338,7 @@ export type Database = {
           assigned_by: string
           id?: string
           job_id: string
+          organization_id: string
           user_id: string
         }
         Update: {
@@ -2344,6 +2346,7 @@ export type Database = {
           assigned_by?: string
           id?: string
           job_id?: string
+          organization_id?: string
           user_id?: string
         }
         Relationships: [
@@ -2359,6 +2362,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_assignments_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {

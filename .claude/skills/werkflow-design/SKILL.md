@@ -136,9 +136,11 @@ One convention: on success the dialog closes immediately and the success banner 
 
 Every mutation's failure is visible at the point of action — this is a defect class, not a style preference. `console.error` alone is never acceptable; neither is closing a dialog on failure or discarding a result (`void someMutation()`). Error copy answers what happened, why (when known), and what to do next, in natural German, without exposing backend internals. One failure, one surface — no double-reporting the same error through two channels.
 
-## Realtime and dialogs
+## Realtime, live views, and dialogs
 
-The app's Realtime subscriptions call `router.refresh()`; a refresh landing mid-dialog can remount it and destroy typed input. The dialog primitives (`Dialog`, `AlertDialog`, `Sheet`) register themselves as open in a shared context, and `useRealtimeRouterRefresh` suspends while any dialog is open, then fires one catch-up refresh on close. You get this for free by using the primitives — which is the rule: dialogs are built on `components/ui/dialog.tsx` / `alert-dialog.tsx` / `sheet.tsx`, not hand-rolled portals.
+Live surfaces consume Realtime through the live-view family, never raw events: `useLiveView` (hooks/use-live-view.ts) for a client refetch view (shared debounce, generation guard, keep-last-known with an `isStale` flag, dialog suspension, catch-up), `useRealtimeRouterRefresh` for route refreshes. The one lint-named exception is a surface that needs the event itself rather than a refetch (the project-detail delete-exit watcher); payload inspection for relevance belongs in the primitive's `eventFilter`. Pending/double-submit state on a server action comes from `useServerAction` — or `usePendingTask` for one shared gate over several flows (both in hooks/use-server-action.ts); ESLint bans async `startTransition` callbacks.
+
+A refresh landing mid-dialog can remount it and destroy typed input. The dialog primitives (`Dialog`, `AlertDialog`, `Sheet`) register themselves as open in a shared context, and the live-view family suspends while any dialog is open, then fires one catch-up on close. You get this for free by using the primitives — which is the rule: dialogs are built on `components/ui/dialog.tsx` / `alert-dialog.tsx` / `sheet.tsx`, not hand-rolled portals.
 
 ## Checklist before shipping UI
 

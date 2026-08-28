@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pencil, Loader2, RotateCcw } from 'lucide-react';
+import { useServerAction } from '@/hooks/use-server-action';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -79,7 +80,13 @@ export function MetadataSection({
   const [pendingSaveConfirmation, setPendingSaveConfirmation] =
     useState<PendingSaveConfirmation | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  // Pending state binds to the awaited server call and nothing else
+  // (freshness contract rule 6 — the P1-16 defect this section fixed).
+  const { run: runSave, isPending } = useServerAction(
+    async (value: string, onSave: (newValue: string) => Promise<void>) => {
+      await onSave(value);
+    }
+  );
 
   const currentEditingField = useMemo(
     () => fields.find((field) => field.label === editingFieldLabel) ?? null,
@@ -134,10 +141,9 @@ export function MetadataSection({
 
   const persistFieldValue = (value: string, onSave: (newValue: string) => Promise<void>) => {
     setSaveError(null);
-    setIsPending(true);
     void (async () => {
       try {
-        await onSave(value);
+        await runSave(value, onSave);
         setEditingFieldLabel(null);
         setEditValue('');
       } catch (error) {
@@ -150,8 +156,6 @@ export function MetadataSection({
           `Failed to save metadata field "${currentEditingField?.label ?? 'unknown'}"`,
           error
         );
-      } finally {
-        setIsPending(false);
       }
     })();
   };

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import {
   calculateBreakMinutes,
@@ -9,7 +8,7 @@ import {
   calculateTotalMinutes
 } from '@/lib/time-tracking/helpers';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   computeBreakdownForSettings,
   type OrgBreakMode,
@@ -31,6 +30,8 @@ export type MemberStatus = {
 };
 
 type MemberStatusMap = Record<string, MemberStatus>;
+
+const EMPTY_STATUS_MAP: MemberStatusMap = {};
 
 interface UseMemberStatusPollingOptions {
   organizationId: string;
@@ -55,165 +56,107 @@ export function useMemberStatusPolling({
   error: string | null;
   refetch: () => Promise<void>;
 } {
-  const [statusMap, setStatusMap] = useState<MemberStatusMap>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const fetchStatus = useCallback(async () => {
-    if (!organizationId || memberIds.length === 0) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // Get today's date range
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      // Fetch all entries for today
-      const result = await getTimeEntries({
-        organizationId,
-        from: today.toISOString(),
-        to: tomorrow.toISOString()
-      });
-
-      if (!result.success) {
-        setError(result.error);
-        return;
+  const view = useLiveView<MemberStatusMap>({
+    tables: ['time_entries', 'organization_settings'],
+    read: async (): Promise<LiveViewResult<MemberStatusMap>> => {
+      if (!organizationId || memberIds.length === 0) {
+        return { ok: true, data: EMPTY_STATUS_MAP };
       }
 
-      // Group entries by user and calculate status
-      const newStatusMap: MemberStatusMap = {};
+      try {
+        // Get today's date range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
 
-      for (const memberId of memberIds) {
-        const memberEntries = result.entries.filter(
-          (e) => e.userId === memberId
-        );
-
-        const currentState = deriveCurrentClockState(memberEntries);
-        const workSessions = calculateWorkSessions(memberEntries);
-        const breakSessions = calculateBreakSessions(memberEntries);
-        const trackedWorkMinutes = calculateTotalMinutes(workSessions);
-        const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
-        const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-        const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, {
-          breakMode,
-          autoBreakThresholdMinutes,
-          autoBreakDurationMinutes,
+        // Fetch all entries for today
+        const result = await getTimeEntries({
+          organizationId,
+          from: today.toISOString(),
+          to: tomorrow.toISOString()
         });
 
-        // If clocked in, find the last clock_in timestamp and check if it's pending
-        let clockInTime: string | null = null;
-        let isPending = false;
-
-        if (currentState.isClockedIn) {
-          // Find the most recent clock_in entry (include pending since they now take effect)
-          // Exclude rejected and pending_delete entries
-          const clockInEntry = memberEntries
-            .filter(
-              (e) =>
-                e.entryType === 'clock_in' &&
-                e.status !== 'rejected' &&
-                e.status !== 'pending_delete'
-            )
-            .sort((a, b) => {
-              const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-              if (diff !== 0) return diff;
-              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-            })[0];
-
-          clockInTime = clockInEntry?.timestamp || null;
-          isPending = clockInEntry?.status === 'pending';
+        if (!result.success) {
+          return { ok: false, error: result.error };
         }
 
-        newStatusMap[memberId] = {
-          breakMode,
-          autoBreakThresholdMinutes,
-          autoBreakDurationMinutes,
-          status: currentState.status,
-          isClockedIn: currentState.isClockedIn,
-          isOnBreak: currentState.isOnBreak,
-          isPending,
-          clockInTime,
-          statusStartedAt: currentState.statusStartedAt,
-          todayMinutes,
-          workMinutes: breakdown.workMinutes,
-          breakMinutes: breakdown.breakMinutes
-        };
+        // Group entries by user and calculate status
+        const newStatusMap: MemberStatusMap = {};
+
+        for (const memberId of memberIds) {
+          const memberEntries = result.entries.filter(
+            (e) => e.userId === memberId
+          );
+
+          const currentState = deriveCurrentClockState(memberEntries);
+          const workSessions = calculateWorkSessions(memberEntries);
+          const breakSessions = calculateBreakSessions(memberEntries);
+          const trackedWorkMinutes = calculateTotalMinutes(workSessions);
+          const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
+          const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
+          const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, {
+            breakMode,
+            autoBreakThresholdMinutes,
+            autoBreakDurationMinutes,
+          });
+
+          // If clocked in, find the last clock_in timestamp and check if it's pending
+          let clockInTime: string | null = null;
+          let isPending = false;
+
+          if (currentState.isClockedIn) {
+            // Find the most recent clock_in entry (include pending since they now take effect)
+            // Exclude rejected and pending_delete entries
+            const clockInEntry = memberEntries
+              .filter(
+                (e) =>
+                  e.entryType === 'clock_in' &&
+                  e.status !== 'rejected' &&
+                  e.status !== 'pending_delete'
+              )
+              .sort((a, b) => {
+                const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+                if (diff !== 0) return diff;
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+              })[0];
+
+            clockInTime = clockInEntry?.timestamp || null;
+            isPending = clockInEntry?.status === 'pending';
+          }
+
+          newStatusMap[memberId] = {
+            breakMode,
+            autoBreakThresholdMinutes,
+            autoBreakDurationMinutes,
+            status: currentState.status,
+            isClockedIn: currentState.isClockedIn,
+            isOnBreak: currentState.isOnBreak,
+            isPending,
+            clockInTime,
+            statusStartedAt: currentState.statusStartedAt,
+            todayMinutes,
+            workMinutes: breakdown.workMinutes,
+            breakMinutes: breakdown.breakMinutes
+          };
+        }
+
+        return { ok: true, data: newStatusMap };
+      } catch (err) {
+        console.error('Error fetching member status:', err);
+        return { ok: false, error: 'Failed to fetch status' };
       }
-
-      setStatusMap(newStatusMap);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching member status:', err);
-      setError('Failed to fetch status');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [
-    autoBreakDurationMinutes,
-    autoBreakThresholdMinutes,
-    breakMode,
-    organizationId,
-    memberIds,
-  ]);
-
-  const scheduleFetchStatus = useCallback(() => {
-    if (!enabled) return;
-
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = null;
-      void fetchStatus();
-    }, 150);
-  }, [enabled, fetchStatus]);
-
-  // Initial fetch
-  useEffect(() => {
-    if (enabled) {
-      void fetchStatus();
-    }
-  }, [fetchStatus, enabled]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        scheduleFetchStatus();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [enabled, scheduleFetchStatus]);
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Realtime: refetch when time entries change, but debounce bursts and
-  // synthetic visibility events into a single repair fetch.
-  useRealtimeEvent('time_entries', () => {
-    scheduleFetchStatus();
+    },
+    enabled,
+    // Membership changes must discard the old map and read fresh; the read
+    // itself always sees the current memberIds through its closure.
+    resetKey: `${organizationId}:${[...memberIds].sort().join(',')}`,
   });
 
   return {
-    statusMap,
-    isLoading,
-    error,
-    refetch: fetchStatus
+    statusMap: view.data ?? EMPTY_STATUS_MAP,
+    isLoading: view.isLoading,
+    error: view.error,
+    refetch: view.refresh
   };
 }

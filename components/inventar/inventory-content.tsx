@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -60,6 +60,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   adjustInventoryStock,
   createInventoryLocation,
@@ -493,7 +494,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
   const [stockDialog, setStockDialog] = useState<StockDialogState>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runInventoryTask, isPending } = usePendingTask();
 
   useRealtimeRouterRefresh({
     tables: [
@@ -576,7 +577,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
       return;
     }
 
-    startTransition(async () => {
+    void runInventoryTask(async () => {
       const result = await upsertInventoryItem({
         id: itemForm.id ?? undefined,
         name: itemForm.name,
@@ -631,7 +632,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
 
   function handleLocationSave() {
     setFormError(null);
-    startTransition(async () => {
+    void runInventoryTask(async () => {
       const result = await createInventoryLocation(locationForm);
       if (!result.success) {
         setFormError(getInventoryActionErrorMessage(result.error));
@@ -649,7 +650,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
     if (!stockDialog) return;
 
     setFormError(null);
-    startTransition(async () => {
+    void runInventoryTask(async () => {
       const result = await adjustInventoryStock({
         itemId: stockDialog.item.id,
         locationId: stockDialog.locationId,
@@ -1787,7 +1788,7 @@ function ImportDialog({
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<Partial<Record<ImportColumnKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runImportTask, isPending } = usePendingTask();
 
   function resetImportState() {
     setFileName('');
@@ -1820,7 +1821,7 @@ function ImportDialog({
 
   function handleImport() {
     setError(null);
-    startTransition(async () => {
+    void runImportTask(async () => {
       const normalizedRows: InventoryImportRow[] = rows.map((row) => {
         const read = (key: ImportColumnKey) => {
           const header = mapping[key];

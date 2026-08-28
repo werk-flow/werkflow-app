@@ -11,8 +11,9 @@ WerkFlow should feel fast, modern, and operationally fresh. The app combines ser
 - React request memoization through `react.cache()`.
 - Cross-request caching through `unstable_cache()`.
 - Cache tags and invalidation through `CACHE_TAGS` in `lib/data/cached.ts`.
-- Supabase Realtime through `components/realtime/realtime-provider.tsx`.
-- Route refresh helpers through `hooks/use-realtime-router-refresh.ts`.
+- Supabase Realtime through `components/realtime/realtime-provider.tsx`; the published table list lives in `lib/realtime/tables.ts`.
+- The live-view family: `hooks/use-live-view.ts` (client refetch views) and `hooks/use-realtime-router-refresh.ts` (route refresh).
+- Pending state for server actions through `hooks/use-server-action.ts`.
 
 ## Caching Layers
 
@@ -45,59 +46,20 @@ Server actions that mutate these areas should call `updateTag()` for affected ta
 
 ## Realtime Model
 
-Supabase Realtime subscriptions are centralized in `components/realtime/realtime-provider.tsx`.
+### Transport posture (Stage B research, 2026-08-28)
 
-The provider subscribes to tables that affect active operational views, including:
+Recorded from current Supabase primary sources before the Stage B consolidation was implemented:
 
-- `time_entries`
-- `entry_change_requests`
-- `organization_invites`
-- `organization_members`
-- `organization_settings`
-- `profiles`
-- `employee_records`
-- `employment_conditions`
-- `work_schedules`
-- `organization_closure_days`
-- `vacation_requests`
-- `sickness_reports`
-- `attention_read_states`
-- `attention_events`
-- `organization_responsibility_configurations`
-- `organization_responsibility_assignments`
-- `organization_responsibility_delegations`
-- `clients`
-- `client_contacts`
-- `client_sites`
-- `client_requests`
-- `client_follow_ups`
-- `client_communication_settings`
-- `client_communication_preferences`
-- `jobs`
-- `projects`
-- `job_assignments`
-- `job_instruction_items`
-- `planning_series`
-- `planning_occurrences`
-- `planning_occurrence_assignments`
-- `planning_dispatches`
-- `planning_dispatch_recipients`
-- `planning_dispatch_acknowledgements`
-- `planning_customer_commitments`
-- `work_blockers`
-- `work_dependencies`
-- `work_artifacts`
-- `work_handover_packages`
-- `job_instruction_evidence_fulfillments`
-- `documents`
-- `document_links`
-- `inventory_stock_levels`
-- `job_material_lines`
-- `inventory_movements`
+- The transport is `postgres_changes` on one channel per organization (`org-<orgId>`); all table bindings ride a single channel join, which is quota-efficient (one join, one of 100 channels per connection). Supabase applies per-subscriber RLS checks to INSERT and UPDATE events.
+- **RLS is not applied to DELETE events** — only the client-supplied subscription filter gates them, and the old-row payload is whatever replica identity logs. Replica identity FULL therefore leaks complete deleted rows to any authenticated project user with a crafted subscription. Published organization-scoped tables use replica identity `USING INDEX` on a unique `(id, organization_id)` index instead: DELETE events stay org-filterable server-side while their payload carries only the two ids. Do not set replica identity FULL on published tables, and do not read row content from DELETE payloads — treat events as invalidation signals.
+- **Broadcast-from-database is the documented end-state at scale.** Supabase recommends Broadcast over `postgres_changes` for most use cases; per-event-per-subscriber RLS checks are single-threaded and the documented ceiling is ~3,000 concurrent subscribers. At current scale `postgres_changes` is correct, and the consolidation confines transport knowledge to the provider, so a later migration to private `org:<orgId>` broadcast topics fed by `realtime.broadcast_changes` triggers changes the provider and one migration, not the surfaces. Raise the migration with the owner before broad multi-tenant launch.
+- `supabase.realtime.setAuth(<user JWT>)` remains required (also on token refresh); Realtime ignores `sb_*` API keys as channel auth.
 
-Most subscriptions are scoped by `organization_id`. Profile updates are broader because profile data may be referenced across organization/member views.
+Supabase Realtime subscriptions are centralized in `components/realtime/realtime-provider.tsx`. The published table list has ONE home: `lib/realtime/tables.ts` exports `REALTIME_TABLES`, the `RealtimeTable` type derives from it, and the provider generates one org-filtered binding per entry (`profiles` is the recorded unfiltered exception — profile data is referenced across organization views). Adding a table to Realtime means: publication + replica-identity migration, one line in `REALTIME_TABLES`, done — a table cannot join without its organization filter. `bun run realtime:check` (also part of the local preflight) diffs the list against the database's publication and replica-identity state.
 
-Events are debounced inside the provider to avoid refresh storms when multiple related rows change quickly.
+Events are debounced per table inside the provider (`REALTIME_DEBOUNCE_MS` in `lib/realtime/events.ts`) to avoid refresh storms when multiple related rows change quickly. The provider also owns the focus/visibility catch-up: returning to the tab dispatches one coalesced synthetic event per table to every subscriber, so consumers get gap recovery without their own listeners.
+
+The per-slice paragraphs below are acceptance-era records. Where they say "replica identity full", read "replica identity `USING INDEX`": Stage B moved every published organization-scoped table onto the minimal `(id, organization_id)` index (the migration `20260828120100`), because FULL leaked deleted rows past RLS. The org-filtered DELETE delivery those slices wanted is preserved.
 
 The three P1-05 responsibility tables, the P1-06 `vacation_requests` table, and the P1-08 `sickness_reports` table use the full Realtime integration contract: publication, the provider table union/`TABLES` subscription, `use-realtime-router-refresh.ts`, and replica identity full so organization-filtered DELETE events retain their filter column. The append-only audit tables (`sickness_report_events` included) are not subscribed, matching other per-domain audit logs — with one deliberate P1-07 exception: `attention_events` is published so a future consumer can react to pattern-level facts, and `attention_read_states` is subscribed so read markers set on one device update badges everywhere. The vacation widget, approver queue, and calendar absence entries refetch on `vacation_requests` events with generation guards and keep last-known data on transient failures; the sickness sections (dashboard, member detail) and the neutral calendar absence entries do the same on `sickness_reports` events. Vacation decisions and sickness mutations are always re-authorized server-side at action time. Sickness reads follow the attention posture — live action queries, no `unstable_cache` consumer yet (the `sickness` cache tag exists for symmetry and is invalidated on every write).
 
@@ -121,27 +83,37 @@ P1-17 publishes only the mutable `work_handover_packages` root with replica iden
 
 ## Refresh Patterns
 
-The app uses two main Realtime response patterns:
+Every live surface consumes Realtime through one of the two live-view family members; neither takes a debounce knob (the shared boundary is the point):
 
-- Refresh the route with `router.refresh()` when server-rendered data should be reloaded.
-- Fetch or update local client state for focused interactive views, such as live job lists, calendar details, approval counts, or clock state.
+- `useRealtimeRouterRefresh({ tables })` (`hooks/use-realtime-router-refresh.ts`) refreshes the route when server-rendered data should reload. Server props stay the authority; local state re-syncs from them.
+- `useLiveView({ tables, read, ... })` (`hooks/use-live-view.ts`) owns a narrower client view: one reader (usually a server action) is the authority, events are invalidation signals. The hook carries the whole refetch discipline — shared debounce, generation guard, keep-last-known with visible staleness, dialog suspension with one queued catch-up, focus/visibility catch-up, `enabled`/`resetKey` scoping, plus `invalidate()`/`setData()` for surfaces with optimistic own-action echoes (the clock).
 
-Use `hooks/use-realtime-router-refresh.ts` when a component should refresh the current route after one of several Realtime table changes.
-
-Use `useRealtimeEvent()` directly when a component can update a narrower local state without refreshing the entire route.
+Direct `useRealtimeEvent()` consumption is lint-banned for surfaces; the recorded exception is the project-detail delete-exit watcher, which needs the event itself (navigation away from a deleted record), not a refetch.
 
 ## Client Freshness Contract
 
-Standardized 2026-08-27 from the race classes P1-16 exposed and fixed one by one. New surfaces follow these rules instead of re-deriving refresh behavior; a surface that deviates recreates a documented defect class (see the refresh-race notes in [testing.md](testing.md)).
+Standardized 2026-08-27 from the race classes P1-16 exposed; since Stage B of the platform hardening (2026-08-28) the contract is not a set of rules surfaces re-implement — it is the behavior of the live-view primitive, and every live surface runs on it.
 
-1. **The provider owns subscriptions.** Components consume `useRealtimeEvent()` or `hooks/use-realtime-router-refresh.ts`; they do not open their own channels. Table events are debounced 150 ms in the provider. A component with a narrower refetch uses the same 150 ms boundary, never a shorter one — a shorter debounce raced server cache invalidation in P1-16 and produced stale reads. *Enforced (Tier 2): `eslint.config.mjs` bans `.channel(` and `onAuthStateChange` outside the provider.*
-2. **Focus and visibility catch-up are provider concerns.** Returning to a tab or window triggers one coalesced catch-up refresh; components must not register competing focus/visibility listeners. *Enforced (Tier 2): `eslint.config.mjs` bans `addEventListener('visibilitychange'|'focus')` outside a frozen legacy allowlist (`attention-count-provider`, `organization-context`, `use-active-jobs`, `use-business-day-refresh`, `use-member-status-polling`) that the Realtime consolidation may shrink and nothing may grow.*
-3. **Server props are mount-time data for live components.** A component that maintains live client state from its own reader treats route-refresh payloads as initial data only; after mount, its subscriptions and explicit refetches are authoritative, and a later stale route payload must not overwrite a newer client read. Key such components by entity id so navigation remounts them cleanly.
-4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with the authoritative client refetch; the reverse order let a stale server payload overwrite the fresh read (the P1-16 dispatch-challenge race).
-5. **Refetches use generation guards and keep-last-known.** An older response never overwrites a newer generation; a transient failure marks content visibly stale — and non-interactive where actions depend on it — instead of clearing it.
-6. **Dialogs suspend, then catch up once.** Open dialogs suspend disruptive route refreshes through the shared open-dialog context (`components/ui/open-dialog-context.tsx`) and receive exactly one queued catch-up after close. Pending/double-submit state binds to the actual server call, never to a router transition — a router-entangled `useTransition` kept controls disabled after unrelated refreshes (the P1-16 `MetadataSection` fix).
+1. **The provider owns subscriptions.** Components consume the live-view family; they do not open their own channels. Table events are debounced `REALTIME_DEBOUNCE_MS` in the provider, and the family shares that boundary with no per-surface override — a shorter debounce raced server cache invalidation in P1-16 and produced stale reads. *Enforced (Tier 2): `eslint.config.mjs` bans `.channel(` and `onAuthStateChange` outside the provider, and bans importing `useRealtimeEvent`/`useRealtimeSubscribe` outside the family. Tier 1 by construction: the hooks expose no debounce option.*
+2. **Focus and visibility catch-up are provider concerns.** Returning to a tab or window dispatches one coalesced synthetic catch-up to every subscriber; components must not register competing focus/visibility listeners. *Enforced (Tier 2): `eslint.config.mjs` bans `addEventListener('visibilitychange'|'focus')` in product code — the Stage B sweep ended the former legacy allowlist at zero. `setInterval` is banned the same way; the named exception is the wall-clock day-rollover tick (`hooks/use-business-day-refresh.ts`), and pure render clocks carry reasoned inline disables.*
+3. **Server props are mount-time data for live components.** `useLiveView`'s `initialData` is exactly this: it seeds the first paint and suppresses the mount read; after mount, the reader is authoritative. Key live components by entity id so navigation remounts them cleanly, or pass `resetKey` where remounting is not an option (app-shell providers).
+4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with the authoritative client refetch (`view.refresh()`); the reverse order let a stale server payload overwrite the fresh read (the P1-16 dispatch-challenge race).
+5. **Refetches use generation guards and keep-last-known.** Built into the primitive: an older response never commits over a newer generation, and a failed read keeps the data while `isStale` marks the surface — render dependent actions non-interactive where they rely on it.
+6. **Dialogs suspend, then catch up once.** Open dialogs suspend reads and route refreshes through the shared open-dialog context (`components/ui/open-dialog-context.tsx`); exactly one queued catch-up fires after close. Built into both family members; `suspend` covers non-dialog editors. Pending/double-submit state binds to the actual server call through `useServerAction` (`hooks/use-server-action.ts`), never to a router transition — a router-entangled `useTransition` kept controls disabled after unrelated refreshes (the P1-16 `MetadataSection` defect). *Enforced (Tier 2): `eslint.config.mjs` bans async `startTransition` callbacks in product code.*
 
-Legacy surfaces that predate this contract are brought onto it opportunistically. During slice work, treat a deviation that produces one of these races as a candidate product defect, not test flakiness.
+Events are signals, not data: consumers never read row content from DELETE payloads (replica identity `USING INDEX` reduces them to `id` + `organization_id`), and an `eventFilter` that inspects payload columns must treat a missing column as relevant. Synthetic catch-up events bypass every filter by design.
+
+## Latency Contract (D4)
+
+The app must feel instant, and the harness holds it to numbers:
+
+- **A user's own action reflects instantly** — the optimistic echo (`useServerAction` pending into a success banner; `view.setData()` where a surface keeps live client state, the clock being the model).
+- **Another session's open surface shows a change within 2 seconds** (`LIVE_TARGET_MS`).
+- **The test helper hard-fails above 15 seconds** (`LIVE_HARD_BUDGET_MS`, local and cloud) — the measured envelope of route-refresh delivery under full-battery load, recalibrated from the provisional 5 s after certification evidence (incident log, 2026-08-28). Every measurement is archived with an `overTarget` flag, so creep past the 2 s target stays visible without failing runs on machine load.
+
+`expectLiveWithin` (`tests/golden/support/live.ts`) asserts the budget in the key cross-session checks (GG-00 customer list, P1-10 follow-ups, P1-12 dispatch state, canary C3) and appends every measured latency to the run archive (`live-latencies.ndjson`), so certification runs double as measurements. Dev servers additionally log per-event propagation (`[Realtime] event received … propagationMs`, database commit to client receipt).
+
+Measured baselines (Stage B, 2026-08-28, full local Golden certification `2026-08-28T192722471Z-16757e`): GG-00 customer list 884 ms, P1-10 follow-up 1428 ms, P1-12 dispatch state 954 ms — all cross-session, all under the 2 s target; focused-run measurements sit in the same 0.9–1.5 s band. The ledger in [platform-hardening.md](../plans/platform-hardening.md) keeps the full context.
 
 ## Mutation Guidelines
 
@@ -158,15 +130,13 @@ Responsibility writes invalidate `responsibilities-<orgId>` and revalidate setti
 
 ## Adding New Realtime Data
 
-Before adding a new table to Realtime:
+Before adding a new table to Realtime, confirm the UI really needs live updates and that route refresh would not serve better than a client view; keep field-worker views simple and avoid noisy UI changes.
 
-- Confirm the UI really needs live updates.
-- Scope events by organization whenever possible.
-- Consider whether route refresh or local state update is better.
-- Debounce or batch reactions if one user action changes multiple rows.
-- Keep field-worker views simple and avoid noisy UI changes.
+Then the mechanics, in one migration plus one line:
 
-Inventory stock levels, job material lines, and inventory movements already use Realtime because several users may change the same operational material state.
+1. Migration: add the table to the `supabase_realtime` publication, create the unique `(<pk>, organization_id)` index named `<table>_replident_idx`, and set `REPLICA IDENTITY USING INDEX` on it (never FULL — the transport-posture section explains the DELETE leak).
+2. Add the table name to `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider binds and org-filters it automatically; `bun run realtime:check` fails until migration and list agree.
+3. Consume it through `useLiveView` or `useRealtimeRouterRefresh`. Debounce, batching, suspension, and catch-up come with the primitive.
 
 ## Freshness Principles
 

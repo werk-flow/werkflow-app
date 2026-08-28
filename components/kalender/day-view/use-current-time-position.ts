@@ -15,6 +15,7 @@ export function useCurrentTimePosition(
   useEffect(() => {
     if (!enabled) return;
 
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = window.setInterval(() => {
       setNowTimestamp(getMinuteTimestamp());
     }, 60000);

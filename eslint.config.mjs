@@ -64,11 +64,61 @@ const focusSelector = {
   message:
     "Window-focus catch-up is a Realtime-provider concern (client freshness contract rule 2); for element focus use the React onFocus prop.",
 };
+// Pending state binds to the awaited server call, never a router transition
+// (client freshness contract rule 6; the P1-16 MetadataSection defect).
+// useServerAction (hooks/use-server-action.ts) is the sanctioned submit path.
+const asyncTransitionSelectors = [
+  {
+    selector:
+      'CallExpression[callee.name="startTransition"] > ArrowFunctionExpression[async=true]',
+    message:
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+  },
+  {
+    selector:
+      'CallExpression[callee.name="startTransition"] > FunctionExpression[async=true]',
+    message:
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+  },
+  {
+    selector:
+      'CallExpression[callee.property.name="startTransition"] > ArrowFunctionExpression[async=true]',
+    message:
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+  },
+  {
+    selector:
+      'CallExpression[callee.property.name="startTransition"] > FunctionExpression[async=true]',
+    message:
+      'Async startTransition callbacks entangle pending state with router transitions. Use useServerAction (hooks/use-server-action.ts) for the server call and keep router.refresh() fire-and-forget (client freshness contract rule 6).',
+  },
+];
+
+// No polling: live data comes from Realtime through the live-view primitive.
+// Config-level exception: hooks/use-business-day-refresh.ts (a local Berlin
+// date comparison on an interval — wall-clock, not server polling). Pure
+// render ticks (elapsed counters, calendar now-lines) carry reasoned inline
+// disables instead of config entries.
+const pollingSelectors = [
+  {
+    selector: 'CallExpression[callee.name="setInterval"]',
+    message:
+      'No polling — live data comes from Realtime via useLiveView (docs/technical/realtime-and-caching.md). The only named exception is the wall-clock tick in hooks/use-business-day-refresh.ts.',
+  },
+  {
+    selector: 'CallExpression[callee.property.name="setInterval"]',
+    message:
+      'No polling — live data comes from Realtime via useLiveView (docs/technical/realtime-and-caching.md). The only named exception is the wall-clock tick in hooks/use-business-day-refresh.ts.',
+  },
+];
+
 const realtimeSelectors = [
   channelSelector,
   authListenerSelector,
   visibilitySelector,
   focusSelector,
+  ...asyncTransitionSelectors,
+  ...pollingSelectors,
 ];
 
 // UI/UX consolidation canon (werkflow-design skill): registry components own
@@ -230,17 +280,11 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // FROZEN legacy allowlist for the freshness contract (may shrink during the
-  // Realtime consolidation, never grow): these pre-contract surfaces keep
-  // their own visibility catch-up; everything else stays banned for them.
+  // The Stage B consolidation ended the frozen visibility/focus allowlist at
+  // zero (decision D5): no product surface registers its own catch-up
+  // listeners anymore. Named exception — the wall-clock day-rollover tick.
   {
-    files: [
-      "components/realtime/attention-count-provider.tsx",
-      "components/organization/organization-context.tsx",
-      "hooks/use-active-jobs.ts",
-      "hooks/use-business-day-refresh.ts",
-      "hooks/use-member-status-polling.ts",
-    ],
+    files: ["hooks/use-business-day-refresh.ts"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -248,9 +292,10 @@ const eslintConfig = defineConfig([
         ...prodRefSelectors,
         channelSelector,
         authListenerSelector,
+        visibilitySelector,
         focusSelector,
+        ...asyncTransitionSelectors,
         ...stylingSelectors,
-        ...registrySelectors,
       ],
     },
   },
@@ -262,6 +307,8 @@ const eslintConfig = defineConfig([
         "error",
         ...authSelectors,
         ...prodRefSelectors,
+        ...asyncTransitionSelectors,
+        ...pollingSelectors,
         ...stylingSelectors,
         ...registrySelectors,
       ],
@@ -278,8 +325,45 @@ const eslintConfig = defineConfig([
         channelSelector,
         visibilitySelector,
         focusSelector,
+        ...asyncTransitionSelectors,
+        ...pollingSelectors,
         ...stylingSelectors,
         ...registrySelectors,
+      ],
+    },
+  },
+  // Surfaces consume Realtime through the live-view family, not the raw
+  // event hook: useLiveView / useRealtimeRouterRefresh own the refetch
+  // discipline. The named exceptions are the two family members (they build
+  // on useRealtimeSubscribe) and the one payload-consuming navigation
+  // watcher (leaving a deleted project's page needs the event, not a
+  // refetch).
+  {
+    files: productFiles,
+    ignores: [
+      "hooks/use-live-view.ts",
+      "hooks/use-realtime-router-refresh.ts",
+      "components/realtime/realtime-provider.tsx",
+      "components/auftraege/project-detail-content.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "sonner",
+              message:
+                "Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.",
+            },
+            {
+              name: "@/components/realtime/realtime-provider",
+              importNames: ["useRealtimeEvent", "useRealtimeSubscribe"],
+              message:
+                "Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).",
+            },
+          ],
+        },
       ],
     },
   },

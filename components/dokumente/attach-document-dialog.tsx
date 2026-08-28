@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, FileText, LinkIcon, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
 } from '@/lib/documents/actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
+import { useServerAction } from '@/hooks/use-server-action';
 
 type AttachDocumentDialogProps = {
   open: boolean;
@@ -43,7 +44,7 @@ export function AttachDocumentDialog({
   targetLabel,
   onAttached,
 }: AttachDocumentDialogProps) {
-  const [isPending, startTransition] = useTransition();
+  const { run: runLinkDocuments, isPending } = useServerAction(linkDocumentsToTarget);
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<OrganizationDocument[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
@@ -60,7 +61,7 @@ export function AttachDocumentDialog({
     if (!open) return;
 
     let cancelled = false;
-    startTransition(async () => {
+    void (async () => {
       const result = await getAttachableDocuments({
         targetType,
         targetId,
@@ -77,7 +78,7 @@ export function AttachDocumentDialog({
 
       setDocuments([]);
       onAttached('error', 'Dokumente konnten nicht geladen werden.');
-    });
+    })();
 
     return () => {
       cancelled = true;
@@ -96,9 +97,9 @@ export function AttachDocumentDialog({
   function handleAttach() {
     if (selectedDocumentIds.size === 0) return;
 
-    startTransition(async () => {
+    void (async () => {
       const documentIds = [...selectedDocumentIds];
-      const result = await linkDocumentsToTarget({
+      const result = await runLinkDocuments({
         documentIds,
         jobId: targetType === 'job' ? targetId : undefined,
         projectId: targetType === 'project' ? targetId : undefined,
@@ -127,7 +128,7 @@ export function AttachDocumentDialog({
       }
 
       onAttached('error', 'Die Dokumente konnten nicht verknüpft werden.');
-    });
+    })();
   }
 
   const targetTypeLabel =

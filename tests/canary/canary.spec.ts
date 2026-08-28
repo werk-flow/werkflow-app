@@ -21,6 +21,7 @@ import {
 import { createSignedDownloadUrl } from '../../lib/storage/r2';
 import { requireEnv } from '../golden/support/env';
 import { ARTIFACTS_DIR } from '../golden/support/world';
+import { expectLiveWithin } from '../golden/support/live';
 
 // Cloud canary suite (@CANARY) — decision D10 in
 // docs/plans/platform-hardening.md, ADR docs/decisions/0006-testing-architecture.md.
@@ -96,10 +97,11 @@ test.describe('Cloud-Canary @CANARY', () => {
     await expect(bueroPage.getByText(`Canary Realtime ${world.runId}`)).toHaveCount(0);
     await createCustomer(adminPage, `Canary Realtime ${world.runId}`);
     // No reload: the row must arrive through the Realtime subscription within
-    // the documented projection envelope.
-    await expect(visibleText(bueroPage, `Canary Realtime ${world.runId}`)).toBeVisible({
-      timeout: 30_000,
-    });
+    // the cloud latency budget (D4); the measured time lands in the archive.
+    await expectLiveWithin(
+      visibleText(bueroPage, `Canary Realtime ${world.runId}`),
+      { label: 'canary C3 realtime cross-session' }
+    );
   });
 
   test('C4: Einladung mit echter Resend-E-Mail und Beitritt', async ({

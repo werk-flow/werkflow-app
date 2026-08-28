@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
+import { usePendingTask } from '@/hooks/use-server-action';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -95,7 +96,7 @@ function formatDateTime(value: string): string {
 export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const router = useRouter();
   const { request } = data;
-  const [isPending, startTransition] = useTransition();
+  const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
   const [convertOpen, setConvertOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -107,7 +108,6 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   useRealtimeRouterRefresh({
     tables: ['client_requests', 'documents', 'document_links'],
-    debounceMs: 250,
   });
 
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
@@ -118,7 +118,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   function handleStatusToggle() {
     const nextStatus = request.status === 'offen' ? 'in_klaerung' : 'offen';
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await updateClientRequest(request.id, { status: nextStatus });
       if (!result.success) {
         showFeedback('error', 'Der Status konnte nicht geändert werden.');
@@ -129,7 +129,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   }
 
   function handleReopen() {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await reopenClientRequest(request.id);
       if (!result.success) {
         showFeedback('error', 'Die Anfrage konnte nicht wieder geöffnet werden.');
@@ -141,7 +141,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   }
 
   function handlePromote() {
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await promoteCallerToClient(request.id);
       if (!result.success) {
         showFeedback(
@@ -159,7 +159,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   function handleMatchConfirm() {
     if (!matchClientId) return;
-    startTransition(async () => {
+    void runPendingTask(async () => {
       const result = await updateClientRequest(request.id, {
         clientId: matchClientId,
         siteId: matchSiteId || null,

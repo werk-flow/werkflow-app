@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -43,6 +43,7 @@ import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { useBanner } from '@/components/ui/banner';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   createCustomerFollowUp,
   getCustomerRelationshipBundle,
@@ -198,7 +199,7 @@ export function CustomerRelationshipWorkspace({
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferenceOpen, setPreferenceOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const { run: runRelationshipTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
 
   const bundle = useMemo(() => {
@@ -239,7 +240,7 @@ export function CustomerRelationshipWorkspace({
   );
 
   function loadOlderTimeline(cursor: string) {
-    startTransition(async () => {
+    void runRelationshipTask(async () => {
       const result = await getCustomerRelationshipBundle(clientId, cursor);
       if (!result.success) {
         showBanner({
@@ -314,7 +315,7 @@ export function CustomerRelationshipWorkspace({
       sourceType: followUpDraft.sourceType ?? undefined,
       sourceId: followUpDraft.sourceId ?? undefined,
     };
-    startTransition(async () => {
+    void runRelationshipTask(async () => {
       const result = followUpDraft.id
         ? await updateCustomerFollowUp(clientId, followUpDraft.id, input)
         : await createCustomerFollowUp(clientId, input);
@@ -332,7 +333,7 @@ export function CustomerRelationshipWorkspace({
     followUp: ClientFollowUp,
     status: 'completed' | 'cancelled'
   ) {
-    startTransition(async () => {
+    void runRelationshipTask(async () => {
       const result = await transitionCustomerFollowUp(clientId, followUp.id, status);
       if (!result.success) {
         showBanner({
@@ -465,7 +466,7 @@ export function CustomerRelationshipWorkspace({
         onSettingsOpenChange={setSettingsOpen}
         onPreferenceOpenChange={setPreferenceOpen}
         onSaved={() => router.refresh()}
-        startTransition={startTransition}
+        runTask={runRelationshipTask}
       />
 
       <section className="space-y-3" aria-labelledby="timeline-heading">
@@ -640,7 +641,7 @@ function CommunicationPreferencesSection({
   onSettingsOpenChange,
   onPreferenceOpenChange,
   onSaved,
-  startTransition,
+  runTask,
 }: {
   clientId: string;
   contacts: ClientContact[];
@@ -651,7 +652,7 @@ function CommunicationPreferencesSection({
   onSettingsOpenChange: (open: boolean) => void;
   onPreferenceOpenChange: (open: boolean) => void;
   onSaved: () => void;
-  startTransition: React.TransitionStartFunction;
+  runTask: (task: () => Promise<void>) => Promise<void | null>;
 }) {
   const settings = bundle.communicationSettings;
   const { showBanner } = useBanner();
@@ -691,7 +692,7 @@ function CommunicationPreferencesSection({
 
   function saveSettings() {
     setSettingsError(null);
-    startTransition(async () => {
+    void runTask(async () => {
       const result = await saveCustomerCommunicationSettings(clientId, settingsDraft);
       if (!result.success) {
         setSettingsError('Die allgemeinen Kontaktvorgaben konnten nicht gespeichert werden.');
@@ -705,7 +706,7 @@ function CommunicationPreferencesSection({
 
   function savePreference() {
     setPreferenceError(null);
-    startTransition(async () => {
+    void runTask(async () => {
       const result = await saveCustomerCommunicationPreference(clientId, preferenceDraft);
       if (!result.success) {
         setPreferenceError('Die Kontaktpräferenz konnte nicht gespeichert werden.');

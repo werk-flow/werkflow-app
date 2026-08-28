@@ -110,6 +110,7 @@ export function TimelineGrid({
     };
 
     updateCurrentTime();
+    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
     const interval = setInterval(updateCurrentTime, 60000);
     return () => clearInterval(interval);
   }, []);

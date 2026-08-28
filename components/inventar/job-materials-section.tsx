@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -34,7 +34,8 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { usePendingTask } from '@/hooks/use-server-action';
 import {
   createJobMaterialLine,
   createProjectMaterialLine,
@@ -313,51 +314,29 @@ export function JobMaterialsSection({
   const { showBanner } = useBanner();
   const [dialog, setDialog] = useState<MaterialDialogState | null>(null);
   const [sectionError, setSectionError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { run: runMaterialTask, isPending } = usePendingTask();
   const [pickerItems, setPickerItems] = useState(inventoryItems);
   const [pickerLocations, setPickerLocations] = useState(locations);
   const [isPickerLoading, setIsPickerLoading] = useState(false);
   const loadedFieldSearchesRef = useRef(new Set<string>());
   const [isFieldSaving, setIsFieldSaving] = useState(false);
-  const [serverBackedFieldLines, setServerBackedFieldLines] = useState(initialLines);
   const isProjectContext = Boolean(projectId && !jobId);
-  const displayedLines = isAdminOrManager ? initialLines : serverBackedFieldLines;
-  const fieldRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fieldRefreshGenerationRef = useRef(0);
-  const refreshFieldLines = useCallback(async () => {
-    if (isAdminOrManager || !jobId) return;
-    const generation = ++fieldRefreshGenerationRef.current;
-    try {
+  // Field workers cannot router.refresh their way to fresh lines, so their
+  // view refetches; managers keep the server-rendered props.
+  const fieldView = useLiveView<JobMaterialLine[]>({
+    tables: ['job_material_lines', 'inventory_movements', 'inventory_stock_levels'],
+    read: async (): Promise<LiveViewResult<JobMaterialLine[]>> => {
+      if (!jobId) return { ok: false };
       const result = await getJobMaterialLines(jobId);
-      if (generation !== fieldRefreshGenerationRef.current) return;
-      if (result.success) {
-        setServerBackedFieldLines(result.lines);
-        setSectionError(null);
-      } else {
-        setSectionError('Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar.');
-      }
-    } catch {
-      if (generation !== fieldRefreshGenerationRef.current) return;
-      setSectionError('Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar.');
-    }
-  }, [isAdminOrManager, jobId]);
-  const scheduleFieldRefresh = useCallback(() => {
-    if (isAdminOrManager || !jobId) return;
-    if (fieldRefreshTimerRef.current) clearTimeout(fieldRefreshTimerRef.current);
-    fieldRefreshTimerRef.current = setTimeout(() => {
-      fieldRefreshTimerRef.current = null;
-      void refreshFieldLines();
-    }, 150);
-  }, [isAdminOrManager, jobId, refreshFieldLines]);
-  useRealtimeEvent('job_material_lines', scheduleFieldRefresh);
-  useRealtimeEvent('inventory_movements', scheduleFieldRefresh);
-  useRealtimeEvent('inventory_stock_levels', scheduleFieldRefresh);
-  useEffect(
-    () => () => {
-      if (fieldRefreshTimerRef.current) clearTimeout(fieldRefreshTimerRef.current);
+      return result.success ? { ok: true, data: result.lines } : { ok: false };
     },
-    []
-  );
+    initialData: initialLines,
+    enabled: !isAdminOrManager && Boolean(jobId),
+    resetKey: jobId ?? null,
+  });
+  const displayedLines = isAdminOrManager
+    ? initialLines
+    : (fieldView.data ?? initialLines);
 
   async function loadPickerOptions(): Promise<{
     items: InventoryPickerOption[];
@@ -486,7 +465,7 @@ export function JobMaterialsSection({
 
     setDialog({ ...dialog, error: null });
     if (!isAdminOrManager) setIsFieldSaving(true);
-    startTransition(async () => {
+    void runMaterialTask(async () => {
       if (dialog.rows.length === 0) {
         setIsFieldSaving(false);
         updateDialogError('item_required', dialog.mode);
@@ -593,16 +572,9 @@ export function JobMaterialsSection({
       }
 
       if (!isAdminOrManager && jobId) {
-        try {
-          const refreshedLines = await getJobMaterialLines(jobId);
-          if (refreshedLines.success) {
-            setServerBackedFieldLines(refreshedLines.lines);
-          } else {
-            setSectionError('Die Buchung wurde gespeichert, aber der aktuelle Materialstand konnte nicht geladen werden.');
-          }
-        } catch {
-          setSectionError('Die Buchung wurde gespeichert, aber der aktuelle Materialstand konnte nicht geladen werden.');
-        }
+        // A failed refresh keeps the last-known lines and surfaces the stale
+        // hint below; the booking itself already succeeded.
+        await fieldView.refresh();
       }
 
       setIsFieldSaving(false);
@@ -624,7 +596,7 @@ export function JobMaterialsSection({
 
   function handleDelete(lineId: string) {
     setSectionError(null);
-    startTransition(async () => {
+    void runMaterialTask(async () => {
       const result = await deleteJobMaterialLine(lineId);
       if (!result.success) {
         setSectionError(getActionErrorMessage(result.error, 'edit'));
@@ -795,7 +767,12 @@ export function JobMaterialsSection({
         </div>
       )}
 
-      <ErrorText className="mt-3">{sectionError}</ErrorText>
+      <ErrorText className="mt-3">
+        {sectionError ??
+          (fieldView.isStale
+            ? 'Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar.'
+            : null)}
+      </ErrorText>
 
       <MaterialSelectionDialog
         dialog={dialog}

@@ -5,8 +5,7 @@ import {
   useCallback,
   useEffect,
   useTransition,
-  useMemo,
-  useRef
+  useMemo
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
@@ -20,7 +19,7 @@ import { getRoleLabel } from '@/lib/roles';
 import { QuickStats } from './quick-stats';
 import { PersonnelRecordsSection } from './personnel-records-section';
 import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { OrgRole } from '@/lib/members/actions';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
@@ -124,35 +123,27 @@ export function MitarbeiterTabs({
       router.refresh();
     });
   }, [router, members.length, invites.length, refetchStatus]);
-  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRealtimeRefresh = useCallback(() => {
-    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    realtimeTimerRef.current = setTimeout(() => {
-      realtimeTimerRef.current = null;
-      handleRefresh();
-    }, 150);
-  }, [handleRefresh]);
-  useEffect(
-    () => () => {
-      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    },
-    []
-  );
 
-  // Realtime: refetch server data when invitations or personnel records change
-  useRealtimeEvent('organization_invites', scheduleRealtimeRefresh);
-  useRealtimeEvent('employee_records', scheduleRealtimeRefresh);
-  useRealtimeEvent('employment_conditions', scheduleRealtimeRefresh);
-  useRealtimeEvent('work_schedules', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_closure_days', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_responsibility_configurations', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_responsibility_assignments', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_responsibility_delegations', scheduleRealtimeRefresh);
-  useRealtimeEvent('teams', scheduleRealtimeRefresh);
-  useRealtimeEvent('team_memberships', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_capabilities', scheduleRealtimeRefresh);
-  useRealtimeEvent('employee_capabilities', scheduleRealtimeRefresh);
-  useRealtimeEvent('organization_qualification_settings', scheduleRealtimeRefresh);
+  // Realtime: reload the server-rendered data when invitations or personnel
+  // records change. Member status needs only time_entries, which
+  // useMemberStatusPolling already refetches itself.
+  useRealtimeRouterRefresh({
+    tables: [
+      'organization_invites',
+      'employee_records',
+      'employment_conditions',
+      'work_schedules',
+      'organization_closure_days',
+      'organization_responsibility_configurations',
+      'organization_responsibility_assignments',
+      'organization_responsibility_delegations',
+      'teams',
+      'team_memberships',
+      'organization_capabilities',
+      'employee_capabilities',
+      'organization_qualification_settings',
+    ],
+  });
 
   // Handle role change with optimistic update
   const handleRoleChange = useCallback(

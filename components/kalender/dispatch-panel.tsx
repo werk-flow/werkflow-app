@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -362,8 +362,6 @@ export function DispatchPanel({
   onChanged?: () => void;
   primaryHeaderHeight?: number;
 }) {
-  const [overview, setOverview] = useState<DispatchOverview | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [issueTarget, setIssueTarget] = useState<
     { occurrenceId: string } | { jobId: string } | null
@@ -396,57 +394,35 @@ export function DispatchPanel({
   const [isBatchWorking, setIsBatchWorking] = useState(false);
   const { requestApproval, warningDialog } = usePlanningWarningConfirmation();
 
-  const generationRef = useRef(0);
-  // Ref instead of a state dependency: keep-last-known reads the CURRENT
-  // loaded state without changing the refresh identity per result.
-  const hasOverviewRef = useRef(false);
   const today = useMemo(() => berlinTodayIso(), []);
 
-  const refresh = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<DispatchOverview>({
+    tables: [
+      'planning_dispatches',
+      'planning_dispatch_recipients',
+      'planning_dispatch_acknowledgements',
+      'planning_customer_commitments',
+      'planning_occurrences',
+      'planning_occurrence_assignments',
+    ],
+    read: async (): Promise<LiveViewResult<DispatchOverview>> => {
       const result = await getDispatchOverview(
         today,
         shiftIsoDate(today, OVERVIEW_WINDOW_DAYS)
       );
-      if (generation !== generationRef.current) return;
-      if (result.success) {
-        hasOverviewRef.current = true;
-        setOverview(result.overview);
-        setLoadError(null);
-      } else if (!hasOverviewRef.current) {
-        setLoadError(dispatchErrorMessage(result.error));
-      }
-    } catch {
-      // A rejected server action must not strand the panel in loading state.
-      if (generation !== generationRef.current) return;
-      if (!hasOverviewRef.current) {
-        setLoadError(dispatchErrorMessage('load_failed'));
-      }
-    }
-  }, [today]);
-
-  // One shared debounce: a single planning mutation touches several published
-  // tables; the listeners below must produce one refetch, not six.
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(() => {
-      refreshTimerRef.current = null;
-      void refresh();
-    }, 150);
-  }, [refresh]);
-  useEffect(
-    () => () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      return result.success
+        ? { ok: true, data: result.overview }
+        : { ok: false, error: dispatchErrorMessage(result.error) };
     },
-    []
-  );
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load; state updates happen only after the awaited fetch resolves
-    void refresh();
-  }, [refresh]);
+  });
+  const { refresh } = view;
+  const overview = view.data ?? null;
+  // A failed initial load must not strand the panel in loading state; later
+  // failures keep the last-known overview (the primitive's keep-last-known).
+  const loadError =
+    view.data === undefined && !view.isLoading
+      ? (view.error ?? dispatchErrorMessage('load_failed'))
+      : null;
 
   // Keyboard path for the non-modal panel: Escape closes it — unless an open
   // dialog already consumed the key (Radix prevents default when it handles
@@ -471,13 +447,6 @@ export function DispatchPanel({
       toggle?.focus();
     };
   }, []);
-  useRealtimeEvent('planning_dispatches', scheduleRefresh);
-  useRealtimeEvent('planning_dispatch_recipients', scheduleRefresh);
-  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefresh);
-  useRealtimeEvent('planning_customer_commitments', scheduleRefresh);
-  useRealtimeEvent('planning_occurrences', scheduleRefresh);
-  useRealtimeEvent('planning_occurrence_assignments', scheduleRefresh);
-
   const afterMutation = useCallback(async () => {
     await refresh();
     onChanged?.();

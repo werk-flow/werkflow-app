@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   CalendarCheck,
   FileCheck,
@@ -58,7 +58,7 @@ import {
   type SicknessAbsenceType,
   type SicknessReport,
 } from '@/lib/sickness/types';
-import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
+import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { cn, toLocalDateString } from '@/lib/utils';
 
 // Manager surface (privacy matrix): admin/büro see type and evidence state
@@ -74,56 +74,31 @@ type DialogState =
   | { mode: 'cancel'; report: SicknessReport };
 
 export function SicknessReportsSection({ recordId }: { recordId: string }) {
-  const [reports, setReports] = useState<SicknessReport[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [dialogState, setDialogState] = useState<DialogState>({
     mode: 'closed',
   });
-  const generationRef = useRef(0);
-  const hasDataRef = useRef(false);
 
-  const refetch = useCallback(async () => {
-    const generation = ++generationRef.current;
-    try {
+  const view = useLiveView<SicknessReport[]>({
+    tables: ['sickness_reports'],
+    read: async (): Promise<LiveViewResult<SicknessReport[]>> => {
       const result = await getSicknessReportsForRecord(recordId);
-      if (generation !== generationRef.current) return;
-      if (result.success) {
-        hasDataRef.current = true;
-        setReports(result.reports);
-        setLoadFailed(false);
-      } else if (!hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } catch (error) {
-      console.error('Error fetching sickness reports:', error);
-      if (generation === generationRef.current && !hasDataRef.current) {
-        setLoadFailed(true);
-      }
-    } finally {
-      if (generation === generationRef.current) {
-        setIsLoading(false);
-      }
-    }
-  }, [recordId]);
-
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
-  useRealtimeEvent('sickness_reports', () => {
-    void refetch();
+      return result.success
+        ? { ok: true, data: result.reports }
+        : { ok: false };
+    },
+    resetKey: recordId,
   });
+  const { refresh } = view;
 
   const closeDialog = useCallback(
     (saved: boolean) => {
       setDialogState({ mode: 'closed' });
-      if (saved) void refetch();
+      if (saved) void refresh();
     },
-    [refetch]
+    [refresh]
   );
 
-  const sorted = [...(reports ?? [])].sort((a, b) =>
+  const sorted = [...(view.data ?? [])].sort((a, b) =>
     b.startDate.localeCompare(a.startDate)
   );
 
@@ -145,9 +120,9 @@ export function SicknessReportsSection({ recordId }: { recordId: string }) {
         </Button>
       </div>
 
-      {isLoading ? (
+      {view.isLoading ? (
         <Skeleton className="h-16 w-full" />
-      ) : loadFailed && !reports ? (
+      ) : view.data === undefined ? (
         <ErrorText>Die Krankmeldungen konnten nicht geladen werden.</ErrorText>
       ) : sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground">
