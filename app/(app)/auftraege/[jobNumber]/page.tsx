@@ -17,6 +17,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
+import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import JobDetailLoading from './loading';
 
 interface JobDetailPageProps {
@@ -65,6 +66,11 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
     organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
   });
+  const handoverWorkspacePromise = jobResultPromise.then((result) =>
+    result.success
+      ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id })
+      : null
+  );
 
   const [
     result,
@@ -77,6 +83,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     lifecycleResult,
     artifactsResult,
     approvalHolder,
+    handoverWorkspaceResult,
   ] = await Promise.all([
     jobResultPromise,
     getOrgMembersForUser(activeOrgId, user.id),
@@ -92,6 +99,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     lifecycleResultPromise,
     artifactsResultPromise,
     approvalHolderPromise,
+    handoverWorkspacePromise,
   ]);
 
   if (!result.success) {
@@ -181,6 +189,9 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
           : null
       }
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
+      handoverWorkspace={
+        handoverWorkspaceResult?.success ? handoverWorkspaceResult.workspace : null
+      }
     />
   );
 }

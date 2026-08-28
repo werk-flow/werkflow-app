@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-28
 
 WerkFlow runs on two fully separated backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)). This document is the operational reference: which project is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
 
@@ -59,6 +59,8 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
 - Dev: `bunx supabase db push` (repo is linked to the dev ref), or MCP `apply_migration` against `mbkkzuqjbdvzelqvuzcn`.
 - Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod.
 - After a schema change: regenerate `lib/supabase/database.types.ts` (`bunx supabase gen types typescript --project-id mbkkzuqjbdvzelqvuzcn --schema public`) — dev and prod schemas are identical, so dev is the generation source.
+
+**Latest parity checkpoint (P1-17, 2026-08-28):** migrations `20260827150000` through `20260827151400` were applied DEV-first and then identically to production. Fresh DEV-generated types exactly match `lib/supabase/database.types.ts`. Both Security Advisors returned zero findings; migration 1514 removed every new unindexed-foreign-key notice. Production retained 40 jobs and 14 projects and received zero rows in all five handover tables. Performance Advisor `unused_index` notices on the new empty tables are expected until real workload exists; they are not a reason to remove foreign-key or query-path indexes before usage data exists.
 
 ## Per-machine onboarding checklist
 

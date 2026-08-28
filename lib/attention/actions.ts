@@ -19,6 +19,7 @@ import { getBusinessTodayIso, toBusinessIsoDate } from '@/lib/personnel/types';
 import { formatProfileName } from '@/lib/members/profile-name';
 import type { OrgRole } from '@/lib/members/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
+import { resolveProjectHandoverExecutionState } from '@/lib/work-handover/project-state';
 import {
   getPendingChangeRequests,
   getPendingSessions,
@@ -1003,6 +1004,183 @@ async function deriveWorkArtifactTasks(
   return { tasks, failed: false };
 }
 
+async function deriveWorkHandoverTasks(
+  context: ActionContext
+): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
+  const holder = await getEffectiveResponsibilityHolderForActor({
+    organizationId: context.orgId,
+    responsibility: 'work_handover_review',
+    actorUserId: context.userId,
+  });
+  if (!holder) return { tasks: [], failed: false };
+
+  const admin = createSupabaseAdminClient();
+  const [jobsResult, terminalChildSignalsResult, explicitProjectsResult] = await Promise.all([
+    admin.from('jobs').select('id, job_number, title, execution_version, project_id')
+      .eq('organization_id', context.orgId)
+      .or('execution_state.eq.execution_complete,and(execution_state.is.null,status.eq.fertig)')
+      .order('updated_at', { ascending: true }).limit(301),
+    admin.from('jobs').select('project_id')
+      .eq('organization_id', context.orgId)
+      .not('project_id', 'is', null)
+      .or(
+        'execution_state.in.(execution_complete,handed_over,cancelled),and(execution_state.is.null,status.eq.fertig)'
+      )
+      .order('updated_at', { ascending: true })
+      .limit(5001),
+    admin.from('projects').select(
+      'id, project_number, name, execution_version, execution_state_override, status_override'
+    )
+      .eq('organization_id', context.orgId)
+      .or(
+        'execution_state_override.eq.execution_complete,and(execution_state_override.is.null,status_override.eq.abgeschlossen)'
+      )
+      .order('updated_at', { ascending: true }).limit(301),
+  ]);
+  if (jobsResult.error || terminalChildSignalsResult.error || explicitProjectsResult.error
+    || (jobsResult.data?.length ?? 0) > 300
+    || (terminalChildSignalsResult.data?.length ?? 0) > 5000
+    || (explicitProjectsResult.data?.length ?? 0) > 300
+  ) {
+    console.error('Failed to load bounded work handover attention contexts:', {
+      code: (
+        jobsResult.error ?? terminalChildSignalsResult.error ?? explicitProjectsResult.error
+      )?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+
+  const childProjectIds = [...new Set(
+    (terminalChildSignalsResult.data ?? []).flatMap((job) => (
+      job.project_id ? [job.project_id] : []
+    ))
+  )];
+  if (childProjectIds.length > 300) {
+    console.error('Failed to load bounded work handover attention contexts:', {
+      code: 'project_candidate_overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  const derivedProjectsResult = childProjectIds.length
+    ? await admin.from('projects').select(
+        'id, project_number, name, execution_version, execution_state_override, status_override'
+      )
+        .eq('organization_id', context.orgId)
+        .in('id', childProjectIds)
+        .is('execution_state_override', null)
+        .order('updated_at', { ascending: true })
+        .limit(301)
+    : { data: [], error: null };
+  if (derivedProjectsResult.error || (derivedProjectsResult.data?.length ?? 0) > 300) {
+    console.error('Failed to load derived project handover attention contexts:', {
+      code: derivedProjectsResult.error?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  const possibleProjects = [...new Map([
+    ...(explicitProjectsResult.data ?? []),
+    ...(derivedProjectsResult.data ?? []),
+  ].map((project) => [project.id, project])).values()];
+  if (possibleProjects.length > 300) {
+    console.error('Failed to load bounded work handover attention contexts:', {
+      code: 'project_candidate_overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  const possibleProjectIds = possibleProjects.map((project) => project.id);
+  const projectJobsResult = possibleProjectIds.length
+    ? await admin.from('jobs').select('project_id, execution_state, status')
+        .eq('organization_id', context.orgId).in('project_id', possibleProjectIds).limit(5001)
+    : { data: [], error: null };
+  if (projectJobsResult.error || (projectJobsResult.data?.length ?? 0) > 5000) {
+    console.error('Failed to load bounded project handover states:', {
+      code: projectJobsResult.error?.code ?? 'overflow',
+    });
+    return { tasks: [], failed: true };
+  }
+  const childJobsByProject = new Map<string, Array<{
+    executionState: NonNullable<typeof projectJobsResult.data>[number]['execution_state'];
+    status: NonNullable<typeof projectJobsResult.data>[number]['status'];
+  }>>();
+  for (const childJob of projectJobsResult.data ?? []) {
+    if (!childJob.project_id) continue;
+    const projectJobs = childJobsByProject.get(childJob.project_id) ?? [];
+    projectJobs.push({ executionState: childJob.execution_state, status: childJob.status });
+    childJobsByProject.set(childJob.project_id, projectJobs);
+  }
+  const projects = possibleProjects.filter((project) => (
+    resolveProjectHandoverExecutionState(
+      project.execution_state_override,
+      project.status_override,
+      childJobsByProject.get(project.id) ?? [],
+    ) === 'execution_complete'
+  ));
+  const jobIds = (jobsResult.data ?? []).map((job) => job.id);
+  const projectIds = projects.map((project) => project.id);
+  const parentProjectIds = [...new Set(
+    (jobsResult.data ?? []).flatMap((job) => job.project_id ? [job.project_id] : [])
+  )];
+  const [jobPackagesResult, projectPackagesResult, parentProjectsResult] = await Promise.all([
+    jobIds.length
+      ? admin.from('work_handover_packages').select('id, job_id, state, version')
+          .eq('organization_id', context.orgId).in('job_id', jobIds)
+      : { data: [], error: null },
+    projectIds.length
+      ? admin.from('work_handover_packages').select('id, project_id, state, version')
+          .eq('organization_id', context.orgId).in('project_id', projectIds)
+      : { data: [], error: null },
+    parentProjectIds.length
+      ? admin.from('projects').select('id, project_number')
+          .eq('organization_id', context.orgId).in('id', parentProjectIds)
+      : { data: [], error: null },
+  ]);
+  if (jobPackagesResult.error || projectPackagesResult.error || parentProjectsResult.error) {
+    console.error('Failed to load work handover attention package states:', {
+      code: (
+        jobPackagesResult.error ?? projectPackagesResult.error ?? parentProjectsResult.error
+      )?.code ?? 'unknown',
+    });
+    return { tasks: [], failed: true };
+  }
+  const jobPackages = new Map((jobPackagesResult.data ?? []).map((entry) => [entry.job_id, entry]));
+  const projectPackages = new Map((projectPackagesResult.data ?? []).map((entry) => [entry.project_id, entry]));
+  const projectNumbers = new Map(
+    (parentProjectsResult.data ?? []).map((project) => [project.id, project.project_number])
+  );
+  const tasks: AttentionTask[] = [];
+  for (const job of jobsResult.data ?? []) {
+    const handoverPackage = jobPackages.get(job.id);
+    if (handoverPackage?.state === 'released') continue;
+    const projectNumber = job.project_id ? projectNumbers.get(job.project_id) : null;
+    tasks.push({
+      sourceType: 'work_handover_review', sourceId: job.id, targetType: 'job',
+      targetLabel: job.job_number ? `${job.job_number} · ${job.title}` : job.title,
+      targetHref: job.job_number && projectNumber
+        ? `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(job.job_number)}/uebergabe`
+        : job.job_number && !job.project_id
+          ? `/auftraege/${encodeURIComponent(job.job_number)}/uebergabe`
+          : `/auftraege/uebergaben/auftrag/${job.id}`,
+      packageState: handoverPackage?.state ?? 'missing',
+      stateVersion: `job:${job.execution_version}:${handoverPackage?.version ?? 0}`,
+    });
+  }
+  for (const project of projects) {
+    const handoverPackage = projectPackages.get(project.id);
+    if (handoverPackage?.state === 'released') continue;
+    tasks.push({
+      sourceType: 'work_handover_review', sourceId: project.id, targetType: 'project',
+      targetLabel: project.project_number
+        ? `${project.project_number} · ${project.name}` : project.name,
+      targetHref: project.project_number
+        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}/uebergabe`
+        : `/auftraege/uebergaben/projekt/${project.id}`,
+      packageState: handoverPackage?.state ?? 'missing',
+      stateVersion: `project:${project.execution_version}:${handoverPackage?.version ?? 0}`,
+    });
+  }
+  return { tasks, failed: false };
+}
+
 // The reason belonging to a decision's current status: the cancellation
 // reason for cancelled requests, otherwise the decision comment.
 function resolveDecisionReason(
@@ -1375,6 +1553,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       dispatchChallenges,
       parkingReviews,
       workArtifacts,
+      workHandovers,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -1387,6 +1566,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       deriveDispatchChallengeTasks(context),
       deriveParkingReviewTasks(context),
       deriveWorkArtifactTasks(context),
+      deriveWorkHandoverTasks(context),
       deriveOwnNotifications(context),
       deriveSicknessNotifications(context),
       deriveCertificationExpiryNotifications(context),
@@ -1403,6 +1583,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
       dispatchChallenges.failed ||
       parkingReviews.failed ||
       workArtifacts.failed ||
+      workHandovers.failed ||
       notifications.failed ||
       sicknessNotifications.failed ||
       certificationNotifications.failed ||
@@ -1438,6 +1619,7 @@ export async function getAttentionOverview(): Promise<AttentionOverviewResult> {
           ...dispatchChallenges.tasks,
           ...parkingReviews.tasks,
           ...workArtifacts.tasks,
+          ...workHandovers.tasks,
         ]),
         notifications: sortNotificationsNewestFirst(
           dedupeAttentionItems([
@@ -1478,6 +1660,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       dispatchChallenges,
       parkingReviews,
       workArtifacts,
+      workHandovers,
       notifications,
       sicknessNotifications,
       certificationNotifications,
@@ -1490,6 +1673,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
         deriveDispatchChallengeTasks(context),
         deriveParkingReviewTasks(context),
         deriveWorkArtifactTasks(context),
+        deriveWorkHandoverTasks(context),
         deriveOwnNotifications(context),
         deriveSicknessNotifications(context),
         deriveCertificationExpiryNotifications(context),
@@ -1502,6 +1686,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       dispatchChallenges.failed ||
       parkingReviews.failed ||
       workArtifacts.failed ||
+      workHandovers.failed ||
       notifications.failed ||
       sicknessNotifications.failed
       || certificationNotifications.failed
@@ -1517,6 +1702,7 @@ export async function getAttentionCounts(): Promise<AttentionCountsResult> {
       ...dispatchChallenges.tasks,
       ...parkingReviews.tasks,
       ...workArtifacts.tasks,
+      ...workHandovers.tasks,
     ]);
     const allNotifications = dedupeAttentionItems([
       ...notifications.notifications,

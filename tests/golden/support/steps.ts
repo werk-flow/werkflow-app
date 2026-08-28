@@ -6,6 +6,14 @@ export function visibleText(page: Page, text: string): Locator {
   return page.getByText(text).filter({ visible: true }).first();
 }
 
+export async function selectAllHandoverSources(section: Locator): Promise<void> {
+  await expect(section.getByRole('checkbox').first()).toBeAttached({ timeout: 20_000 });
+  const sourceCheckboxes = await section.getByRole('checkbox').all();
+  for (const checkbox of sourceCheckboxes) {
+    if (!(await checkbox.isChecked())) await checkbox.check();
+  }
+}
+
 // Reusable business-step helpers. Golden-gate specs compose these steps; when
 // a slice changes the UI, update the step here once and every gate follows.
 
@@ -265,12 +273,12 @@ export async function createAndPublishWorkTemplate(
 
 // Uploads into the "Dokumente & Bilder" section of the page currently open.
 // Shared by the job-page and request-page upload steps.
-async function uploadIntoDocumentsSection(
+export async function uploadIntoDocumentsSection(
   page: Page,
   filePath: string,
   expectedFileName: string
 ): Promise<void> {
-  await expect(page.getByText('Dokumente & Bilder')).toBeVisible();
+  await expect(page.getByText('Dokumente & Bilder')).toBeVisible({ timeout: 30_000 });
 
   const section = page
     .locator('section, div')

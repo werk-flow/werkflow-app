@@ -2388,3 +2388,97 @@ export async function getVisibleDispatchStateAs(
     tables.map((table, index) => [table, counts[index]])
   ) as Record<(typeof tables)[number], number>;
 }
+
+export async function getWorkHandoverState(
+  orgId: string,
+  target: { jobNumber: string } | { projectNumber: string }
+) {
+  const admin = createAdminClient();
+  const isJob = 'jobNumber' in target;
+  const targetResult = isJob
+    ? await admin.from('jobs').select('id, execution_state, execution_version')
+        .eq('organization_id', orgId).eq('job_number', target.jobNumber).single()
+    : await admin.from('projects').select('id, execution_state_override, execution_version')
+        .eq('organization_id', orgId).eq('project_number', target.projectNumber).single();
+  if (targetResult.error) {
+    throw new Error(`Handover target lookup failed: ${targetResult.error.message}`);
+  }
+  const targetColumn = isJob ? 'job_id' : 'project_id';
+  const packageResult = await admin.from('work_handover_packages').select('*')
+    .eq('organization_id', orgId).eq(targetColumn, targetResult.data.id).maybeSingle();
+  if (packageResult.error) {
+    throw new Error(`Handover package lookup failed: ${packageResult.error.message}`);
+  }
+  if (!packageResult.data) {
+    return {
+      target: targetResult.data,
+      package: null,
+      draftItems: [],
+      releases: [],
+      releaseItems: [],
+      events: [],
+      documents: [],
+    };
+  }
+  const packageId = packageResult.data.id;
+  const [draftResult, releaseResult, eventResult] = await Promise.all([
+    admin.from('work_handover_draft_items').select('*')
+      .eq('organization_id', orgId).eq('package_id', packageId).order('sort_order'),
+    admin.from('work_handover_releases').select('*')
+      .eq('organization_id', orgId).eq('package_id', packageId).order('release_number'),
+    admin.from('work_handover_events').select('*')
+      .eq('organization_id', orgId).eq('package_id', packageId).order('created_at').order('id'),
+  ]);
+  const firstError = draftResult.error ?? releaseResult.error ?? eventResult.error;
+  if (firstError) throw new Error(`Handover ledger lookup failed: ${firstError.message}`);
+  const releaseIds = (releaseResult.data ?? []).map((release) => release.id);
+  const documentIds = (releaseResult.data ?? [])
+    .map((release) => release.package_document_id)
+    .filter((documentId): documentId is string => Boolean(documentId));
+  const [itemResult, documentResult] = await Promise.all([
+    releaseIds.length
+      ? admin.from('work_handover_release_items').select('*')
+          .eq('organization_id', orgId).in('release_id', releaseIds)
+          .order('release_id').order('sort_order')
+      : Promise.resolve({ data: [], error: null }),
+    documentIds.length
+      ? admin.from('documents').select('id, storage_path, display_name, current_version_number, size_bytes')
+          .eq('organization_id', orgId).in('id', documentIds).order('id')
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (itemResult.error || documentResult.error) {
+    throw new Error(`Handover release lookup failed: ${(itemResult.error ?? documentResult.error)?.message}`);
+  }
+  return {
+    target: targetResult.data,
+    package: packageResult.data,
+    draftItems: draftResult.data ?? [],
+    releases: releaseResult.data ?? [],
+    releaseItems: itemResult.data ?? [],
+    events: eventResult.data ?? [],
+    documents: documentResult.data ?? [],
+  };
+}
+
+export async function getVisibleWorkHandoverCountsAs(
+  user: { email: string; password: string },
+  orgId: string
+) {
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      'work_handover_packages',
+      'work_handover_draft_items',
+      'work_handover_releases',
+      'work_handover_release_items',
+      'work_handover_events',
+    ] as const;
+    const counts = {} as Record<(typeof tables)[number], number>;
+    for (const table of tables) {
+      const { count, error } = await client.from(table).select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId);
+      if (error) throw new Error(`Handover RLS lookup failed for ${table}: ${error.message}`);
+      counts[table] = count ?? 0;
+    }
+    return counts;
+  });
+}

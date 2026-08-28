@@ -1,6 +1,6 @@
 # Technical Architecture
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-28
 
 This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`.
 
@@ -101,12 +101,15 @@ The core implemented domain currently includes:
 - Job instruction items.
 - Time entries and change requests.
 - Organization settings and per-user organization preferences.
+- Durable office-handover package roots with immutable exact-version releases and append-only events.
 
 Do not maintain a manual column-by-column schema in docs. If schema details matter:
 
 1. Inspect live Supabase through the MCP/plugin workflow.
 2. Check generated types in `lib/supabase/database.types.ts`.
 3. Then update app code and docs if the conceptual model changed.
+
+P1-17 follows the existing storage boundary: the server renders deterministic customer-safe HTML and uploads those bytes directly to the organization-scoped EU R2 path through the storage adapter; a guarded database RPC then atomically registers document metadata, immutable release facts and the lifecycle transition. Source document/artifact bytes are referenced by exact identity, never copied through a Server Action. A failed post-upload registration deletes the object only after proving no committed document or release references it.
 
 ## Caching And Freshness
 
@@ -123,7 +126,7 @@ The product principle is fast initial load with fresh operational data. Avoid ad
 
 Supabase Realtime is centralized through `components/realtime/realtime-provider.tsx`.
 
-The provider subscribes to organization-scoped tables such as time entries, change requests, invites, members, settings, clients, jobs, projects, assignments, and instruction items. Events are debounced to avoid unnecessary refresh storms.
+The provider subscribes to organization-scoped tables such as time entries, change requests, invites, members, settings, clients, jobs, projects, assignments, instruction items and the mutable handover-package root. Events are debounced to avoid unnecessary refresh storms; immutable handover releases/items/events stay unpublished and refetch behind the root signal.
 
 `hooks/use-realtime-router-refresh.ts` lets components refresh the current route when subscribed tables change.
 

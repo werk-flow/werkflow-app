@@ -162,15 +162,18 @@ export function AufgabenContent() {
   // One shared 150ms debounce for all Realtime triggers (mirrors the count
   // provider): a burst of related row changes causes one refetch, not eight.
   const refetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleRefetch = useCallback(() => {
+  const scheduleRefetch = useCallback((delay = 150) => {
     if (refetchTimerRef.current) {
       clearTimeout(refetchTimerRef.current);
     }
     refetchTimerRef.current = setTimeout(() => {
       refetchTimerRef.current = null;
       void refetch();
-    }, 150);
+    }, delay);
   }, [refetch]);
+  const scheduleDefaultRefetch = useCallback(() => {
+    scheduleRefetch();
+  }, [scheduleRefetch]);
 
   useEffect(() => {
     return () => {
@@ -180,24 +183,27 @@ export function AufgabenContent() {
     };
   }, []);
 
-  useRealtimeEvent('time_entries', scheduleRefetch);
-  useRealtimeEvent('entry_change_requests', scheduleRefetch);
-  useRealtimeEvent('vacation_requests', scheduleRefetch);
-  useRealtimeEvent('sickness_reports', scheduleRefetch);
-  useRealtimeEvent('employee_capabilities', scheduleRefetch);
-  useRealtimeEvent('organization_capabilities', scheduleRefetch);
-  useRealtimeEvent('client_requests', scheduleRefetch);
-  useRealtimeEvent('client_follow_ups', scheduleRefetch);
-  useRealtimeEvent('planning_dispatches', scheduleRefetch);
-  useRealtimeEvent('planning_dispatch_recipients', scheduleRefetch);
-  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleRefetch);
-  useRealtimeEvent('work_blockers', scheduleRefetch);
-  useRealtimeEvent('work_artifacts', scheduleRefetch);
-  useRealtimeEvent('attention_read_states', scheduleRefetch);
-  useRealtimeEvent('organization_responsibility_configurations', scheduleRefetch);
-  useRealtimeEvent('organization_responsibility_assignments', scheduleRefetch);
-  useRealtimeEvent('organization_responsibility_delegations', scheduleRefetch);
-  useBusinessDayRefresh(scheduleRefetch);
+  useRealtimeEvent('time_entries', scheduleDefaultRefetch);
+  useRealtimeEvent('entry_change_requests', scheduleDefaultRefetch);
+  useRealtimeEvent('vacation_requests', scheduleDefaultRefetch);
+  useRealtimeEvent('sickness_reports', scheduleDefaultRefetch);
+  useRealtimeEvent('employee_capabilities', scheduleDefaultRefetch);
+  useRealtimeEvent('organization_capabilities', scheduleDefaultRefetch);
+  useRealtimeEvent('client_requests', scheduleDefaultRefetch);
+  useRealtimeEvent('client_follow_ups', scheduleDefaultRefetch);
+  useRealtimeEvent('planning_dispatches', scheduleDefaultRefetch);
+  useRealtimeEvent('planning_dispatch_recipients', scheduleDefaultRefetch);
+  useRealtimeEvent('planning_dispatch_acknowledgements', scheduleDefaultRefetch);
+  useRealtimeEvent('work_blockers', scheduleDefaultRefetch);
+  useRealtimeEvent('work_artifacts', scheduleDefaultRefetch);
+  useRealtimeEvent('jobs', () => scheduleRefetch(500));
+  useRealtimeEvent('projects', () => scheduleRefetch(500));
+  useRealtimeEvent('work_handover_packages', scheduleDefaultRefetch);
+  useRealtimeEvent('attention_read_states', scheduleDefaultRefetch);
+  useRealtimeEvent('organization_responsibility_configurations', scheduleDefaultRefetch);
+  useRealtimeEvent('organization_responsibility_assignments', scheduleDefaultRefetch);
+  useRealtimeEvent('organization_responsibility_delegations', scheduleDefaultRefetch);
+  useBusinessDayRefresh(scheduleDefaultRefetch);
 
   const handleMarkRead = async (notification: AttentionNotification) => {
     if (busyKey) return;
@@ -290,6 +296,9 @@ export function AufgabenContent() {
   const dueDefectTasks = overview.tasks.filter(
     (task) => task.sourceType === 'work_defect_due'
   );
+  const handoverTasks = overview.tasks.filter(
+    (task) => task.sourceType === 'work_handover_review'
+  );
   const unreadCount = overview.notifications.filter(
     (notification) => notification.unread
   ).length;
@@ -314,6 +323,7 @@ export function AufgabenContent() {
           parkingReviewTasks.length === 0 &&
           artifactReviewTasks.length === 0 &&
           artifactCorrectionTasks.length === 0 &&
+          handoverTasks.length === 0 &&
           dueDefectTasks.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Keine offenen Aufgaben.
@@ -363,6 +373,18 @@ export function AufgabenContent() {
             testId="attention-work-artifact-tasks"
           >
             {[...artifactReviewTasks, ...artifactCorrectionTasks].map((task) => (
+              <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
+            ))}
+          </TaskGroup>
+        )}
+
+        {handoverTasks.length > 0 && (
+          <TaskGroup
+            icon={<ClipboardCheck className="size-4" />}
+            title="Übergaben prüfen"
+            testId="attention-work-handover-tasks"
+          >
+            {handoverTasks.map((task) => (
               <TaskRow key={`${task.sourceType}:${task.sourceId}`} task={task} />
             ))}
           </TaskGroup>
@@ -743,6 +765,25 @@ function TaskRow({ task }: { task: AttentionTask }) {
         <p className="truncate text-sm font-medium">{task.artifactTitle}</p>
         <p className="text-xs text-muted-foreground tabular-nums">
           {task.targetLabel} · fällig {formatDate(task.dueDate)}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'work_handover_review') {
+    return (
+      <TaskLink
+        href={task.targetHref}
+        ariaLabel={`Übergabe für ${task.targetLabel} prüfen`}
+        sourceId={task.sourceId}
+      >
+        <p className="truncate text-sm font-medium">{task.targetLabel}</p>
+        <p className="text-xs text-muted-foreground">
+          {task.packageState === 'reopened'
+            ? 'Erneute Freigabe erforderlich'
+            : task.packageState === 'draft'
+              ? 'Entwurf prüfen und freigeben'
+              : 'Übergabepaket vorbereiten'}
         </p>
       </TaskLink>
     );

@@ -101,6 +101,8 @@ import type {
   ProjectMaterialSummary,
 } from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
+import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
+import { WorkHandoverSummary } from './work-handover-section';
 
 const PROJECT_STATUS_CLASSES: Record<ProjectStatus, string> = {
   nicht_begonnen: 'bg-secondary text-secondary-foreground',
@@ -190,6 +192,7 @@ interface ProjectDetailContentProps {
   inventoryItems: InventoryPickerOption[];
   inventoryLocations: InventoryLocation[];
   lifecycleSnapshot: WorkLifecycleSnapshot | null;
+  handoverWorkspace: WorkHandoverWorkspace | null;
   // Set when this project was created by converting an Anfrage (P1-02).
   originRequest?: { label: string; href: string } | null;
 }
@@ -210,6 +213,7 @@ export function ProjectDetailContent({
   inventoryItems,
   inventoryLocations,
   lifecycleSnapshot,
+  handoverWorkspace,
   originRequest,
 }: ProjectDetailContentProps) {
   const router = useRouter();
@@ -754,6 +758,16 @@ export function ProjectDetailContent({
             />
           ) : (
             <WorkLifecycleLoadError />
+          )}
+          {handoverWorkspace && (
+            <div className="mt-4">
+              <WorkHandoverSummary
+                workspace={handoverWorkspace}
+                href={liveProject.projectNumber
+                  ? `/auftraege/projekt/${encodeURIComponent(liveProject.projectNumber)}/uebergabe`
+                  : `/auftraege/uebergaben/projekt/${handoverWorkspace.targetId}`}
+              />
+            </div>
           )}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">

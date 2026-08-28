@@ -18,6 +18,7 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
+import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
@@ -78,6 +79,11 @@ async function NestedJobDetailData({
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
     organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
   });
+  const handoverWorkspacePromise = jobResultPromise.then((result) =>
+    result.success
+      ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id })
+      : null
+  );
 
   const [
     projectResult,
@@ -91,6 +97,7 @@ async function NestedJobDetailData({
     lifecycleResult,
     artifactsResult,
     approvalHolder,
+    handoverWorkspaceResult,
   ] = await Promise.all([
     getProjectByNumber(decodeURIComponent(projectNumber)),
     jobResultPromise,
@@ -107,6 +114,7 @@ async function NestedJobDetailData({
     lifecycleResultPromise,
     artifactsResultPromise,
     approvalHolderPromise,
+    handoverWorkspacePromise,
   ]);
 
   if (!projectResult.success || !jobResult.success) {
@@ -184,6 +192,9 @@ async function NestedJobDetailData({
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
+      handoverWorkspace={
+        handoverWorkspaceResult?.success ? handoverWorkspaceResult.workspace : null
+      }
     />
   );
 }

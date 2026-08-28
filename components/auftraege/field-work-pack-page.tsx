@@ -29,6 +29,8 @@ import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
+import { getWorkHandoverFieldStatus } from '@/lib/work-handover/actions';
+import { FieldWorkHandoverStatus } from '@/components/auftraege/work-handover-section';
 
 export async function FieldWorkPackPage({
   jobNumber,
@@ -66,6 +68,7 @@ export async function FieldWorkPackPage({
     artifactsResult,
     timeResult,
     dispatchResult,
+    handoverStatusResult,
   ] = await Promise.all([
     getJobInstructionItems(job.id),
     getJobDocuments(job.id),
@@ -74,6 +77,7 @@ export async function FieldWorkPackPage({
     getWorkArtifacts({ targetType: 'job', targetId: job.id }),
     getTimeEntriesForJob(job.id),
     getJobDispatchCards(job.id),
+    getWorkHandoverFieldStatus(job.id),
   ]);
 
   const fieldJob = projectFieldWorkPackJob(job);
@@ -145,6 +149,17 @@ export async function FieldWorkPackPage({
           lifecycleSnapshot={lifecycleResult.success ? lifecycleResult.snapshot : null}
           readOnly={readOnly}
         />
+
+        <FieldWorkPackSource
+          sourceId={`${job.id}:handover`}
+          success={handoverStatusResult.success}
+          title="Übergabestand nicht verfügbar"
+          description="Der Übergabestand konnte nicht geladen werden. Bitte lade ihn erneut, bevor du dich darauf verlässt."
+        >
+          {handoverStatusResult.success
+            ? <FieldWorkHandoverStatus status={handoverStatusResult.status} />
+            : null}
+        </FieldWorkPackSource>
 
         <FieldWorkPackSource
           sourceId={`${job.id}:instructions`}

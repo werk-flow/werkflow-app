@@ -89,17 +89,21 @@ describe("work lifecycle", () => {
     });
   });
 
-  test("keeps cancellation, handover, and terminal reopening manager-owned", () => {
+  test("keeps cancellation manager-owned and routes handover through its package workflow", () => {
     expect(getAllowedWorkTransitions("in_progress", false)).toEqual([
       "interrupted",
       "execution_complete",
     ]);
     expect(getAllowedWorkTransitions("execution_complete", false)).toEqual([]);
     expect(getAllowedWorkTransitions("cancelled", false)).toEqual([]);
-    expect(getAllowedWorkTransitions("execution_complete", true)).toEqual([
-      "handed_over",
-      "in_progress",
+    expect(getAllowedWorkTransitions("execution_complete", true)).toEqual(["in_progress"]);
+    expect(getAllowedWorkTransitions("handed_over", true)).toEqual([]);
+    expect(getAllowedWorkTransitions("in_progress", true)).toEqual([
+      "interrupted",
+      "execution_complete",
+      "cancelled",
     ]);
+    expect(getAllowedWorkTransitions("cancelled", true)).toEqual(["not_started"]);
   });
 
   test("prioritizes parking, blockers, and prerequisites over state guidance", () => {

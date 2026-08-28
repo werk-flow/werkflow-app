@@ -1,6 +1,6 @@
 # Conceptual Data Model
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-28
 
 This document describes WerkFlow's domain model at a conceptual level. It is not a schema dump.
 
@@ -56,7 +56,7 @@ Role behavior should be designed around the product context:
 
 Responsibilities restrict a small number of operational actions without turning the fixed role enum into a generic permission system:
 
-- Responsibility vocabulary: `time_approval` and `leave_approval`. They are stored as stable English enum values and presented as **Zeitfreigaben** and **Urlaubsfreigaben**.
+- Responsibility vocabulary: `time_approval`, `leave_approval`, `work_artifact_approval` and `work_handover_review`. They are stored as stable English enum values and presented as **Zeitfreigaben**, **Urlaubsfreigaben**, **Arbeitsnachweise freigeben** and **Übergaben prüfen**.
 - Responsibility configuration: append-only, organization-scoped effective versions. `role_default` snapshots active Admin/Büro memberships; `selected` snapshots a non-empty named holder set. The effective version is the newest `effective_from <= action time`, with deterministic tie-breaking. Organizations received default snapshots, so migration changed no existing authority. Since `P1-06` the server-side action time is clock-skew guarded: configurations are stamped with the database clock, so an app server whose clock trails the database floors its action time to the newest configuration timestamp — a just-applied configuration is always effective at the next action and a freshly revoked holder can never remain authorized for the skew window.
 - Responsibility assignment: an immutable member of one configuration snapshot, keyed to `employee_record_id`. The personnel record supplies the organization-stable person identity; authorization is only effective while that record is linked to an active organization membership/login. An assignment source is `role_default` with its role snapshot or `direct`.
 - Responsibility delegation/substitute: references a base holder record and substitute record in the same organization and responsibility. `valid_from` and `valid_until` are inclusive Europe/Berlin business dates; `revoked_from` is the first date on which an early-ended window no longer applies. Rows are retained, not deleted, so historical authority remains reconstructible.
@@ -68,7 +68,7 @@ Responsibilities restrict a small number of operational actions without turning 
 
 One role-aware task/approval/notification pattern serves every feature instead of per-feature inboxes. Its data-model rule is strict: **attention items are derived, never stored.**
 
-- An attention item is identified by `source_type` + `source_id` (e.g. `vacation_request_approval` + the request id). The vocabulary: `time_session_approval`, `time_change_request_approval`, `vacation_request_approval`, `client_request_open`, `vacation_decision`, and since `P1-08` `sickness_report` (a two-audience notification: managers learn of reports they did not record, the affected person learns of office-recorded reports/cancellations; the state version is built from the availability-relevant facts, so corrections re-surface the same item unread while evidence bookkeeping does not). Later slices (qualification warnings `P1-09`, follow-ups `P1-10`, corrections `P1-22`, procurement approvals `P1-29`) extend this vocabulary and the database CHECK constraints on BOTH pattern tables plus the `app_private.validate_attention_source_org` trigger — they never add parallel item storage.
+- An attention item is identified by `source_type` + `source_id` (e.g. `vacation_request_approval` + the request id). The vocabulary includes time/vacation approvals, customer requests/follow-ups, sickness and qualification facts, work-artifact review/correction/defect facts and, since P1-17, `work_handover_review` for execution-complete work without a current release. Later slices extend this vocabulary and the database CHECK constraints on BOTH pattern tables plus the `app_private.validate_attention_source_org` trigger — they never add parallel item storage.
 - Items are resolved live by the server boundary (`lib/attention/actions.ts` + the pure helpers in `lib/attention/resolution.ts`) from the owning domains through their own loaders and authorization paths (`time_approval`/`leave_approval` responsibility resolution at derivation time, manager role for requests). There is no materialized task table, so a decision made on any surface can never leave a stale copy behind. Deduplication (one item per source record per viewer, regardless of how many authorization paths apply) happens in the resolver.
 - The only stored pattern state: `attention_read_states` (per-user read markers keyed by item identity plus an opaque `state_version`; a domain state change — e.g. approve → cancel — produces a new version and makes the same item unread again) and append-only `attention_events` (pattern-level audit: who marked what read, when). Neither table duplicates a domain column; every disappearance of an item is explainable from the owning domain's own history.
 - Access: read markers are strictly self-scoped SELECT (`user_id = auth.uid()`), pattern events self-or-manager; all writes are service-role server actions. A validation trigger checks membership and that the referenced source row lives in the same organization. Both tables are Realtime-published with replica identity full.
@@ -134,6 +134,15 @@ Concepts:
 - `job_instruction_evidence_fulfillments` is the current attributable link from one expected-evidence row to one document or artifact revision. Removal is versioned and reasoned; the expectation itself stays in the instruction domain.
 - P1-14 declared approval dependencies can reference one current `internal_approved` artifact action. Lifecycle gate snapshots derive required evidence, customer decisions, signatures, defects and formal approval facts without storing a second lifecycle state.
 - Mutable `work_artifacts` and active evidence fulfilments use organization-scoped RLS, replica identity full and Realtime publication. Revisions, detail rows, relations and actions are immutable unpublished ledgers. Business writes use action-time authorized, organization-scoped, version-checked and request-idempotent RPCs.
+
+### Work Handover Domain (P1-17)
+
+- `work_handover_packages` is one organization-scoped mutable root for exactly one job or one project. It carries the draft version, current state and current immutable release pointer; existing work receives no fabricated row.
+- Draft membership selects exact approved work-artifact revisions, exact document versions/storage paths and, for a project, exact immutable releases of its own child jobs.
+- `work_handover_releases` is numbered and immutable. It freezes target/customer context, exact membership, gate snapshot/fingerprint, effective responsibility, exception/readiness result, deterministic renderer/content hash and package document identity.
+- Release items preserve source identities without taking ownership of source-domain facts. Append-only events preserve save/release/withdrawal/correction/successor history and request-id idempotency.
+- Package release and withdrawal are transactionally coupled to the P1-14 lifecycle. A project owns its handover: handed-over children can derive project execution completion but never hand over the project automatically.
+- `work_handover_review` extends scoped responsibility without changing fixed roles. Attention remains a live projection from package/lifecycle facts rather than a materialized task row. Only the mutable package root is Realtime-published; immutable releases/items/events refetch behind that signal.
 
 Ownership rule: sites, contacts, manual follow-ups, and communication guidance belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity). Customer master and P1-10 relationship reads are manager-only under RLS; field workers receive only purpose-limited context through assigned work.
 

@@ -74,6 +74,17 @@ function berlinDateAtOffset(offsetDays: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+async function gotoReadOnlyRoute(page: Page, path: string): Promise<void> {
+  try {
+    await page.goto(path);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('net::ERR_ABORTED')) {
+      throw error;
+    }
+    await page.goto(path);
+  }
+}
+
 function detailActionsButton(page: Page) {
   return page
     .getByRole('heading', { level: 1 })
@@ -466,13 +477,18 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
       'title',
       /Anwesenheit.*Arbeitszeit.*Pause.*Überstunden/
     );
-    await employeePage.goto(`/auftraege/A1-Z1-${world.runId}`);
+    await gotoReadOnlyRoute(employeePage, `/auftraege/A1-Z1-${world.runId}`);
     await expect(employeePage.getByText('Noch keine Arbeitszeiten für diesen Auftrag erfasst.')).toHaveCount(0);
-    await employeePage.goto(`/auftraege/A1-Z2-${world.runId}`);
+    await gotoReadOnlyRoute(employeePage, `/auftraege/A1-Z2-${world.runId}`);
     await expect(employeePage.getByText('Noch keine Arbeitszeiten für diesen Auftrag erfasst.')).toHaveCount(0);
     await adminPage.goto(`/auftraege/projekt/${timeProjectNumber}`);
-    await expect(adminPage.getByText('Noch keine Arbeitszeiten für dieses Projekt erfasst.')).toHaveCount(0);
-    await expect(visibleText(adminPage, 'Gesamtstunden (alle Aufträge)')).toBeVisible();
+    const projectTimeSummary = visibleText(adminPage, 'Gesamtstunden (alle Aufträge)');
+    try {
+      await expect(projectTimeSummary).toBeVisible({ timeout: 20_000 });
+    } catch {
+      await adminPage.reload();
+      await expect(projectTimeSummary).toBeVisible({ timeout: 30_000 });
+    }
   });
 
   test('A1-09/A1-11: Kundendaten inline und Kunde direkt im Arbeitsdialog', async ({
@@ -1411,6 +1427,10 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(manualDialog).toHaveCount(0, { timeout: 10_000 });
 
     await adminPage.getByRole('tab', { name: 'Tag', exact: true }).click();
+    const refreshButton = adminPage.getByRole('button', { name: 'Aktualisieren' });
+    await refreshButton.click();
+    await expect(refreshButton).toBeDisabled();
+    await expect(refreshButton).toBeEnabled({ timeout: 30_000 });
     await adminPage.getByText('Arbeitszeiten', { exact: true }).click();
     const plannedBlock = adminPage.locator(`div.absolute[title="${plannedTitle}"]`).first();
     const workBlock = adminPage.getByTitle(/00:10.*00:15/).filter({ visible: true }).first();

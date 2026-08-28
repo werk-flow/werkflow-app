@@ -1,6 +1,6 @@
 # Realtime And Caching
 
-Status: living — last reviewed 2026-08-27
+Status: living — last reviewed 2026-08-28
 
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
@@ -87,6 +87,7 @@ The provider subscribes to tables that affect active operational views, includin
 - `work_blockers`
 - `work_dependencies`
 - `work_artifacts`
+- `work_handover_packages`
 - `job_instruction_evidence_fulfillments`
 - `documents`
 - `document_links`
@@ -115,6 +116,8 @@ P1-14 publishes `work_blockers` and `work_dependencies` with replica identity fu
 P1-15 publishes only current `work_artifacts` and active `job_instruction_evidence_fulfillments`, both with replica identity full. Immutable revisions, type details, document/source relations and action ledgers stay unpublished. Job/project detail uses the central dialog-safe catch-up behavior; artifact review, correction and due-defect changes also refresh the unified attention pipeline. Mutations reuse jobs/projects, documents and responsibilities tags and routes rather than adding an artifact cache.
 
 P1-16 composes the assigned worker's field pack from these existing live sources without adding a cache, copied pack, or publication member. Server rendering loads the independent customer/site, dispatch, lifecycle, instruction, artifact, document, time, material, blocker, and bounded project projections in parallel. Route refresh covers assignment, planning, dispatch-root, instruction, document, artifact-root, time, blocker, and dependency changes. The employee material section performs a narrower debounced refetch for `job_material_lines`, `inventory_movements`, and `inventory_stock_levels`, keeps the last confirmed state during a transient failure, and ignores an older response after a newer generation starts. Open dialogs use the shared suspension and queued catch-up behavior so Realtime cannot discard typed input. Immutable `planning_dispatch_revisions`, `work_artifact_revisions`, and `work_artifact_actions` remain unpublished because their owning root-row mutations already signal the required refresh.
+
+P1-17 publishes only the mutable `work_handover_packages` root with replica identity full. Immutable releases, draft/release membership and append-only events remain unpublished; every accepted package mutation updates the root, which signals one authoritative refetch of the complete server-projected state. Handover detail and the unified attention pipeline consume that signal through the central 150 ms debounce, generation guards, focus/visibility catch-up, keep-last-known stale state and shared dialog suspension. Package mutations reuse jobs/projects, documents and responsibility invalidation; preview remains side-effect free and creates no parallel cache.
 
 ## Refresh Patterns
 

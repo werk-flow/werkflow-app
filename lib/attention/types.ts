@@ -39,7 +39,8 @@ export type AttentionSourceType =
   | 'work_blocker_review'
   | 'work_artifact_review'
   | 'work_artifact_correction'
-  | 'work_defect_due';
+  | 'work_defect_due'
+  | 'work_handover_review';
 
 export type AttentionItemIdentity = {
   sourceType: AttentionSourceType;
@@ -166,6 +167,18 @@ export type AttentionTask =
       targetHref: string;
       dueDate: string;
       severity: Database['public']['Enums']['work_artifact_defect_severity'];
+      stateVersion: string;
+    }
+  | {
+      sourceType: 'work_handover_review';
+      sourceId: string;
+      targetType: 'job' | 'project';
+      targetLabel: string;
+      targetHref: string;
+      packageState: 'missing' | Exclude<
+        Database['public']['Enums']['work_handover_package_state'],
+        'released'
+      >;
       stateVersion: string;
     };
 

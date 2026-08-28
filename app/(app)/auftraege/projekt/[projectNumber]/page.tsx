@@ -21,6 +21,7 @@ import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
+import { getWorkHandoverWorkspace } from '@/lib/work-handover/actions';
 
 interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
@@ -76,8 +77,15 @@ async function ProjectDetailData({
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
     organizationId: activeOrgId, responsibility: 'work_artifact_approval', actorUserId: user.id,
   });
+  const handoverWorkspacePromise = projectResultPromise.then((result) =>
+    result.success
+      ? getWorkHandoverWorkspace({
+          targetType: 'project', targetId: result.details.project.id,
+        })
+      : null
+  );
 
-  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder] = await Promise.all([
+  const [result, clientsResult, documentsResult, materialResult, inventoryOptionsResult, lifecycleResult, artifactsResult, instructionItemsResult, approvalHolder, handoverWorkspaceResult] = await Promise.all([
     projectResultPromise,
     admin
       .from('clients')
@@ -91,6 +99,7 @@ async function ProjectDetailData({
     artifactsResultPromise,
     instructionItemsResultPromise,
     approvalHolderPromise,
+    handoverWorkspacePromise,
   ]);
 
   if (!result.success) {
@@ -174,6 +183,9 @@ async function ProjectDetailData({
             : null
         }
         lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
+        handoverWorkspace={
+          handoverWorkspaceResult?.success ? handoverWorkspaceResult.workspace : null
+        }
       />
     </>
   );

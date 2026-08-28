@@ -12,6 +12,7 @@ export const ORGANIZATION_RESPONSIBILITIES = [
   'time_approval',
   'leave_approval',
   'work_artifact_approval',
+  'work_handover_review',
 ] as const satisfies readonly OrganizationResponsibility[];
 
 export const RESPONSIBILITY_LABELS: Record<
@@ -21,6 +22,7 @@ export const RESPONSIBILITY_LABELS: Record<
   time_approval: 'Zeitfreigaben',
   leave_approval: 'Urlaubsfreigaben',
   work_artifact_approval: 'Arbeitsnachweise freigeben',
+  work_handover_review: 'Übergaben prüfen',
 };
 
 export const RESPONSIBILITY_DESCRIPTIONS: Record<
@@ -33,6 +35,8 @@ export const RESPONSIBILITY_DESCRIPTIONS: Record<
     'Legt fest, wer Urlaubsanträge freigeben darf, sobald der Urlaubsprozess verfügbar ist.',
   work_artifact_approval:
     'Legt fest, wer eingereichte Arbeitsnachweise nach dem Vier-Augen-Prinzip intern freigeben darf.',
+  work_handover_review:
+    'Legt fest, wer abgeschlossene Einsätze prüft, ein unveränderliches Übergabepaket freigibt und an das Büro übergibt.',
 };
 
 export type ResponsibilityPerson = {

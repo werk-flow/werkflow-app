@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -6379,6 +6379,438 @@ export type Database = {
           },
         ]
       }
+      work_handover_draft_items: {
+        Row: {
+          child_handover_release_id: string | null
+          created_at: string
+          created_by: string
+          customer_label: string
+          document_id: string | null
+          document_storage_path: string | null
+          document_version_number: number | null
+          id: string
+          organization_id: string
+          package_id: string
+          sort_order: number
+          source_kind: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id: string | null
+        }
+        Insert: {
+          child_handover_release_id?: string | null
+          created_at?: string
+          created_by: string
+          customer_label: string
+          document_id?: string | null
+          document_storage_path?: string | null
+          document_version_number?: number | null
+          id: string
+          organization_id: string
+          package_id: string
+          sort_order: number
+          source_kind: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id?: string | null
+        }
+        Update: {
+          child_handover_release_id?: string | null
+          created_at?: string
+          created_by?: string
+          customer_label?: string
+          document_id?: string | null
+          document_storage_path?: string | null
+          document_version_number?: number | null
+          id?: string
+          organization_id?: string
+          package_id?: string
+          sort_order?: number
+          source_kind?: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_handover_draft_items_child_handover_release_fkey"
+            columns: ["child_handover_release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_draft_items_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_draft_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_draft_items_package_fkey"
+            columns: ["package_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_packages"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_draft_items_work_artifact_revision_id_fkey"
+            columns: ["work_artifact_revision_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_handover_events: {
+        Row: {
+          created_at: string
+          created_by: string
+          event_payload: Json
+          event_type: Database["public"]["Enums"]["work_handover_event_type"]
+          from_state:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+          id: string
+          organization_id: string
+          package_id: string
+          previous_release_id: string | null
+          reason: string | null
+          release_id: string | null
+          request_fingerprint: string | null
+          request_id: string | null
+          to_state:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          event_payload?: Json
+          event_type: Database["public"]["Enums"]["work_handover_event_type"]
+          from_state?:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+          id: string
+          organization_id: string
+          package_id: string
+          previous_release_id?: string | null
+          reason?: string | null
+          release_id?: string | null
+          request_fingerprint?: string | null
+          request_id?: string | null
+          to_state?:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          event_payload?: Json
+          event_type?: Database["public"]["Enums"]["work_handover_event_type"]
+          from_state?:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+          id?: string
+          organization_id?: string
+          package_id?: string
+          previous_release_id?: string | null
+          reason?: string | null
+          release_id?: string | null
+          request_fingerprint?: string | null
+          request_id?: string | null
+          to_state?:
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_handover_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_events_package_fkey"
+            columns: ["package_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_packages"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_events_previous_release_fkey"
+            columns: ["previous_release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_events_release_fkey"
+            columns: ["release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
+      work_handover_packages: {
+        Row: {
+          created_at: string
+          created_by: string
+          current_release_id: string | null
+          id: string
+          job_id: string | null
+          organization_id: string
+          project_id: string | null
+          state: Database["public"]["Enums"]["work_handover_package_state"]
+          updated_at: string
+          updated_by: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          current_release_id?: string | null
+          id: string
+          job_id?: string | null
+          organization_id: string
+          project_id?: string | null
+          state?: Database["public"]["Enums"]["work_handover_package_state"]
+          updated_at?: string
+          updated_by: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          current_release_id?: string | null
+          id?: string
+          job_id?: string | null
+          organization_id?: string
+          project_id?: string | null
+          state?: Database["public"]["Enums"]["work_handover_package_state"]
+          updated_at?: string
+          updated_by?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_handover_packages_current_release_fkey"
+            columns: ["current_release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_packages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_packages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_packages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_handover_release_items: {
+        Row: {
+          child_handover_release_id: string | null
+          customer_label: string
+          customer_payload: Json
+          document_id: string | null
+          document_storage_path: string | null
+          document_version_number: number | null
+          id: string
+          organization_id: string
+          release_id: string
+          sort_order: number
+          source_kind: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id: string | null
+        }
+        Insert: {
+          child_handover_release_id?: string | null
+          customer_label: string
+          customer_payload: Json
+          document_id?: string | null
+          document_storage_path?: string | null
+          document_version_number?: number | null
+          id: string
+          organization_id: string
+          release_id: string
+          sort_order: number
+          source_kind: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id?: string | null
+        }
+        Update: {
+          child_handover_release_id?: string | null
+          customer_label?: string
+          customer_payload?: Json
+          document_id?: string | null
+          document_storage_path?: string | null
+          document_version_number?: number | null
+          id?: string
+          organization_id?: string
+          release_id?: string
+          sort_order?: number
+          source_kind?: Database["public"]["Enums"]["work_handover_source_kind"]
+          work_artifact_revision_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_handover_release_items_child_handover_release_fkey"
+            columns: ["child_handover_release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_release_items_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_release_items_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_release_items_release_fkey"
+            columns: ["release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_release_items_work_artifact_revision_id_fkey"
+            columns: ["work_artifact_revision_id"]
+            isOneToOne: false
+            referencedRelation: "work_artifact_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      work_handover_releases: {
+        Row: {
+          commercial_readiness: Database["public"]["Enums"]["work_handover_commercial_readiness_state"]
+          content_hash: string
+          created_at: string
+          gate_fingerprint: string
+          gate_snapshot: Json
+          id: string
+          material_summary: Json
+          organization_id: string
+          overridden_gates: Json
+          override_reason: string | null
+          package_document_id: string
+          package_id: string
+          previous_release_id: string | null
+          release_number: number
+          renderer_version: string
+          request_id: string
+          responsibility_snapshot: Json
+          reviewed_at: string
+          reviewed_by: string
+          target_snapshot: Json
+          time_summary: Json
+          unassessed_facts: Json
+        }
+        Insert: {
+          commercial_readiness: Database["public"]["Enums"]["work_handover_commercial_readiness_state"]
+          content_hash: string
+          created_at?: string
+          gate_fingerprint: string
+          gate_snapshot: Json
+          id: string
+          material_summary?: Json
+          organization_id: string
+          overridden_gates?: Json
+          override_reason?: string | null
+          package_document_id: string
+          package_id: string
+          previous_release_id?: string | null
+          release_number: number
+          renderer_version: string
+          request_id: string
+          responsibility_snapshot: Json
+          reviewed_at?: string
+          reviewed_by: string
+          target_snapshot: Json
+          time_summary?: Json
+          unassessed_facts?: Json
+        }
+        Update: {
+          commercial_readiness?: Database["public"]["Enums"]["work_handover_commercial_readiness_state"]
+          content_hash?: string
+          created_at?: string
+          gate_fingerprint?: string
+          gate_snapshot?: Json
+          id?: string
+          material_summary?: Json
+          organization_id?: string
+          overridden_gates?: Json
+          override_reason?: string | null
+          package_document_id?: string
+          package_id?: string
+          previous_release_id?: string | null
+          release_number?: number
+          renderer_version?: string
+          request_id?: string
+          responsibility_snapshot?: Json
+          reviewed_at?: string
+          reviewed_by?: string
+          target_snapshot?: Json
+          time_summary?: Json
+          unassessed_facts?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_handover_releases_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_releases_package_document_id_fkey"
+            columns: ["package_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_handover_releases_package_fkey"
+            columns: ["package_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_packages"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "work_handover_releases_previous_fkey"
+            columns: ["previous_release_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "work_handover_releases"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       work_schedules: {
         Row: {
           created_at: string
@@ -7395,6 +7827,15 @@ export type Database = {
       }
       get_user_admin_org_ids: { Args: { p_user_id: string }; Returns: string[] }
       get_user_org_ids: { Args: { p_user_id: string }; Returns: string[] }
+      get_work_handover_gate_snapshot: {
+        Args: {
+          p_actor_id: string
+          p_organization_id: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
+      }
       get_work_lifecycle_snapshot: {
         Args: {
           p_actor_id: string
@@ -7578,6 +8019,23 @@ export type Database = {
         }
         Returns: Json
       }
+      record_work_artifact_action_p1_17_inner: {
+        Args: {
+          p_action_id: string
+          p_action_type: Database["public"]["Enums"]["work_artifact_action_type"]
+          p_actor_id: string
+          p_artifact_id: string
+          p_comment: string
+          p_customer_context: Json
+          p_expected_version: number
+          p_organization_id: string
+          p_reason: string
+          p_responsibility_snapshot: Json
+          p_revision_id: string
+          p_signature_document_id: string
+        }
+        Returns: Json
+      }
       redeem_organization_invite: {
         Args: { p_invite_code: string }
         Returns: {
@@ -7593,6 +8051,64 @@ export type Database = {
           org_id: string
           org_name: string
         }[]
+      }
+      release_work_handover: {
+        Args: {
+          p_actor_id: string
+          p_content_hash: string
+          p_document_id: string
+          p_document_link_id: string
+          p_expected_execution_version: number
+          p_expected_gate_fingerprint: string
+          p_expected_package_version: number
+          p_file_name: string
+          p_handover_reason: string
+          p_item_payloads: Json
+          p_material_summary: Json
+          p_organization_id: string
+          p_override_gates: boolean
+          p_override_reason: string
+          p_package_id: string
+          p_release_id: string
+          p_renderer_version: string
+          p_request_id: string
+          p_responsibility_snapshot: Json
+          p_size_bytes: number
+          p_storage_path: string
+          p_target_snapshot: Json
+          p_time_summary: Json
+          p_unassessed_facts: Json
+        }
+        Returns: Json
+      }
+      release_work_handover_p1_17_inner: {
+        Args: {
+          p_actor_id: string
+          p_content_hash: string
+          p_document_id: string
+          p_document_link_id: string
+          p_expected_execution_version: number
+          p_expected_gate_fingerprint: string
+          p_expected_package_version: number
+          p_file_name: string
+          p_handover_reason: string
+          p_item_payloads: Json
+          p_material_summary: Json
+          p_organization_id: string
+          p_override_gates: boolean
+          p_override_reason: string
+          p_package_id: string
+          p_release_id: string
+          p_renderer_version: string
+          p_request_id: string
+          p_responsibility_snapshot: Json
+          p_size_bytes: number
+          p_storage_path: string
+          p_target_snapshot: Json
+          p_time_summary: Json
+          p_unassessed_facts: Json
+        }
+        Returns: Json
       }
       remove_instruction_evidence_fulfillment: {
         Args: {
@@ -7726,6 +8242,30 @@ export type Database = {
         }
         Returns: undefined
       }
+      return_work_handover_for_correction: {
+        Args: {
+          p_actor_id: string
+          p_expected_execution_version: number
+          p_expected_package_version: number
+          p_organization_id: string
+          p_package_id: string
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
+      return_work_handover_for_correction_p1_17_inner: {
+        Args: {
+          p_actor_id: string
+          p_expected_execution_version: number
+          p_expected_package_version: number
+          p_organization_id: string
+          p_package_id: string
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       save_client_communication_settings: {
         Args: {
           p_accessibility_note: string
@@ -7761,6 +8301,32 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_work_handover_draft: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_items: Json
+          p_organization_id: string
+          p_package_id: string
+          p_request_id: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
+      }
+      save_work_handover_draft_p1_17_inner: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_items: Json
+          p_organization_id: string
+          p_package_id: string
+          p_request_id: string
+          p_target_id: string
+          p_target_type: string
+        }
+        Returns: Json
       }
       save_work_template_draft: {
         Args: {
@@ -7933,6 +8499,25 @@ export type Database = {
         }
       }
       transition_work_execution: {
+        Args: {
+          p_actor_id: string
+          p_expected_version: number
+          p_organization_id: string
+          p_override_gates?: boolean
+          p_reason?: string
+          p_target_id: string
+          p_target_type: string
+          p_to_state: Database["public"]["Enums"]["work_execution_state"]
+        }
+        Returns: {
+          event_id: string
+          execution_state: Database["public"]["Enums"]["work_execution_state"]
+          execution_version: number
+          gate_fingerprint: string
+          gate_snapshot: Json
+        }[]
+      }
+      transition_work_execution_p1_15: {
         Args: {
           p_actor_id: string
           p_expected_version: number
@@ -8131,6 +8716,30 @@ export type Database = {
         }
         Returns: undefined
       }
+      withdraw_work_handover: {
+        Args: {
+          p_actor_id: string
+          p_expected_execution_version: number
+          p_expected_package_version: number
+          p_organization_id: string
+          p_package_id: string
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
+      withdraw_work_handover_p1_17_inner: {
+        Args: {
+          p_actor_id: string
+          p_expected_execution_version: number
+          p_expected_package_version: number
+          p_organization_id: string
+          p_package_id: string
+          p_reason: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       change_request_status: "pending" | "approved" | "rejected"
@@ -8162,6 +8771,7 @@ export type Database = {
         | "time_approval"
         | "leave_approval"
         | "work_artifact_approval"
+        | "work_handover_review"
       planning_entry_kind: "job_visit" | "internal"
       planning_internal_type: "internal_work" | "meeting" | "training" | "other"
       planning_occurrence_status: "scheduled" | "skipped" | "cancelled"
@@ -8268,6 +8878,24 @@ export type Database = {
         | "execution_complete"
         | "handed_over"
         | "cancelled"
+      work_handover_commercial_readiness_state:
+        | "not_ready"
+        | "ready_for_commercial_review"
+        | "ready_with_exceptions"
+      work_handover_event_type:
+        | "draft_saved"
+        | "review_returned"
+        | "release_reviewed"
+        | "released"
+        | "override_applied"
+        | "handover_withdrawn"
+        | "execution_reopened"
+        | "successor_created"
+      work_handover_package_state: "draft" | "released" | "reopened"
+      work_handover_source_kind:
+        | "work_artifact_revision"
+        | "document_version"
+        | "child_handover_release"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -8427,6 +9055,7 @@ export const Constants = {
         "time_approval",
         "leave_approval",
         "work_artifact_approval",
+        "work_handover_review",
       ],
       planning_entry_kind: ["job_visit", "internal"],
       planning_internal_type: ["internal_work", "meeting", "training", "other"],
@@ -8545,6 +9174,27 @@ export const Constants = {
         "execution_complete",
         "handed_over",
         "cancelled",
+      ],
+      work_handover_commercial_readiness_state: [
+        "not_ready",
+        "ready_for_commercial_review",
+        "ready_with_exceptions",
+      ],
+      work_handover_event_type: [
+        "draft_saved",
+        "review_returned",
+        "release_reviewed",
+        "released",
+        "override_applied",
+        "handover_withdrawn",
+        "execution_reopened",
+        "successor_created",
+      ],
+      work_handover_package_state: ["draft", "released", "reopened"],
+      work_handover_source_kind: [
+        "work_artifact_revision",
+        "document_version",
+        "child_handover_release",
       ],
     },
   },

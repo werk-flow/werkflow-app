@@ -75,7 +75,7 @@ export function AttentionCountProvider({
     }
   }, [activeOrgId]);
 
-  const scheduleRefresh = useCallback(() => {
+  const scheduleRefresh = useCallback((delay = 150) => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
     }
@@ -83,7 +83,7 @@ export function AttentionCountProvider({
     refreshTimerRef.current = setTimeout(() => {
       refreshTimerRef.current = null;
       void refreshAttentionCounts();
-    }, 150);
+    }, delay);
   }, [refreshAttentionCounts]);
 
   useEffect(() => {
@@ -177,6 +177,15 @@ export function AttentionCountProvider({
     scheduleRefresh();
   });
   useRealtimeEvent('work_artifacts', () => {
+    scheduleRefresh();
+  });
+  useRealtimeEvent('jobs', () => {
+    scheduleRefresh(500);
+  });
+  useRealtimeEvent('projects', () => {
+    scheduleRefresh(500);
+  });
+  useRealtimeEvent('work_handover_packages', () => {
     scheduleRefresh();
   });
   useRealtimeEvent('attention_read_states', () => {

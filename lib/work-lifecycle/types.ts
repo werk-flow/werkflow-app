@@ -177,7 +177,10 @@ export function getAllowedWorkTransitions(
   state: WorkExecutionState,
   isManager: boolean,
 ): WorkExecutionState[] {
-  if (isManager) return WORK_TRANSITIONS[state];
+  if (isManager) {
+    if (state === "handed_over") return [];
+    return WORK_TRANSITIONS[state].filter((next) => next !== "handed_over");
+  }
   if (isTerminalWorkExecutionState(state)) return [];
   return WORK_TRANSITIONS[state].filter(
     (next) => next !== "cancelled" && next !== "handed_over",

@@ -65,6 +65,7 @@ export type RealtimeTable =
   | 'job_instruction_item_evidence_fulfillments'
   | 'job_instruction_item_dependencies'
   | 'work_artifacts'
+  | 'work_handover_packages'
   | 'work_templates'
   | 'work_template_versions'
   | 'work_template_items'
@@ -152,6 +153,7 @@ const TABLES: RealtimeTable[] = [
   'job_instruction_item_evidence_fulfillments',
   'job_instruction_item_dependencies',
   'work_artifacts',
+  'work_handover_packages',
   'work_templates',
   'work_template_versions',
   'work_template_items',
@@ -800,6 +802,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
             dispatch('work_artifacts', p)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'work_handover_packages',
+            filter: `organization_id=eq.${activeOrgId}`
+          },
+          (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
+            dispatch('work_handover_packages', p)
         )
         .on(
           'postgres_changes',

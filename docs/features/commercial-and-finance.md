@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-28
 
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
@@ -31,6 +31,7 @@ WerkFlow does not currently have structured commercial or finance modules.
 - Inventory V1 stores basic purchase price, sale price, tax-rate infrastructure, billable defaults, material planning, and actual take/return quantities. No current workflow converts these fields into offers, invoices, procurement accounting, revenue, or profit.
 - Time entries can be associated with operational work, but there is no approved billable-time handoff, labor calculation, commercial rate card, or job post-calculation.
 - P1-15 provides versioned operational Aufmaß and Regie-/Änderungsnachweise with internal decisions and customer-response evidence. They carry no prices, commercial scope acceptance, billing release or invoice effect.
+- P1-17 records an operational handover result as `ready_for_commercial_review` or `ready_with_exceptions` on an immutable release. This means only that the office-reviewed evidence package is ready for a later commercial process; it creates no calculation, price/tax decision, billable quantity, offer, contract, invoice, payment, posting or message.
 - There is no structured product/service price catalog, calculation engine, offer, order confirmation, commercial contract/change order, billable measurement, invoice, credit, incoming-bill, payment, open-item, dunning, bank-matching, accounting-export, or native ledger workflow.
 - WerkFlow does not currently claim XRechnung, ZUGFeRD, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll, or tax-filing capability.
 

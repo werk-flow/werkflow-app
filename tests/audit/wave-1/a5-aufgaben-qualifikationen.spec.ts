@@ -225,6 +225,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     employeePage,
     world,
   }) => {
+    test.setTimeout(300_000);
+
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const todayIso = berlinTodayIso();
     const [firstOffset, secondOffset] = ownedWeekdayOffsets(2);

@@ -123,6 +123,8 @@ import type {
   JobMaterialLine,
 } from '@/lib/inventory/types';
 import { cn } from '@/lib/utils';
+import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
+import { WorkHandoverSummary } from './work-handover-section';
 
 const JOB_STATUS_CLASSES: Record<JobStatus, string> = {
   nicht_bearbeitet: 'bg-secondary text-secondary-foreground',
@@ -230,6 +232,7 @@ interface JobDetailContentProps {
   inventoryLocations: InventoryLocation[];
   currentUserId: string;
   lifecycleSnapshot: WorkLifecycleSnapshot | null;
+  handoverWorkspace: WorkHandoverWorkspace | null;
   // Set when this job was created by converting an Anfrage (P1-02).
   originRequest?: { label: string; href: string } | null;
 }
@@ -250,6 +253,7 @@ export function JobDetailContent({
   inventoryLocations,
   currentUserId,
   lifecycleSnapshot,
+  handoverWorkspace,
   originRequest,
 }: JobDetailContentProps) {
   const router = useRouter();
@@ -1284,6 +1288,18 @@ export function JobDetailContent({
             />
           ) : (
             <WorkLifecycleLoadError />
+          )}
+          {handoverWorkspace && (
+            <div className="mt-4">
+              <WorkHandoverSummary
+                workspace={handoverWorkspace}
+                href={liveJob.jobNumber && parentProject?.projectNumber
+                  ? `/auftraege/projekt/${encodeURIComponent(parentProject.projectNumber)}/${encodeURIComponent(liveJob.jobNumber)}/uebergabe`
+                  : liveJob.jobNumber
+                    ? `/auftraege/${encodeURIComponent(liveJob.jobNumber)}/uebergabe`
+                    : `/auftraege/uebergaben/auftrag/${handoverWorkspace.targetId}`}
+              />
+            </div>
           )}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">

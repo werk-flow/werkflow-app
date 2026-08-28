@@ -506,3 +506,117 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-16-F92` — P1-16 führt keinen Navigationsanbieter, Geocoder, GPS- oder Routenverlauf und kein kostenpflichtiges externes Konto ein.
 - `P1-16-F93` — P1-16 sendet keine Nachricht oder Kundenaktualisierung und baut weder Geräte-/Servicehistorie, kaufmännische Freigabe noch kundenöffentliche Übergabe vor.
 - `P1-16-F94` — Jede sichtbare Aktion bleibt beim zuständigen Fachgebiet; Rendern und Ausführen erzeugen keine fachfremde Mutation und der Arbeitspack bleibt eine Projektion statt einer neuen Domäne.
+
+### `P1-17` — Bürogeprüfte Übergabe und Kundenpaket (2026-08-27)
+
+- `P1-17-F01` — Büro/Admin öffnen für einen Einzelauftrag den eigenen Übergabestand unter `/auftraege/[Auftragsnummer]/uebergabe`.
+- `P1-17-F02` — Büro/Admin öffnen für einen Projekt-Unterauftrag denselben fachlichen Übergabestand unter der verschachtelten Auftragsroute.
+- `P1-17-F03` — Büro/Admin öffnen für ein Projekt einen eigenen Übergabestand, der nicht mit einem Unterauftrag zusammenfällt.
+- `P1-17-F04` — Auftrag und Projekt zeigen im Detail nur eine kompakte Zusammenfassung und eine primäre Aktion zum vollständigen Übergabestand.
+- `P1-17-F05` — Der P1-16-Arbeitspack bleibt feldtauglich und erhält keine Büroprüfung, Quellenauswahl oder Ausnahmebegründung.
+- `P1-17-F06` — Ein zugewiesener Handwerker sieht am eigenen Auftrag nur den kompakten kundenverträglichen Freigabestand.
+- `P1-17-F07` — Ein nicht zugewiesener Handwerker erhält weder Übergabepaket noch Prüfdetails oder Kundenpaketdaten.
+- `P1-17-F08` — Mitglieder einer fremden Organisation erhalten keine Paket-, Review-, Freigabe- oder Verlaufsdaten.
+- `P1-17-F09` — Bestehende Aufträge und Projekte beginnen ohne erfundenes Paket, Review, Bereitschaftsurteil oder Freigabehistorie.
+- `P1-17-F10` — Das bloße Öffnen, Aktualisieren oder Vorschauen erzeugt keine Paketzeile, Datei, Freigabe oder Lebenszyklusänderung.
+- `P1-17-F11` — Die Zielzusammenfassung nennt Nummer, Titel, Kunde, Einsatzort und den gespeicherten Ansprechpartner mit Funktion und Kontaktdaten, soweit vorhanden.
+- `P1-17-F12` — Fehlende Kunden-, Einsatzort- oder Kontaktdaten erscheinen ehrlich als fehlend und werden nicht aus anderen Zielen geraten.
+- `P1-17-F13` — Ein Projektpaket kann eigene Projektquellen und freigegebene Unterauftragspakete enthalten.
+- `P1-17-F14` — Ein Unterauftragspaket erweitert die Berechtigung eines Handwerkers weder auf das Projekt noch auf Geschwisteraufträge oder Projektdokumente.
+- `P1-17-F15` — Jede Leseaktion prüft aktive Organisation, Mitgliedschaft, Zielzugriff und die für die Rolle zulässige Projektion serverseitig.
+- `P1-17-F16` — Jede Schreibaktion prüft Organisation, Ziel, aktuelle Verantwortung oder Delegation und alle erwarteten Versionen erneut am Server.
+- `P1-17-F17` — Die Verantwortung `work_handover_review` ist von der Freigabe strukturierter Arbeitsnachweise getrennt.
+- `P1-17-F18` — Admin und Büro bilden den Rollenstandard der Übergabeprüfung; eine konfigurierte benannte Zuständigkeit ersetzt ihn nach dem bestehenden Verantwortungsmodell.
+- `P1-17-F19` — Eine aktuell wirksame Delegation darf die Übergabe im delegierten Umfang bearbeiten, ohne der Person weitere Bürorechte zu geben.
+- `P1-17-F20` — Eine abgelaufene Verantwortung oder Delegation macht die geladene Fläche veraltet und weist die Aktion zum Absendezeitpunkt ab.
+- `P1-17-F21` — Eine während der Bearbeitung entfernte Auftragszuweisung entzieht dem Handwerker die geschützte Paketprojektion beim nächsten Abgleich.
+- `P1-17-F22` — Ein Ausführungsstand vor „Ausführung abgeschlossen“ kann kein Übergabepaket freigeben und erklärt die fehlende Voraussetzung sichtbar.
+- `P1-17-F23` — „Ausführung abgeschlossen“ beendet die Feldarbeit, bedeutet aber noch nicht „Übergeben“.
+- `P1-17-F24` — Nur die atomare Freigabe eines gültigen Pakets setzt den zugehörigen Auftrag oder das Projekt auf „Übergeben“.
+- `P1-17-F25` — Vollständig übergebene Unteraufträge leiten für ihr Projekt höchstens „Ausführung abgeschlossen“ ab; das Projekt braucht seine eigene Paketfreigabe.
+- `P1-17-F26` — Ein noch laufender Zeitstempel am Ziel ist eine nicht überschreibbare Freigabesperre.
+- `P1-17-F27` — Ein leeres Paket ist eine nicht überschreibbare Freigabesperre.
+- `P1-17-F28` — Ungültige, fremde oder nicht mehr zugängliche Quellen sind eine nicht überschreibbare Freigabesperre.
+- `P1-17-F29` — Ein Projekt darf nur aktuelle unveränderliche Freigaben seiner eigenen Unteraufträge aufnehmen.
+- `P1-17-F30` — Erwartete Paket-, Lebenszyklus-, Quell- und Prüfstands-Versionen bilden harte atomare Konkurrenzgrenzen.
+- `P1-17-F31` — Fehlende Pflichtanweisungen oder geforderte Nachweise erscheinen als begründbar überschreibbare Ausnahme.
+- `P1-17-F32` — Offene Abschlussblocker oder unerfüllte Abhängigkeiten erscheinen als begründbar überschreibbare Ausnahme.
+- `P1-17-F33` — Offene Mängel und ausstehende formale Arbeitsnachweis-Freigaben erscheinen als begründbar überschreibbare Ausnahme.
+- `P1-17-F34` — Eine verlangte Kundenentscheidung oder Unterschrift ohne aktuellen Ausgang erscheint als begründbar überschreibbare Ausnahme.
+- `P1-17-F35` — Unvollständige oder wieder geöffnete Unterauftragspakete verhindern die normale Projektfreigabe und verlangen eine begründete Ausnahme, soweit die harte Integrität gewahrt bleibt.
+- `P1-17-F36` — Fehlende optionale Fotos oder Dokumente erscheinen als Warnung und nicht als erfüllte Tatsache.
+- `P1-17-F37` — Fehlender Versand-, Zeit- oder Materialkontext erscheint jeweils als Warnung und wird nicht automatisch zur Sperre.
+- `P1-17-F38` — Zeitsegmentierung, Materialverbrauch, Werkzeugverwahrung, Abrechenbarkeit, Mengen, Preise, Steuern und Buchhaltung bleiben ausdrücklich nicht bewertet.
+- `P1-17-F39` — Die Fläche fasst Sperren, begründbare Ausnahmen, Warnungen und nicht bewertete Bereiche getrennt, kompakt und mit Quellensprung zusammen.
+- `P1-17-F40` — Ein Paket besitzt genau eine veränderliche Wurzel mit versionierter Entwurfsmitgliedschaft.
+- `P1-17-F41` — Büro/Admin wählen zulässige freigegebene Arbeitsnachweis-Versionen bewusst für den Entwurf aus oder ab.
+- `P1-17-F42` — Büro/Admin wählen zugängliche Auftrags- oder Projektdokumente bewusst für den Entwurf aus oder ab.
+- `P1-17-F43` — Eine Dokumentquelle friert Dokument-ID, genaue Versionsnummer und den zu dieser Version gehörenden Speicherpfad ein.
+- `P1-17-F44` — Eine Arbeitsnachweisquelle friert genau die freigegebene unveränderliche Revision ein und folgt nicht still einer späteren Version.
+- `P1-17-F45` — Eine Projektquelle friert die konkrete unveränderliche Unterauftragsfreigabe ein und folgt nicht still deren Nachfolger.
+- `P1-17-F46` — Nachträgliche Änderungen an ausgewählten Quellen markieren den Entwurf als veraltet und verhindern eine unbemerkte Freigabe.
+- `P1-17-F47` — Entzogener Dokumentzugriff oder zurückgezogene Arbeitsnachweis-Freigabe wird beim Absenden erneut erkannt.
+- `P1-17-F48` — Der gespeicherte Entwurf bleibt nach Neuladen oder neuer Sitzung mit seiner exakten Auswahl erhalten.
+- `P1-17-F49` — Zwei Büropersonen bearbeiten dieselbe Paketwurzel; der erste gültige Stand gewinnt und der zweite erhält eine konkrete Veraltet-Meldung.
+- `P1-17-F50` — Bei einer veralteten Speicherung bleiben lokale Auswahl und Begründung erhalten, bis der aktuelle Serverstand bewusst geladen wird.
+- `P1-17-F51` — Eine doppelte Speicheranfrage mit derselben Anfrage-ID ist idempotent; ein abweichender Inhalt mit derselben ID wird abgewiesen.
+- `P1-17-F52` — Die interne Vorschau zeigt Ziel, ausgewählte Quellen, Prüfstand, Warnungen und die spätere Kundenausgabe vor der Freigabe.
+- `P1-17-F53` — Die Kundenvorschau enthält nur eine ausdrückliche erlaubte Feldmenge und keine zufällig serialisierten Quelldaten.
+- `P1-17-F54` — Interne Notizen, interne Entwürfe, Korrektur- und Ablehnungsstände bleiben aus der Kundenausgabe ausgeschlossen.
+- `P1-17-F55` — Verantwortungs-, Review- und Ausnahmebegründungen bleiben intern und erscheinen nicht im Kundenpaket.
+- `P1-17-F56` — Personal- und detaillierte Zeitdaten, verborgener Signaturkontext und fremde Zieldaten bleiben aus der Kundenausgabe ausgeschlossen.
+- `P1-17-F57` — Preise, Margen, Lieferantenbedingungen, Bewertung und Abrechenbarkeit bleiben aus Vorschau und Kundenpaket ausgeschlossen.
+- `P1-17-F58` — Der Renderer erzeugt aus demselben eingefrorenen Inhalt bytegleiches UTF-8-HTML mit fester Renderer-Version.
+- `P1-17-F59` — Ein SHA-256-Inhalts-Hash identifiziert die genaue Kundenausgabe und ändert sich bei einer Inhaltsänderung.
+- `P1-17-F60` — Die erzeugte Datei wird über den vorhandenen EU-R2-Pfad gespeichert und als bestehendes Dokument zum exakten Ziel registriert.
+- `P1-17-F61` — Das Kundenpaket enthält sichere Zeit- und Materialzusammenfassungen mit reproduzierbaren Quellenfingerabdrücken statt kopierter Fachzeilen.
+- `P1-17-F62` — Fotos und sonstige Dokumente gelangen nur durch ihre bewusst ausgewählte genaue Dokumentversion in das Paket.
+- `P1-17-F63` — Die Freigabe friert Kunden-, Einsatzort- und Ansprechpartnerkontext zusammen mit dem Prüfstand der Freigabe ein.
+- `P1-17-F64` — Die Freigabe friert handelnde Person und die zu diesem Zeitpunkt wirksame Verantwortungs- oder Delegationsauflösung ein.
+- `P1-17-F65` — Die Freigabe speichert `ready_for_commercial_review`, wenn keine akzeptierte Ausnahme verbleibt.
+- `P1-17-F66` — Die Freigabe speichert `ready_with_exceptions`, wenn begründbar überschriebene Ausnahmen akzeptiert wurden.
+- `P1-17-F67` — Die Bereitschaft bedeutet nur, dass die operative Unterlage für eine spätere kaufmännische Prüfung bereitsteht; sie ist keine Rechnungs- oder Preisfreigabe.
+- `P1-17-F68` — Eine begründbare Ausnahme kann nur mit aktiv ausgewählter Manager-Ausnahme und einer nicht leeren fachlichen Begründung freigegeben werden.
+- `P1-17-F69` — Harte Sperren können weder durch Rolle noch Begründung überschrieben werden.
+- `P1-17-F70` — Ohne vorhandene begründbare Ausnahme wird eine unnötige Ausnahmefreigabe abgewiesen.
+- `P1-17-F71` — Paketregistrierung, unveränderliche Freigabe, Quellmitglieder, Verlauf, Readiness und Lebenszykluswechsel werden in einer Datenbanktransaktion geschrieben.
+- `P1-17-F72` — Ein erfolgreicher Lebenszykluswechsel ohne freigegebenes Paket und eine freigegebene Paketzeile ohne Lebenszykluswechsel sind unmöglich.
+- `P1-17-F73` — Scheitert die Datenbankregistrierung nach dem Upload, wird das Objekt nur gelöscht, wenn sicher keine registrierte Referenz darauf zeigt.
+- `P1-17-F74` — Ist die Referenzprüfung nach einem Teilfehler nicht eindeutig, bleibt das Objekt für die bestehende begrenzte Bereinigung erhalten statt möglicherweise Geschäftsdaten zu löschen.
+- `P1-17-F75` — Scheitert Erzeugung oder Upload vor der Registrierung, bleibt der Entwurf unverändert und die Oberfläche zeigt einen wiederholbaren Fehler.
+- `P1-17-F76` — Eine wiederholte identische Freigabeanfrage liefert dasselbe Ergebnis und erzeugt weder zweite Datei noch zweite Freigabe.
+- `P1-17-F77` — Eine widersprüchliche Wiederverwendung derselben Freigabe-Anfrage-ID wird ohne Teilmutation abgewiesen.
+- `P1-17-F78` — Jede unveränderliche Freigabe besitzt eine fortlaufende Nummer, ihren Paketbeleg und ihre genaue Quellmitgliedschaft.
+- `P1-17-F79` — Ein Projektpaket speichert die konkreten Unterauftragsfreigabe-IDs in stabiler Reihenfolge und kopiert deren Fachquellen nicht in neue Eigentümerschaft.
+- `P1-17-F80` — Eine Projektfreigabe setzt nur das Projekt auf „Übergeben“ und verändert keine unveränderliche Unterauftragsfreigabe.
+- `P1-17-F81` — Die Freigabe verändert weder Planung, Versand, Einsatzbestätigung noch tatsächliche Arbeitszeit.
+- `P1-17-F82` — Die Freigabe erzeugt weder Bestandsbewegung, Reservierung, Verbrauch noch Beschaffung.
+- `P1-17-F83` — Die Freigabe erzeugt weder Angebot, Vertrag, Rechnung, Zahlung, Buchung noch Nachricht.
+- `P1-17-F84` — Die Anwendung stellt das Paket bereit, versendet es aber nicht an den Kunden und erzeugt keinen öffentlichen Link.
+- `P1-17-F85` — P1-17 führt weder Kundenkonto noch Kundenportal, Gastzugriff oder öffentliche Download-Route ein.
+- `P1-17-F86` — P1-17 führt keinen externen Signatur-, Versand-, PDF-, Speicher- oder sonstigen kostenpflichtigen Anbieter ein.
+- `P1-17-F87` — P1-17 behauptet keine Offline-Verfügbarkeit und legt keine Offline-Warteschlange für Review oder Freigabe an.
+- `P1-17-F88` — Geräteakte, Servicehistorie, Zeitsegmente, Verbrauch, Nachkalkulation und kaufmännische Belege bleiben bei ihren späteren Slices.
+- `P1-17-F89` — Büro/Admin nehmen eine erfolgte Übergabe nur mit einem sichtbaren fachlichen Grund zurück.
+- `P1-17-F90` — Die Rücknahme setzt den Lebenszyklus atomar auf „Ausführung abgeschlossen“ und bewahrt die alte Freigabe unverändert.
+- `P1-17-F91` — Die Rücknahme eröffnet einen Nachfolgerentwurf, der seine Vorgängerfreigabe eindeutig referenziert.
+- `P1-17-F92` — Büro/Admin geben den Auftrag oder das Projekt nur mit Grund wieder in „In Ausführung“, wenn tatsächliche Korrekturarbeit nötig ist.
+- `P1-17-F93` — Wiedereröffnung und Korrektur überschreiben weder altes Review noch Ausnahme, Readiness, Paketdatei oder Lebenszyklusereignis.
+- `P1-17-F94` — Die erneute Übergabe erzeugt eine neue fortlaufende unveränderliche Freigabe mit Vorgängerbezug.
+- `P1-17-F95` — Die Freigabehistorie zeigt Vorgänger, Rücknahme, Korrektur und Nachfolger mit Akteur, Zeitpunkt und internem Grund.
+- `P1-17-F96` — Ein alter Paketbeleg bleibt nach der Nachfolgerfreigabe adressierbar und wird weder ersetzt noch umgebogen.
+- `P1-17-F97` — Eine zurückgezogene Freigabe ist nicht mehr der aktuelle Kundenstand, bleibt aber als historische Tatsache erhalten.
+- `P1-17-F98` — Ein veralteter Rücknahme-, Wiedereröffnungs- oder Nachfolgeraufruf wird atomar mit dem aktuellen Serverstand abgewiesen.
+- `P1-17-F99` — Doppelte Rücknahme- und Wiedereröffnungsanfragen sind über ihre Anfrage-ID idempotent.
+- `P1-17-F100` — Eine Korrektur kann neue genaue Quellen aufnehmen, ohne die Mitgliedschaft einer früheren Freigabe zu verändern.
+- `P1-17-F101` — Ein Projekt-Nachfolger referenziert die zu diesem Zeitpunkt aktuellen Unterauftragsfreigaben und bewahrt die alte Projektzusammensetzung.
+- `P1-17-F102` — Das erste Laden zeigt einen klaren Ladezustand und unabhängige Quellen werden parallel und begrenzt geladen statt als Karten-Wasserfall.
+- `P1-17-F103` — Schlägt das erste Laden fehl, erscheint ein sichtbarer Fehler mit Wiederholen-Aktion statt eines falschen leeren Pakets.
+- `P1-17-F104` — Schlägt eine spätere Aktualisierung fehl, bleibt der letzte bekannte Stand sichtbar, wird als veraltet markiert und ist für betroffene Mutationen gesperrt.
+- `P1-17-F105` — Zentrale Realtime-Ereignisse der veränderlichen Paketwurzel, Fokus- und Sichtbarkeitsrückkehr führen über den vorhandenen 150-ms-Abgleich zum aktuellen Serverstand.
+- `P1-17-F106` — Unveränderliche Freigabe-, Mitglieds- und Verlaufszeilen brauchen keine eigenen Client-Kanäle; die veröffentlichte Paketwurzel signalisiert das autoritative Nachladen.
+- `P1-17-F107` — Ein geöffneter Dialog behält Eingabe und Fokus, stellt störende Aktualisierungen zurück und holt nach dem Schließen genau einmal nach.
+- `P1-17-F108` — Primäre Aktionen, Auswahl, Dialoge und Verlauf besitzen logische Tastaturreihenfolge, sichtbaren Fokus, deutsche Screenreader-Namen, Live-Rückmeldung und mindestens 44 Pixel Touchhöhe.
+- `P1-17-F109` — Jede sichtbare P1-17-Aktion bleibt auf Paket, Review, Readiness und den gekoppelten Lebenszyklus begrenzt; Rendering und Nachladen sind nebenwirkungsfrei und erzeugen keine spätere Fachdomäne vorzeitig.
+
+**Acceptance invariant:** `109/109 mapped; 109/109 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-28).
