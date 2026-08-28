@@ -73,6 +73,7 @@ Phase 1 execution lives in `phase-1/`, split by change rate:
 | phase-1/slices/ | You need one slice's full acceptance evidence — one record per accepted slice (canonical home). |
 | [phase-1-build-roadmap.md](plans/phase-1-build-roadmap.md) | Pointer stub for the pre-split path; do not add content. |
 | [golden-gate-log.md](plans/golden-gate-log.md) | You record or check a gate run — append-only run log. |
+| [platform-hardening.md](plans/platform-hardening.md) | Any platform-hardening stage session (local test stack, Realtime consolidation, legacy sweep): the owner-confirmed decisions, stage definitions, closure duties, and ledger. |
 | [wave-2-audit.md](plans/wave-2-audit.md) | Wave 2 slice acceptance: the per-slice coverage ledger and certification-gate record. |
 | [wave-1-audit.md](plans/wave-1-audit.md) | Closed — Wave 1 coverage ledger (retired wave-end model); historical reference only. |
 | [uiux-consolidation.md](plans/uiux-consolidation.md) | Closed — the 2026-08 UI/UX consolidation ledger; the durable output is the `werkflow-design` skill. |
