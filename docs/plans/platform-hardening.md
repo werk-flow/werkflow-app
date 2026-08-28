@@ -19,14 +19,14 @@ Recorded evidence: the full Golden battery is a ~57-minute serial run against li
 | D7 | Context handoff model: **this file is the canonical context**, not the prompts. Every stage agent reads it fully (all three stages — an agent must know the arc to avoid doing a later stage's work early). Prompts are thin: verify the starting position, point here, name the stage's deliverables and its closure duties. The Stage A prompt is drafted at the end of the design session; each stage's agent drafts the next stage's prompt at closure (the proven P1-16 → P1-17 meta-prompt pattern), folding in what that stage actually learned. |
 | D8 | Suite placement after Stage A: iteration, diagnostic, and certification lanes all run local by default. The runner gains an explicit target mode; the cloud DEV project remains reachable for the canary lane and live-state inspection. DEV/PROD cloud roles and the migration workflow (dev-first, committed files, PROD after) are unchanged. |
 
+| D9 | Local file storage: the Supabase local stack's bundled S3-compatible Storage endpoint first; MinIO is the recorded fallback, implemented only if the bundled endpoint fails a real browser signed-upload proof. App code stays provider-neutral — environment values change, at most a small endpoint-override variable in the storage module. |
+| D10 | Canary suite v1 (9 tests, target under 8 minutes): real login + session refresh across a protected navigation; one signed upload to real R2 plus download round-trip; one cross-session Realtime delivery through cloud infrastructure; the invite flow with a real Resend email; an organization-isolation smoke; clock-in/out round trip; one server-action write with read-back; the leaked-password rejection copy (HIBP needs internet — canary-only by nature); DEV migration history matches the committed files. **Growth rule (owner requirement):** the canary is explicitly open to additions by future agents, but must stay short — reserved for behavior that can only be proven in the cloud or is distinctly more valuable proven there; every addition or removal is recorded in the ledger with its reason. Stage A writes this rule into `testing.md` at closure. |
+| D11 | The full battery runs against the **cloud** only at wave-end certification gates and before owner-named partner milestones — never per slice again. |
+| D12 | Stage B ships all five pieces together: the live-view primitive, the exported shared debounce constant (replacing the five hard-coded 150s), the `useServerAction` pending-state helper (the `MetadataSection` fix generalized — pending state binds to the server call, never a router transition), dev-mode latency instrumentation, and `expectLiveWithin` latency assertions in the key cross-session checks. **Research requirement (owner requirement):** before implementing, the Stage B agent re-reads the current Supabase Realtime documentation in depth — publication model, RLS interaction with Realtime, `postgres_changes` versus broadcast, rate/connection limits, and recommended client patterns — and records any finding that changes the design in this file and in `realtime-and-caching.md` before writing code. The goal is to get Realtime right once, from primary sources, not to re-derive it from the app's history. |
+
 ## Open decisions
 
-| # | Question | Status |
-| --- | --- | --- |
-| O1 | Local file-storage substitute for direct signed uploads: Supabase's bundled local Storage S3 endpoint first, MinIO container as fallback | asked in round 2 |
-| O2 | Canary suite contents | asked in round 2 |
-| O3 | When the full battery still runs against the cloud (proposal: wave-end certification gates and owner-named partner milestones) | asked in round 2 |
-| O4 | Stage B scope bundle: live-view primitive + exported debounce constant + `useServerAction` pending-state helper + dev-mode latency instrumentation + latency assertions in key cross-session tests | asked in round 2 |
+None — the design frontier closed on 2026-08-28. New questions discovered by a stage session are added here and resolved with the owner before that stage proceeds past them.
 
 ## Stages
 
@@ -37,6 +37,8 @@ Go/no-go: docker-ce in WSL Ubuntu + `supabase start` (CLI 2.116.0 already availa
 ### Stage B — Realtime consolidation
 
 Product half: one shared live-view primitive owning subscription consumption, generation-guarded refetch, keep-last-known, dialog suspension, and focus catch-up (the [Client Freshness Contract](../technical/realtime-and-caching.md) turned from prose into the component); full-sweep migration of every live surface, ledgered below; the frozen lint allowlist shrinks to zero. Testing half: the latency contract (D4) written into realtime-and-caching.md with numbers; an `expectLiveWithin` helper that fails over budget and archives the measured latency; instrumentation to see real propagation times. Every P1-16/P1-17 refresh-race fix becomes the primitive's default behavior.
+
+Product intent behind this stage: saving users time is a core product virtue, and the app must feel genuinely instant — which requires Realtime and Partial Prerendering both set up correctly, not fought per surface. Stage B starts with the D12 research phase against current Supabase primary sources. A comparable PPR reconciliation is a possible future follow-up the owner may raise after this phase; it is noted here so no stage forecloses it, and it is not in this phase's scope.
 
 ### Stage C — legacy audit sweep
 
