@@ -1,6 +1,6 @@
 # Enforcement-Ladder Backlog
 
-Status: living — last reviewed 2026-08-27
+Status: living — last reviewed 2026-08-28
 
 The open conversion candidates from the 2026-08-27 three-part audit (code comments, docs, skills) under [decision 0005](../decisions/0005-enforcement-ladder.md). Each row names the rule, where it lives as prose today, and the concrete mechanism that would enforce it. Remove a row when its conversion lands (and annotate the owning doc "enforced by …"); add rows as new lessons appear. Most rows are scheduled for the Realtime/testing consolidation phase after P1-17.
 
@@ -29,6 +29,8 @@ The open conversion candidates from the 2026-08-27 three-part audit (code commen
 
 | Rule (prose home) | Mechanism |
 | --- | --- |
+| "Mid-suite specs are not dual-mode" — a focused replay of a mid-suite/mid-file test without its predecessors fails spuriously after minutes on a wrong locator (testing.md; cost the P1-17 cycle three diagnostic rounds rediscovering the A1-01→A1-02→A1-05 chain) | Precondition guards: each dependent legacy test opens with a cheap persisted-state check (the `expectSetupJob` pattern the stage-split convention already mandates for new specs) that fails in seconds with the exact grep chain to run instead ("this test needs A1-01\|A1-02 in the same run"). Optional second layer: the runner warns when an iteration grep selects a strict subset of a serial file |
+| Legacy Wave-1 audit test bodies predate every hardening convention (sanctioned reload, refresh-cycle waits, persisted-precondition guards, measured budgets) and surface latent races under each new slice's load — the dominant time cost of both the P1-16 and P1-17 cycles | One deliberate content-hardening sweep over `tests/audit/wave-1/**` applying the current conventions, folded into the Realtime consolidation phase (most of the latent races are freshness races that phase changes anyway; hardening them twice is waste) |
 | Rule-12 ledger invariant (`X/X mapped; 0 partial; 0 unmapped`; set equality catalog↔ledger↔specs) | `bun run audit:check` parsing catalog IDs, ledger rows, and audit-spec tags |
 | Catalog-wording change reopens the flow ID (testing rule 12) | Committed per-ID text hashes; `audit:check` fails on silent drift |
 | Every certification run recorded in the gate log (testing.md) | Reporter appends the row itself, or `test:runs` asserts manifest↔log parity |

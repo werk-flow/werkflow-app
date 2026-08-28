@@ -93,7 +93,8 @@ async function assertDevR2Reachable(): Promise<void> {
 
 function getWindowsListener(): ListenerDetails {
   const script = [
-    "$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop | Select-Object -First 1",
+    "$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1",
+    "if (-not $listener) { Write-Output 'NO_LISTENER'; exit 0 }",
     "$process = Get-CimInstance Win32_Process -Filter \"ProcessId = $($listener.OwningProcess)\"",
     "$started = (Get-Process -Id $listener.OwningProcess).StartTime.ToUniversalTime().ToString('o')",
     "[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress",
@@ -112,8 +113,13 @@ function getWindowsListener(): ListenerDetails {
     );
   }
   const output = result.stdout.trim();
-  if (!output) {
-    throw new Error('Certification requires a listener on port 3000.');
+  // An empty port is an expected pre-run state, not an inspection failure —
+  // the vague "Could not inspect" wording cost the P1-17 cycle a confused
+  // diagnosis moment (incident log, 2026-08-28).
+  if (!output || output === 'NO_LISTENER') {
+    throw new Error(
+      'Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).'
+    );
   }
   try {
     return JSON.parse(output) as ListenerDetails;
