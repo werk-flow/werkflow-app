@@ -43,13 +43,13 @@ function removeOption(args: string[], name: string): string[] {
   return [...args.slice(0, index), ...args.slice(index + 2)];
 }
 
-function certificationAttemptsSinceLastPass() {
+function certificationAttemptsSinceLastPass(suite: PlaywrightSuite) {
   // timedout and interrupted attempts count toward the budget: a Ctrl+C'd or
   // hung full run is still a consumed attempt, not a free retry.
   const attempts = listRunManifests().filter(
     (manifest) =>
       manifest.lane === 'certification' &&
-      manifest.suite === 'golden' &&
+      manifest.suite === suite &&
       !manifest.grep &&
       ['passed', 'failed', 'failed_retained', 'timedout', 'interrupted'].includes(manifest.status)
   );
@@ -93,11 +93,14 @@ async function main(): Promise<number> {
   if (requestErrors.length > 0) throw new Error(requestErrors.join('\n'));
 
   const sourceFingerprint = calculateSourceFingerprint();
-  if (lane === 'certification' && suite === 'golden' && !grep) {
+  // The rerun budget guards every full certification, per suite: Stage A's
+  // local-battery campaign ran eight same-class audit certification retries
+  // with no mechanical gate because this block was golden-only (2026-08-28).
+  if (lane === 'certification' && !grep) {
     const focusedVerifications = listRunManifests()
       .filter(
         (manifest) =>
-          manifest.grep && manifest.lane === 'iteration' && manifest.suite === 'golden'
+          manifest.grep && manifest.lane === 'iteration' && manifest.suite === suite
       )
       .map((manifest) => ({
         status: manifest.status === 'passed' ? ('passed' as const) : ('failed' as const),
@@ -106,7 +109,7 @@ async function main(): Promise<number> {
         grep: manifest.grep ?? '',
       }));
     const policy = evaluateFullCertificationRerun({
-      attemptsSinceLastPass: certificationAttemptsSinceLastPass(),
+      attemptsSinceLastPass: certificationAttemptsSinceLastPass(suite),
       focusedVerifications,
       currentSourceFingerprint: sourceFingerprint,
       overrideReason,
