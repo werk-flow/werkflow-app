@@ -359,7 +359,7 @@ export function SignupForm({
         <FormField
           control={form.control}
           name="password"
-          render={({ field }) => (
+          render={({ field, fieldState }) => (
             <FormItem>
               <FormLabel>Passwort</FormLabel>
               <FormControl>
@@ -373,7 +373,15 @@ export function SignupForm({
                 className="mt-2"
                 requirements={passwordRequirements}
               />
-              <FormMessage aria-hidden className="hidden" />
+              {/* Client-side rules are already visible in the requirements
+                  checklist above; only server rejections (e.g. the
+                  leaked-password check) carry information the checklist
+                  cannot show and must be visible. */}
+              {fieldState.error?.type === 'server' ? (
+                <FormMessage />
+              ) : (
+                <FormMessage aria-hidden className="hidden" />
+              )}
             </FormItem>
           )}
         />

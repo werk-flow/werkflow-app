@@ -14,9 +14,12 @@ import { basename, resolve } from 'node:path';
 import {
   PLAYWRIGHT_LANES,
   PLAYWRIGHT_SUITES,
+  PLAYWRIGHT_TARGETS,
+  defaultTargetForSuite,
   type IncidentClass,
   type PlaywrightLane,
   type PlaywrightSuite,
+  type PlaywrightTarget,
 } from '../../../lib/testing/run-policy';
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/file-lock';
 import type { SessionRole } from './sessions';
@@ -51,6 +54,9 @@ export type RunManifest = {
   sourceRunKey: string | null;
   lane: PlaywrightLane;
   suite: PlaywrightSuite;
+  // Absent on manifests archived before the local-stack split (Stage A,
+  // 2026-08-28); those runs were all cloud runs.
+  target?: PlaywrightTarget;
   grep: string | null;
   command: string;
   status: ArchivedRunStatus;
@@ -140,8 +146,11 @@ export function calculateSourceFingerprint(): string {
   const hash = createHash('sha256');
   hash.update(commandOutput('git', ['rev-parse', 'HEAD']));
   hash.update(commandOutput('git', ['diff', '--no-ext-diff', '--binary', 'HEAD']));
-  const untracked = commandOutput('git', ['ls-files', '--others', '--exclude-standard'])
-    .split(/\r?\n/)
+  // -z: NUL-separated and unquoted — git C-quotes non-ASCII names in newline
+  // mode, and the quoted string is not a readable path (broke the runner on an
+  // umlaut-named Playwright artifact, 2026-08-28).
+  const untracked = commandOutput('git', ['ls-files', '--others', '--exclude-standard', '-z'])
+    .split('\0')
     .filter(Boolean)
     .sort();
   for (const relativePath of untracked) {
@@ -179,6 +188,12 @@ export function createRunManifest(input?: {
 }): RunManifest {
   const runKey = currentRunKey();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const suite = parseEnvironmentValue(
+    process.env.WERKFLOW_TEST_SUITE,
+    PLAYWRIGHT_SUITES,
+    'golden',
+    'WERKFLOW_TEST_SUITE'
+  );
   const manifest: RunManifest = {
     version: 1,
     runKey,
@@ -189,11 +204,12 @@ export function createRunManifest(input?: {
       'direct',
       'WERKFLOW_TEST_LANE'
     ),
-    suite: parseEnvironmentValue(
-      process.env.WERKFLOW_TEST_SUITE,
-      PLAYWRIGHT_SUITES,
-      'golden',
-      'WERKFLOW_TEST_SUITE'
+    suite,
+    target: parseEnvironmentValue(
+      process.env.WERKFLOW_TEST_TARGET,
+      PLAYWRIGHT_TARGETS,
+      defaultTargetForSuite(suite),
+      'WERKFLOW_TEST_TARGET'
     ),
     grep: input?.grep ?? (process.env.WERKFLOW_TEST_GREP || null),
     command: input?.command ?? process.env.WERKFLOW_TEST_COMMAND ?? 'direct Playwright invocation',
@@ -309,9 +325,15 @@ export function restoreArchivedState(sourceRunKey: string): TestWorld {
   return loadWorld();
 }
 
+const SUITE_SOURCE_ROOTS: Record<PlaywrightSuite, string> = {
+  golden: 'tests/golden',
+  audit: 'tests/audit',
+  canary: 'tests/canary',
+};
+
 export function archiveRunOutputs(runKey = currentRunKey()): void {
   const manifest = readRunManifest(runKey);
-  const sourceRoot = manifest.suite === 'audit' ? 'tests/audit' : 'tests/golden';
+  const sourceRoot = SUITE_SOURCE_ROOTS[manifest.suite];
   const target = resolve(runDirectory(runKey), 'playwright');
   mkdirSync(target, { recursive: true });
   for (const directoryName of ['.results', '.report']) {

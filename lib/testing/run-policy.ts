@@ -6,8 +6,21 @@ export const PLAYWRIGHT_LANES = [
 ] as const;
 export type PlaywrightLane = (typeof PLAYWRIGHT_LANES)[number];
 
-export const PLAYWRIGHT_SUITES = ['golden', 'audit'] as const;
+export const PLAYWRIGHT_SUITES = ['golden', 'audit', 'canary'] as const;
 export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
+
+// Where a run's authoritative backend lives (decision D8, docs/plans/
+// platform-hardening.md): golden and audit batteries run against the local
+// Supabase stack by default; the canary suite exists to prove cloud behavior
+// and only ever runs against cloud DEV. `--target cloud` on golden/audit is
+// the deliberate exception for wave-end and partner-milestone certifications
+// (decision D11).
+export const PLAYWRIGHT_TARGETS = ['local', 'cloud'] as const;
+export type PlaywrightTarget = (typeof PLAYWRIGHT_TARGETS)[number];
+
+export function defaultTargetForSuite(suite: PlaywrightSuite): PlaywrightTarget {
+  return suite === 'canary' ? 'cloud' : 'local';
+}
 
 export const INCIDENT_CLASSES = ['product', 'harness', 'environment', 'transient'] as const;
 export type IncidentClass = (typeof INCIDENT_CLASSES)[number];
@@ -15,6 +28,7 @@ export type IncidentClass = (typeof INCIDENT_CLASSES)[number];
 export type RunRequest = {
   lane: PlaywrightLane;
   suite: PlaywrightSuite;
+  target: PlaywrightTarget;
   grep: string | null;
   reuseRunKey: string | null;
 };
@@ -52,6 +66,9 @@ export function focusedGrepCoversToken(grep: string, token: string): boolean {
 
 export function validateRunRequest(request: RunRequest): string[] {
   const errors: string[] = [];
+  if (request.suite === 'canary' && request.target !== 'cloud') {
+    errors.push('The canary suite proves cloud behavior; it only runs with target cloud.');
+  }
   if (request.lane === 'iteration' && !request.grep?.trim()) {
     errors.push('Iteration runs require --grep. Use certification for a complete battery.');
   }

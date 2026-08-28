@@ -18,7 +18,7 @@ function printRuns(): void {
       [
         manifest.runKey,
         manifest.status,
-        `${manifest.lane}/${manifest.suite}`,
+        `${manifest.lane}/${manifest.suite}/${manifest.target ?? 'cloud'}`,
         manifest.grep ?? 'full',
         manifest.world?.runId ?? 'no-world',
         manifest.classification ?? 'unclassified',
@@ -40,6 +40,17 @@ async function cleanupRun(runKey: string): Promise<void> {
   const worldPath = resolve(runDirectory(runKey), 'state/world.json');
   if (!manifest.world || !existsSync(worldPath)) {
     throw new Error(`Run ${runKey} has no retained world at ${worldPath}.`);
+  }
+  // The seeder follows .env.local. Destroying a world recorded against a
+  // different backend would silently "succeed" against the wrong project and
+  // leave the real rows behind — refuse instead.
+  const currentProjectRef = new URL(
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'invalid://missing'
+  ).hostname.split('.')[0];
+  if (manifest.projectRef && manifest.projectRef !== currentProjectRef) {
+    throw new Error(
+      `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`
+    );
   }
   const world = JSON.parse(readFileSync(worldPath, 'utf8')) as TestWorld;
   await destroyTestWorld(world);

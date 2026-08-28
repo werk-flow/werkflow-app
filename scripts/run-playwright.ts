@@ -3,10 +3,13 @@ import { createWriteStream, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
+  PLAYWRIGHT_TARGETS,
+  defaultTargetForSuite,
   evaluateFullCertificationRerun,
   validateRunRequest,
   type PlaywrightLane,
   type PlaywrightSuite,
+  type PlaywrightTarget,
 } from '../lib/testing/run-policy';
 import { runPlaywrightPreflight } from './playwright-preflight';
 import { loadEnvLocal } from '../tests/golden/support/env';
@@ -66,17 +69,27 @@ async function main(): Promise<number> {
   const lane = process.argv[2] as PlaywrightLane | undefined;
   const suite = process.argv[3] as PlaywrightSuite | undefined;
   if (!lane || !['iteration', 'certification', 'diagnostic'].includes(lane)) {
-    throw new Error('Usage: bun scripts/run-playwright.ts <iteration|certification|diagnostic> <golden|audit> [Playwright args]');
+    throw new Error(
+      'Usage: bun scripts/run-playwright.ts <iteration|certification|diagnostic> <golden|audit|canary> [--target local|cloud] [Playwright args]'
+    );
   }
-  if (!suite || !['golden', 'audit'].includes(suite)) throw new Error('Suite must be golden or audit.');
+  if (!suite || !['golden', 'audit', 'canary'].includes(suite)) {
+    throw new Error('Suite must be golden, audit, or canary.');
+  }
 
   let playwrightArgs = process.argv.slice(4);
   const reuseRunKey = argumentValue(playwrightArgs, '--reuse-run');
   const overrideReason = argumentValue(playwrightArgs, '--override-rerun-budget');
+  const targetArgument = argumentValue(playwrightArgs, '--target');
   playwrightArgs = removeOption(playwrightArgs, '--reuse-run');
   playwrightArgs = removeOption(playwrightArgs, '--override-rerun-budget');
+  playwrightArgs = removeOption(playwrightArgs, '--target');
+  if (targetArgument && !PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)) {
+    throw new Error(`--target must be one of ${PLAYWRIGHT_TARGETS.join(', ')}.`);
+  }
+  const target = (targetArgument as PlaywrightTarget | null) ?? defaultTargetForSuite(suite);
   const grep = argumentValue(playwrightArgs, '--grep');
-  const requestErrors = validateRunRequest({ lane, suite, grep, reuseRunKey });
+  const requestErrors = validateRunRequest({ lane, suite, target, grep, reuseRunKey });
   if (requestErrors.length > 0) throw new Error(requestErrors.join('\n'));
 
   const sourceFingerprint = calculateSourceFingerprint();
@@ -101,22 +114,22 @@ async function main(): Promise<number> {
     if (!policy.allowed) throw new Error(policy.reason ?? 'Full certification rerun blocked.');
   }
 
-  await runPlaywrightPreflight({ lane });
+  await runPlaywrightPreflight({ lane, target });
   const runKey = createRunKey();
   process.env.WERKFLOW_RUN_KEY = runKey;
   process.env.WERKFLOW_TEST_LANE = lane;
   process.env.WERKFLOW_TEST_SUITE = suite;
+  process.env.WERKFLOW_TEST_TARGET = target;
   process.env.WERKFLOW_TEST_GREP = grep ?? '';
   if (reuseRunKey) process.env.WERKFLOW_REUSE_RUN_KEY = reuseRunKey;
   else delete process.env.WERKFLOW_REUSE_RUN_KEY;
   process.env.WERKFLOW_QUIET_REPORTER = '1';
-  const commandArgs = [
-    'x',
-    'playwright',
-    'test',
-    ...(suite === 'audit' ? ['--config', 'playwright.audit.config.ts'] : []),
-    ...playwrightArgs,
-  ];
+  const suiteConfig: Record<PlaywrightSuite, string[]> = {
+    golden: [],
+    audit: ['--config', 'playwright.audit.config.ts'],
+    canary: ['--config', 'playwright.canary.config.ts'],
+  };
+  const commandArgs = ['x', 'playwright', 'test', ...suiteConfig[suite], ...playwrightArgs];
   process.env.WERKFLOW_TEST_COMMAND = `bun ${commandArgs.join(' ')}`;
   configureRunEnvironment(suite);
   createRunManifest({
@@ -128,7 +141,9 @@ async function main(): Promise<number> {
   const logPath = resolve(runDirectory(runKey), 'runner.log');
   const log = createWriteStream(logPath, { flags: 'a' });
   log.on('error', () => undefined);
-  console.log(`[werkflow-test] started ${lane} ${suite} run ${runKey}; output: ${logPath}`);
+  console.log(
+    `[werkflow-test] started ${lane} ${suite} run ${runKey} (target ${target}); output: ${logPath}`
+  );
   const child = spawn(process.execPath, commandArgs, {
     cwd: resolve(import.meta.dir, '..'),
     env: process.env,

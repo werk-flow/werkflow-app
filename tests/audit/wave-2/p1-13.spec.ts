@@ -272,6 +272,11 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await adminPage.getByRole('option', { name: 'Archiv' }).click()
     await expect(adminPage.getByText(name, { exact: true })).toBeVisible()
     await adminPage.getByRole('button', { name: 'Arbeitsvorlage reaktivieren' }).click()
+    // Poll like the archive step above: the immediate read raced the
+    // reactivation commit on the fast local stack (2026-08-28).
+    await expect.poll(async () => (
+      await getWorkTemplateStateByName(world.orgId, name)
+    ).template.archived_at, { timeout: 20_000 }).toBeNull()
     const templateState = await getWorkTemplateStateByName(world.orgId, name)
     expect(templateState.template.archived_at).toBeNull()
     expect(templateState.events.map((event) => event.event_type)).toEqual(expect.arrayContaining(['draft_created', 'archived', 'reactivated']))

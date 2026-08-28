@@ -40,6 +40,11 @@ type R2Config = {
   secretAccessKey: string;
   bucketName: string;
   jurisdiction: string;
+  // Optional full endpoint override (decision D9, docs/plans/platform-hardening.md):
+  // the local test stack serves an S3-compatible endpoint on localhost that the
+  // account/jurisdiction URL scheme cannot express. Cloud environments leave it
+  // unset; the test preflight rejects it outside the local target.
+  endpointOverride: string | null;
 };
 
 export type StorageObjectHead = {
@@ -67,12 +72,20 @@ function getR2Config(): R2Config {
     );
   }
 
-  cachedConfig = { accountId, accessKeyId, secretAccessKey, bucketName, jurisdiction };
+  cachedConfig = {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucketName,
+    jurisdiction,
+    endpointOverride: process.env.R2_ENDPOINT?.trim() || null,
+  };
   return cachedConfig;
 }
 
 export function getR2Endpoint(): string {
   const config = getR2Config();
+  if (config.endpointOverride) return config.endpointOverride;
   const jurisdictionSegment = config.jurisdiction ? `${config.jurisdiction}.` : '';
   return `https://${config.accountId}.${jurisdictionSegment}r2.cloudflarestorage.com`;
 }

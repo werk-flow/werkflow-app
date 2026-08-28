@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  defaultTargetForSuite,
   evaluateFullCertificationRerun,
   focusedGrepCoversToken,
   focusedProofToken,
@@ -11,26 +12,28 @@ import {
 describe('Playwright run policy', () => {
   test('keeps iteration and diagnostic runs focused', () => {
     expect(
-      validateRunRequest({ lane: 'iteration', suite: 'golden', grep: null, reuseRunKey: null })
+      validateRunRequest({ lane: 'iteration', suite: 'golden', target: 'local', grep: null, reuseRunKey: null })
     ).toHaveLength(1);
     expect(
-      validateRunRequest({ lane: 'iteration', suite: 'golden', grep: '  ', reuseRunKey: null })
+      validateRunRequest({ lane: 'iteration', suite: 'golden', target: 'local', grep: '  ', reuseRunKey: null })
     ).toHaveLength(1);
     expect(
       validateRunRequest({
         lane: 'diagnostic',
         suite: 'golden',
+        target: 'local',
         grep: '@P1-16-stage-boundaries',
         reuseRunKey: 'run-1',
       })
     ).toEqual([]);
     expect(
-      validateRunRequest({ lane: 'diagnostic', suite: 'golden', grep: null, reuseRunKey: null })
+      validateRunRequest({ lane: 'diagnostic', suite: 'golden', target: 'local', grep: null, reuseRunKey: null })
     ).toHaveLength(2);
     expect(
       validateRunRequest({
         lane: 'certification',
         suite: 'golden',
+        target: 'local',
         grep: '@P1-16',
         reuseRunKey: null,
       })
@@ -39,10 +42,35 @@ describe('Playwright run policy', () => {
       validateRunRequest({
         lane: 'certification',
         suite: 'golden',
+        target: 'local',
         grep: null,
         reuseRunKey: 'run-1',
       })
     ).toHaveLength(1);
+  });
+
+  test('pins the canary suite to the cloud target', () => {
+    expect(
+      validateRunRequest({
+        lane: 'certification',
+        suite: 'canary',
+        target: 'local',
+        grep: null,
+        reuseRunKey: null,
+      })
+    ).toHaveLength(1);
+    expect(
+      validateRunRequest({
+        lane: 'certification',
+        suite: 'canary',
+        target: 'cloud',
+        grep: null,
+        reuseRunKey: null,
+      })
+    ).toEqual([]);
+    expect(defaultTargetForSuite('canary')).toBe('cloud');
+    expect(defaultTargetForSuite('golden')).toBe('local');
+    expect(defaultTargetForSuite('audit')).toBe('local');
   });
 
   test('refreshes old, future-dated, and wrong-organization sessions', () => {

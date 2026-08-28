@@ -100,8 +100,22 @@ async function submitAndClose(dialog: Locator): Promise<void> {
 }
 
 async function approveArtifact(page: Page, title: string): Promise<void> {
-  await page.getByText(title, { exact: true }).click();
   const dialog = page.getByRole('dialog');
+  // A Realtime refresh can replace the artifact row between locator
+  // resolution and the click, silently eating the open (testing.md re-render
+  // class; first surfaced by the faster local stack). Re-click only while no
+  // dialog opened at all.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await page.getByText(title, { exact: true }).click();
+    const opened = await dialog
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (opened) break;
+    if (attempt === 3) {
+      throw new Error(`Artifact dialog for ${title} did not open after three clicks.`);
+    }
+  }
   await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
   await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({ timeout: 20_000 });
   await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();

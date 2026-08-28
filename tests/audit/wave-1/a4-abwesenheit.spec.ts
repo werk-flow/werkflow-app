@@ -127,16 +127,27 @@ async function deleteWorkScheduleViaDetail(
   note: string
 ): Promise<void> {
   const row = page.locator('li').filter({ hasText: note }).first();
-  await row
-    .getByRole('button', {
-      name: `Aktionen für Wochenplan ab ${formatGermanDate(validFromIso)}`,
-    })
-    .click();
-  await page.getByRole('menuitem', { name: 'Löschen' }).click();
-  await page
-    .getByRole('alertdialog')
-    .getByRole('button', { name: 'Löschen', exact: true })
-    .click();
+  const confirmDialog = page.getByRole('alertdialog');
+  // A Realtime refresh can remount the list between the menu open and the
+  // confirm dialog (testing.md re-render class; surfaced by the fast local
+  // stack 2026-08-28). Nothing is deleted until the confirm button is
+  // pressed, so re-opening the menu is safe while no dialog appeared.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await row
+        .getByRole('button', {
+          name: `Aktionen für Wochenplan ab ${formatGermanDate(validFromIso)}`,
+        })
+        .click({ timeout: 15_000 });
+      await page.getByRole('menuitem', { name: 'Löschen' }).click({ timeout: 10_000 });
+      await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 });
+      break;
+    } catch (error) {
+      if (attempt >= 3) throw error;
+      await page.keyboard.press('Escape');
+    }
+  }
+  await confirmDialog.getByRole('button', { name: 'Löschen', exact: true }).click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0, {
     timeout: 15_000,
   });

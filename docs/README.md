@@ -97,6 +97,7 @@ Short ADR-style records: why a durable choice was made. Immutable once accepted;
 | [0003-dev-prod-environment-split.md](decisions/0003-dev-prod-environment-split.md) | The dev/prod two-project split, migration-history materialization, repair migrations. |
 | [0004-documentation-structure.md](decisions/0004-documentation-structure.md) | Why this docs tree looks the way it does: graph discipline over a knowledge graph, and what agent memory may hold. |
 | [0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md) | The enforcement ladder: every learned lesson climbs Tier 1 (unwritable) or Tier 2 (checked) before resting as prose. |
+| [0006-testing-architecture.md](decisions/0006-testing-architecture.md) | The deterministic/canary split: full batteries run against the local Supabase stack, a nine-test cloud canary proves the live providers. |
 
 ## Skills
 

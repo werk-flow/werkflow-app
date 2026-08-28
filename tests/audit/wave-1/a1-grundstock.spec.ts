@@ -44,6 +44,39 @@ import { confirmTestUserEmail } from '../../golden/support/seed';
 
 test.describe.configure({ mode: 'serial' });
 
+// A Realtime refresh can close a material dialog mid-interaction before the
+// submit (testing.md refresh-interrupted class; frequent on the fast local
+// stack — this closed the Zurücklegen dialog under a running fill on
+// 2026-08-28). Retries the complete transaction only when the dialog was
+// removed before submission; a completed submit never retries.
+async function bookMaterialDialog(
+  page: Page,
+  openButton: Locator,
+  heading: string,
+  quantity: string,
+  submitLabel: string = heading
+): Promise<void> {
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: heading }),
+  });
+  for (let attempt = 1; ; attempt += 1) {
+    await openButton.click();
+    try {
+      await dialog.locator('input[id$="-quantity"]').fill(quantity, { timeout: 15_000 });
+      await selectFromSearchable(
+        page,
+        dialog.locator('button[id$="-location"]'),
+        'Hauptlager (Golden)'
+      );
+      await dialog.getByRole('button', { name: submitLabel }).click();
+      break;
+    } catch (error) {
+      if (attempt >= 2 || (await dialog.count()) > 0) throw error;
+    }
+  }
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+}
+
 async function toggleInstructionItem(
   page: Page,
   button: Locator,
@@ -156,7 +189,7 @@ async function expectSignedWindowOpen(
   const popup = await popupPromise;
   await expect
     .poll(() => page.evaluate(() => document.documentElement.dataset.signedWindowOpenUrl ?? ''))
-    .toMatch(/^https:\/\/.+X-Amz-(Algorithm|Signature)=/);
+    .toMatch(/^https?:\/\/.+X-Amz-(Algorithm|Signature)=/);
   await popup.close().catch(() => undefined);
 }
 
@@ -1856,9 +1889,25 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(documentRows).toHaveCount(0);
     await documentSearch.fill('');
     await documentSearch.press('Enter');
-    // The cleared search commits asynchronously; navigating before the file row
-    // returns carries the stale query into the folders view and hides the file.
-    await expect(documentRows).toHaveCount(1, { timeout: 20_000 });
+    // The cleared search commits asynchronously, and a late Realtime
+    // router.refresh can revert the controlled input to the stale negative
+    // query (observed 2026-08-28 on the fast local stack). Clearing is
+    // idempotent and read-only, so re-commit it whenever the revert
+    // demonstrably happened, then assert the row strictly.
+    await expect
+      .poll(
+        async () => {
+          if ((await documentRows.count()) === 1) return 'row-visible';
+          if ((await documentSearch.inputValue()) !== '') {
+            await documentSearch.fill('');
+            await documentSearch.press('Enter');
+          }
+          return 'pending';
+        },
+        { timeout: 30_000 }
+      )
+      .toBe('row-visible');
+    await expect(documentRows).toHaveCount(1);
     // Navigate directly: the view-tab href embeds the live searchQuery state,
     // and a late Realtime router.refresh can revert that state to the stale
     // negative query mid-click, carrying the old search into the folders view.
@@ -1984,7 +2033,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     await expect(imagePreview).toBeVisible({ timeout: 20_000 });
     await expect(viewer.getByRole('link', { name: 'Neuer Tab' })).toHaveAttribute(
       'href',
-      /^https:\/\/.+X-Amz-(Algorithm|Signature)=/
+      /^https?:\/\/.+X-Amz-(Algorithm|Signature)=/
     );
     await expectSignedWindowOpen(adminPage, () =>
       viewer.getByRole('button', { name: 'Herunterladen' }).click()
@@ -1997,7 +2046,7 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     });
     await expect(viewer.getByTitle(pdfViewerFile)).toHaveAttribute(
       'src',
-      /^https:\/\/.+X-Amz-(Algorithm|Signature)=.+#toolbar=0/
+      /^https?:\/\/.+X-Amz-(Algorithm|Signature)=.+#toolbar=0/
     );
   });
 
@@ -2052,15 +2101,30 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     const liveFileName = `a1-doc-live-${world.runId}.txt`;
     await adminPage.goto('/dokumente?view=all');
     await bueroPage.goto('/dokumente');
-    await bueroPage.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
-      name: liveFileName,
-      mimeType: 'text/plain',
-      buffer: Buffer.from('A1 document Realtime'),
-    });
     const uploadDialog = bueroPage.getByRole('dialog').filter({
       has: bueroPage.getByRole('heading', { name: 'Dateien hochladen' }),
     });
-    await expect(uploadDialog).toBeVisible({ timeout: 15_000 });
+    // Right after navigation the file input can receive the files before
+    // hydration attaches its change handler, so nothing opens (pre-hydration
+    // class; surfaced by the fast local stack 2026-08-28). Wait for hydration
+    // like the login helper does; no dialog means no upload started, so
+    // re-selecting the files is safe.
+    await bueroPage.waitForLoadState('networkidle');
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await bueroPage.locator('input[type="file"]:not([webkitdirectory])').setInputFiles({
+        name: liveFileName,
+        mimeType: 'text/plain',
+        buffer: Buffer.from('A1 document Realtime'),
+      });
+      const opened = await uploadDialog
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (opened) break;
+      if (attempt === 3) {
+        throw new Error('Upload dialog did not open after three file selections.');
+      }
+    }
     await expect(uploadDialog).toHaveCount(0, { timeout: 60_000 });
     await expect(visibleText(bueroPage, liveFileName)).toBeVisible({ timeout: 15_000 });
     // The admin channel can still be subscribing when the INSERT fires right
@@ -2285,33 +2349,22 @@ test.describe('A1 Grundstock und Wave 0 @AUDIT-W1-A1', () => {
     const plannedLine = employeePage
       .getByText(world.inventory.itemName, { exact: true })
       .locator('xpath=ancestor::div[contains(@class, "rounded-md") and contains(@class, "border")][1]');
-    await plannedLine.getByRole('button', { name: 'Entnahme buchen' }).click();
-    dialog = employeePage.getByRole('dialog').filter({
-      has: employeePage.getByRole('heading', { name: 'Entnahme buchen' }),
-    });
-    await dialog.locator('input[id$="-quantity"]').fill('2');
-    await selectFromSearchable(
+    await bookMaterialDialog(
       employeePage,
-      dialog.locator('button[id$="-location"]'),
-      'Hauptlager (Golden)'
+      plannedLine.getByRole('button', { name: 'Entnahme buchen' }),
+      'Entnahme buchen',
+      '2'
     );
-    await dialog.getByRole('button', { name: 'Entnahme buchen' }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     const worldMaterialLine = employeePage
       .getByText(world.inventory.itemName, { exact: true })
       .locator('xpath=ancestor::div[contains(@class, "rounded-md") and contains(@class, "border")][1]');
-    await worldMaterialLine.getByRole('button', { name: 'Zurücklegen' }).click();
-    dialog = employeePage.getByRole('dialog').filter({
-      has: employeePage.getByRole('heading', { name: 'Material zurücklegen' }),
-    });
-    await dialog.locator('input[id$="-quantity"]').fill('1');
-    await selectFromSearchable(
+    await bookMaterialDialog(
       employeePage,
-      dialog.locator('button[id$="-location"]'),
-      'Hauptlager (Golden)'
+      worldMaterialLine.getByRole('button', { name: 'Zurücklegen' }),
+      'Material zurücklegen',
+      '1',
+      'Zurücklegen'
     );
-    await dialog.getByRole('button', { name: 'Zurücklegen' }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     const returnReachedUi = await expect(worldMaterialLine).toContainText(/\+1/, { timeout: 5_000 })
       .then(() => true).catch(() => false);
     if (!returnReachedUi) await employeePage.reload();

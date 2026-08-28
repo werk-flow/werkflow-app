@@ -382,7 +382,10 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(visibleText(employeePage, 'Feldstraße 26, 10115 Berlin')).toBeVisible();
     await expect(visibleText(employeePage, 'Zugang: Seitentor, Schlüsselcode 2600')).toBeVisible();
     await expect(visibleText(employeePage, contact)).toBeVisible();
-    await expect(employeePage.getByRole('link', { name: '+49 30 260026' }))
+    // P1-16's field view renders the call action as an „Anrufen" link named
+    // after the contact instead of showing the raw number as link text; the
+    // callable-contact promise is the tel: href.
+    await expect(employeePage.getByRole('link', { name: `${contact} anrufen` }))
       .toHaveAttribute('href', 'tel:+4930260026');
   });
 
@@ -784,7 +787,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(bueroPage.locator('input[type="file"]')).toHaveCount(0);
   });
 
-  test('A2-R04: Auftragsumwandlung ist vollständig vorbefüllt, editierbar, geparkt und versandfrei', async ({
+  test('A2-R04: Auftragsumwandlung ist vollständig vorbefüllt, editierbar, ungeplant und versandfrei', async ({
     adminPage,
     world,
   }) => {
@@ -826,7 +829,10 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await requestLink.click();
     await expect(visibleText(adminPage, editedTitle)).toBeVisible();
     await expect(visibleText(adminPage, editedDescription)).toBeVisible();
-    await expect(visibleText(adminPage, 'Geparkt')).toBeVisible();
+    // Since P1-12/P1-14 a conversion no longer creates a passive parked state
+    // (catalog P1-02-F05, BASE-WORK-F03): a date-less converted job is honest
+    // unplanned open work, and parking stays a separate reasoned act.
+    await expect(visibleText(adminPage, 'Nicht geplant')).toBeVisible();
     await expect(adminPage.getByRole('link', { name: `Anfrage ${requestNumber}` })).toBeVisible();
 
     const state = await getConvertedRequestJobState(world.orgId, requestNumber);
@@ -834,7 +840,7 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       title: editedTitle,
       description: editedDescription,
       priority: 'hoch',
-      status: 'geparkt',
+      status: 'nicht_bearbeitet',
       plannedDate: null,
       planningCount: 0,
       dispatchCount: 0,

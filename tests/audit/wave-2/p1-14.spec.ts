@@ -11,6 +11,7 @@ import {
   createAndPublishWorkTemplate,
   createJob,
   createProject,
+  selectAllHandoverSources,
   selectFromSearchable,
   typeIntoDatePickerById,
 } from "../../golden/support/steps";
@@ -372,10 +373,14 @@ test.describe("P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2",
     await adminPage
       .getByRole("option", { name: "Deklarierte Voraussetzung" })
       .click();
+    // Since P1-17 an approval-kind (Freigabe) dependency is satisfied by
+    // linking a released Arbeitsnachweis, not by the manual Erfüllt cycle
+    // this test exercises; the manual cycle stays sanctioned for the other
+    // declared kinds.
     await selectFromSearchable(
       adminPage,
       dialog.locator("#dependency-target"),
-      "Freigabe",
+      "Bedingung am Einsatzort",
     );
     await dialog
       .locator("#dependency-description")
@@ -385,10 +390,15 @@ test.describe("P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2",
       .getByRole("option", { name: "Blockiert den Abschluss" })
       .click();
     await dialog.getByRole("button", { name: "Hinzufügen" }).click();
+    // Bound each step so a lost submit or a Realtime remount fails in seconds
+    // with the real cause instead of waiting out the test budget (local-stack
+    // finding 2026-08-28).
+    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     const declared = card
       .getByTestId("work-dependency-row")
       .filter({ hasText: "Bauseitige Freigabe liegt vor." });
-    await declared.getByRole("button", { name: "Erfüllt" }).click();
+    await expect(declared).toBeVisible({ timeout: 20_000 });
+    await declared.getByRole("button", { name: "Erfüllt" }).click({ timeout: 15_000 });
     dialog = adminPage.getByRole("dialog");
     await dialog
       .locator("#work-reason")
@@ -413,7 +423,7 @@ test.describe("P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2",
     expect(state.dependencies).toHaveLength(2);
     expect(
       state.dependencies.find(
-        (dependency) => dependency.declared_kind === "approval",
+        (dependency) => dependency.declared_kind === "site_condition",
       ),
     ).toMatchObject({
       effect: "blocks_completion",
@@ -490,19 +500,62 @@ test.describe("P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2",
 
     await adminPage.reload();
     await transition(adminPage, "Ausführung abgeschlossen");
+    // Since P1-17, handed_over is reached only through the handover release
+    // flow — the pre-P1-17 manual manager transition no longer exists. The
+    // full handover section lives on the dedicated Übergabe page and needs at
+    // least one releasable source; a run-scoped job document is the cheapest
+    // (the shared fixture name would collide with P1-15's upload in the same
+    // world and get dedup-renamed).
+    await adminPage.goto(`/auftraege/${jobNumber}`);
+    await expect(adminPage.getByText("Dokumente & Bilder")).toBeVisible({
+      timeout: 30_000,
+    });
     await adminPage
-      .getByTestId("work-lifecycle-card")
-      .getByRole("button", { name: "Übergeben", exact: true })
+      .locator("section, div")
+      .filter({ has: adminPage.getByText("Dokumente & Bilder") })
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({
+        name: `p114-uebergabequelle-${world.runId}.pdf`,
+        mimeType: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4\nP1-14 Uebergabequelle"),
+      });
+    await expect(adminPage.getByText("1 von 1 abgeschlossen")).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(adminPage.getByText("Upload fehlgeschlagen.")).toHaveCount(0);
+    const uploadClose = adminPage.getByRole("button", { name: "Schließen" });
+    if (await uploadClose.isVisible().catch(() => false)) {
+      await uploadClose.click();
+    }
+    await expect(adminPage.getByRole("dialog")).toHaveCount(0, { timeout: 10_000 });
+    await adminPage.goto(`/auftraege/${jobNumber}/uebergabe`);
+    const handoverSection = adminPage.getByTestId("work-handover-section");
+    await selectAllHandoverSources(handoverSection);
+    await handoverSection.getByRole("button", { name: "Entwurf speichern" }).click();
+    await expect(handoverSection.getByText("Entwurf gespeichert.")).toBeVisible({
+      timeout: 20_000,
+    });
+    const handoverOverride = handoverSection.getByLabel("Begründung der Ausnahme");
+    if (await handoverOverride.isVisible().catch(() => false)) {
+      await handoverOverride.fill(
+        "Offene Punkte sind im Übergabepaket transparent ausgewiesen.",
+      );
+    }
+    const previewPromise = adminPage.waitForEvent("popup");
+    await handoverSection.getByRole("button", { name: "Vorschau öffnen" }).click();
+    const handoverPreview = await previewPromise;
+    await handoverPreview.waitForLoadState("domcontentloaded");
+    await expect(
+      handoverSection.getByText("Vorschau erstellt.", { exact: false }),
+    ).toBeVisible({ timeout: 20_000 });
+    await handoverSection
+      .getByRole("button", { name: "Freigeben und übergeben" })
       .click();
-    const handoverDialog = adminPage.getByRole("dialog");
-    await handoverDialog.getByRole("checkbox").check();
-    await handoverDialog
-      .locator("#work-transition-reason")
-      .fill("Übergabe wird vor P1-17 bewusst als Manager-Ausnahme dokumentiert.");
-    await handoverDialog
-      .getByRole("button", { name: "Änderung speichern" })
-      .click();
-    await expect(handoverDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(
+      handoverSection.getByText("Übergabepaket freigegeben", { exact: false }),
+    ).toBeVisible({ timeout: 30_000 });
+    await handoverPreview.close();
     const state = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(state.entity).toMatchObject({
       execution_state: "handed_over",

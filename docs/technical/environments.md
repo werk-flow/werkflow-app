@@ -2,7 +2,7 @@
 
 Status: living — last reviewed 2026-08-28
 
-WerkFlow runs on two fully separated backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)). This document is the operational reference: which project is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
+WerkFlow runs on two fully separated cloud backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)), plus a local Supabase stack for the browser-test harness since 2026-08-28 (decision [0006](../decisions/0006-testing-architecture.md)). This document is the operational reference: which backend is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
 
 ## The two backends
 
@@ -12,7 +12,7 @@ WerkFlow runs on two fully separated backend environments since 2026-08-18 (deci
 | Supabase org | "WerkFlow" (`svxdwqapsmvfkchswonc`) | same org since 2026-08-20 (transfer verified: refs/keys unchanged) |
 | Region / compute | AWS eu-central-1, Postgres 17 | AWS eu-central-1 (same, deliberate), Postgres 17, Micro compute since 2026-08-21 |
 | R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS: localhost only) |
-| Serves | Deployed app on Vercel, real customers | Local dev server, Playwright harness (Golden + audit) |
+| Serves | Deployed app on Vercel, real customers | Local dev server, the cloud canary suite, wave-end cloud certifications (the Golden/audit batteries run against the local stack since 2026-08-28) |
 | Edge functions | `send-invite-email`, `send-email-change-current-otp` | Same two, deployed from `supabase/functions/` |
 | Auth | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key) |
 
@@ -22,25 +22,53 @@ Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "Wer
 
 **Auth/config parity:** project configuration (auth email templates, SMTP, rate limits) is not schema and is not covered by migrations or the decision-0003 object comparison. `bun scripts/sync-dev-auth-from-prod.ts` diffs the complete auth config of both projects and with `--apply` syncs the `mailer_*` fields prod → dev (this fixed the 2026-08-20 gap where dev sent confirmation links instead of the app's 6-digit OTP). Run the diff after any dashboard-side auth change on prod.
 
+## The local test stack
+
+Since Stage A of the [platform-hardening phase](../plans/platform-hardening.md), the full Golden and audit batteries run against a local Supabase stack; cloud DEV keeps the canary suite and live-state inspection (decision [0006](../decisions/0006-testing-architecture.md)). The stack is the Supabase CLI's Docker composition, running on Docker Engine (docker-ce) inside WSL Ubuntu — not Docker Desktop.
+
+| | Local stack |
+| --- | --- |
+| Runs | `supabase start` from the repo root inside WSL (config: `supabase/config.toml`) |
+| API / DB / Studio / Mailpit | ports 54321 / 54322 / 54323 / 54324 |
+| Schema | `supabase db reset` replays the committed `supabase/migrations/` history — a failing reset is a finding about that history |
+| Keys | the CLI's shared local defaults (`sb_publishable_…`/`sb_secret_…`), printed by `supabase status`; not secrets |
+| Storage | bundled S3-compatible endpoint (`/storage/v1/s3`), bucket `werkflow-documents-local` declared in `config.toml`; the app reaches it through the `R2_ENDPOINT` override |
+| Auth posture | mirrors the cloud posture in `config.toml` (password min length 8, OTP 6 digits / 5 minutes, confirmations on); auth mail lands in Mailpit, never real inboxes. Leaked-password protection (HIBP) needs internet and has no local equivalent — the canary owns that copy |
+| Edge functions | served from `supabase/functions/`; without a local `RESEND_API_KEY` the mail functions log instead of sending, which is the intended local behavior |
+
+Operational facts for this workstation:
+
+- Windows reaches the stack via the WSL VM's NAT address, not `localhost`: the Windows→WSL localhost relay drops connections under sustained traffic (observed 2026-08-28; mirrored networking is blocked by the corporate IPv6 policy). `bun run env:local` resolves the current WSL address and rewrites `.env.local` — rerun it after every WSL restart, and rebuild before certification because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with a clear remedy when the address is stale.
+- `supabase db reset` leaves the edge-runtime container stopped (CLI 2.116.0). The preflight detects it; the remedy is `wsl docker start supabase_edge_runtime_werkflow-app`.
+- Docker and the stack survive WSL restarts (systemd starts Docker; containers restart themselves), but the WSL address changes — hence the `env:local` rerun.
+
 ## Env-file ownership
 
 `.env.local` (gitignored) is the only env file Next.js loads locally, and it points at **dev**. Vercel holds production's environment variables independently — no local file change can ever affect deployed behavior (NEXT_PUBLIC_* values are baked at build time per deployment).
 
 Gitignored backups next to it:
 
-- `.env.dev-backup` — the dev configuration (normal state of `.env.local`)
+- `.env.local-stack-backup` — the local test stack (normal state for harness work; `env:local` refreshes its WSL address on every switch)
+- `.env.dev-backup` — the cloud dev configuration (normal state for dev-server work and canary runs)
 - `.env.live-backup` — the production configuration (Supabase prod + `werkflow-documents-prod`)
 
-Both are outside Next.js's env loading chain (only `.env`, `.env.local`, `.env.development*`, `.env.production*`, `.env.test*` are loaded), so their presence changes nothing.
+All three are outside Next.js's env loading chain (only `.env`, `.env.local`, `.env.development*`, `.env.production*`, `.env.test*` are loaded), so their presence changes nothing.
 
-Swapping (the deliberate escape hatch for rare prod-local sessions):
+Swapping:
 
 ```bash
-bun run env:dev    # .env.local -> dev backend (normal state)
+bun run env:local  # .env.local -> local Supabase stack (golden/audit batteries)
+```
+
+```bash
+bun run env:dev    # .env.local -> cloud dev backend (canary, live inspection)
+```
+
+```bash
 bun run env:prod   # .env.local -> LIVE PRODUCTION backend (loud warning; no tests!)
 ```
 
-Never run the Playwright harness or destructive scripts while `.env.local` points at prod. Switch back immediately after the prod-local task is done.
+Never run the Playwright harness or destructive scripts while `.env.local` points at prod. Switch back immediately after the prod-local task is done. The test preflight additionally refuses any run whose `.env.local` routing does not match the requested target, so a forgotten switch fails loudly instead of sweeping the wrong backend.
 
 ## Which tool reaches what
 
@@ -56,8 +84,8 @@ Never run the Playwright harness or destructive scripts while `.env.local` point
 
 Every schema change is **a file in `supabase/migrations/` first**, and is applied **dev-first, prod-second** — via the MCP `apply_migration` or the CLI, but always both projects and always from the same committed file. Details and the repair-migration story: [decision 0003](../decisions/0003-dev-prod-environment-split.md).
 
-- Dev: `bunx supabase db push` (repo is linked to the dev ref), or MCP `apply_migration` against `mbkkzuqjbdvzelqvuzcn`.
-- Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod.
+- Dev: prefer `bunx supabase db push` (repo is linked to the dev ref) — it records the committed file's exact version in the remote history. MCP `apply_migration` works but stamps its own apply-time version: 23 pre-Stage-A migrations diverged that way from the committed filenames until the history was repaired by a name-keyed version update on 2026-08-28. Canary C9 now fails on any new divergence, so an MCP-applied dev migration must be followed by the same history alignment.
+- Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod. Prod's recorded history carries the same apply-time-version divergence for MCP-applied migrations; it is harmless there (nothing pushes against prod's history) and repairing it is a deliberate future act, not routine work.
 - After a schema change: regenerate `lib/supabase/database.types.ts` (`bunx supabase gen types typescript --project-id mbkkzuqjbdvzelqvuzcn --schema public`) — dev and prod schemas are identical, so dev is the generation source.
 
 **Latest parity checkpoint (P1-17, 2026-08-28):** migrations `20260827150000` through `20260827151400` were applied DEV-first and then identically to production. Fresh DEV-generated types exactly match `lib/supabase/database.types.ts`. Both Security Advisors returned zero findings; migration 1514 removed every new unindexed-foreign-key notice. Production retained 40 jobs and 14 projects and received zero rows in all five handover tables. Performance Advisor `unused_index` notices on the new empty tables are expected until real workload exists; they are not a reason to remove foreign-key or query-path indexes before usage data exists.
@@ -76,7 +104,8 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
    env = { "SUPABASE_ACCESS_TOKEN" = "…" }
    ```
 
-5. **Verify**: `bunx supabase projects list` shows both projects; `bun scripts/check-r2.ts` passes the EU round-trip against the dev bucket; `bun run test:golden:gg00` passes 13/13.
+5. **Local stack**: install Docker Engine inside WSL Ubuntu (`docker-ce` via Docker's apt repo; corporate proxies permitting), install the Supabase CLI in WSL (pinned to the version in use — 2.116.0 as of Stage A), then from the repo root in WSL: `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from another machine or from the values `supabase status` prints (the keys are shared CLI defaults; copy `SUPABASE_ACCESS_TOKEN` in from `.env.local` — a swap overwrites `.env.local`, so the PAT must live in every backup).
+6. **Verify**: `bunx supabase projects list` shows both cloud projects; `bun scripts/check-r2.ts` passes the EU round-trip against the dev bucket; `bun run env:local` then `bun run test:golden:gg00` passes against the local stack.
 
 ## Escape hatches for prod work
 

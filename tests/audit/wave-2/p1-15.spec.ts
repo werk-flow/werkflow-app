@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 
 import type { Locator, Page } from '@playwright/test';
 
@@ -21,9 +20,7 @@ import {
   selectFromSearchable,
   typeIntoDatePickerById,
   typeIntoDateTimeField,
-  uploadDocumentOnJobPage,
 } from '../../golden/support/steps';
-import { ARTIFACTS_DIR } from '../../golden/support/world';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -339,7 +336,29 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const artifactTitle = `Kundenbericht ${world.runId}`;
     await createAndPublishWorkTemplate(adminPage, { name: templateName, targetType: 'job', firstItem: 'Inbetriebnahme dokumentieren', evidenceDescription: 'Abschlussbericht der Inbetriebnahme' });
     await createJob(adminPage, { jobNumber, title: jobTitle, assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`, workTemplateName: templateName });
-    await uploadDocumentOnJobPage(employeePage, jobNumber, resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'), 'upload-fixture');
+    // Run-scoped name: the shared fixture name collides with A2's uploads in
+    // the full-battery world and gets dedup-renamed, which would break the
+    // exact-name document selection below.
+    const evidenceFileName = `p115-nachweis-${world.runId}.pdf`;
+    await employeePage.goto(`/auftraege/${jobNumber}`);
+    await expect(employeePage.getByText('Dokumente & Bilder')).toBeVisible({ timeout: 30_000 });
+    await employeePage
+      .locator('section, div')
+      .filter({ has: employeePage.getByText('Dokumente & Bilder') })
+      .locator('input[type="file"]')
+      .first()
+      .setInputFiles({
+        name: evidenceFileName,
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\nP1-15 Nachweisdokument'),
+      });
+    await expect(employeePage.getByText('1 von 1 abgeschlossen')).toBeVisible({ timeout: 60_000 });
+    await expect(employeePage.getByText('Upload fehlgeschlagen.')).toHaveCount(0);
+    const evidenceUploadClose = employeePage.getByRole('button', { name: 'Schließen' });
+    if (await evidenceUploadClose.isVisible().catch(() => false)) {
+      await evidenceUploadClose.click();
+    }
+    await expect(employeePage.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
     await clockInOnJob(employeePage, jobTitle);
     await clockOut(employeePage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
@@ -401,7 +420,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
 
     await dialog.getByText('Dokument verknüpfen').click();
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Dokument auswählen' }), 'upload-fixture.pdf');
+    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Dokument auswählen' }), evidenceFileName);
     await dialog.getByRole('button', { name: 'Verknüpfen', exact: true }).first().click();
     await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).documents
       .filter((document) => document.relation === 'supporting_evidence').length).toBe(1);

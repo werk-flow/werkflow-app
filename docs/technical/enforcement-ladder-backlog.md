@@ -4,6 +4,8 @@ Status: living — last reviewed 2026-08-28
 
 The open conversion candidates from the 2026-08-27 three-part audit (code comments, docs, skills) under [decision 0005](../decisions/0005-enforcement-ladder.md). Each row names the rule, where it lives as prose today, and the concrete mechanism that would enforce it. Remove a row when its conversion lands (and annotate the owning doc "enforced by …"); add rows as new lessons appear. Most rows are scheduled for the Realtime/testing consolidation phase after P1-17.
 
+Stage A of that phase (2026-08-28) added its own protections directly rather than through this backlog: run-policy pins the canary suite to the cloud target and the preflight refuses any run whose `.env.local` routing does not match the requested target (Tier 1); retained-world cleanup refuses a backend mismatch (Tier 1); the untracked-file fingerprint uses NUL-separated git output (Tier 1); local-stack health probes carry named remedies and the canary pins the HIBP copy and migration-history parity (Tier 2).
+
 ## Tier 1 candidates (make it unwritable)
 
 | Rule (prose home) | Mechanism |
@@ -24,6 +26,7 @@ The open conversion candidates from the 2026-08-27 three-part audit (code commen
 | Status colors semantic-only (AGENTS.md styling) | `statusVariant(status)` registry helper; ban raw `bg-green-*`/`bg-red-*`/`bg-yellow-*` |
 | Hardcoded German UI strings buried in logic (AGENTS.md) | A `de` message catalog + lint on string literals in JSX text/aria positions |
 | Harness mutation helpers can return the optimistic echo (testing rule 13) | Step helpers return the persisted row (db.ts read or reload) |
+| "Never run two browser batteries concurrently" is operator discipline (testing.md; audit/canary config comments) | Runner acquires an exclusive lock on the shared `tests/golden/.artifacts` state before preflight and releases it after the child settles, so a concurrent second battery refuses instead of clobbering the world (CodeRabbit finding, Stage A 2026-08-28) |
 
 ## Tier 2 candidates (a check catches it)
 
@@ -45,7 +48,7 @@ The open conversion candidates from the 2026-08-27 three-part audit (code commen
 | No polling without a named exception (realtime doc; `use-member-status-polling` is unnamed today) | Ban `setInterval` in product dirs with a named allowlist |
 | Radix dialog imports bypassing the suspension wrapper (freshness rule 6) | Ban `@radix-ui/react-dialog`/`react-alert-dialog` imports outside `components/ui/**` |
 | Purple/violet/amber palette bans; ring offsets; heavy shadows; hex in components (2 files to clean first) | Styling selector additions after the small cleanups |
-| Migration history alignment; generated-types drift; auth-config posture; advisors clean (environments.md, supabase skill) | `migrations:check`, `types:check`, sync script `--check` mode, `advisors:check` |
+| Generated-types drift; auth-config posture; advisors clean (environments.md, supabase skill) | `types:check`, sync script `--check` mode, `advisors:check`. Migration-history alignment landed in Stage A: canary C9 fails on any divergence between DEV's `schema_migrations` and the committed files, and every local `supabase db reset` validates the history itself |
 | Build while a server serves `.next` (testing rule 3); dev-server fallback in `webServer` config (rule 1) | `guarded-build` script reusing the listener check; drop `webServer` from the certification path |
 | Destructive migrations unmarked (protocol) | SQL lint requiring a `-- @destructive: <reason>` marker |
 | Every public table has RLS + org column (protocol invariant 2) | Live dev check with a named global-table allowlist |
@@ -60,7 +63,7 @@ The open conversion candidates from the 2026-08-27 three-part audit (code commen
 ## Stale or contradictory prose found by the audit (fix in the owning docs)
 
 - AGENTS.md Bun-First: the "no package-lock.json" bullet contradicts the later "package-lock.json is completely fine" note and the tracked file — reconcile before any lockfile check.
-- testing.md rule 5 (Chromium installed) and environments.md's hardcoded 13/13 onboarding count are workstation state / stale counters, not repository rules.
+- testing.md rule 5 (Chromium installed) is workstation state, not a repository rule. (environments.md's hardcoded onboarding count was removed in Stage A.)
 - architecture.md "Implementation Simplicity" near-duplicates AGENTS.md's simplicity bullets (one-home-per-fact violation).
 - coderabbit.md's plan/rate-limit facts are self-flagged stale; verify before encoding the review wrapper's limit.
 - Entity lists vs fixed-enum `Select` (werkflow-design): 24 candidate files need one human triage pass before any freeze.
