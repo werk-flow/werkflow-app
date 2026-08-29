@@ -1,16 +1,17 @@
 ---
 name: supabase-live-workflow
-description: Use for Supabase-related work in this WerkFlow repo: database schema/state inspection, SQL, auth, RLS, storage, edge functions, project metadata, generated types, or any task where live Supabase state matters. Covers the two-project model (prod + dev), which tool reaches which project, and the dev-first migration rule.
+description: Use for Supabase-related work in this WerkFlow repo: database schema/state inspection, SQL, auth, RLS, storage, edge functions, project metadata, generated types, or any task where live Supabase state matters. Covers the two cloud projects (prod + dev) plus the local test stack, which tool reaches which backend, and the dev-first migration rule.
 ---
 
 # Supabase Live Workflow
 
-WerkFlow runs on **two** Supabase projects since 2026-08-18 (decision `docs/decisions/0003-dev-prod-environment-split.md`; operational reference `docs/technical/environments.md`):
+WerkFlow runs on **two** cloud Supabase projects since 2026-08-18 (decision `docs/decisions/0003-dev-prod-environment-split.md`), plus a **local Supabase stack** in WSL for the browser-test harness since 2026-08-28 (decision `docs/decisions/0006-testing-architecture.md`; operational reference `docs/technical/environments.md`):
 
 - **Prod** `jbgaqpdjauzoocplgdsn` — real customers, serves the deployed Vercel app. Treat as read-only outside the migration rule below.
-- **Dev** `mbkkzuqjbdvzelqvuzcn` — local dev and the entire Playwright harness. Routine-write territory. Both projects run under the org's Pro plan since 2026-08-21, so dev does not auto-pause; the current plan/compute posture lives in `docs/technical/environments.md`.
+- **Dev** `mbkkzuqjbdvzelqvuzcn` — local dev, the cloud canary suite, and wave-end cloud batteries. Routine-write territory. Both cloud projects run under the org's Pro plan since 2026-08-21, so dev does not auto-pause; the current plan/compute posture lives in `docs/technical/environments.md`.
+- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) — the default backend for the Golden and audit batteries. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
 
-`.env.local` points at dev. Schemas are kept identical through the shared migration history in `supabase/migrations/`.
+`.env.local` has no permanent target: the `bun run env:local` / `env:dev` / `env:prod` scripts switch it between the three backends. Schemas are kept identical through the shared migration history in `supabase/migrations/`.
 
 ## Which tool reaches what
 
