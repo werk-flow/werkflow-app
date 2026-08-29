@@ -24,7 +24,7 @@ On 2026-08-27, four full certifications failed at the final boundary because a h
 ## Initial adoption (2026-08-27)
 
 - Tier 1: `withRoleClient` wraps harness RLS sign-ins with scope-local cleanup; every app `signOut` carries an explicit scope; `lib/supabase/admin.ts` is `server-only`; `bunfig.toml` scopes `bun test` to `lib/` so browser specs only run through the repository runner; `app/globals.css` honors `prefers-reduced-motion` globally.
-- Tier 2: composed rule sets in `eslint.config.mjs` — auth scope, production project-ref quarantine, Realtime ownership (channels, auth listeners, focus/visibility catch-up, with a frozen legacy allowlist that may shrink, never grow), the UI registry bans (now including `details`/`summary`), the styling canon (radius scale, arbitrary hex classes, gradient syntax), and `no-console` — plus the `typecheck` package script.
+- Tier 2: composed rule sets in `eslint.config.mjs` — auth scope, production project-ref quarantine, Realtime ownership (channels, auth listeners, focus/visibility catch-up, with a frozen legacy allowlist that may shrink, never grow — it reached zero and was deleted in platform-hardening Stage B, 2026-08-28), the UI registry bans (now including `details`/`summary`), the styling canon (radius scale, arbitrary hex classes, gradient syntax), and `no-console` — plus the `typecheck` package script.
 - Tier 3: this record, the ladder rule in `AGENTS.md`, and the tier column in the incident log.
 
 The three-part audit (code comments, docs, skills) that seeded this adoption produced a substantially larger conversion backlog; it lives in [enforcement-ladder-backlog.md](../technical/enforcement-ladder-backlog.md) and feeds the Realtime/testing consolidation phase planned after P1-17.

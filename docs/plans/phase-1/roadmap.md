@@ -46,7 +46,7 @@ They do not make later roadmap slices complete automatically. `P1-00` verified t
 | Other ready slices | `P1-21` |
 | Current implementation wave | Wave 2; next eligible slice is P1-18 |
 | Latest completed golden gate | `GG-04`: focused `@AUDIT-W2-P1-17` 4/4 (world `mtc6tlit`, 8.6m) followed by full Golden 110/110 (world `mtc767kd`, 56.6m) on frozen build `X4oL6dbQcckKrMaF8IuOX`, 2026-08-28 (`docs/plans/golden-gate-log.md`) |
-| Known execution blocker | None |
+| Known execution blocker | The [platform-hardening phase](../platform-hardening.md) runs between P1-17 and P1-18 (owner decision, 2026-08-28): Stages A (local test stack + cloud canary) and B (Realtime consolidation) are complete; Stage C (legacy audit sweep) is open. P1-18 starts after the phase closes. |
 | Last roadmap review | 28 August 2026 |
 
 Agents must update this table whenever a slice enters `in_progress`, `verification`, `complete`, or `decision_blocked`.

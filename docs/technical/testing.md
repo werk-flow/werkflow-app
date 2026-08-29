@@ -91,7 +91,7 @@ A test that passes must mean the business outcome happened: pair every positive 
 | `tests/golden/support/world.ts` | The world contract and artifact paths |
 | `tests/golden/support/fixtures.ts` | `adminPage` / `bueroPage` / `employeePage` / `outsiderPage` fixtures bound to the saved sessions |
 | `tests/golden/support/steps.ts` | **The reuse mechanism**: named business steps (`createCustomer`, `createJob`, `uploadDocumentOnJobPage`, …). Specs compose steps; when a slice changes UI, update the step once and every gate follows |
-| `tests/golden/support/live.ts` | `expectLiveWithin`: the D4 latency-contract assertion (2 s target; hard budget 5 s local / 15 s cloud) used by the key cross-session checks (GG-00, P1-10, P1-12, canary C3); appends every measured latency to the run archive (`live-latencies.ndjson`) |
+| `tests/golden/support/live.ts` | `expectLiveWithin`: the D4 latency-contract assertion (2 s target; 15 s hard budget, local and cloud) used by the key cross-session checks (GG-00, P1-10, P1-12, canary C3); appends every measured latency to the run archive (`live-latencies.ndjson`) |
 | `tests/golden/gg-00.spec.ts` | The baseline gate |
 | `tests/golden/gg-01.spec.ts` | The `GG-01` gate: client-request capture, exactly-once conversion, closure, and request authorization boundaries |
 | `tests/golden/p1-01.spec.ts` | P1-01 contacts/sites slice proof (`@P1-01`): snapshot stability, assigned-worker context, search, isolation |

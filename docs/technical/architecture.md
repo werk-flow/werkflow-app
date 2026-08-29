@@ -126,15 +126,14 @@ The product principle is fast initial load with fresh operational data. Avoid ad
 
 Supabase Realtime is centralized through `components/realtime/realtime-provider.tsx`.
 
-The provider subscribes to organization-scoped tables such as time entries, change requests, invites, members, settings, clients, jobs, projects, assignments, instruction items and the mutable handover-package root. Events are debounced to avoid unnecessary refresh storms; immutable handover releases/items/events stay unpublished and refetch behind the root signal.
+The published table list has one home: `REALTIME_TABLES` in `lib/realtime/tables.ts`. The provider generates one organization-filtered binding per entry (`bun run realtime:check` diffs the list against the database's publication and replica-identity state), debounces events centrally, and owns the focus/visibility catch-up. Immutable ledgers stay unpublished and refetch behind their root row's signal.
 
-`hooks/use-realtime-router-refresh.ts` lets components refresh the current route when subscribed tables change.
+Surfaces consume through the live-view family: `hooks/use-live-view.ts` for client refetch views (shared debounce, generation guards, keep-last-known, dialog suspension, catch-up) and `hooks/use-realtime-router-refresh.ts` for route refreshes. Pending state on server actions comes from `hooks/use-server-action.ts`. The full freshness and latency contract lives in [realtime-and-caching.md](realtime-and-caching.md).
 
 When adding new operational data that must stay live:
 
-- Decide whether it belongs in the centralized Realtime provider.
-- Scope events by organization whenever possible.
-- Debounce refreshes or local updates to avoid thundering herds.
+- One migration (publication membership plus minimal `USING INDEX` replica identity) and one `REALTIME_TABLES` line; the provider binds and org-filters it automatically.
+- Consume through the live-view family; debounce, batching, suspension, and catch-up come with the primitive, never per surface.
 - Keep employee views lightweight and manager views efficient.
 
 ## UI And Language

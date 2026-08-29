@@ -113,7 +113,7 @@ The app must feel instant, and the harness holds it to numbers:
 
 `expectLiveWithin` (`tests/golden/support/live.ts`) asserts the budget in the key cross-session checks (GG-00 customer list, P1-10 follow-ups, P1-12 dispatch state, canary C3) and appends every measured latency to the run archive (`live-latencies.ndjson`), so certification runs double as measurements. Dev servers additionally log per-event propagation (`[Realtime] event received … propagationMs`, database commit to client receipt).
 
-Measured baselines (Stage B, 2026-08-28, full local Golden certification `2026-08-28T192722471Z-16757e`): GG-00 customer list 884 ms, P1-10 follow-up 1428 ms, P1-12 dispatch state 954 ms — all cross-session, all under the 2 s target; focused-run measurements sit in the same 0.9–1.5 s band. The ledger in [platform-hardening.md](../plans/platform-hardening.md) keeps the full context.
+Measured baselines (Stage B, 2026-08-28, final frozen-build Golden certification `2026-08-28T215821537Z-a1af14`): GG-00 customer list 883 ms, P1-10 follow-up 957 ms, P1-12 dispatch state 973 ms — all cross-session, all under the 2 s target; earlier certification and focused-run measurements sit in the same 0.9–1.5 s band, and cloud delivery measured 4459 ms (canary C3, over target, archived as such). The ledger in [platform-hardening.md](../plans/platform-hardening.md) keeps the full context.
 
 ## Mutation Guidelines
 

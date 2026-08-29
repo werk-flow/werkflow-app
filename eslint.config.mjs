@@ -45,7 +45,7 @@ const prodRefSelectors = [
 const channelSelector = {
   selector: 'CallExpression[callee.property.name="channel"]',
   message:
-    "Realtime channels are owned by components/realtime/realtime-provider.tsx (client freshness contract rule 1). Consume useRealtimeEvent() or use-realtime-router-refresh.ts instead of opening a channel.",
+    "Realtime channels are owned by components/realtime/realtime-provider.tsx (client freshness contract rule 1). Consume useLiveView() or useRealtimeRouterRefresh() instead of opening a channel.",
 };
 const authListenerSelector = {
   selector: 'CallExpression[callee.property.name="onAuthStateChange"]',

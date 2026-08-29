@@ -42,6 +42,8 @@ Stage B (2026-08-28) retired four Tier 1 rows and two Tier 2 rows by landing the
 | Stage-split per new slice spec; serial mode; ≥1 negative check (testing conventions) | Meta-test over `tests/golden/p1-*.spec.ts` |
 | Golden-marker identities outside the seeder (testing conventions) | Lint ban on `werkflow-golden.test`/`Golden Test SHK`/`Fremde Firma` literals outside `seed.ts` |
 | Mutations must invalidate their cache tags (realtime doc) | Static scan: `'use server'` mutation files must call `updateTag()` via a table→tag registry |
+| The realtime import ban matches only the `@/components/realtime/realtime-provider` specifier (owner audit 2026-08-29) | Add a `patterns` entry so relative specifiers (`./realtime-provider`) carry the same `importNames` ban |
+| `realtime:check` verifies the replident index by name suffix only and ignores publication operation flags (owner audit 2026-08-29) | Extend the parity query: the index column list must equal `(id, organization_id)`; assert `pubinsert`/`pubupdate`/`pubdelete` |
 | Radix dialog imports bypassing the suspension wrapper (freshness rule 6) | Ban `@radix-ui/react-dialog`/`react-alert-dialog` imports outside `components/ui/**` |
 | Purple/violet/amber palette bans; ring offsets; heavy shadows; hex in components (2 files to clean first) | Styling selector additions after the small cleanups |
 | Generated-types drift; auth-config posture; advisors clean (environments.md, supabase skill) | `types:check`, sync script `--check` mode, `advisors:check`. Migration-history alignment landed in Stage A: canary C9 fails on any divergence between DEV's `schema_migrations` and the committed files, and every local `supabase db reset` validates the history itself |
