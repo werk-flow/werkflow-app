@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
-import { Building2 } from 'lucide-react';
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Building2 } from "lucide-react";
 
 import {
   Table,
@@ -9,11 +10,11 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
-} from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ClientActionsMenu } from './client-actions-menu';
-import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ClientActionsMenu } from "./client-actions-menu";
+import { CLIENT_TYPE_LABELS, type Client } from "@/lib/jobs/types";
 
 interface ClientsTableProps {
   clients: Client[];
@@ -174,14 +175,22 @@ export function ClientsTable({
                 className="cursor-pointer transition-colors hover:bg-accent/50"
                 onClick={() => router.push(`/kunden/${client.id}`)}
               >
-                <TableCell className="font-medium">{client.name}</TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={`/kunden/${client.id}`}
+                    className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {client.name}
+                  </Link>
+                </TableCell>
                 <TableCell className="px-4">
                   <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
                     {CLIENT_TYPE_LABELS[client.clientType]}
                   </span>
                 </TableCell>
-                <TableCell>{client.email || '—'}</TableCell>
-                <TableCell>{client.phone || '—'}</TableCell>
+                <TableCell>{client.email || "—"}</TableCell>
+                <TableCell>{client.phone || "—"}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <ClientActionsMenu client={client} />
                 </TableCell>

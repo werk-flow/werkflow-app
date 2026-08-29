@@ -10,8 +10,8 @@ import {
   createDocumentVersionUploadTicket,
   finalizeDocumentUpload,
   finalizeDocumentVersionUpload,
-} from './actions';
-import type { DocumentCategory, DocumentResult, VersionResult } from './types';
+} from "./actions";
+import type { DocumentCategory, DocumentResult, VersionResult } from "./types";
 
 export type UploadProgressHandler = (fraction: number) => void;
 
@@ -22,6 +22,7 @@ type DocumentUploadTargetInput = {
   clientId?: string | null;
   employeeId?: string | null;
   requestId?: string | null;
+  equipmentId?: string | null;
 };
 
 // Shorter than the signed upload URL lifetime (30 min) so a stalled transfer
@@ -31,15 +32,18 @@ const UPLOAD_TIMEOUT_MS = 25 * 60 * 1000;
 function putFileWithProgress(
   url: string,
   file: File,
-  onProgress?: UploadProgressHandler
+  onProgress?: UploadProgressHandler,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     // XMLHttpRequest instead of fetch because fetch has no upload progress.
     const xhr = new XMLHttpRequest();
-    xhr.open('PUT', url);
+    xhr.open("PUT", url);
     xhr.timeout = UPLOAD_TIMEOUT_MS;
     // Must match the content type the signed URL was created for.
-    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+    xhr.setRequestHeader(
+      "Content-Type",
+      file.type || "application/octet-stream",
+    );
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
@@ -53,9 +57,9 @@ function putFileWithProgress(
         reject(new Error(`storage_put_failed_${xhr.status}`));
       }
     };
-    xhr.onerror = () => reject(new Error('storage_put_network_error'));
-    xhr.onabort = () => reject(new Error('storage_put_aborted'));
-    xhr.ontimeout = () => reject(new Error('storage_put_timeout'));
+    xhr.onerror = () => reject(new Error("storage_put_network_error"));
+    xhr.onabort = () => reject(new Error("storage_put_aborted"));
+    xhr.ontimeout = () => reject(new Error("storage_put_timeout"));
 
     xhr.send(file);
   });
@@ -91,8 +95,8 @@ export async function uploadDocumentDirect({
       ...target,
     });
   } catch (error) {
-    console.error('Direct document upload failed:', error);
-    return { success: false, error: 'upload_failed' };
+    console.error("Direct document upload failed:", error);
+    return { success: false, error: "upload_failed" };
   }
 }
 
@@ -123,7 +127,7 @@ export async function uploadDocumentVersionDirect({
       fileName: file.name,
     });
   } catch (error) {
-    console.error('Direct version upload failed:', error);
-    return { success: false, error: 'upload_failed' };
+    console.error("Direct version upload failed:", error);
+    return { success: false, error: "upload_failed" };
   }
 }

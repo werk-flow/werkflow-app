@@ -1,54 +1,65 @@
-'use client';
+"use client";
 
+import { useState, useEffect, createContext, useContext, useMemo } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  useState,
-  useEffect,
-  createContext,
-  useContext,
-  useMemo
-} from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import dynamic from 'next/dynamic';
-import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, Menu, X, Calendar, Clock, Building2, Briefcase, FileText, Boxes, Inbox, ListTodo, Award, ClipboardList } from 'lucide-react';
+  LayoutDashboard,
+  Users,
+  Menu,
+  X,
+  Calendar,
+  Clock,
+  Building2,
+  Briefcase,
+  FileText,
+  Boxes,
+  Inbox,
+  ListTodo,
+  Award,
+  ClipboardList,
+  Wrench,
+} from "lucide-react";
 
-import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import { useOrganization } from '@/components/organization/organization-context';
-import { DashboardPageSkeleton } from '@/components/loading-states/dashboard-page-skeleton';
-import { MitarbeiterPageSkeleton } from '@/components/loading-states/mitarbeiter-page-skeleton';
-import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
-import { ZeiterfassungPageSkeleton } from '@/components/loading-states/zeiterfassung-page-skeleton';
-import { KundenPageSkeleton } from '@/components/loading-states/kunden-page-skeleton';
-import { AuftraegePageSkeleton } from '@/components/loading-states/auftraege-page-skeleton';
-import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
-import { InventarPageSkeleton } from '@/components/loading-states/inventar-page-skeleton';
-import { AufgabenPageSkeleton } from '@/components/loading-states/aufgaben-page-skeleton';
-import { AnfragenPageSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
-import { QualifikationenPageSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
-import { EinstellungenPageSkeleton } from '@/components/loading-states/einstellungen-page-skeleton';
-import { WorkTemplatesPageSkeleton } from '@/components/loading-states/work-templates-page-skeleton';
-import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useOrganization } from "@/components/organization/organization-context";
+import { DashboardPageSkeleton } from "@/components/loading-states/dashboard-page-skeleton";
+import { MitarbeiterPageSkeleton } from "@/components/loading-states/mitarbeiter-page-skeleton";
+import { KalenderPageSkeleton } from "@/components/loading-states/kalender-page-skeleton";
+import { ZeiterfassungPageSkeleton } from "@/components/loading-states/zeiterfassung-page-skeleton";
+import { KundenPageSkeleton } from "@/components/loading-states/kunden-page-skeleton";
+import { AuftraegePageSkeleton } from "@/components/loading-states/auftraege-page-skeleton";
+import { DokumentePageSkeleton } from "@/components/loading-states/dokumente-page-skeleton";
+import { InventarPageSkeleton } from "@/components/loading-states/inventar-page-skeleton";
+import { AufgabenPageSkeleton } from "@/components/loading-states/aufgaben-page-skeleton";
+import { AnfragenPageSkeleton } from "@/components/loading-states/anfragen-page-skeleton";
+import { QualifikationenPageSkeleton } from "@/components/loading-states/qualifikationen-page-skeleton";
+import { EinstellungenPageSkeleton } from "@/components/loading-states/einstellungen-page-skeleton";
+import { WorkTemplatesPageSkeleton } from "@/components/loading-states/work-templates-page-skeleton";
+import { EquipmentPageSkeleton } from "@/components/loading-states/equipment-page-skeleton";
+import { SidebarProfileCard } from "@/components/sidebar/sidebar-profile-card";
 import {
   AttentionCountProvider,
   useAttentionCounts,
-} from '@/components/realtime/attention-count-provider';
-import type { AttentionCounts } from '@/lib/attention/types';
+} from "@/components/realtime/attention-count-provider";
+import type { AttentionCounts } from "@/lib/attention/types";
 
 const OrganizationSwitcher = dynamic(
   () =>
-    import('@/components/organization/organization-switcher').then(
-      (mod) => mod.OrganizationSwitcher
+    import("@/components/organization/organization-switcher").then(
+      (mod) => mod.OrganizationSwitcher,
     ),
   {
     ssr: false,
     loading: () => (
       <div className="h-9 w-full rounded-md border border-input bg-muted animate-pulse" />
-    )
-  }
+    ),
+  },
 );
 
 type NavItem = {
@@ -61,71 +72,77 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    href: '/dashboard',
-    label: 'Dashboard',
-    icon: LayoutDashboard
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
   },
   {
-    href: '/aufgaben',
-    label: 'Aufgaben',
-    icon: ListTodo
+    href: "/aufgaben",
+    label: "Aufgaben",
+    icon: ListTodo,
   },
   {
-    href: '/kalender',
-    label: 'Kalender',
-    icon: Calendar
+    href: "/kalender",
+    label: "Kalender",
+    icon: Calendar,
   },
   {
-    href: '/zeiterfassung',
-    label: 'Zeiterfassung',
-    icon: Clock
+    href: "/zeiterfassung",
+    label: "Zeiterfassung",
+    icon: Clock,
   },
   {
-    href: '/qualifikationen',
-    label: 'Qualifikationen',
-    icon: Award
+    href: "/qualifikationen",
+    label: "Qualifikationen",
+    icon: Award,
   },
   {
-    href: '/anfragen',
-    label: 'Anfragen',
+    href: "/anfragen",
+    label: "Anfragen",
     icon: Inbox,
-    managerOrAbove: true
+    managerOrAbove: true,
   },
   {
-    href: '/auftraege',
-    label: 'Aufträge',
-    icon: Briefcase
+    href: "/auftraege",
+    label: "Aufträge",
+    icon: Briefcase,
   },
   {
-    href: '/dokumente',
-    label: 'Dokumente',
+    href: "/dokumente",
+    label: "Dokumente",
     icon: FileText,
-    managerOrAbove: true
+    managerOrAbove: true,
   },
   {
-    href: '/inventar',
-    label: 'Inventar',
+    href: "/inventar",
+    label: "Inventar",
     icon: Boxes,
-    managerOrAbove: true
+    managerOrAbove: true,
   },
   {
-    href: '/arbeitsvorlagen',
-    label: 'Arbeitsvorlagen',
+    href: "/service/anlagen",
+    label: "Service",
+    icon: Wrench,
+    managerOrAbove: true,
+  },
+  {
+    href: "/arbeitsvorlagen",
+    label: "Arbeitsvorlagen",
     icon: ClipboardList,
-    managerOrAbove: true
+    managerOrAbove: true,
   },
   {
-    href: '/mitarbeiter',
-    label: 'Mitarbeiter',
+    href: "/mitarbeiter",
+    label: "Mitarbeiter",
     icon: Users,
-    managerOrAbove: true
+    managerOrAbove: true,
   },
   {
-    href: '/kunden',
-    label: 'Kunden',
+    href: "/kunden",
+    label: "Kunden",
     icon: Building2,
-    managerOrAbove: true
-  }
+    managerOrAbove: true,
+  },
 ];
 
 // Context for sidebar state
@@ -139,7 +156,7 @@ const SidebarContext = createContext<SidebarContextType | null>(null);
 export function useSidebar() {
   const context = useContext(SidebarContext);
   if (!context) {
-    throw new Error('useSidebar must be used within AppShell');
+    throw new Error("useSidebar must be used within AppShell");
   }
   return context;
 }
@@ -204,10 +221,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     useAttentionCounts();
 
   const isAdminOrManager =
-    activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
+    activeOrg?.role === "admin" || activeOrg?.role === "buero";
 
   const visibleNavItems = navItems.filter(
-    (item) => !item.managerOrAbove || isAdminOrManager
+    (item) => !item.managerOrAbove || isAdminOrManager,
   );
 
   const activePath = pathname;
@@ -258,19 +275,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <ul className="space-y-1">
           {visibleNavItems.map((item) => {
             const isActive =
-              activePath === item.href || activePath.startsWith(item.href + '/');
+              activePath === item.href ||
+              activePath.startsWith(item.href + "/");
             const Icon = item.icon;
             // Badges are viewer-scoped: the counts already exclude everything
             // the viewer cannot act on, so no extra role gate is needed.
             const badgeCount =
-              item.href === '/aufgaben'
+              item.href === "/aufgaben"
                 ? actionableCount + unreadNotificationCount
-                : item.href === '/zeiterfassung'
+                : item.href === "/zeiterfassung"
                   ? approvalsCount
                   : 0;
             const showBadge = badgeCount > 0;
             const badgeLabel =
-              item.href === '/aufgaben'
+              item.href === "/aufgaben"
                 ? `${badgeCount} offene Aufgaben und Benachrichtigungen`
                 : `${badgeCount} ausstehende Freigaben`;
 
@@ -280,10 +298,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   href={item.href}
                   onClick={handleNavClick}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
+                    "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
                     isActive
-                      ? 'bg-accent font-medium text-foreground'
-                      : 'font-normal text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+                      ? "bg-accent font-medium text-foreground"
+                      : "font-normal text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                   )}
                 >
                   <Icon className="size-4" />
@@ -338,7 +356,7 @@ function DesktopSidebar() {
 // Mobile drawer overlay
 function MobileDrawer({
   isOpen,
-  onClose
+  onClose,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -346,18 +364,18 @@ function MobileDrawer({
   // Close on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
 
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
+      document.addEventListener("keydown", handleEscape);
       // Prevent body scroll when drawer is open
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     }
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
     };
   }, [isOpen, onClose]);
 
@@ -377,10 +395,10 @@ function MobileDrawer({
 
           {/* Drawer */}
           <motion.aside
-            initial={{ x: '-100%' }}
+            initial={{ x: "-100%" }}
             animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
             className="fixed left-0 top-0 z-50 h-full w-72 flex-col border-r bg-card shadow-xl md:hidden flex"
           >
             {/* Close button */}
@@ -453,25 +471,27 @@ function OrgSwitchOverlay() {
   const pathname = usePathname();
 
   const currentSkeleton = useMemo(() => {
-    if (pathname.startsWith('/mitarbeiter')) return <MitarbeiterPageSkeleton />;
-    if (pathname.startsWith('/aufgaben')) return <AufgabenPageSkeleton />;
-    if (pathname.startsWith('/dashboard')) return <DashboardPageSkeleton />;
-    if (pathname.startsWith('/kalender')) return <KalenderPageSkeleton />;
-    if (pathname.startsWith('/zeiterfassung')) return <ZeiterfassungPageSkeleton />;
-    if (pathname.startsWith('/kunden')) return <KundenPageSkeleton />;
-    if (pathname.startsWith('/auftraege')) return <AuftraegePageSkeleton />;
-    if (pathname.startsWith('/dokumente')) return <DokumentePageSkeleton />;
-    if (pathname.startsWith('/anfragen')) return <AnfragenPageSkeleton />;
-    if (pathname.startsWith('/qualifikationen')) {
+    if (pathname.startsWith("/mitarbeiter")) return <MitarbeiterPageSkeleton />;
+    if (pathname.startsWith("/aufgaben")) return <AufgabenPageSkeleton />;
+    if (pathname.startsWith("/dashboard")) return <DashboardPageSkeleton />;
+    if (pathname.startsWith("/kalender")) return <KalenderPageSkeleton />;
+    if (pathname.startsWith("/zeiterfassung"))
+      return <ZeiterfassungPageSkeleton />;
+    if (pathname.startsWith("/kunden")) return <KundenPageSkeleton />;
+    if (pathname.startsWith("/auftraege")) return <AuftraegePageSkeleton />;
+    if (pathname.startsWith("/dokumente")) return <DokumentePageSkeleton />;
+    if (pathname.startsWith("/service")) return <EquipmentPageSkeleton />;
+    if (pathname.startsWith("/anfragen")) return <AnfragenPageSkeleton />;
+    if (pathname.startsWith("/qualifikationen")) {
       return <QualifikationenPageSkeleton />;
     }
-    if (pathname.startsWith('/arbeitsvorlagen')) {
+    if (pathname.startsWith("/arbeitsvorlagen")) {
       return <WorkTemplatesPageSkeleton />;
     }
-    if (pathname.startsWith('/einstellungen')) {
+    if (pathname.startsWith("/einstellungen")) {
       return <EinstellungenPageSkeleton />;
     }
-    if (pathname === '/inventar' || pathname.startsWith('/inventar/')) {
+    if (pathname === "/inventar" || pathname.startsWith("/inventar/")) {
       return <InventarPageSkeleton />;
     }
     return null;
@@ -500,7 +520,9 @@ export function AppShell({
   const { isSwitchingOrg } = useOrganization();
 
   return (
-    <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
+    <SidebarContext.Provider
+      value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}
+    >
       <AttentionCountProvider
         initialCounts={initialAttentionCounts}
         initialOrganizationId={initialOrganizationId}
@@ -513,8 +535,8 @@ export function AppShell({
             <main
               aria-hidden={isSwitchingOrg}
               className={cn(
-                'h-full overflow-hidden',
-                isSwitchingOrg && 'pointer-events-none opacity-0'
+                "h-full overflow-hidden",
+                isSwitchingOrg && "pointer-events-none opacity-0",
               )}
             >
               {children}

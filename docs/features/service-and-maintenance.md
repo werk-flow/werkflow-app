@@ -1,6 +1,6 @@
 # Service And Maintenance
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-29
 
 Service and maintenance covers recurring maintenance, reactive customer service, faults, inspections, emergency work, and the long-term history of installed customer equipment.
 
@@ -22,7 +22,9 @@ The feature should reduce forgotten maintenance, paper service folders, repeated
 
 ## Current Product Baseline
 
-WerkFlow does not currently have a dedicated service-and-maintenance module.
+WerkFlow now has the first dedicated service-owned foundation: P1-18 installed-equipment records. Büro/Admin manage site-bound roots and one bounded component level under `/service/anlagen`, including stable equipment numbers, typed identifiers, honest unknown technical facts, warranty and commissioning data, exact installation origins, existing-document links, work links, lifecycle state and immutable searchable history. Customer pages show only a compact site projection, while an assigned field worker receives only equipment explicitly linked to that assigned job.
+
+P1-18 does not yet provide service intake, dispatch, maintenance plans, contracts, recurrence, due work, commercial warranty decisions, inventory consumption, offline/mobile behavior, telemetry or manufacturer rule sets. Those remain with their named later slices.
 
 Relevant foundations already exist:
 
@@ -36,6 +38,7 @@ Relevant foundations already exist:
 - basic tool/asset infrastructure inside inventory.
 - recurring, multi-day, and multi-visit calendar occurrences with explainable employee capacity and series exceptions (`P1-11`).
 - exact-version Bautagebuch, Arbeitsbericht, Aufmaß, Mangel and Regie-/Änderungsnachweise with review, customer-response, signature and evidence links (`P1-15`).
+- site-bound installed-equipment identity, components, identifiers, exact origins, document/work links and retained lifecycle history (`P1-18`).
 
 These foundations should be reused. A future service feature should not create parallel customer, job, time, document, or inventory systems.
 
@@ -178,17 +181,17 @@ The history should be a structured timeline of linked records, not a second docu
 
 ## Connected Workflow Contracts
 
-| Feature area | Service receives | Service provides |
-| --- | --- | --- |
-| Customers and CRM | Customer, contacts, sites, communication preferences, relationship history | Service requests, installed-equipment history, commitments, and follow-up context |
-| Jobs and projects | Job lifecycle, assignments, tasks, field artifacts, completion rules | Service-specific scope, equipment, recurrence, and visit outcome |
-| Calendar | Availability, dispatch, resource conflicts, appointment confirmation | Due work, urgency, duration, skills, and visit constraints |
-| Employee management | Skills, certifications, on-call duty, team, and permissions | Service workload, assignment history, and qualification demand |
-| Time tracking | Work, travel, breaks, supplements, and approved corrections | Service/job allocation and commercial context |
-| Inventory | Planned/reserved material, stock, tools, returns, supplier and warranty data | Consumption, removed components, shortages, and replenishment demand |
-| Documents | Manuals, photos, certificates, reports, forms, and signatures | Structured service context and retention relevance |
-| Commercial and finance | Contract scope, prices, warranty and billing rules | Invoice-ready time/material, reports, follow-up offers, and service profitability inputs |
-| AI automations | Approved analysis, drafting, extraction, and workflow rules | Bounded service events and reviewable artifacts |
+| Feature area           | Service receives                                                             | Service provides                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Customers and CRM      | Customer, contacts, sites, communication preferences, relationship history   | Service requests, installed-equipment history, commitments, and follow-up context        |
+| Jobs and projects      | Job lifecycle, assignments, tasks, field artifacts, completion rules         | Service-specific scope, equipment, recurrence, and visit outcome                         |
+| Calendar               | Availability, dispatch, resource conflicts, appointment confirmation         | Due work, urgency, duration, skills, and visit constraints                               |
+| Employee management    | Skills, certifications, on-call duty, team, and permissions                  | Service workload, assignment history, and qualification demand                           |
+| Time tracking          | Work, travel, breaks, supplements, and approved corrections                  | Service/job allocation and commercial context                                            |
+| Inventory              | Planned/reserved material, stock, tools, returns, supplier and warranty data | Consumption, removed components, shortages, and replenishment demand                     |
+| Documents              | Manuals, photos, certificates, reports, forms, and signatures                | Structured service context and retention relevance                                       |
+| Commercial and finance | Contract scope, prices, warranty and billing rules                           | Invoice-ready time/material, reports, follow-up offers, and service profitability inputs |
+| AI automations         | Approved analysis, drafting, extraction, and workflow rules                  | Bounded service events and reviewable artifacts                                          |
 
 ## Role And UX Principles
 

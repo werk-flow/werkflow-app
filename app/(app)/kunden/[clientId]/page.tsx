@@ -1,47 +1,50 @@
-import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { resolveActiveOrgId } from "@/lib/org/cookies";
 import {
   getCachedMemberships,
   getCachedOrganizationUserPreferences,
   getCachedUser,
-} from '@/lib/data/cached';
-import { getClientDetail, getClientRelations } from '@/lib/clients/actions';
-import { getClientDocuments } from '@/lib/documents/actions';
-import { getJobsForClient } from '@/lib/jobs/actions';
-import { getCustomerRelationshipBundle } from '@/lib/customer-relationships/actions';
-import { toClient, type Client } from '@/lib/jobs/types';
-import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
-import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
-import { RouteRedirect } from '@/components/shared/route-redirect';
-import KundenDetailLoading from './loading';
+} from "@/lib/data/cached";
+import { getClientDetail, getClientRelations } from "@/lib/clients/actions";
+import { getClientDocuments } from "@/lib/documents/actions";
+import { getJobsForClient } from "@/lib/jobs/actions";
+import { getCustomerRelationshipBundle } from "@/lib/customer-relationships/actions";
+import { getInstalledEquipmentForClient } from "@/lib/installed-equipment/actions";
+import { toClient, type Client } from "@/lib/jobs/types";
+import { getOrgMembersForUser, type OrgRole } from "@/lib/members/actions";
+import type { OrgMemberOption } from "@/components/auftraege/employee-multi-select";
+import { KundenDetailContent } from "@/components/kunden/kunden-detail-content";
+import { RouteRedirect } from "@/components/shared/route-redirect";
+import KundenDetailLoading from "./loading";
 
 interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
 }
 
 async function KundenDetailData({ clientId }: { clientId: string }) {
-  const [{ data: { user } }, cookieStore] = await Promise.all([
-    getCachedUser(),
-    cookies(),
-  ]);
+  const [
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([getCachedUser(), cookies()]);
 
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-  if (!activeOrgId) redirect('/kunden');
+  if (!activeOrgId) redirect("/kunden");
 
   const memberships = await getCachedMemberships(user.id);
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
   const currentUserRole = currentMembership?.role as OrgRole | undefined;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
+    currentUserRole === "admin" || currentUserRole === "buero";
 
   if (!isAdminOrManager) {
-    redirect('/dashboard');
+    redirect("/dashboard");
   }
 
   const admin = createSupabaseAdminClient();
@@ -54,18 +57,20 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     clientsResult,
     membersResult,
     relationshipResult,
+    equipmentResult,
   ] = await Promise.all([
     getClientDetail(clientId),
     getClientRelations(clientId, { includeInactive: true }),
     getJobsForClient(clientId),
     getClientDocuments(clientId),
     admin
-      .from('clients')
-      .select('*')
-      .eq('organization_id', activeOrgId)
-      .order('name', { ascending: true }),
+      .from("clients")
+      .select("*")
+      .eq("organization_id", activeOrgId)
+      .order("name", { ascending: true }),
     getOrgMembersForUser(activeOrgId, user.id),
     getCustomerRelationshipBundle(clientId),
+    getInstalledEquipmentForClient(clientId),
   ]);
 
   if (!clientResult.success) {
@@ -88,17 +93,15 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     : { jobs: [], projects: [], clientMap: {}, jobAssignmentMap: {} };
 
   const allClients: Client[] = (clientsResult.data ?? []).map(toClient);
-  const members: OrgMemberOption[] = membersResult.map(
-    (m) => ({
-      userId: m.user_id,
-      firstName: m.first_name,
-      lastName: m.last_name,
-      role: m.role,
-    })
-  );
+  const members: OrgMemberOption[] = membersResult.map((m) => ({
+    userId: m.user_id,
+    firstName: m.first_name,
+    lastName: m.last_name,
+    role: m.role,
+  }));
   const { visibleColumns } = await getCachedOrganizationUserPreferences(
     activeOrgId,
-    user.id
+    user.id,
   );
 
   return (
@@ -106,7 +109,9 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       client={client}
       contacts={relationsResult.success ? relationsResult.contacts : []}
       sites={relationsResult.success ? relationsResult.sites : []}
-      documents={clientDocumentsResult.success ? clientDocumentsResult.documents : []}
+      documents={
+        clientDocumentsResult.success ? clientDocumentsResult.documents : []
+      }
       jobs={jobsData.jobs}
       projects={jobsData.projects}
       clientMap={jobsData.clientMap}
@@ -119,6 +124,8 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
       relationshipBundle={
         relationshipResult.success ? relationshipResult.data : null
       }
+      equipment={equipmentResult.success ? equipmentResult.equipment : []}
+      equipmentLoadFailed={!equipmentResult.success}
     />
   );
 }

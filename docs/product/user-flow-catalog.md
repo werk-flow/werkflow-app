@@ -620,3 +620,56 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-17-F109` — Jede sichtbare P1-17-Aktion bleibt auf Paket, Review, Readiness und den gekoppelten Lebenszyklus begrenzt; Rendering und Nachladen sind nebenwirkungsfrei und erzeugen keine spätere Fachdomäne vorzeitig.
 
 **Acceptance invariant:** `109/109 mapped; 109/109 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-28).
+
+### `P1-18` — Installierte Anlagen und Geräte (2026-08-29)
+
+- `P1-18-F01` — Büro/Admin öffnen unter `/service/anlagen` eine organisationsweite, nach Anlage, Kunde, Einsatzort, Hersteller, Modell und Kennung durchsuchbare Anlagenliste.
+- `P1-18-F02` — Büro/Admin registrieren eine Anlage an genau einem vorhandenen Einsatzort eines vorhandenen Kunden.
+- `P1-18-F03` — Jede Anlage erhält unveränderlich eine organisationsweit eindeutige Nummer im Format `ANL-YYYY-NNN`.
+- `P1-18-F04` — Eine Anlage besitzt eine begrenzte SHK-Kategorie oder den ehrlichen Wert „Sonstiges“ statt eines frei konfigurierbaren Gerätetypsystems.
+- `P1-18-F05` — Eine optionale Positionsangabe beschreibt den Ort am Einsatzort frei; P1-18 erzeugt keine Gebäude-, Wohnungs-, Etagen- oder Raumhierarchie.
+- `P1-18-F06` — Eine eigenständig wartbare Komponente gehört genau zu einer Wurzelanlage und darf keine weitere Komponente enthalten.
+- `P1-18-F07` — Wurzel und Komponente gehören zwingend derselben Organisation, demselben Kunden und demselben Einsatzort.
+- `P1-18-F08` — Installierte Kundengeräte bleiben strukturell von WerkFlow-Inventar, Materialbestand und betriebseigenen Werkzeugen getrennt.
+- `P1-18-F09` — Hersteller, Modell, Baujahr, Einbau-, Inbetriebnahme- und Garantiedaten sind optionale Tatsachen; fehlende Werte bleiben sichtbar unbekannt.
+- `P1-18-F10` — Garantieende und Garantiebasis werden als dokumentierte Fakten gezeigt, ohne eine kaufmännische oder rechtliche Garantieentscheidung abzuleiten.
+- `P1-18-F11` — Serien-, Produkt-, QR-/Barcode- und sonstige Kennungen behalten Rohwert, normalisierten Suchwert und Typ.
+- `P1-18-F12` — Eine Seriennummer ist innerhalb einer Organisation und ihres Herstellers oder Herausgebers eindeutig; Produktnummern werden nicht als Instanzidentität missverstanden.
+- `P1-18-F13` — Eine identische Kennung kann idempotent erneut übermittelt werden; widersprüchliche Wiederverwendung wird ohne Teilmutation abgewiesen.
+- `P1-18-F14` — Altdaten dürfen ohne Hersteller, Modell, Seriennummer, Einbauursprung oder Inbetriebnahme erfasst werden; WerkFlow errät nichts aus Notizen, Dokumentnamen, Inventar oder jüngster Arbeit.
+- `P1-18-F15` — Ein Anlagenursprung kann genau einen Auftrag oder ein Projekt referenzieren und bewahrt dessen damaligen Ziel- und Adresskontext.
+- `P1-18-F16` — Ein Ursprung aus einer Büroübergabe referenziert die genaue unveränderliche Freigabe statt eines veränderlichen aktuellen Paketzeigers.
+- `P1-18-F17` — Ein Arbeitsnachweisbezug referenziert die genaue unveränderliche Revision statt kopierter Nachweisfelder.
+- `P1-18-F18` — Ein Anlagenbezug zu Installation, Inbetriebnahme, Service, Ausbau oder Ersatz referenziert den bestehenden Auftrag oder das bestehende Projekt; er erzeugt kein zweites Arbeitsobjekt.
+- `P1-18-F19` — Ein vorhandenes Dokument wird über den bestehenden Dokumenteigentümer mit der Anlage verknüpft; Dateibytes werden weder kopiert noch durch eine Server Action geleitet.
+- `P1-18-F20` — Ein Anlagen-Dokumentbezug erweitert die Dokumentberechtigung eines Handwerkers nicht.
+- `P1-18-F21` — Ein Dokument mit unveränderlicher Anlagenhistorie kann nicht dauerhaft gelöscht oder von der Anlage getrennt werden, solange dieser Verlauf darauf beruht.
+- `P1-18-F22` — Die Anlagenhistorie ist eine strukturierte Zeitleiste aus Anlagen-, Kennungs-, Arbeits-, Dokument- und Lebenszyklusbezügen und kein zweiter Dokumentordner oder Freitext-Verlauf.
+- `P1-18-F23` — Registrierung, Einbau und Inbetriebnahme sind datierte Tatsachen oder Ereignisse und werden nicht als Lebenszyklusstatus missbraucht.
+- `P1-18-F24` — Der aktuelle Status ist genau einer von „Unbekannt“, „Aktiv“, „Inaktiv“, „Ausgebaut“, „Ersetzt“ oder „Außer Betrieb“.
+- `P1-18-F25` — Büro/Admin ändern einen zulässigen Status mit erwarteter Version; veraltete Änderungen werden atomar mit dem aktuellen Serverstand abgewiesen.
+- `P1-18-F26` — Ausbau, Ersatz und Außerbetriebnahme verlangen einen sichtbaren fachlichen Grund und bewahren die bisherige Anlagenidentität.
+- `P1-18-F27` — Ersatz erzeugt eine neue Nachfolgeridentität und verknüpft sie eindeutig mit dem unveränderten Vorgänger.
+- `P1-18-F28` — Ein ersetzter oder außer Betrieb gesetzter Vorgänger kann nicht still reaktiviert oder überschrieben werden.
+- `P1-18-F29` — Nur eine inaktive Anlage oder dieselbe ausgebaute physische Einheit darf zulässig reaktiviert werden.
+- `P1-18-F30` — Ein irrtümlicher terminaler Vorgang wird durch ein begründetes Korrekturereignis berichtigt; das ursprüngliche Ereignis bleibt unverändert.
+- `P1-18-F31` — Jede Mutation bewahrt Akteur, Wirksamkeitszeit, Aufzeichnungszeit, Anfrage-ID, Version, Einsatzort-/Adresssnapshot und genaue Quellen.
+- `P1-18-F32` — Gleiche Anfrage-ID und gleicher Inhalt liefern dasselbe Ergebnis; gleiche Anfrage-ID mit anderem Inhalt wird ohne zweite Historienzeile abgewiesen.
+- `P1-18-F33` — Das bloße Öffnen, Suchen, Filtern oder Nachladen erzeugt keine Anlage, Kennung, Historie, Verknüpfung oder Dokumentzeile.
+- `P1-18-F34` — Die Kundendetailseite zeigt je Einsatzort nur eine kompakte Anlagenzusammenfassung und verweist für technische Details auf `/service/anlagen/[Anlagennummer]`.
+- `P1-18-F35` — Die Detailseite zeigt Identität, Einsatzort, technische Fakten, Kennungen, Garantie, genaue Ursprünge, Arbeitsbezüge, Dokumente und chronologischen Verlauf in einer serviceeigenen Oberfläche.
+- `P1-18-F36` — Eine unbekannte oder leere Anlagenakte wird als fehlende Erfassung gezeigt und niemals als bestätigte Abwesenheit von Geräten formuliert.
+- `P1-18-F37` — Admin und Büro dürfen Anlagen lesen und verändern; ein Mitarbeiter erhält keine Anlagenliste, Kundenakte oder serviceweite Suche.
+- `P1-18-F38` — Ein Handwerker sieht nur eine kompakte Anlage, die exakt mit einem ihm exakt zugewiesenen Auftrag verknüpft ist.
+- `P1-18-F39` — Kunden-, Einsatzort-, Projekt-, Wurzel-, Komponenten- oder Geschwisterbezug allein erweitert den Mitarbeiterzugriff nicht.
+- `P1-18-F40` — Mitglieder einer fremden Organisation können Anlagen, Kennungen, Arbeitsbezüge, Dokumentbezüge und Ereignisse weder lesen noch verändern.
+- `P1-18-F41` — Organisation, Kunde, Einsatzort, Wurzel, Quelle und Ziel werden bei jeder Schreibaktion serverseitig erneut auf Konsistenz geprüft.
+- `P1-18-F42` — Das erste Laden zeigt einen klaren Ladezustand; ein Fehler zeigt eine sichtbare Wiederholen-Aktion statt eines falschen Leerzustands.
+- `P1-18-F43` — Schlägt eine spätere Aktualisierung fehl, bleibt der letzte bekannte Stand sichtbar, wird als veraltet markiert und sperrt betroffene Mutationen.
+- `P1-18-F44` — Änderungen an der veränderlichen Anlagenwurzel, Fokus- und Sichtbarkeitsrückkehr lösen über den zentralen Realtime-Abgleich ein autoritatives Nachladen aus.
+- `P1-18-F45` — Kennungen, Arbeitsbezüge, Dokumentbezüge und Ereignisse bleiben unveröffentlicht; ihre erfolgreiche Mutation aktualisiert die veröffentlichte Anlagenwurzel als Invalidierungssignal.
+- `P1-18-F46` — Dialoge bewahren Eingabe und Fokus bei aufgeschobener Aktualisierung; Aktionen sind tastaturbedienbar, deutsch benannt, sichtbar fokussiert und mobil ausreichend groß.
+- `P1-18-F47` — P1-18 erzeugt weder Serviceannahme, Disposition, Wartungsplan, Vertrag, Wiederholung, Fälligkeit, Zeitsegment, Bestandsbewegung, Verbrauch, Preis, Rechnung, Nachricht, öffentlichen Link noch Offline-Warteschlange.
+- `P1-18-F48` — P1-18 führt weder Herstellerregelwerk, Rechts- oder Compliance-Behauptung, IoT/Telemetrie, Ferndiagnose, Kundenportal, externen Anbieter noch generische EAV-/CMDB-/Workflow-Plattform ein.
+
+**Acceptance invariant:** `48/48 mapped; 48/48 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-29).

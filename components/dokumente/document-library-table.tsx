@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   useEffect,
@@ -7,7 +7,7 @@ import {
   useState,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
-} from 'react';
+} from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -20,9 +20,9 @@ import {
   FileText,
   FileType,
   Folder,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   Table,
   TableBody,
@@ -30,26 +30,24 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { cn } from '@/lib/utils';
-import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import type {
+  DocumentFolder,
+  OrganizationDocument,
+} from "@/lib/documents/types";
 import {
   DocumentActionsMenu,
   DocumentContextMenuContent,
   FolderActionsMenu,
   FolderContextMenuContent,
   MultiSelectionContextMenuContent,
-} from './document-row-actions';
+} from "./document-row-actions";
 
 type DocumentTableSortColumn =
-  | 'name'
-  | 'uploadedBy'
-  | 'date'
-  | 'size'
-  | 'type'
-  | 'linkedTo';
+  "name" | "uploadedBy" | "date" | "size" | "type" | "linkedTo";
 
-type SortDirection = 'asc' | 'desc';
+type SortDirection = "asc" | "desc";
 
 type DocumentActionHandlers = {
   onOpen: () => void;
@@ -113,27 +111,25 @@ type DocumentLibraryTableProps = {
   onMoveItemsToTrash: (selection: DocumentTableDragSelection) => void;
   onPointerDropTargetChange: (
     target:
-      | { kind: 'folder'; folderId: string | null }
-      | { kind: 'trash' }
-      | null
+      { kind: "folder"; folderId: string | null } | { kind: "trash" } | null,
   ) => void;
   canDropSelectionIntoFolder: (
     selection: DocumentTableDragSelection,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ) => boolean;
 };
 
 export type DocumentLibraryTableItem =
   | {
-      kind: 'folder';
+      kind: "folder";
       key: string;
       folder: DocumentFolder;
     }
   | {
-      kind: 'document';
+      kind: "document";
       key: string;
       document: OrganizationDocument;
-};
+    };
 
 type SelectionBox = {
   startX: number;
@@ -155,11 +151,11 @@ type PendingRowDrag = {
 };
 
 type PointerDropTarget =
-  | { kind: 'folder'; folderId: string | null; scope: 'breadcrumb' | 'table' }
-  | { kind: 'trash' }
+  | { kind: "folder"; folderId: string | null; scope: "breadcrumb" | "table" }
+  | { kind: "trash" }
   | null;
 
-export const DOCUMENT_ROW_DRAG_MIME = 'application/x-werkflow-document-row';
+export const DOCUMENT_ROW_DRAG_MIME = "application/x-werkflow-document-row";
 
 export type DocumentTableDragSelection = {
   folderIds: string[];
@@ -167,11 +163,11 @@ export type DocumentTableDragSelection = {
 };
 
 function startDocumentDragState() {
-  document.body.style.userSelect = 'none';
+  document.body.style.userSelect = "none";
 }
 
 function clearDocumentDragState() {
-  document.body.style.userSelect = '';
+  document.body.style.userSelect = "";
 }
 
 function formatFileSize(sizeBytes: number): string {
@@ -181,10 +177,10 @@ function formatFileSize(sizeBytes: number): string {
 }
 
 function formatDate(date: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(new Date(date));
 }
 
@@ -193,59 +189,76 @@ function getUploaderName(document: OrganizationDocument): string {
 }
 
 function getUserDisplayName(
-  uploader: OrganizationDocument['uploader'] | DocumentFolder['creator']
+  uploader: OrganizationDocument["uploader"] | DocumentFolder["creator"],
 ): string {
-  if (!uploader) return 'Unbekannt';
+  if (!uploader) return "Unbekannt";
 
   const fullName = [uploader.firstName, uploader.lastName]
     .filter(Boolean)
-    .join(' ')
+    .join(" ")
     .trim();
-  return fullName || uploader.email || 'Unbekannt';
+  return fullName || uploader.email || "Unbekannt";
 }
 
 function getFileIcon(document: OrganizationDocument) {
-  const mimeType = document.mimeType ?? '';
+  const mimeType = document.mimeType ?? "";
   const fileName = document.displayName.toLowerCase();
 
-  if (mimeType.startsWith('image/')) return FileImage;
-  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return FileText;
+  if (mimeType.startsWith("image/")) return FileImage;
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf"))
+    return FileText;
   if (
-    mimeType.includes('spreadsheet') ||
-    fileName.endsWith('.xlsx') ||
-    fileName.endsWith('.csv')
+    mimeType.includes("spreadsheet") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv")
   ) {
     return FileSpreadsheet;
   }
-  if (mimeType.includes('zip') || fileName.endsWith('.zip') || fileName.endsWith('.rar')) {
+  if (
+    mimeType.includes("zip") ||
+    fileName.endsWith(".zip") ||
+    fileName.endsWith(".rar")
+  ) {
     return FileArchive;
   }
-  if (mimeType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+  if (
+    mimeType.includes("word") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx")
+  ) {
     return FileType;
   }
   return File;
 }
 
 function getFileTypeLabel(document: OrganizationDocument): string {
-  const mimeType = document.mimeType ?? '';
+  const mimeType = document.mimeType ?? "";
   const fileName = document.displayName.toLowerCase();
 
-  if (mimeType.startsWith('image/')) return 'Bild';
-  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'PDF';
+  if (mimeType.startsWith("image/")) return "Bild";
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) return "PDF";
   if (
-    mimeType.includes('spreadsheet') ||
-    fileName.endsWith('.xlsx') ||
-    fileName.endsWith('.csv')
+    mimeType.includes("spreadsheet") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv")
   ) {
-    return 'Tabelle';
+    return "Tabelle";
   }
-  if (mimeType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
-    return 'Dokument';
+  if (
+    mimeType.includes("word") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx")
+  ) {
+    return "Dokument";
   }
-  if (mimeType.includes('zip') || fileName.endsWith('.zip') || fileName.endsWith('.rar')) {
-    return 'Archiv';
+  if (
+    mimeType.includes("zip") ||
+    fileName.endsWith(".zip") ||
+    fileName.endsWith(".rar")
+  ) {
+    return "Archiv";
   }
-  return 'Datei';
+  return "Datei";
 }
 
 function getLinkBadges(document: OrganizationDocument): string[] {
@@ -255,43 +268,55 @@ function getLinkBadges(document: OrganizationDocument): string[] {
         ? `Auftrag ${link.jobNumber}`
         : link.jobTitle
           ? `Auftrag: ${link.jobTitle}`
-          : 'Auftrag';
+          : "Auftrag";
     }
 
     if (link.clientId) {
-      return link.clientName ? `Kunde: ${link.clientName}` : 'Kunde';
+      return link.clientName ? `Kunde: ${link.clientName}` : "Kunde";
     }
 
     if (link.employeeId) {
-      return link.employeeName ? `Mitarbeiter: ${link.employeeName}` : 'Mitarbeiter';
+      return link.employeeName
+        ? `Mitarbeiter: ${link.employeeName}`
+        : "Mitarbeiter";
     }
 
     if (link.requestId) {
-      return link.requestNumber ? `Anfrage ${link.requestNumber}` : 'Anfrage';
+      return link.requestNumber ? `Anfrage ${link.requestNumber}` : "Anfrage";
+    }
+
+    if (link.equipmentId) {
+      return link.equipmentNumber
+        ? `Anlage ${link.equipmentNumber}`
+        : link.equipmentName
+          ? `Anlage: ${link.equipmentName}`
+          : "Anlage";
     }
 
     return link.projectNumber
       ? `Projekt ${link.projectNumber}`
       : link.projectName
         ? `Projekt: ${link.projectName}`
-        : 'Projekt';
+        : "Projekt";
   });
 }
 
 function getItemName(item: DocumentLibraryTableItem): string {
-  return item.kind === 'folder' ? item.folder.name : item.document.displayName;
+  return item.kind === "folder" ? item.folder.name : item.document.displayName;
 }
 
 function getItemDate(item: DocumentLibraryTableItem): string {
-  return item.kind === 'folder' ? item.folder.createdAt : item.document.updatedAt;
+  return item.kind === "folder"
+    ? item.folder.createdAt
+    : item.document.updatedAt;
 }
 
 function getItemType(item: DocumentLibraryTableItem): string {
-  return item.kind === 'folder' ? 'Ordner' : getFileTypeLabel(item.document);
+  return item.kind === "folder" ? "Ordner" : getFileTypeLabel(item.document);
 }
 
 function getItemLinkedTo(item: DocumentLibraryTableItem): string {
-  return item.kind === 'folder' ? '' : getLinkBadges(item.document).join(' ');
+  return item.kind === "folder" ? "" : getLinkBadges(item.document).join(" ");
 }
 
 function getDragSelectionLabel(selection: DocumentTableDragSelection): string {
@@ -300,59 +325,64 @@ function getDragSelectionLabel(selection: DocumentTableDragSelection): string {
   const totalCount = folderCount + documentCount;
 
   if (folderCount > 0 && documentCount > 0) {
-    return totalCount === 1 ? '1 Objekt' : `${totalCount} Objekte`;
+    return totalCount === 1 ? "1 Objekt" : `${totalCount} Objekte`;
   }
 
   if (folderCount > 0) {
-    return folderCount === 1 ? '1 Ordner' : `${folderCount} Ordner`;
+    return folderCount === 1 ? "1 Ordner" : `${folderCount} Ordner`;
   }
 
-  return documentCount === 1 ? '1 Dokument' : `${documentCount} Dokumente`;
+  return documentCount === 1 ? "1 Dokument" : `${documentCount} Dokumente`;
 }
 
 function getSortValue(
   item: DocumentLibraryTableItem,
-  column: DocumentTableSortColumn
+  column: DocumentTableSortColumn,
 ): string | number {
-  if (column === 'name') return getItemName(item).toLocaleLowerCase('de-DE');
-  if (column === 'uploadedBy') {
-    return item.kind === 'folder'
-      ? getUserDisplayName(item.folder.creator).toLocaleLowerCase('de-DE')
-      : getUploaderName(item.document).toLocaleLowerCase('de-DE');
+  if (column === "name") return getItemName(item).toLocaleLowerCase("de-DE");
+  if (column === "uploadedBy") {
+    return item.kind === "folder"
+      ? getUserDisplayName(item.folder.creator).toLocaleLowerCase("de-DE")
+      : getUploaderName(item.document).toLocaleLowerCase("de-DE");
   }
-  if (column === 'date') return new Date(getItemDate(item)).getTime();
-  if (column === 'size') return item.kind === 'folder' ? -1 : item.document.sizeBytes;
-  if (column === 'type') return getItemType(item).toLocaleLowerCase('de-DE');
-  return getItemLinkedTo(item).toLocaleLowerCase('de-DE');
+  if (column === "date") return new Date(getItemDate(item)).getTime();
+  if (column === "size")
+    return item.kind === "folder" ? -1 : item.document.sizeBytes;
+  if (column === "type") return getItemType(item).toLocaleLowerCase("de-DE");
+  return getItemLinkedTo(item).toLocaleLowerCase("de-DE");
 }
 
 function compareItems(
   firstItem: DocumentLibraryTableItem,
   secondItem: DocumentLibraryTableItem,
   column: DocumentTableSortColumn,
-  direction: SortDirection
+  direction: SortDirection,
 ): number {
   const firstValue = getSortValue(firstItem, column);
   const secondValue = getSortValue(secondItem, column);
-  const multiplier = direction === 'asc' ? 1 : -1;
+  const multiplier = direction === "asc" ? 1 : -1;
 
   let result =
-    typeof firstValue === 'number' && typeof secondValue === 'number'
+    typeof firstValue === "number" && typeof secondValue === "number"
       ? firstValue - secondValue
-      : String(firstValue).localeCompare(String(secondValue), 'de-DE', {
+      : String(firstValue).localeCompare(String(secondValue), "de-DE", {
           numeric: true,
-          sensitivity: 'base',
+          sensitivity: "base",
         });
 
   if (result === 0) {
-    result = getItemName(firstItem).localeCompare(getItemName(secondItem), 'de-DE', {
-      numeric: true,
-      sensitivity: 'base',
-    });
+    result = getItemName(firstItem).localeCompare(
+      getItemName(secondItem),
+      "de-DE",
+      {
+        numeric: true,
+        sensitivity: "base",
+      },
+    );
   }
 
   if (result === 0 && firstItem.kind !== secondItem.kind) {
-    result = firstItem.kind === 'folder' ? -1 : 1;
+    result = firstItem.kind === "folder" ? -1 : 1;
   }
 
   return result * multiplier;
@@ -384,7 +414,7 @@ function SortableHeader({
       >
         {label}
         {isActive ? (
-          currentDirection === 'asc' ? (
+          currentDirection === "asc" ? (
             <ArrowUp className="size-3.5" />
           ) : (
             <ArrowDown className="size-3.5" />
@@ -428,13 +458,13 @@ function SelectionCircle({
         event.stopPropagation();
       }}
       className={cn(
-        'flex size-5 cursor-pointer items-center justify-center rounded-full border transition-all',
+        "flex size-5 cursor-pointer items-center justify-center rounded-full border transition-all",
         checked
-          ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-muted-foreground/50 bg-background text-transparent hover:border-primary',
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-muted-foreground/50 bg-background text-transparent hover:border-primary",
         checked || alwaysVisible
-          ? 'opacity-100'
-          : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          ? "opacity-100"
+          : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
       )}
     >
       {checked && <Check className="size-3.5" />}
@@ -455,7 +485,7 @@ function getBoxStyle(selectionBox: SelectionBox) {
 
 function intersects(
   first: { left: number; top: number; right: number; bottom: number },
-  second: { left: number; top: number; right: number; bottom: number }
+  second: { left: number; top: number; right: number; bottom: number },
 ): boolean {
   return (
     first.left <= second.right &&
@@ -506,39 +536,44 @@ export function DocumentLibraryTable({
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const suppressClickRef = useRef(false);
   const pendingRowDragRef = useRef<PendingRowDrag | null>(null);
-  const [sortColumn, setSortColumn] = useState<DocumentTableSortColumn>('name');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortColumn, setSortColumn] = useState<DocumentTableSortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [selectionBox, setSelectionBox] = useState<SelectionBox>(null);
   const [draggedItem, setDraggedItem] = useState<DraggedTableItem>(null);
   const [draggedSelection, setDraggedSelection] =
     useState<DocumentTableDragSelection | null>(null);
-  const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(null);
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [dragTargetFolderId, setDragTargetFolderId] = useState<string | null>(
+    null,
+  );
+  const [dragPosition, setDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const sortedItems = useMemo<DocumentLibraryTableItem[]>(() => {
     const items: DocumentLibraryTableItem[] = [
       ...folders.map((folder) => ({
-        kind: 'folder' as const,
+        kind: "folder" as const,
         key: `folder-${folder.id}`,
         folder,
       })),
       ...documents.map((document) => ({
-        kind: 'document' as const,
+        kind: "document" as const,
         key: `document-${document.id}`,
         document,
       })),
     ];
 
     return items.sort((firstItem, secondItem) =>
-      compareItems(firstItem, secondItem, sortColumn, sortDirection)
+      compareItems(firstItem, secondItem, sortColumn, sortDirection),
     );
   }, [documents, folders, sortColumn, sortDirection]);
 
   const visibleItemCount = sortedItems.length;
   const visibleSelectedItemCount = sortedItems.filter((item) =>
-    item.kind === 'folder'
+    item.kind === "folder"
       ? selectedFolderIds.has(item.folder.id)
-      : selectedDocumentIds.has(item.document.id)
+      : selectedDocumentIds.has(item.document.id),
   ).length;
   const allVisibleSelected =
     visibleItemCount > 0 && visibleSelectedItemCount === visibleItemCount;
@@ -550,12 +585,12 @@ export function DocumentLibraryTable({
 
   function handleSort(column: DocumentTableSortColumn) {
     if (column === sortColumn) {
-      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
       return;
     }
 
     setSortColumn(column);
-    setSortDirection('asc');
+    setSortDirection("asc");
   }
 
   function setRowRef(key: string, node: HTMLTableRowElement | null) {
@@ -577,15 +612,15 @@ export function DocumentLibraryTable({
   }
 
   function isItemSelected(item: DocumentLibraryTableItem): boolean {
-    return item.kind === 'folder'
+    return item.kind === "folder"
       ? selectedFolderIds.has(item.folder.id)
       : selectedDocumentIds.has(item.document.id);
   }
 
   function getSingleItemSelection(item: DocumentLibraryTableItem) {
     return {
-      folderIds: new Set(item.kind === 'folder' ? [item.folder.id] : []),
-      documentIds: new Set(item.kind === 'document' ? [item.document.id] : []),
+      folderIds: new Set(item.kind === "folder" ? [item.folder.id] : []),
+      documentIds: new Set(item.kind === "document" ? [item.document.id] : []),
     };
   }
 
@@ -605,18 +640,22 @@ export function DocumentLibraryTable({
         const nearestDistance = Math.abs(nearestIndex - targetIndex);
         return currentDistance < nearestDistance ? selectedIndex : nearestIndex;
       },
-      null
+      null,
     );
 
     const rangeStartIndex =
-      nearestSelectedIndex === null ? targetIndex : Math.min(nearestSelectedIndex, targetIndex);
+      nearestSelectedIndex === null
+        ? targetIndex
+        : Math.min(nearestSelectedIndex, targetIndex);
     const rangeEndIndex =
-      nearestSelectedIndex === null ? targetIndex : Math.max(nearestSelectedIndex, targetIndex);
+      nearestSelectedIndex === null
+        ? targetIndex
+        : Math.max(nearestSelectedIndex, targetIndex);
     const folderIds = new Set(selectedFolderIds);
     const documentIds = new Set(selectedDocumentIds);
 
     for (const item of sortedItems.slice(rangeStartIndex, rangeEndIndex + 1)) {
-      if (item.kind === 'folder') {
+      if (item.kind === "folder") {
         folderIds.add(item.folder.id);
       } else {
         documentIds.add(item.document.id);
@@ -628,7 +667,7 @@ export function DocumentLibraryTable({
 
   function handleRowSelectionClick(
     event: MouseEvent<HTMLTableRowElement>,
-    item: DocumentLibraryTableItem
+    item: DocumentLibraryTableItem,
   ) {
     if (suppressClickRef.current || event.detail > 1) return;
     event.stopPropagation();
@@ -645,7 +684,7 @@ export function DocumentLibraryTable({
 
     if (isAdditiveClick) {
       if (!isItemSelected(item)) {
-        if (item.kind === 'folder') {
+        if (item.kind === "folder") {
           onToggleFolderSelection(item.folder.id);
         } else {
           onToggleDocumentSelection(item.document.id);
@@ -697,7 +736,7 @@ export function DocumentLibraryTable({
 
       if (!intersects(selectionRect, relativeRowRect)) continue;
 
-      if (item.kind === 'folder') {
+      if (item.kind === "folder") {
         nextFolderIds.add(item.folder.id);
       } else {
         nextDocumentIds.add(item.document.id);
@@ -716,9 +755,11 @@ export function DocumentLibraryTable({
       event.button !== 0 ||
       !target ||
       Boolean(target.closest('[data-table-interactive="true"]')) ||
-      Boolean(target.closest('thead')) ||
-      Boolean(target.closest('tr')) ||
-      Boolean(target.closest('button, a, input, textarea, select, [role="menuitem"]'))
+      Boolean(target.closest("thead")) ||
+      Boolean(target.closest("tr")) ||
+      Boolean(
+        target.closest('button, a, input, textarea, select, [role="menuitem"]'),
+      )
     );
   }
 
@@ -791,15 +832,17 @@ export function DocumentLibraryTable({
 
   const selectionBoxStyle = getBoxStyle(selectionBox);
 
-  function buildDragSelection(item: DocumentLibraryTableItem): DocumentTableDragSelection {
+  function buildDragSelection(
+    item: DocumentLibraryTableItem,
+  ): DocumentTableDragSelection {
     return isItemSelected(item)
       ? {
           folderIds: Array.from(selectedFolderIds),
           documentIds: Array.from(selectedDocumentIds),
         }
       : {
-          folderIds: item.kind === 'folder' ? [item.folder.id] : [],
-          documentIds: item.kind === 'document' ? [item.document.id] : [],
+          folderIds: item.kind === "folder" ? [item.folder.id] : [],
+          documentIds: item.kind === "document" ? [item.document.id] : [],
         };
   }
 
@@ -817,33 +860,38 @@ export function DocumentLibraryTable({
   function getPointerDropTarget(
     clientX: number,
     clientY: number,
-    selection: DocumentTableDragSelection
+    selection: DocumentTableDragSelection,
   ): PointerDropTarget {
-    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    const element = document.elementFromPoint(
+      clientX,
+      clientY,
+    ) as HTMLElement | null;
     if (!element) return null;
 
     if (element.closest('[data-document-trash-drop="true"]')) {
-      return { kind: 'trash' };
+      return { kind: "trash" };
     }
 
     const breadcrumbTarget = element.closest<HTMLElement>(
-      '[data-document-breadcrumb-folder-drop-id]'
+      "[data-document-breadcrumb-folder-drop-id]",
     );
     if (breadcrumbTarget) {
-      const rawFolderId = breadcrumbTarget.dataset.documentBreadcrumbFolderDropId;
-      const folderId = rawFolderId === 'root' ? null : rawFolderId || null;
+      const rawFolderId =
+        breadcrumbTarget.dataset.documentBreadcrumbFolderDropId;
+      const folderId = rawFolderId === "root" ? null : rawFolderId || null;
       return canDropSelectionIntoFolder(selection, folderId)
-        ? { kind: 'folder', folderId, scope: 'breadcrumb' }
+        ? { kind: "folder", folderId, scope: "breadcrumb" }
         : null;
     }
 
     const tableFolderTarget = element.closest<HTMLElement>(
-      '[data-document-table-folder-drop-id]'
+      "[data-document-table-folder-drop-id]",
     );
     if (tableFolderTarget) {
-      const folderId = tableFolderTarget.dataset.documentTableFolderDropId ?? null;
+      const folderId =
+        tableFolderTarget.dataset.documentTableFolderDropId ?? null;
       return folderId && canDropSelectionIntoFolder(selection, folderId)
-        ? { kind: 'folder', folderId, scope: 'table' }
+        ? { kind: "folder", folderId, scope: "table" }
         : null;
     }
 
@@ -853,25 +901,29 @@ export function DocumentLibraryTable({
   function updatePointerDropTarget(
     clientX: number,
     clientY: number,
-    selection: DocumentTableDragSelection
+    selection: DocumentTableDragSelection,
   ): PointerDropTarget {
     const target = getPointerDropTarget(clientX, clientY, selection);
     setDragTargetFolderId(
-      target?.kind === 'folder' && target.scope === 'table' && target.folderId
+      target?.kind === "folder" && target.scope === "table" && target.folderId
         ? target.folderId
-        : null
+        : null,
     );
     onPointerDropTargetChange(
-      target?.kind === 'trash'
-        ? { kind: 'trash' }
-        : target?.kind === 'folder' && target.scope === 'breadcrumb'
-          ? { kind: 'folder', folderId: target.folderId }
-          : null
+      target?.kind === "trash"
+        ? { kind: "trash" }
+        : target?.kind === "folder" && target.scope === "breadcrumb"
+          ? { kind: "folder", folderId: target.folderId }
+          : null,
     );
     return target;
   }
 
-  function startPointerDrag(pendingDrag: PendingRowDrag, clientX: number, clientY: number) {
+  function startPointerDrag(
+    pendingDrag: PendingRowDrag,
+    clientX: number,
+    clientY: number,
+  ) {
     suppressClickRef.current = true;
     window.getSelection()?.removeAllRanges();
     setDraggedItem(pendingDrag.item);
@@ -884,7 +936,7 @@ export function DocumentLibraryTable({
 
   function handleRowPointerDown(
     event: ReactPointerEvent<HTMLTableRowElement>,
-    item: DocumentLibraryTableItem
+    item: DocumentLibraryTableItem,
   ) {
     const target = event.target as HTMLElement | null;
     if (
@@ -925,7 +977,11 @@ export function DocumentLibraryTable({
     }
 
     setDragPosition({ x: event.clientX, y: event.clientY });
-    updatePointerDropTarget(event.clientX, event.clientY, pendingDrag.selection);
+    updatePointerDropTarget(
+      event.clientX,
+      event.clientY,
+      pendingDrag.selection,
+    );
   }
 
   function handleWindowPointerUp(event: PointerEvent) {
@@ -933,12 +989,16 @@ export function DocumentLibraryTable({
     if (!pendingDrag || pendingDrag.pointerId !== event.pointerId) return;
 
     const dropTarget = pendingDrag.isActive
-      ? getPointerDropTarget(event.clientX, event.clientY, pendingDrag.selection)
+      ? getPointerDropTarget(
+          event.clientX,
+          event.clientY,
+          pendingDrag.selection,
+        )
       : null;
 
-    if (dropTarget?.kind === 'trash') {
+    if (dropTarget?.kind === "trash") {
       onMoveItemsToTrash(pendingDrag.selection);
-    } else if (dropTarget?.kind === 'folder') {
+    } else if (dropTarget?.kind === "folder") {
       onMoveItemsToFolder({
         selection: pendingDrag.selection,
         targetFolderId: dropTarget.folderId,
@@ -952,15 +1012,15 @@ export function DocumentLibraryTable({
   }
 
   useEffect(() => {
-    window.addEventListener('pointermove', handleWindowPointerMove, {
+    window.addEventListener("pointermove", handleWindowPointerMove, {
       passive: false,
     });
-    window.addEventListener('pointerup', handleWindowPointerUp);
-    window.addEventListener('pointercancel', clearPointerDrag);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", clearPointerDrag);
     return () => {
-      window.removeEventListener('pointermove', handleWindowPointerMove);
-      window.removeEventListener('pointerup', handleWindowPointerUp);
-      window.removeEventListener('pointercancel', clearPointerDrag);
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", clearPointerDrag);
     };
   });
 
@@ -982,8 +1042,8 @@ export function DocumentLibraryTable({
                 alwaysVisible
                 label={
                   allVisibleSelected
-                    ? 'Alle sichtbaren Einträge abwählen'
-                    : 'Alle sichtbaren Einträge auswählen'
+                    ? "Alle sichtbaren Einträge abwählen"
+                    : "Alle sichtbaren Einträge auswählen"
                 }
                 onClick={handleHeaderSelection}
               />
@@ -1040,7 +1100,7 @@ export function DocumentLibraryTable({
         </TableHeader>
         <TableBody>
           {sortedItems.map((item) => {
-            if (item.kind === 'folder') {
+            if (item.kind === "folder") {
               const { folder } = item;
               const isSelected = selectedFolderIds.has(folder.id);
               const handlers: FolderActionHandlers = {
@@ -1056,17 +1116,22 @@ export function DocumentLibraryTable({
                   <ContextMenuTrigger asChild>
                     <TableRow
                       ref={(node) => setRowRef(item.key, node)}
-                      data-state={isSelected ? 'selected' : undefined}
+                      data-state={isSelected ? "selected" : undefined}
                       data-document-selection-preserve="true"
                       data-document-table-folder-drop-id={folder.id}
                       className={cn(
-                        'group cursor-default transition-colors hover:bg-accent/50',
-                        isSelected && 'bg-primary/10 hover:bg-primary/15',
-                        dragTargetFolderId === folder.id && 'bg-primary/20 outline outline-1 outline-primary/60'
+                        "group cursor-default transition-colors hover:bg-accent/50",
+                        isSelected && "bg-primary/10 hover:bg-primary/15",
+                        dragTargetFolderId === folder.id &&
+                          "bg-primary/20 outline outline-1 outline-primary/60",
                       )}
-                      onPointerDown={(event) => handleRowPointerDown(event, item)}
+                      onPointerDown={(event) =>
+                        handleRowPointerDown(event, item)
+                      }
                       onClick={(event) => handleRowSelectionClick(event, item)}
-                      onDoubleClick={() => openFromDoubleClick(() => onOpenFolder(folder))}
+                      onDoubleClick={() =>
+                        openFromDoubleClick(() => onOpenFolder(folder))
+                      }
                       onContextMenu={handleRowContextMenu}
                     >
                       <TableCell>
@@ -1113,7 +1178,9 @@ export function DocumentLibraryTable({
                           handlers={handlers}
                           onOpenChange={() => {
                             if (!(isSelected && selectedItemCount > 1)) {
-                              onRectangleSelectionChange(getSingleItemSelection(item));
+                              onRectangleSelectionChange(
+                                getSingleItemSelection(item),
+                              );
                             }
                           }}
                         />
@@ -1127,7 +1194,10 @@ export function DocumentLibraryTable({
                       onDelete={onBatchDeleteSelection}
                     />
                   ) : (
-                    <FolderContextMenuContent folder={folder} handlers={handlers} />
+                    <FolderContextMenuContent
+                      folder={folder}
+                      handlers={handlers}
+                    />
                   )}
                 </ContextMenu>
               );
@@ -1154,17 +1224,19 @@ export function DocumentLibraryTable({
                 <ContextMenuTrigger asChild>
                   <TableRow
                     ref={(node) => setRowRef(item.key, node)}
-                    data-state={isSelected ? 'selected' : undefined}
+                    data-state={isSelected ? "selected" : undefined}
                     data-document-selection-preserve="true"
                     className={cn(
-                      'group cursor-default transition-colors hover:bg-accent/50',
-                      isSelected && 'bg-primary/10 hover:bg-primary/15',
+                      "group cursor-default transition-colors hover:bg-accent/50",
+                      isSelected && "bg-primary/10 hover:bg-primary/15",
                       draggedItem &&
-                        'cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent'
+                        "cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent",
                     )}
                     onPointerDown={(event) => handleRowPointerDown(event, item)}
                     onClick={(event) => handleRowSelectionClick(event, item)}
-                    onDoubleClick={() => openFromDoubleClick(() => onOpenDocument(document))}
+                    onDoubleClick={() =>
+                      openFromDoubleClick(() => onOpenDocument(document))
+                    }
                     onContextMenu={handleRowContextMenu}
                   >
                     <TableCell>
@@ -1230,7 +1302,9 @@ export function DocumentLibraryTable({
                         handlers={handlers}
                         onOpenChange={() => {
                           if (!(isSelected && selectedItemCount > 1)) {
-                            onRectangleSelectionChange(getSingleItemSelection(item));
+                            onRectangleSelectionChange(
+                              getSingleItemSelection(item),
+                            );
                           }
                         }}
                       />
@@ -1288,7 +1362,7 @@ export function DocumentLibraryTable({
           {draggedSelection.documentIds.length > 0 &&
             (draggedSelection.folderIds.length > 0 ? (
               <File className="size-3.5 shrink-0" />
-            ) : draggedItem.kind === 'document' ? (
+            ) : draggedItem.kind === "document" ? (
               (() => {
                 const DragIcon = getFileIcon(draggedItem.document);
                 return <DragIcon className="size-3.5 shrink-0" />;
@@ -1296,7 +1370,9 @@ export function DocumentLibraryTable({
             ) : (
               <File className="size-3.5 shrink-0" />
             ))}
-          <span className="truncate">{getDragSelectionLabel(draggedSelection)}</span>
+          <span className="truncate">
+            {getDragSelectionLabel(draggedSelection)}
+          </span>
         </div>
       )}
     </div>

@@ -6,15 +6,15 @@ WerkFlow runs on two fully separated cloud backend environments since 2026-08-18
 
 ## The two backends
 
-| | Production | Dev / Test |
-| --- | --- | --- |
-| Supabase project | `jbgaqpdjauzoocplgdsn` | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev") |
-| Supabase org | "WerkFlow" (`svxdwqapsmvfkchswonc`) | same org since 2026-08-20 (transfer verified: refs/keys unchanged) |
-| Region / compute | AWS eu-central-1, Postgres 17 | AWS eu-central-1 (same, deliberate), Postgres 17, Micro compute since 2026-08-21 |
-| R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS: localhost only) |
-| Serves | Deployed app on Vercel, real customers | Local dev server, the cloud canary suite, wave-end cloud certifications (the Golden/audit batteries run against the local stack since 2026-08-28) |
-| Edge functions | `send-invite-email`, `send-email-change-current-otp` | Same two, deployed from `supabase/functions/` |
-| Auth | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key) |
+|                             | Production                                                              | Dev / Test                                                                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase project            | `jbgaqpdjauzoocplgdsn`                                                  | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev")                                                                                                       |
+| Supabase org                | "WerkFlow" (`svxdwqapsmvfkchswonc`)                                     | same org since 2026-08-20 (transfer verified: refs/keys unchanged)                                                                                |
+| Region / compute            | AWS eu-central-1, Postgres 17                                           | AWS eu-central-1 (same, deliberate), Postgres 17, Micro compute since 2026-08-21                                                                  |
+| R2 bucket (EU jurisdiction) | `werkflow-documents-prod`                                               | `werkflow-documents-dev` (CORS: localhost only)                                                                                                   |
+| Serves                      | Deployed app on Vercel, real customers                                  | Local dev server, the cloud canary suite, wave-end cloud certifications (the Golden/audit batteries run against the local stack since 2026-08-28) |
+| Edge functions              | `send-invite-email`, `send-email-change-current-otp`                    | Same two, deployed from `supabase/functions/`                                                                                                     |
+| Auth                        | Site URL `https://app.werk-flow.app`, custom SMTP via Resend (prod key) | Site URL `http://localhost:3000`, custom SMTP via Resend ("werkflow-dev" key)                                                                     |
 
 Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "WerkFlow Dev" org was deleted after the transfer). **The org is on the Pro plan since 2026-08-21**, so both projects run under Pro quotas. The same day the dev project's compute was raised from Nano to Micro (covered by the plan's compute credits, no additional cost per the owner). Practical effects: the free-tier auto-pause no longer applies to dev, the shared free egress cap is gone, and harness runs are faster than the Nano-era baselines recorded in [testing.md](testing.md) — re-baseline durations on the next full run before reading a slow run as a regression.
 
@@ -26,15 +26,15 @@ Both projects live in the one "WerkFlow" org since 2026-08-20 (the separate "Wer
 
 Since Stage A of the [platform-hardening phase](../plans/platform-hardening.md), the full Golden and audit batteries run against a local Supabase stack; cloud DEV keeps the canary suite and live-state inspection (decision [0006](../decisions/0006-testing-architecture.md)). The stack is the Supabase CLI's Docker composition, running on Docker Engine (docker-ce) inside WSL Ubuntu — not Docker Desktop.
 
-| | Local stack |
-| --- | --- |
-| Runs | `supabase start` from the repo root inside WSL (config: `supabase/config.toml`) |
-| API / DB / Studio / Mailpit | ports 54321 / 54322 / 54323 / 54324 |
-| Schema | `supabase db reset` replays the committed `supabase/migrations/` history — a failing reset is a finding about that history |
-| Keys | the CLI's shared local defaults (`sb_publishable_…`/`sb_secret_…`), printed by `supabase status`; not secrets |
-| Storage | bundled S3-compatible endpoint (`/storage/v1/s3`), bucket `werkflow-documents-local` declared in `config.toml`; the app reaches it through the `R2_ENDPOINT` override |
-| Auth posture | mirrors the cloud posture in `config.toml` (password min length 8, OTP 6 digits / 5 minutes, confirmations on); auth mail lands in Mailpit, never real inboxes. Leaked-password protection (HIBP) needs internet and has no local equivalent — the canary owns that copy |
-| Edge functions | served from `supabase/functions/`; without a local `RESEND_API_KEY` the mail functions log instead of sending, which is the intended local behavior |
+|                             | Local stack                                                                                                                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Runs                        | `supabase start` from the repo root inside WSL (config: `supabase/config.toml`)                                                                                                                                                                                          |
+| API / DB / Studio / Mailpit | ports 54321 / 54322 / 54323 / 54324                                                                                                                                                                                                                                      |
+| Schema                      | `supabase db reset` replays the committed `supabase/migrations/` history — a failing reset is a finding about that history                                                                                                                                               |
+| Keys                        | the CLI's shared local defaults (`sb_publishable_…`/`sb_secret_…`), printed by `supabase status`; not secrets                                                                                                                                                            |
+| Storage                     | bundled S3-compatible endpoint (`/storage/v1/s3`), bucket `werkflow-documents-local` declared in `config.toml`; the app reaches it through the `R2_ENDPOINT` override                                                                                                    |
+| Auth posture                | mirrors the cloud posture in `config.toml` (password min length 8, OTP 6 digits / 5 minutes, confirmations on); auth mail lands in Mailpit, never real inboxes. Leaked-password protection (HIBP) needs internet and has no local equivalent — the canary owns that copy |
+| Edge functions              | served from `supabase/functions/`; without a local `RESEND_API_KEY` the mail functions log instead of sending, which is the intended local behavior                                                                                                                      |
 
 Operational facts for this workstation:
 
@@ -72,25 +72,25 @@ Never run the Playwright harness or destructive scripts while `.env.local` point
 
 ## Which tool reaches what
 
-| Access path | Prod | Dev | Notes |
-| --- | --- | --- | --- |
-| claude.ai Supabase connector (OAuth, org-scoped) | read/write | read/write (since the 2026-08-20 org consolidation) | Scoped to the "WerkFlow" org, which now contains both projects. Address projects by ref; prod writes remain forbidden outside the migration rule. |
-| Account-wide Supabase MCP server (`.mcp.json`) | yes | yes | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only. |
-| Supabase CLI (`bunx supabase`) | yes (forbidden to link/push) | yes | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod. |
-| Management API (`api.supabase.com`) | yes | yes | Same PAT. Used for read-only prod inspection and dev configuration. |
-| R2 API tokens (S3 credentials) | prod token: prod bucket only | dev token: dev bucket only | Per-bucket account tokens since 2026-08-19: `.env.local`/`.env.dev-backup` carry the dev-scoped token, Vercel and `.env.live-backup` carry the prod-scoped one. Both are object-scoped and cannot manage bucket settings (CORS is set in the Cloudflare dashboard). |
+| Access path                                      | Prod                         | Dev                                                 | Notes                                                                                                                                                                                                                                                               |
+| ------------------------------------------------ | ---------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| claude.ai Supabase connector (OAuth, org-scoped) | read/write                   | read/write (since the 2026-08-20 org consolidation) | Scoped to the "WerkFlow" org, which now contains both projects. Address projects by ref; prod writes remain forbidden outside the migration rule.                                                                                                                   |
+| Account-wide Supabase MCP server (`.mcp.json`)   | yes                          | yes                                                 | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only.                                                                                                   |
+| Supabase CLI (`bunx supabase`)                   | yes (forbidden to link/push) | yes                                                 | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod.                                                                                                                                                 |
+| Management API (`api.supabase.com`)              | yes                          | yes                                                 | Same PAT. Used for read-only prod inspection and dev configuration.                                                                                                                                                                                                 |
+| R2 API tokens (S3 credentials)                   | prod token: prod bucket only | dev token: dev bucket only                          | Per-bucket account tokens since 2026-08-19: `.env.local`/`.env.dev-backup` carry the dev-scoped token, Vercel and `.env.live-backup` carry the prod-scoped one. Both are object-scoped and cannot manage bucket settings (CORS is set in the Cloudflare dashboard). |
 
 ## The migration rule
 
 Every schema change is **a file in `supabase/migrations/` first**, and is applied **dev-first, prod-second** — via the MCP `apply_migration` or the CLI, but always both projects and always from the same committed file. Details and the repair-migration story: [decision 0003](../decisions/0003-dev-prod-environment-split.md).
 
 - Dev: prefer `bunx supabase db push` (repo is linked to the dev ref) — it records the committed file's exact version in the remote history. MCP `apply_migration` works but stamps its own apply-time version: 23 pre-Stage-A migrations diverged that way from the committed filenames until the history was repaired by a name-keyed version update on 2026-08-28. Canary C9 now fails on any new divergence, so an MCP-applied dev migration must be followed by the same history alignment.
-- Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod. Prod's recorded history carries the same apply-time-version divergence for MCP-applied migrations; it is harmless there (nothing pushes against prod's history). **Owner decision 2026-08-28: left as-is deliberately.** The schema itself is correct; only the bookkeeping version labels differ from the committed filenames. Repair it (the same name-keyed version update that fixed dev) only when something genuinely needs prod's history by version — e.g. future CLI/CI tooling against prod — ideally folded into the next real prod migration rollout. Do not treat the divergence as a defect or "fix" it in passing.
+- Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod. MCP may stamp an apply-time version, so compare the name and statement before aligning the ledger key to the committed filename. P1-18's canary required exact parity and aligned only its four guarded version keys in DEV and PROD; schema objects and business data were unchanged.
 - After a schema change: regenerate `lib/supabase/database.types.ts` (`bunx supabase gen types typescript --project-id mbkkzuqjbdvzelqvuzcn --schema public`) — dev and prod schemas are identical, so dev is the generation source.
 
-**Latest parity checkpoint (P1-17, 2026-08-28):** migrations `20260827150000` through `20260827151400` were applied DEV-first and then identically to production. Fresh DEV-generated types exactly match `lib/supabase/database.types.ts`. Both Security Advisors returned zero findings; migration 1514 removed every new unindexed-foreign-key notice. Production retained 40 jobs and 14 projects and received zero rows in all five handover tables. Performance Advisor `unused_index` notices on the new empty tables are expected until real workload exists; they are not a reason to remove foreign-key or query-path indexes before usage data exists.
+**Latest parity checkpoint (P1-18, 2026-08-29):** migrations `20260829120000` through `20260829120300` were applied DEV-first and then identically to production. Their DEV and PROD ledger keys match the committed filenames. Fresh DEV type generation agrees with the committed P1-18 contract; the checked-in file keeps the repository generator's established relation-aware formatting. P1-18 Security and Performance Advisor scopes returned zero findings after the forward foreign-key-index migration. Production retained 5 organizations, 13 customers, 1 site, 40 jobs, 14 projects and 43 documents and received zero equipment, identifier, work-link, equipment-document-link or event rows.
 
-**Latest Realtime parity checkpoint (Stage C, 2026-08-29):** `bun run realtime:check` and read-only cloud inspection agree across local, DEV, and PROD. Each backend publishes 73 tables: 70 use replica identity `USING INDEX` on exactly `(id, organization_id)`, 3 use the recorded DEFAULT identity, and 0 use FULL. The `supabase_realtime` publication has INSERT, UPDATE, and DELETE enabled on all three backends.
+**Latest Realtime parity checkpoint (P1-18, 2026-08-29):** `bun run realtime:check` and read-only cloud inspection agree across local, DEV, and PROD. Each backend publishes 74 tables: 71 use replica identity `USING INDEX` on exactly `(id, organization_id)`, 3 use the recorded DEFAULT identity, and 0 use FULL. The `supabase_realtime` publication has INSERT, UPDATE, and DELETE enabled on all three backends.
 
 ## Per-machine onboarding checklist
 

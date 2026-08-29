@@ -1,4 +1,4 @@
-﻿'use client';
+﻿"use client";
 
 import {
   useEffect,
@@ -9,9 +9,9 @@ import {
   type DragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
-} from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+} from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   File,
   FileArchive,
@@ -33,9 +33,9 @@ import {
   Undo2,
   Upload,
   X,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,9 +45,9 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
-import { Checkbox } from '@/components/ui/checkbox';
+} from "@/components/ui/alert-dialog";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -55,23 +55,23 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   copyDocument,
   copyDocumentFolder,
@@ -88,8 +88,8 @@ import {
   renameDocumentFolder,
   restoreDocument,
   updateDocumentCategory,
-} from '@/lib/documents/actions';
-import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
+} from "@/lib/documents/actions";
+import { uploadDocumentVersionDirect } from "@/lib/documents/upload-client";
 import {
   DOCUMENT_CATEGORY_LABELS,
   type DocumentCategory,
@@ -100,31 +100,31 @@ import {
   type DocumentFolder,
   type DocumentDetailsResult,
   type OrganizationDocument,
-} from '@/lib/documents/types';
-import { cn } from '@/lib/utils';
-import { useBanner } from '@/components/ui/banner';
-import { DokumenteTabContentSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
-import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { usePendingTask } from '@/hooks/use-server-action';
+} from "@/lib/documents/types";
+import { cn } from "@/lib/utils";
+import { useBanner } from "@/components/ui/banner";
+import { DokumenteTabContentSkeleton } from "@/components/loading-states/dokumente-page-skeleton";
+import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
+import { usePendingTask } from "@/hooks/use-server-action";
 import {
   DocumentUploadDialog,
   type DocumentUploadItem,
-} from './document-upload-dialog';
+} from "./document-upload-dialog";
 import {
   DocumentLibraryTable,
   DOCUMENT_ROW_DRAG_MIME,
   type DocumentTableDragSelection,
-} from './document-library-table';
-import { DocumentViewerDialog } from './document-viewer-dialog';
-import { DocumentLinkDialog } from './document-link-dialog';
-import { DocumentWorkContextView } from './document-work-context-view';
+} from "./document-library-table";
+import { DocumentViewerDialog } from "./document-viewer-dialog";
+import { DocumentLinkDialog } from "./document-link-dialog";
+import { DocumentWorkContextView } from "./document-work-context-view";
 import {
   DocumentActionsMenu,
   DocumentContextMenuContent,
   FolderActionsMenu,
   FolderContextMenuContent,
-} from './document-row-actions';
-import type { Job, ProjectWithDetails, Client } from '@/lib/jobs/types';
+} from "./document-row-actions";
+import type { Job, ProjectWithDetails, Client } from "@/lib/jobs/types";
 
 type DocumentLibraryContentProps = {
   view: DocumentLibraryView;
@@ -146,7 +146,7 @@ type DocumentLibraryContentProps = {
 };
 
 type MoveCopyDialogState = {
-  mode: 'move' | 'copy';
+  mode: "move" | "copy";
   documents: OrganizationDocument[];
   folders: DocumentFolder[];
   sourceFolderId: string | null;
@@ -155,8 +155,8 @@ type MoveCopyDialogState = {
 type DetailsDialogState = OrganizationDocument | null;
 
 type RenameDialogState =
-  | { kind: 'folder'; id: string; currentName: string }
-  | { kind: 'document'; id: string; currentName: string }
+  | { kind: "folder"; id: string; currentName: string }
+  | { kind: "document"; id: string; currentName: string }
   | null;
 
 type LinkDialogState = OrganizationDocument | null;
@@ -185,7 +185,9 @@ type BrowserFileSystemFileEntry = BrowserFileSystemEntry & {
 
 type BrowserFileSystemDirectoryEntry = BrowserFileSystemEntry & {
   createReader: () => {
-    readEntries: (callback: (entries: BrowserFileSystemEntry[]) => void) => void;
+    readEntries: (
+      callback: (entries: BrowserFileSystemEntry[]) => void,
+    ) => void;
   };
 };
 
@@ -200,30 +202,32 @@ function formatFileSize(sizeBytes: number): string {
 }
 
 function formatDate(date: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(new Date(date));
 }
 
 function getUploaderName(document: OrganizationDocument): string {
   const uploader = document.uploader;
-  if (!uploader) return 'Unbekannt';
+  if (!uploader) return "Unbekannt";
 
   const fullName = [uploader.firstName, uploader.lastName]
     .filter(Boolean)
-    .join(' ')
+    .join(" ")
     .trim();
-  return fullName || uploader.email || 'Unbekannt';
+  return fullName || uploader.email || "Unbekannt";
 }
 
 function getFolderHref(folderId: string | null): string {
-  return folderId ? `/dokumente?folder=${encodeURIComponent(folderId)}` : '/dokumente';
+  return folderId
+    ? `/dokumente?folder=${encodeURIComponent(folderId)}`
+    : "/dokumente";
 }
 
 function shouldUseDefaultLinkBehavior(
-  event: ReactMouseEvent<HTMLAnchorElement>
+  event: ReactMouseEvent<HTMLAnchorElement>,
 ): boolean {
   return (
     event.defaultPrevented ||
@@ -247,47 +251,74 @@ function getViewHref({
   linkFilter?: DocumentLibraryLinkFilter;
 }): string {
   const params = new URLSearchParams();
-  params.set('view', view);
-  if (searchQuery.trim()) params.set('q', searchQuery.trim());
-  if (view === 'all' && category && category !== 'all') params.set('category', category);
-  if (view === 'all' && linkFilter && linkFilter !== 'all') params.set('link', linkFilter);
+  params.set("view", view);
+  if (searchQuery.trim()) params.set("q", searchQuery.trim());
+  if (view === "all" && category && category !== "all")
+    params.set("category", category);
+  if (view === "all" && linkFilter && linkFilter !== "all")
+    params.set("link", linkFilter);
   return `/dokumente?${params.toString()}`;
 }
 
 function getFileIcon(document: OrganizationDocument) {
-  const mimeType = document.mimeType ?? '';
+  const mimeType = document.mimeType ?? "";
   const fileName = document.displayName.toLowerCase();
 
-  if (mimeType.startsWith('image/')) return FileImage;
-  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return FileText;
-  if (mimeType.includes('spreadsheet') || fileName.endsWith('.xlsx') || fileName.endsWith('.csv')) {
+  if (mimeType.startsWith("image/")) return FileImage;
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf"))
+    return FileText;
+  if (
+    mimeType.includes("spreadsheet") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv")
+  ) {
     return FileSpreadsheet;
   }
-  if (mimeType.includes('zip') || fileName.endsWith('.zip') || fileName.endsWith('.rar')) {
+  if (
+    mimeType.includes("zip") ||
+    fileName.endsWith(".zip") ||
+    fileName.endsWith(".rar")
+  ) {
     return FileArchive;
   }
-  if (mimeType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+  if (
+    mimeType.includes("word") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx")
+  ) {
     return FileType;
   }
   return File;
 }
 
 function getFileTypeLabel(document: OrganizationDocument): string {
-  const mimeType = document.mimeType ?? '';
+  const mimeType = document.mimeType ?? "";
   const fileName = document.displayName.toLowerCase();
 
-  if (mimeType.startsWith('image/')) return 'Bild';
-  if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'PDF';
-  if (mimeType.includes('spreadsheet') || fileName.endsWith('.xlsx') || fileName.endsWith('.csv')) {
-    return 'Tabelle';
+  if (mimeType.startsWith("image/")) return "Bild";
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) return "PDF";
+  if (
+    mimeType.includes("spreadsheet") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv")
+  ) {
+    return "Tabelle";
   }
-  if (mimeType.includes('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
-    return 'Dokument';
+  if (
+    mimeType.includes("word") ||
+    fileName.endsWith(".doc") ||
+    fileName.endsWith(".docx")
+  ) {
+    return "Dokument";
   }
-  if (mimeType.includes('zip') || fileName.endsWith('.zip') || fileName.endsWith('.rar')) {
-    return 'Archiv';
+  if (
+    mimeType.includes("zip") ||
+    fileName.endsWith(".zip") ||
+    fileName.endsWith(".rar")
+  ) {
+    return "Archiv";
   }
-  return 'Datei';
+  return "Datei";
 }
 
 function getLinkBadges(document: OrganizationDocument): string[] {
@@ -297,56 +328,66 @@ function getLinkBadges(document: OrganizationDocument): string[] {
         ? `Auftrag ${link.jobNumber}`
         : link.jobTitle
           ? `Auftrag: ${link.jobTitle}`
-          : 'Auftrag';
+          : "Auftrag";
     }
 
     if (link.clientId) {
-      return link.clientName ? `Kunde: ${link.clientName}` : 'Kunde';
+      return link.clientName ? `Kunde: ${link.clientName}` : "Kunde";
     }
 
     if (link.employeeId) {
-      return link.employeeName ? `Mitarbeiter: ${link.employeeName}` : 'Mitarbeiter';
+      return link.employeeName
+        ? `Mitarbeiter: ${link.employeeName}`
+        : "Mitarbeiter";
     }
 
     if (link.requestId) {
-      return link.requestNumber ? `Anfrage ${link.requestNumber}` : 'Anfrage';
+      return link.requestNumber ? `Anfrage ${link.requestNumber}` : "Anfrage";
+    }
+
+    if (link.equipmentId) {
+      return link.equipmentNumber
+        ? `Anlage ${link.equipmentNumber}`
+        : link.equipmentName
+          ? `Anlage: ${link.equipmentName}`
+          : "Anlage";
     }
 
     return link.projectNumber
       ? `Projekt ${link.projectNumber}`
       : link.projectName
         ? `Projekt: ${link.projectName}`
-        : 'Projekt';
+        : "Projekt";
   });
 }
 
 function getAuditEventLabel(eventType: string): string {
   const labels: Record<string, string> = {
-    uploaded: 'Hochgeladen',
-    renamed: 'Umbenannt',
-    moved: 'Verschoben',
-    copied: 'Kopiert',
-    category_changed: 'Kategorie geändert',
-    linked: 'Verknüpft',
-    unlinked: 'Verknüpfung entfernt',
-    deleted: 'In den Papierkorb verschoben',
-    restored: 'Wiederhergestellt',
-    version_uploaded: 'Neue Version hochgeladen',
-    permanently_deleted: 'Endgültig gelöscht',
-    storage_cleanup: 'Speicher bereinigt',
+    uploaded: "Hochgeladen",
+    renamed: "Umbenannt",
+    moved: "Verschoben",
+    copied: "Kopiert",
+    category_changed: "Kategorie geändert",
+    linked: "Verknüpft",
+    unlinked: "Verknüpfung entfernt",
+    deleted: "In den Papierkorb verschoben",
+    restored: "Wiederhergestellt",
+    version_uploaded: "Neue Version hochgeladen",
+    permanently_deleted: "Endgültig gelöscht",
+    storage_cleanup: "Speicher bereinigt",
   };
 
-  return labels[eventType] ?? 'Dokumentaktion';
+  return labels[eventType] ?? "Dokumentaktion";
 }
 
 function isDirectoryEntry(
-  entry: BrowserFileSystemEntry
+  entry: BrowserFileSystemEntry,
 ): entry is BrowserFileSystemDirectoryEntry {
   return entry.isDirectory;
 }
 
 function isFileEntry(
-  entry: BrowserFileSystemEntry
+  entry: BrowserFileSystemEntry,
 ): entry is BrowserFileSystemFileEntry {
   return entry.isFile;
 }
@@ -356,7 +397,7 @@ function readFileEntry(entry: BrowserFileSystemFileEntry): Promise<File> {
 }
 
 function readDirectoryEntries(
-  entry: BrowserFileSystemDirectoryEntry
+  entry: BrowserFileSystemDirectoryEntry,
 ): Promise<BrowserFileSystemEntry[]> {
   const reader = entry.createReader();
   const entries: BrowserFileSystemEntry[] = [];
@@ -378,7 +419,7 @@ function readDirectoryEntries(
 
 async function collectFilesFromEntry(
   entry: BrowserFileSystemEntry,
-  parentPath = ''
+  parentPath = "",
 ): Promise<Array<{ file: File; relativePath: string }>> {
   const relativePath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
 
@@ -391,14 +432,14 @@ async function collectFilesFromEntry(
 
   const children = await readDirectoryEntries(entry);
   const nestedFiles = await Promise.all(
-    children.map((child) => collectFilesFromEntry(child, relativePath))
+    children.map((child) => collectFilesFromEntry(child, relativePath)),
   );
   return nestedFiles.flat();
 }
 
 function getFolderPath(
   foldersById: Map<string, DocumentFolder>,
-  folderId: string | null
+  folderId: string | null,
 ): DocumentFolder[] {
   if (!folderId) return [];
 
@@ -419,7 +460,7 @@ function getFolderPath(
 
 function getDescendantFolderIds(
   folders: DocumentFolder[],
-  folderIds: Set<string>
+  folderIds: Set<string>,
 ): Set<string> {
   const childIdsByParent = new Map<string, string[]>();
 
@@ -432,7 +473,7 @@ function getDescendantFolderIds(
 
   const descendantIds = new Set<string>();
   const stack = Array.from(folderIds).flatMap(
-    (folderId) => childIdsByParent.get(folderId) ?? []
+    (folderId) => childIdsByParent.get(folderId) ?? [],
   );
 
   while (stack.length > 0) {
@@ -447,7 +488,7 @@ function getDescendantFolderIds(
 
 function getTopLevelSelectedFolders(
   folders: DocumentFolder[],
-  allFolders: DocumentFolder[]
+  allFolders: DocumentFolder[],
 ): DocumentFolder[] {
   if (folders.length <= 1) return folders;
 
@@ -467,7 +508,7 @@ function getTopLevelSelectedFolders(
 }
 
 function getSourceFolderKey(folderId: string | null): string {
-  return folderId ?? 'root';
+  return folderId ?? "root";
 }
 
 function getSelectedSourceFolderKeys({
@@ -485,7 +526,7 @@ function getSelectedSourceFolderKeys({
 
 type MoveDestinationDialogProps = {
   open: boolean;
-  mode: 'move' | 'copy';
+  mode: "move" | "copy";
   title: string;
   description: string;
   allFolders: DocumentFolder[];
@@ -517,46 +558,46 @@ function MoveDestinationDialog({
   onOpenDocument,
 }: MoveDestinationDialogProps) {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(
-    sourceFolderId
+    sourceFolderId,
   );
   const selectedFolderIds = useMemo(
     () => new Set(selectedFolders.map((folder) => folder.id)),
-    [selectedFolders]
+    [selectedFolders],
   );
   const selectedDocumentIds = useMemo(
     () => new Set(selectedDocuments.map((document) => document.id)),
-    [selectedDocuments]
+    [selectedDocuments],
   );
   const foldersById = useMemo(
     () => new Map(allFolders.map((folder) => [folder.id, folder])),
-    [allFolders]
+    [allFolders],
   );
   const descendantFolderIds = useMemo(
     () => getDescendantFolderIds(allFolders, selectedFolderIds),
-    [allFolders, selectedFolderIds]
+    [allFolders, selectedFolderIds],
   );
   const breadcrumbFolders = useMemo(
     () => getFolderPath(foldersById, currentFolderId),
-    [currentFolderId, foldersById]
+    [currentFolderId, foldersById],
   );
   const childFolders = useMemo(
     () =>
       allFolders
         .filter((folder) => folder.parentFolderId === currentFolderId)
         .sort((firstFolder, secondFolder) =>
-          firstFolder.name.localeCompare(secondFolder.name, 'de-DE', {
+          firstFolder.name.localeCompare(secondFolder.name, "de-DE", {
             numeric: true,
-            sensitivity: 'base',
-          })
+            sensitivity: "base",
+          }),
         ),
-    [allFolders, currentFolderId]
+    [allFolders, currentFolderId],
   );
   const documentsInCurrentFolder = useMemo(
     () =>
       visibleDocuments.filter(
-        (document) => document.folderId === currentFolderId
+        (document) => document.folderId === currentFolderId,
       ),
-    [currentFolderId, visibleDocuments]
+    [currentFolderId, visibleDocuments],
   );
   const selectedSourceFolderKeys = useMemo(
     () =>
@@ -564,14 +605,14 @@ function MoveDestinationDialog({
         documents: selectedDocuments,
         folders: selectedFolders,
       }),
-    [selectedDocuments, selectedFolders]
+    [selectedDocuments, selectedFolders],
   );
   const targetFolderIsSelected =
     currentFolderId !== null && selectedFolderIds.has(currentFolderId);
   const targetFolderIsDescendant =
     currentFolderId !== null && descendantFolderIds.has(currentFolderId);
   const isSameMoveDestination =
-    mode === 'move' &&
+    mode === "move" &&
     selectedSourceFolderKeys.has(getSourceFolderKey(currentFolderId));
   const confirmDisabled =
     isPending ||
@@ -579,11 +620,11 @@ function MoveDestinationDialog({
     targetFolderIsDescendant ||
     isSameMoveDestination;
   const disabledReason = targetFolderIsSelected
-    ? 'Ein Ordner kann nicht in sich selbst verschoben werden.'
+    ? "Ein Ordner kann nicht in sich selbst verschoben werden."
     : targetFolderIsDescendant
-      ? 'Ein Ordner kann nicht in einen Unterordner von sich selbst verschoben werden.'
+      ? "Ein Ordner kann nicht in einen Unterordner von sich selbst verschoben werden."
       : isSameMoveDestination
-        ? 'Wähle einen anderen Zielordner aus.'
+        ? "Wähle einen anderen Zielordner aus."
         : null;
 
   function renderSelectedItemPill(label: ReactNode) {
@@ -601,7 +642,9 @@ function MoveDestinationDialog({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <DialogTitle>{title}</DialogTitle>
-              <DialogDescription className="mt-1">{description}</DialogDescription>
+              <DialogDescription className="mt-1">
+                {description}
+              </DialogDescription>
             </div>
             <div className="flex shrink-0">
               <Button
@@ -620,14 +663,14 @@ function MoveDestinationDialog({
         <div className="grid min-h-0 flex-1 grid-cols-1 bg-muted/20 lg:grid-cols-[240px_minmax(0,1fr)]">
           <aside className="hidden border-r bg-background/80 p-4 text-sm lg:block">
             <p className="font-medium">
-              {mode === 'copy' ? 'Kopieren nach' : 'Verschieben nach'}
+              {mode === "copy" ? "Kopieren nach" : "Verschieben nach"}
             </p>
             <div className="mt-4 space-y-2 text-muted-foreground">
               <button
                 type="button"
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted hover:text-foreground',
-                  currentFolderId === null && 'bg-muted text-foreground'
+                  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted hover:text-foreground",
+                  currentFolderId === null && "bg-muted text-foreground",
                 )}
                 onClick={() => setCurrentFolderId(null)}
               >
@@ -641,14 +684,14 @@ function MoveDestinationDialog({
                 {selectedFolders.length > 0 &&
                   renderSelectedItemPill(
                     selectedFolders.length === 1
-                      ? '1 Ordner'
-                      : `${selectedFolders.length} Ordner`
+                      ? "1 Ordner"
+                      : `${selectedFolders.length} Ordner`,
                   )}
                 {selectedDocuments.length > 0 &&
                   renderSelectedItemPill(
                     selectedDocuments.length === 1
-                      ? '1 Dokument'
-                      : `${selectedDocuments.length} Dokumente`
+                      ? "1 Dokument"
+                      : `${selectedDocuments.length} Dokumente`,
                   )}
               </div>
             </div>
@@ -659,21 +702,24 @@ function MoveDestinationDialog({
               <button
                 type="button"
                 className={cn(
-                  'rounded-md px-2 py-1 font-medium transition-colors hover:bg-muted',
-                  currentFolderId === null && 'bg-muted'
+                  "rounded-md px-2 py-1 font-medium transition-colors hover:bg-muted",
+                  currentFolderId === null && "bg-muted",
                 )}
                 onClick={() => setCurrentFolderId(null)}
               >
                 Dokumente
               </button>
               {breadcrumbFolders.map((folder) => (
-                <div key={folder.id} className="flex min-w-0 items-center gap-1">
+                <div
+                  key={folder.id}
+                  className="flex min-w-0 items-center gap-1"
+                >
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   <button
                     type="button"
                     className={cn(
-                      'truncate rounded-md px-2 py-1 font-medium transition-colors hover:bg-muted',
-                      folder.id === currentFolderId && 'bg-muted'
+                      "truncate rounded-md px-2 py-1 font-medium transition-colors hover:bg-muted",
+                      folder.id === currentFolderId && "bg-muted",
                     )}
                     onClick={() => setCurrentFolderId(folder.id)}
                   >
@@ -703,8 +749,8 @@ function MoveDestinationDialog({
                       <div
                         key={folder.id}
                         className={cn(
-                          'grid w-full grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-left text-sm transition-colors hover:bg-muted/70',
-                          isDisabled && 'cursor-not-allowed'
+                          "grid w-full grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-left text-sm transition-colors hover:bg-muted/70",
+                          isDisabled && "cursor-not-allowed",
                         )}
                         onDoubleClick={() => {
                           if (!isDisabled) setCurrentFolderId(folder.id);
@@ -712,8 +758,8 @@ function MoveDestinationDialog({
                       >
                         <span
                           className={cn(
-                            'flex min-w-0 items-center gap-2 font-medium',
-                            isDisabled && 'opacity-45'
+                            "flex min-w-0 items-center gap-2 font-medium",
+                            isDisabled && "opacity-45",
                           )}
                         >
                           <Folder className="size-4 shrink-0 text-orange-500" />
@@ -730,16 +776,16 @@ function MoveDestinationDialog({
                         </span>
                         <span
                           className={cn(
-                            'text-muted-foreground',
-                            isDisabled && 'opacity-45'
+                            "text-muted-foreground",
+                            isDisabled && "opacity-45",
                           )}
                         >
                           Ordner
                         </span>
                         <span
                           className={cn(
-                            'text-muted-foreground',
-                            isDisabled && 'opacity-45'
+                            "text-muted-foreground",
+                            isDisabled && "opacity-45",
                           )}
                         >
                           {formatDate(folder.updatedAt)}
@@ -755,10 +801,10 @@ function MoveDestinationDialog({
                       <div
                         key={document.id}
                         className={cn(
-                          'grid grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-sm',
+                          "grid grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-sm",
                           isSelected
-                            ? 'bg-muted/70 text-muted-foreground opacity-60'
-                            : 'text-muted-foreground'
+                            ? "bg-muted/70 text-muted-foreground opacity-60"
+                            : "text-muted-foreground",
                         )}
                         onDoubleClick={() => onOpenDocument(document)}
                       >
@@ -777,18 +823,20 @@ function MoveDestinationDialog({
                       </div>
                     );
                   })}
-                  {childFolders.length === 0 && documentsInCurrentFolder.length === 0 && (
-                    <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Dieser Ordner ist leer.
-                    </div>
-                  )}
+                  {childFolders.length === 0 &&
+                    documentsInCurrentFolder.length === 0 && (
+                      <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                        Dieser Ordner ist leer.
+                      </div>
+                    )}
                 </div>
               </div>
             </div>
 
             <div className="flex flex-col gap-3 border-t bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="min-h-5 text-sm text-muted-foreground">
-                {disabledReason ?? 'Wähle den Zielordner und bestätige den Vorgang.'}
+                {disabledReason ??
+                  "Wähle den Zielordner und bestätige den Vorgang."}
               </p>
               <div className="flex shrink-0 justify-end gap-2">
                 <Button
@@ -804,7 +852,7 @@ function MoveDestinationDialog({
                   disabled={confirmDisabled}
                 >
                   {isPending && <Loader2 className="size-4 animate-spin" />}
-                  {mode === 'copy' ? 'Hierhin kopieren' : 'Hierhin verschieben'}
+                  {mode === "copy" ? "Hierhin kopieren" : "Hierhin verschieben"}
                 </Button>
               </div>
             </div>
@@ -846,35 +894,38 @@ export function DocumentLibraryContent({
   const [isMoveCopySubmitting, setIsMoveCopySubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
-  const [folderName, setFolderName] = useState('');
+  const [folderName, setFolderName] = useState("");
   const [renameDialog, setRenameDialog] = useState<RenameDialogState>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [renameValue, setRenameValue] = useState("");
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const [moveCopyDialog, setMoveCopyDialog] = useState<MoveCopyDialogState>(null);
+  const [moveCopyDialog, setMoveCopyDialog] =
+    useState<MoveCopyDialogState>(null);
   const [linkDialog, setLinkDialog] = useState<LinkDialogState>(null);
   const [detailsDialog, setDetailsDialog] = useState<DetailsDialogState>(null);
   const detailsDialogIdRef = useRef<string | null>(null);
-  const [detailsData, setDetailsData] = useState<
-    Extract<DocumentDetailsResult, { success: true }> | null
-  >(null);
+  const [detailsData, setDetailsData] = useState<Extract<
+    DocumentDetailsResult,
+    { success: true }
+  > | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
   const [viewerDocument, setViewerDocument] =
     useState<OrganizationDocument | null>(initialDocument);
   const initialDocumentIdRef = useRef(initialDocumentId);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
-  const [folderDialogParentFolderId, setFolderDialogParentFolderId] =
-    useState<string | null | undefined>(undefined);
+  const [folderDialogParentFolderId, setFolderDialogParentFolderId] = useState<
+    string | null | undefined
+  >(undefined);
   const [draggedTableSelection, setDraggedTableSelection] =
     useState<DocumentTableDragSelection | null>(null);
   const [isTrashDragOver, setIsTrashDragOver] = useState(false);
   const [breadcrumbDropTargetId, setBreadcrumbDropTargetId] = useState<
-    string | 'root' | null
+    string | "root" | null
   >(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -882,25 +933,23 @@ export function DocumentLibraryContent({
   const [pendingNavigation, setPendingNavigation] =
     useState<PendingDocumentNavigation>(null);
   const visibleView = pendingNavigation?.view ?? view;
-  const isTrashView = visibleView === 'trash';
-  const isWorkView = visibleView === 'work';
-  const canUseUploadActions = visibleView === 'folders' || visibleView === 'all';
-  const uploadTargetFolderId = visibleView === 'folders' ? currentFolderId : null;
+  const isTrashView = visibleView === "trash";
+  const isWorkView = visibleView === "work";
+  const canUseUploadActions =
+    visibleView === "folders" || visibleView === "all";
+  const uploadTargetFolderId =
+    visibleView === "folders" ? currentFolderId : null;
   const allowUploadFolderCreation = canUseUploadActions;
   const showNavigationSkeleton = pendingNavigation !== null;
   const linkDialogCatalogIsPrefetched =
-    view === 'work' &&
+    view === "work" &&
     (jobs.length > 0 ||
       projects.length > 0 ||
       clients.length > 0 ||
       employees.length > 0);
 
   useRealtimeRouterRefresh({
-    tables: [
-      'documents',
-      'document_folders',
-      'document_links',
-    ],
+    tables: ["documents", "document_folders", "document_links"],
   });
 
   useEffect(() => {
@@ -931,15 +980,15 @@ export function DocumentLibraryContent({
 
   const selectedDocuments = useMemo(
     () => documents.filter((document) => selectedDocumentIds.has(document.id)),
-    [documents, selectedDocumentIds]
+    [documents, selectedDocumentIds],
   );
   const selectedFolders = useMemo(
     () => allFolders.filter((folder) => selectedFolderIds.has(folder.id)),
-    [allFolders, selectedFolderIds]
+    [allFolders, selectedFolderIds],
   );
   const selectedItemCount = selectedDocuments.length + selectedFolders.length;
   const activeFilterCount =
-    (category !== 'all' ? 1 : 0) + (linkFilter !== 'all' ? 1 : 0);
+    (category !== "all" ? 1 : 0) + (linkFilter !== "all" ? 1 : 0);
 
   function getSharedSourceFolderId({
     documentsToCheck,
@@ -949,17 +998,17 @@ export function DocumentLibraryContent({
     foldersToCheck: DocumentFolder[];
   }): string | null {
     const sourceFolderIds = [
-      ...documentsToCheck.map((document) => document.folderId ?? 'root'),
-      ...foldersToCheck.map((folder) => folder.parentFolderId ?? 'root'),
+      ...documentsToCheck.map((document) => document.folderId ?? "root"),
+      ...foldersToCheck.map((folder) => folder.parentFolderId ?? "root"),
     ];
 
     if (sourceFolderIds.length === 0) return currentFolderId;
     const firstSourceFolderId = sourceFolderIds[0];
     const allSameSource = sourceFolderIds.every(
-      (sourceFolderId) => sourceFolderId === firstSourceFolderId
+      (sourceFolderId) => sourceFolderId === firstSourceFolderId,
     );
 
-    return allSameSource && firstSourceFolderId !== 'root'
+    return allSameSource && firstSourceFolderId !== "root"
       ? firstSourceFolderId
       : null;
   }
@@ -972,32 +1021,34 @@ export function DocumentLibraryContent({
     });
   }, [renameDialog]);
 
-  function showFeedback(variant: 'success' | 'error', message: string) {
+  function showFeedback(variant: "success" | "error", message: string) {
     showBanner({ variant, message });
   }
 
   // Long-running operations run through the global banner's progress variant;
   // the follow-up success/error banner simply replaces it in the single slot.
   function showOperationBanner(
-    status: 'loading' | 'success' | 'error',
-    message: string
+    status: "loading" | "success" | "error",
+    message: string,
   ) {
     showBanner({
-      variant: status === 'loading' ? 'progress' : status,
+      variant: status === "loading" ? "progress" : status,
       message,
     });
   }
 
   function targetContainsSelectedFolder(
     foldersToProcess: DocumentFolder[],
-    destinationFolderId: string | null
+    destinationFolderId: string | null,
   ): boolean {
     if (!destinationFolderId || foldersToProcess.length === 0) return false;
 
     const folderIds = new Set(foldersToProcess.map((folder) => folder.id));
     if (folderIds.has(destinationFolderId)) return true;
 
-    return getDescendantFolderIds(allFolders, folderIds).has(destinationFolderId);
+    return getDescendantFolderIds(allFolders, folderIds).has(
+      destinationFolderId,
+    );
   }
 
   function targetContainsSelectedItemCurrentLocation({
@@ -1013,10 +1064,11 @@ export function DocumentLibraryContent({
 
     return (
       documentsToProcess.some(
-        (document) => getSourceFolderKey(document.folderId) === destinationKey
+        (document) => getSourceFolderKey(document.folderId) === destinationKey,
       ) ||
       foldersToProcess.some(
-        (folder) => getSourceFolderKey(folder.parentFolderId) === destinationKey
+        (folder) =>
+          getSourceFolderKey(folder.parentFolderId) === destinationKey,
       )
     );
   }
@@ -1028,7 +1080,7 @@ export function DocumentLibraryContent({
     destinationFolderId,
     onSuccess,
   }: {
-    mode: 'move' | 'copy';
+    mode: "move" | "copy";
     documentsToProcess: OrganizationDocument[];
     foldersToProcess: DocumentFolder[];
     destinationFolderId: string | null;
@@ -1041,16 +1093,16 @@ export function DocumentLibraryContent({
 
     if (targetContainsSelectedFolder(foldersToProcess, destinationFolderId)) {
       showFeedback(
-        'error',
-        mode === 'copy'
-          ? 'Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner kopiert werden.'
-          : 'Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner verschoben werden.'
+        "error",
+        mode === "copy"
+          ? "Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner kopiert werden."
+          : "Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner verschoben werden.",
       );
       return;
     }
 
     if (
-      mode === 'move' &&
+      mode === "move" &&
       targetContainsSelectedItemCurrentLocation({
         documentsToProcess,
         foldersToProcess,
@@ -1058,23 +1110,23 @@ export function DocumentLibraryContent({
       })
     ) {
       showFeedback(
-        'error',
-        'Einträge können nicht in ihren aktuellen Ordner verschoben werden.'
+        "error",
+        "Einträge können nicht in ihren aktuellen Ordner verschoben werden.",
       );
       return;
     }
 
     const topLevelFoldersToProcess = getTopLevelSelectedFolders(
       foldersToProcess,
-      allFolders
+      allFolders,
     );
-    const actionLabel = mode === 'copy' ? 'kopiert' : 'verschoben';
+    const actionLabel = mode === "copy" ? "kopiert" : "verschoben";
     setIsMoveCopySubmitting(true);
     showOperationBanner(
-      'loading',
+      "loading",
       itemCount === 1
         ? `1 Eintrag wird ${actionLabel}...`
-        : `${itemCount} Einträge werden ${actionLabel}...`
+        : `${itemCount} Einträge werden ${actionLabel}...`,
     );
 
     try {
@@ -1082,7 +1134,7 @@ export function DocumentLibraryContent({
 
       for (const document of documentsToProcess) {
         const result =
-          mode === 'move'
+          mode === "move"
             ? await moveDocument({
                 documentId: document.id,
                 folderId: destinationFolderId,
@@ -1097,7 +1149,7 @@ export function DocumentLibraryContent({
 
       for (const folder of topLevelFoldersToProcess) {
         const result =
-          mode === 'move'
+          mode === "move"
             ? await moveDocumentFolder({
                 folderId: folder.id,
                 parentFolderId: destinationFolderId,
@@ -1112,10 +1164,10 @@ export function DocumentLibraryContent({
 
       if (failedCount > 0) {
         const failedItemLabel =
-          failedCount === 1 ? '1 Eintrag' : `${failedCount} Einträge`;
+          failedCount === 1 ? "1 Eintrag" : `${failedCount} Einträge`;
         showFeedback(
-          'error',
-          `${failedItemLabel} ${failedCount === 1 ? 'konnte' : 'konnten'} nicht ${actionLabel} werden.`
+          "error",
+          `${failedItemLabel} ${failedCount === 1 ? "konnte" : "konnten"} nicht ${actionLabel} werden.`,
         );
         return;
       }
@@ -1124,18 +1176,18 @@ export function DocumentLibraryContent({
       clearSelection();
       refreshDocuments();
       showFeedback(
-        'success',
+        "success",
         itemCount === 1
           ? `1 Eintrag wurde ${actionLabel}.`
-          : `${itemCount} Einträge wurden ${actionLabel}.`
+          : `${itemCount} Einträge wurden ${actionLabel}.`,
       );
     } catch (error) {
-      console.error('Failed to run document move/copy operation:', error);
+      console.error("Failed to run document move/copy operation:", error);
       showFeedback(
-        'error',
-        mode === 'copy'
-          ? 'Die Auswahl konnte nicht kopiert werden.'
-          : 'Die Auswahl konnte nicht verschoben werden.'
+        "error",
+        mode === "copy"
+          ? "Die Auswahl konnte nicht kopiert werden."
+          : "Die Auswahl konnte nicht verschoben werden.",
       );
     } finally {
       setIsMoveCopySubmitting(false);
@@ -1184,12 +1236,12 @@ export function DocumentLibraryContent({
       href: folderId
         ? getFolderHref(folderId)
         : getViewHref({
-            view: 'folders',
+            view: "folders",
             searchQuery,
             category,
             linkFilter,
           }),
-      targetView: 'folders',
+      targetView: "folders",
       targetFolderId: folderId,
     });
   }
@@ -1207,7 +1259,7 @@ export function DocumentLibraryContent({
     void runDocumentTask(async () => {
       const result = await getDocumentDetails(document.id);
       if (!result.success) {
-        showFeedback('error', 'Die Dateidetails konnten nicht geladen werden.');
+        showFeedback("error", "Die Dateidetails konnten nicht geladen werden.");
         setIsDetailsLoading(false);
         return;
       }
@@ -1234,18 +1286,18 @@ export function DocumentLibraryContent({
     nextLinkFilter?: DocumentLibraryLinkFilter;
   } = {}) {
     const params = new URLSearchParams();
-    if (view !== 'folders') params.set('view', view);
-    if (currentFolderId) params.set('folder', currentFolderId);
-    if (nextSearchQuery.trim()) params.set('q', nextSearchQuery.trim());
-    if (view === 'all' && nextCategory !== 'all') {
-      params.set('category', nextCategory);
+    if (view !== "folders") params.set("view", view);
+    if (currentFolderId) params.set("folder", currentFolderId);
+    if (nextSearchQuery.trim()) params.set("q", nextSearchQuery.trim());
+    if (view === "all" && nextCategory !== "all") {
+      params.set("category", nextCategory);
     }
-    if (view === 'all' && nextLinkFilter !== 'all') {
-      params.set('link', nextLinkFilter);
+    if (view === "all" && nextLinkFilter !== "all") {
+      params.set("link", nextLinkFilter);
     }
     replaceDocumentLocation({
-      href: `/dokumente${params.size > 0 ? `?${params.toString()}` : ''}`,
-      targetView: currentFolderId ? 'folders' : view,
+      href: `/dokumente${params.size > 0 ? `?${params.toString()}` : ""}`,
+      targetView: currentFolderId ? "folders" : view,
       targetFolderId: currentFolderId,
     });
   }
@@ -1265,24 +1317,26 @@ export function DocumentLibraryContent({
         parentFolderId,
       });
       if (!result.success) {
-        showFeedback('error', 'Der Ordner konnte nicht erstellt werden.');
+        showFeedback("error", "Der Ordner konnte nicht erstellt werden.");
         return;
       }
 
-      setFolderName('');
+      setFolderName("");
       setFolderDialogOpen(false);
       setFolderDialogParentFolderId(undefined);
       refreshDocuments();
     });
   }
 
-  function openCreateFolderDialog(parentFolderId: string | null = currentFolderId) {
+  function openCreateFolderDialog(
+    parentFolderId: string | null = currentFolderId,
+  ) {
     setFolderDialogParentFolderId(parentFolderId);
     setFolderDialogOpen(true);
   }
 
   function buildUploadItems(
-    files: Array<{ file: File; relativePath?: string }>
+    files: Array<{ file: File; relativePath?: string }>,
   ): DocumentUploadItem[] {
     return files.map(({ file, relativePath }) => {
       uploadItemIdRef.current += 1;
@@ -1294,7 +1348,9 @@ export function DocumentLibraryContent({
     });
   }
 
-  function openUploadDialog(files: Array<{ file: File; relativePath?: string }>) {
+  function openUploadDialog(
+    files: Array<{ file: File; relativePath?: string }>,
+  ) {
     if (!canUseUploadActions) return;
     if (files.length === 0) return;
     setUploadItems(buildUploadItems(files));
@@ -1314,19 +1370,23 @@ export function DocumentLibraryContent({
         relativePath:
           (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
           file.name,
-      }))
+      })),
     );
   }
 
   function openRenameFolderDialog(folder: DocumentFolder) {
-    setRenameDialog({ kind: 'folder', id: folder.id, currentName: folder.name });
+    setRenameDialog({
+      kind: "folder",
+      id: folder.id,
+      currentName: folder.name,
+    });
     setRenameValue(folder.name);
   }
 
   function openRenameDocumentDialog(document: OrganizationDocument) {
     if (isTrashView) return;
     setRenameDialog({
-      kind: 'document',
+      kind: "document",
       id: document.id,
       currentName: document.displayName,
     });
@@ -1348,7 +1408,7 @@ export function DocumentLibraryContent({
 
     void runDocumentTask(async () => {
       const result =
-        renameDialog.kind === 'folder'
+        renameDialog.kind === "folder"
           ? await renameDocumentFolder({
               folderId: renameDialog.id,
               name: nextName,
@@ -1359,10 +1419,10 @@ export function DocumentLibraryContent({
             });
       if (!result.success) {
         showFeedback(
-          'error',
-          renameDialog.kind === 'folder'
-            ? 'Der Ordner konnte nicht umbenannt werden.'
-            : 'Die Datei konnte nicht umbenannt werden.'
+          "error",
+          renameDialog.kind === "folder"
+            ? "Der Ordner konnte nicht umbenannt werden."
+            : "Die Datei konnte nicht umbenannt werden.",
         );
       }
       setRenameDialog(null);
@@ -1372,14 +1432,14 @@ export function DocumentLibraryContent({
 
   function handleDeleteFolder(folder: DocumentFolder) {
     setConfirmDialog({
-      title: 'Ordner löschen?',
+      title: "Ordner löschen?",
       description: `Der Ordner „${folder.name}“ und alle enthaltenen Dateien werden in den Papierkorb verschoben.`,
-      confirmLabel: 'Ordner löschen',
+      confirmLabel: "Ordner löschen",
       onConfirm: () => {
         void runDocumentTask(async () => {
           const result = await deleteDocumentFolder(folder.id);
           if (!result.success) {
-            showFeedback('error', 'Der Ordner konnte nicht gelöscht werden.');
+            showFeedback("error", "Der Ordner konnte nicht gelöscht werden.");
           }
           setSelectedFolderIds((current) => {
             const next = new Set(current);
@@ -1392,7 +1452,10 @@ export function DocumentLibraryContent({
     });
   }
 
-  function handleUpdateCategory(document: OrganizationDocument, category: DocumentCategory) {
+  function handleUpdateCategory(
+    document: OrganizationDocument,
+    category: DocumentCategory,
+  ) {
     if (isTrashView) return;
     void runDocumentTask(async () => {
       const result = await updateDocumentCategory({
@@ -1401,7 +1464,7 @@ export function DocumentLibraryContent({
       });
 
       if (!result.success) {
-        showFeedback('error', 'Die Kategorie konnte nicht geändert werden.');
+        showFeedback("error", "Die Kategorie konnte nicht geändert werden.");
       }
 
       setDetailsDialog(result.success ? result.document : document);
@@ -1411,14 +1474,14 @@ export function DocumentLibraryContent({
 
   function handleDeleteDocument(document: OrganizationDocument) {
     setConfirmDialog({
-      title: 'Datei löschen?',
+      title: "Datei löschen?",
       description: `„${document.displayName}“ wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
-      confirmLabel: 'Datei löschen',
+      confirmLabel: "Datei löschen",
       onConfirm: () => {
         void runDocumentTask(async () => {
           const result = await deleteDocument(document.id);
           if (!result.success) {
-            showFeedback('error', 'Die Datei konnte nicht gelöscht werden.');
+            showFeedback("error", "Die Datei konnte nicht gelöscht werden.");
           }
           setSelectedDocumentIds((current) => {
             const next = new Set(current);
@@ -1435,9 +1498,12 @@ export function DocumentLibraryContent({
     void runDocumentTask(async () => {
       const result = await restoreDocument(document.id);
       if (!result.success) {
-        showFeedback('error', 'Die Datei konnte nicht wiederhergestellt werden.');
+        showFeedback(
+          "error",
+          "Die Datei konnte nicht wiederhergestellt werden.",
+        );
       } else {
-        showFeedback('success', 'Datei wurde wiederhergestellt.');
+        showFeedback("success", "Datei wurde wiederhergestellt.");
       }
       setSelectedDocumentIds((current) => {
         const next = new Set(current);
@@ -1450,14 +1516,19 @@ export function DocumentLibraryContent({
 
   function handlePermanentDeleteDocument(document: OrganizationDocument) {
     setConfirmDialog({
-      title: 'Datei endgültig löschen?',
+      title: "Datei endgültig löschen?",
       description: `„${document.displayName}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
-      confirmLabel: 'Endgültig löschen',
+      confirmLabel: "Endgültig löschen",
       onConfirm: () => {
         void runDocumentTask(async () => {
           const result = await permanentlyDeleteDocument(document.id);
           if (!result.success) {
-            showFeedback('error', 'Die Datei konnte nicht endgültig gelöscht werden.');
+            showFeedback(
+              "error",
+              result.error === "document_has_equipment_history"
+                ? "Die Datei gehört zur Anlagenhistorie und kann nicht endgültig gelöscht werden. Entferne zuerst die Anlagenverknüpfung."
+                : "Die Datei konnte nicht endgültig gelöscht werden.",
+            );
           }
           setSelectedDocumentIds((current) => {
             const next = new Set(current);
@@ -1472,24 +1543,24 @@ export function DocumentLibraryContent({
 
   function openMoveCopyDialog(
     item:
-      | { kind: 'document'; document: OrganizationDocument }
-      | { kind: 'folder'; folder: DocumentFolder },
-    mode: 'move' | 'copy'
+      | { kind: "document"; document: OrganizationDocument }
+      | { kind: "folder"; folder: DocumentFolder },
+    mode: "move" | "copy",
   ) {
     if (isTrashView) return;
 
     const shouldUseCurrentSelection =
-      item.kind === 'document'
+      item.kind === "document"
         ? selectedDocuments.some((document) => document.id === item.document.id)
         : selectedFolders.some((folder) => folder.id === item.folder.id);
     const documentsToUse = shouldUseCurrentSelection
       ? selectedDocuments
-      : item.kind === 'document'
+      : item.kind === "document"
         ? [item.document]
         : [];
     const foldersToUse = shouldUseCurrentSelection
       ? selectedFolders
-      : item.kind === 'folder'
+      : item.kind === "folder"
         ? [item.folder]
         : [];
 
@@ -1504,7 +1575,7 @@ export function DocumentLibraryContent({
     });
   }
 
-  function openMoveCopyDialogForSelection(mode: 'move' | 'copy') {
+  function openMoveCopyDialogForSelection(mode: "move" | "copy") {
     if (isTrashView || selectedItemCount === 0) return;
 
     setMoveCopyDialog({
@@ -1535,11 +1606,11 @@ export function DocumentLibraryContent({
     void runDocumentTask(async () => {
       const result = await getDocumentSignedUrl(document.id);
       if (!result.success) {
-        showFeedback('error', 'Die Datei konnte nicht geöffnet werden.');
+        showFeedback("error", "Die Datei konnte nicht geöffnet werden.");
         return;
       }
 
-      window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
+      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
     });
   }
 
@@ -1557,9 +1628,12 @@ export function DocumentLibraryContent({
       });
 
       if (!result.success) {
-        showFeedback('error', 'Die neue Version konnte nicht hochgeladen werden.');
+        showFeedback(
+          "error",
+          "Die neue Version konnte nicht hochgeladen werden.",
+        );
       } else {
-        showFeedback('success', 'Neue Version wurde hochgeladen.');
+        showFeedback("success", "Neue Version wurde hochgeladen.");
         if (detailsDialogIdRef.current === documentId) {
           const refreshedDocument = {
             ...activeDocument,
@@ -1583,45 +1657,48 @@ export function DocumentLibraryContent({
                 document: refreshedDocument,
               });
             } else {
-              showFeedback('error', 'Die Dateidetails konnten nicht geladen werden.');
+              showFeedback(
+                "error",
+                "Die Dateidetails konnten nicht geladen werden.",
+              );
             }
             setIsDetailsLoading(false);
           }
         }
       }
 
-      if (versionInputRef.current) versionInputRef.current.value = '';
+      if (versionInputRef.current) versionInputRef.current.value = "";
       refreshDocuments();
     });
   }
 
   function handleDownloadVersion(versionId: string) {
     void runDocumentTask(async () => {
-      const result = await getDocumentVersionSignedUrl(versionId, { download: true });
+      const result = await getDocumentVersionSignedUrl(versionId, {
+        download: true,
+      });
       if (!result.success) {
-        showFeedback('error', 'Die Version konnte nicht geöffnet werden.');
+        showFeedback("error", "Die Version konnte nicht geöffnet werden.");
         return;
       }
-      window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
+      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
     });
   }
 
   function hasExternalFileDrag(dataTransfer: DataTransfer): boolean {
     return (
-      Array.from(dataTransfer.types).includes('Files') ||
-      Array.from(dataTransfer.items).some((item) => item.kind === 'file') ||
+      Array.from(dataTransfer.types).includes("Files") ||
+      Array.from(dataTransfer.items).some((item) => item.kind === "file") ||
       dataTransfer.files.length > 0
     );
   }
 
   function hasInternalRowDrag(dataTransfer: DataTransfer): boolean {
-    return Array.from(dataTransfer.types).includes(
-      DOCUMENT_ROW_DRAG_MIME
-    );
+    return Array.from(dataTransfer.types).includes(DOCUMENT_ROW_DRAG_MIME);
   }
 
   function readInternalRowDragSelection(
-    dataTransfer: DataTransfer
+    dataTransfer: DataTransfer,
   ): DocumentTableDragSelection | null {
     const raw = dataTransfer.getData(DOCUMENT_ROW_DRAG_MIME);
     if (!raw) return draggedTableSelection;
@@ -1630,7 +1707,9 @@ export function DocumentLibraryContent({
       const parsed = JSON.parse(raw) as Partial<DocumentTableDragSelection>;
       return {
         folderIds: Array.isArray(parsed.folderIds) ? parsed.folderIds : [],
-        documentIds: Array.isArray(parsed.documentIds) ? parsed.documentIds : [],
+        documentIds: Array.isArray(parsed.documentIds)
+          ? parsed.documentIds
+          : [],
       };
     } catch {
       return draggedTableSelection;
@@ -1640,39 +1719,43 @@ export function DocumentLibraryContent({
   function getSelectionItems(selection: DocumentTableDragSelection) {
     return {
       documentsToUse: documents.filter((document) =>
-        selection.documentIds.includes(document.id)
+        selection.documentIds.includes(document.id),
       ),
-      foldersToUse: folders.filter((folder) => selection.folderIds.includes(folder.id)),
+      foldersToUse: folders.filter((folder) =>
+        selection.folderIds.includes(folder.id),
+      ),
     };
   }
 
   function canDropSelectionIntoFolder(
     selection: DocumentTableDragSelection,
     targetFolderId: string | null,
-    { disallowCurrentFolder = false }: { disallowCurrentFolder?: boolean } = {}
+    { disallowCurrentFolder = false }: { disallowCurrentFolder?: boolean } = {},
   ): boolean {
-    if (disallowCurrentFolder && targetFolderId === currentFolderId) return false;
+    if (disallowCurrentFolder && targetFolderId === currentFolderId)
+      return false;
     if (!targetFolderId) return true;
     if (selection.folderIds.includes(targetFolderId)) return false;
 
     const descendantFolderIds = getDescendantFolderIds(
       allFolders,
-      new Set(selection.folderIds)
+      new Set(selection.folderIds),
     );
     return !descendantFolderIds.has(targetFolderId);
   }
 
   function moveSelectionIntoFolder(
     selection: DocumentTableDragSelection,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ) {
     if (isTrashView) return;
     const { documentsToUse, foldersToUse } = getSelectionItems(selection);
     const filteredFoldersToMove = foldersToUse.filter(
-      (folder) => folder.id !== targetFolderId
+      (folder) => folder.id !== targetFolderId,
     );
 
-    if (documentsToUse.length === 0 && filteredFoldersToMove.length === 0) return;
+    if (documentsToUse.length === 0 && filteredFoldersToMove.length === 0)
+      return;
 
     void runDocumentTask(async () => {
       let failedCount = 0;
@@ -1695,11 +1778,11 @@ export function DocumentLibraryContent({
 
       if (failedCount > 0) {
         showFeedback(
-          'error',
-          `${failedCount} Eintrag/Einträge konnten nicht verschoben werden.`
+          "error",
+          `${failedCount} Eintrag/Einträge konnten nicht verschoben werden.`,
         );
       } else {
-        showFeedback('success', 'Auswahl wurde verschoben.');
+        showFeedback("success", "Auswahl wurde verschoben.");
       }
 
       clearSelection();
@@ -1725,14 +1808,15 @@ export function DocumentLibraryContent({
 
     const entries = Array.from(event.dataTransfer.items)
       .map((item) => {
-        const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.() ?? null;
+        const entry =
+          (item as DataTransferItemWithEntry).webkitGetAsEntry?.() ?? null;
         return entry as BrowserFileSystemEntry | null;
       })
       .filter((entry): entry is BrowserFileSystemEntry => Boolean(entry));
 
     if (entries.length > 0) {
       const collectedFiles = await Promise.all(
-        entries.map((entry) => collectFilesFromEntry(entry))
+        entries.map((entry) => collectFilesFromEntry(entry)),
       );
       openUploadDialog(collectedFiles.flat());
       return;
@@ -1785,14 +1869,17 @@ export function DocumentLibraryContent({
       }
       if (target?.closest('[data-document-selection-circle="true"]')) return;
       if (target?.closest('[data-document-selection-preserve="true"]')) return;
-      if (target?.closest('[role="menu"], [data-radix-popper-content-wrapper]')) {
+      if (
+        target?.closest('[role="menu"], [data-radix-popper-content-wrapper]')
+      ) {
         return;
       }
       window.setTimeout(clearSelection, 0);
     }
 
-    document.addEventListener('click', handleDocumentClick, true);
-    return () => document.removeEventListener('click', handleDocumentClick, true);
+    document.addEventListener("click", handleDocumentClick, true);
+    return () =>
+      document.removeEventListener("click", handleDocumentClick, true);
   }, [selectedItemCount]);
 
   function openDeleteConfirmationForSelection({
@@ -1805,14 +1892,14 @@ export function DocumentLibraryContent({
     const itemCount = documentsToDelete.length + foldersToDelete.length;
     if (itemCount === 0) return;
     const selectedItemLabel =
-      itemCount === 1 ? '1 Eintrag' : `${itemCount} Einträge`;
+      itemCount === 1 ? "1 Eintrag" : `${itemCount} Einträge`;
 
     setConfirmDialog({
-      title: 'Ausgewählte Einträge löschen?',
+      title: "Ausgewählte Einträge löschen?",
       description: `${selectedItemLabel} ${
-        itemCount === 1 ? 'wird' : 'werden'
+        itemCount === 1 ? "wird" : "werden"
       } in den Papierkorb verschoben.`,
-      confirmLabel: 'Einträge löschen',
+      confirmLabel: "Einträge löschen",
       onConfirm: () => {
         void runDocumentTask(async () => {
           let failedCount = 0;
@@ -1828,12 +1915,12 @@ export function DocumentLibraryContent({
           clearSelection();
           if (failedCount > 0) {
             const failedItemLabel =
-              failedCount === 1 ? '1 Eintrag' : `${failedCount} Einträge`;
+              failedCount === 1 ? "1 Eintrag" : `${failedCount} Einträge`;
             showFeedback(
-              'error',
+              "error",
               `${failedItemLabel} ${
-                failedCount === 1 ? 'konnte' : 'konnten'
-              } nicht gelöscht werden.`
+                failedCount === 1 ? "konnte" : "konnten"
+              } nicht gelöscht werden.`,
             );
           }
           refreshDocuments();
@@ -1862,8 +1949,8 @@ export function DocumentLibraryContent({
       clearSelection();
       if (failedCount > 0) {
         showFeedback(
-          'error',
-          `${failedCount} Datei(en) konnten nicht wiederhergestellt werden.`
+          "error",
+          `${failedCount} Datei(en) konnten nicht wiederhergestellt werden.`,
         );
       }
       refreshDocuments();
@@ -1871,11 +1958,11 @@ export function DocumentLibraryContent({
   }
 
   function openBatchMoveSelectionDialog() {
-    openMoveCopyDialogForSelection('move');
+    openMoveCopyDialogForSelection("move");
   }
 
   function openBatchCopySelectionDialog() {
-    openMoveCopyDialogForSelection('copy');
+    openMoveCopyDialogForSelection("copy");
   }
   function handleMoveItemsToFolder({
     selection,
@@ -1900,26 +1987,27 @@ export function DocumentLibraryContent({
 
   function handlePointerDropTargetChange(
     target:
-      | { kind: 'folder'; folderId: string | null }
-      | { kind: 'trash' }
-      | null
+      { kind: "folder"; folderId: string | null } | { kind: "trash" } | null,
   ) {
-    setIsTrashDragOver(target?.kind === 'trash');
+    setIsTrashDragOver(target?.kind === "trash");
     setBreadcrumbDropTargetId(
-      target?.kind === 'folder' ? target.folderId ?? 'root' : null
+      target?.kind === "folder" ? (target.folderId ?? "root") : null,
     );
   }
 
-  const primaryViewOptions: Array<{ value: DocumentLibraryView; label: string }> = [
-    { value: 'folders', label: 'Dokumente' },
-    { value: 'work', label: 'Verknüpfungen' },
-    { value: 'all', label: 'Alle Dateien' },
+  const primaryViewOptions: Array<{
+    value: DocumentLibraryView;
+    label: string;
+  }> = [
+    { value: "folders", label: "Dokumente" },
+    { value: "work", label: "Verknüpfungen" },
+    { value: "all", label: "Alle Dateien" },
   ];
   const categoryFilterOptions: Array<{
     value: DocumentLibraryCategoryFilter;
     label: string;
   }> = [
-    { value: 'all', label: 'Alle Kategorien' },
+    { value: "all", label: "Alle Kategorien" },
     ...Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value, label]) => ({
       value: value as DocumentCategory,
       label,
@@ -1929,12 +2017,12 @@ export function DocumentLibraryContent({
     value: DocumentLibraryLinkFilter;
     label: string;
   }> = [
-    { value: 'all', label: 'Alle Verknüpfungen' },
-    { value: 'jobs', label: 'Aufträge' },
-    { value: 'projects', label: 'Projekte' },
-    { value: 'clients', label: 'Kunden' },
-    { value: 'employees', label: 'Mitarbeiter' },
-    { value: 'unlinked', label: 'Nicht verknüpft' },
+    { value: "all", label: "Alle Verknüpfungen" },
+    { value: "jobs", label: "Aufträge" },
+    { value: "projects", label: "Projekte" },
+    { value: "clients", label: "Kunden" },
+    { value: "employees", label: "Mitarbeiter" },
+    { value: "unlinked", label: "Nicht verknüpft" },
   ];
 
   function handleTrashDrop(event: DragEvent<HTMLButtonElement>) {
@@ -1958,7 +2046,7 @@ export function DocumentLibraryContent({
 
   function handleBreadcrumbDragOver(
     event: DragEvent<HTMLElement>,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ) {
     if (!hasInternalRowDrag(event.dataTransfer)) return;
     event.preventDefault();
@@ -1971,18 +2059,18 @@ export function DocumentLibraryContent({
         disallowCurrentFolder: true,
       })
     ) {
-      event.dataTransfer.dropEffect = 'none';
+      event.dataTransfer.dropEffect = "none";
       setBreadcrumbDropTargetId(null);
       return;
     }
 
-    event.dataTransfer.dropEffect = 'move';
-    setBreadcrumbDropTargetId(targetFolderId ?? 'root');
+    event.dataTransfer.dropEffect = "move";
+    setBreadcrumbDropTargetId(targetFolderId ?? "root");
   }
 
   function handleBreadcrumbDrop(
     event: DragEvent<HTMLElement>,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ) {
     if (!hasInternalRowDrag(event.dataTransfer)) return;
     event.preventDefault();
@@ -2006,9 +2094,9 @@ export function DocumentLibraryContent({
   return (
     <div
       className={cn(
-        'flex min-h-[calc(100vh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors',
+        "flex min-h-[calc(100vh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors",
         isDragActive &&
-          'bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80'
+          "bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80",
       )}
       onDragOver={(event) => {
         if (!canUseUploadActions || isNavigationPending) return;
@@ -2027,7 +2115,8 @@ export function DocumentLibraryContent({
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">Dokumente</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Organisiere Dateien, Bilder, Verträge und Auftragsdokumente an einem Ort.
+            Organisiere Dateien, Bilder, Verträge und Auftragsdokumente an einem
+            Ort.
           </p>
         </div>
 
@@ -2036,7 +2125,9 @@ export function DocumentLibraryContent({
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                disabled={isPending || isNavigationPending || !canUseUploadActions}
+                disabled={
+                  isPending || isNavigationPending || !canUseUploadActions
+                }
                 className="sm:mt-1"
               >
                 <Plus className="size-4" />
@@ -2044,7 +2135,7 @@ export function DocumentLibraryContent({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {visibleView === 'folders' && (
+              {visibleView === "folders" && (
                 <>
                   <DropdownMenuItem
                     onClick={() => openCreateFolderDialog(currentFolderId)}
@@ -2072,7 +2163,7 @@ export function DocumentLibraryContent({
           multiple
           className="hidden"
           onChange={(event) => handleFolderInput(event.target.files)}
-          {...{ webkitdirectory: '', directory: '' }}
+          {...{ webkitdirectory: "", directory: "" }}
         />
         <input
           ref={fileInputRef}
@@ -2093,7 +2184,6 @@ export function DocumentLibraryContent({
         </p>
       )}
 
-
       <div className="space-y-3 rounded-lg border bg-card p-3">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap gap-2">
@@ -2102,7 +2192,7 @@ export function DocumentLibraryContent({
                 key={option.value}
                 asChild
                 size="sm"
-                variant={visibleView === option.value ? 'secondary' : 'outline'}
+                variant={visibleView === option.value ? "secondary" : "outline"}
                 className="min-w-32"
               >
                 <Link
@@ -2136,27 +2226,27 @@ export function DocumentLibraryContent({
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              variant={visibleView === 'trash' ? 'secondary' : 'outline'}
+              variant={visibleView === "trash" ? "secondary" : "outline"}
               data-document-trash-drop="true"
               className={cn(
-                'min-w-32',
+                "min-w-32",
                 isTrashDragOver &&
-                  'border-destructive text-destructive ring-2 ring-destructive/30'
+                  "border-destructive text-destructive ring-2 ring-destructive/30",
               )}
               onClick={() => {
                 navigateToDocumentLocation({
                   href: getViewHref({
-                    view: 'trash',
+                    view: "trash",
                     searchQuery,
                   }),
-                  targetView: 'trash',
+                  targetView: "trash",
                   targetFolderId: null,
                 });
               }}
               onDragOver={(event) => {
                 if (!hasInternalRowDrag(event.dataTransfer)) return;
                 event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
+                event.dataTransfer.dropEffect = "move";
                 setIsTrashDragOver(true);
               }}
               onDragEnter={(event) => {
@@ -2261,7 +2351,7 @@ export function DocumentLibraryContent({
 
           <Button
             type="button"
-            variant={filterPanelOpen ? 'secondary' : 'outline'}
+            variant={filterPanelOpen ? "secondary" : "outline"}
             onClick={() => setFilterPanelOpen((current) => !current)}
             className="h-9 shrink-0"
           >
@@ -2287,9 +2377,12 @@ export function DocumentLibraryContent({
                       nextCategory: value as DocumentLibraryCategoryFilter,
                     })
                   }
-                  disabled={visibleView !== 'all'}
+                  disabled={visibleView !== "all"}
                 >
-                  <SelectTrigger className="h-9 text-sm" aria-label="Kategorie filtern">
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    aria-label="Kategorie filtern"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2310,9 +2403,12 @@ export function DocumentLibraryContent({
                       nextLinkFilter: value as DocumentLibraryLinkFilter,
                     })
                   }
-                  disabled={visibleView !== 'all'}
+                  disabled={visibleView !== "all"}
                 >
-                  <SelectTrigger className="h-9 text-sm" aria-label="Verknüpfung filtern">
+                  <SelectTrigger
+                    className="h-9 text-sm"
+                    aria-label="Verknüpfung filtern"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2325,25 +2421,27 @@ export function DocumentLibraryContent({
                 </Select>
               </div>
             </div>
-            {visibleView !== 'all' && (
+            {visibleView !== "all" && (
               <p className="mt-2 text-xs text-muted-foreground">
-                Kategorie- und Verknüpfungsfilter sind in „Alle Dateien“ verfügbar.
+                Kategorie- und Verknüpfungsfilter sind in „Alle Dateien“
+                verfügbar.
               </p>
             )}
           </div>
         )}
       </div>
 
-      {visibleView === 'folders' && (
+      {visibleView === "folders" && (
         <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
           <Link
             href="/dokumente?view=folders"
             data-document-breadcrumb-folder-drop-id="root"
             className={cn(
-              'rounded border border-transparent px-2 py-1 transition-colors hover:bg-accent hover:text-foreground',
-              !currentFolderId && 'bg-accent text-foreground cursor-not-allowed',
-              breadcrumbDropTargetId === 'root' &&
-                'border-primary bg-primary/10 text-foreground'
+              "rounded border border-transparent px-2 py-1 transition-colors hover:bg-accent hover:text-foreground",
+              !currentFolderId &&
+                "bg-accent text-foreground cursor-not-allowed",
+              breadcrumbDropTargetId === "root" &&
+                "border-primary bg-primary/10 text-foreground",
             )}
             onClick={(event) => {
               if (shouldUseDefaultLinkBehavior(event)) return;
@@ -2364,19 +2462,23 @@ export function DocumentLibraryContent({
                 href={getFolderHref(folder.id)}
                 data-document-breadcrumb-folder-drop-id={folder.id}
                 className={cn(
-                  'rounded border border-transparent px-2 py-1 transition-colors hover:bg-accent hover:text-foreground',
+                  "rounded border border-transparent px-2 py-1 transition-colors hover:bg-accent hover:text-foreground",
                   currentFolderId === folder.id &&
-                    'bg-accent text-foreground cursor-not-allowed',
+                    "bg-accent text-foreground cursor-not-allowed",
                   breadcrumbDropTargetId === folder.id &&
-                    'border-primary bg-primary/10 text-foreground'
+                    "border-primary bg-primary/10 text-foreground",
                 )}
                 onClick={(event) => {
                   if (shouldUseDefaultLinkBehavior(event)) return;
                   event.preventDefault();
                   navigateToFolder(folder.id);
                 }}
-                onDragOver={(event) => handleBreadcrumbDragOver(event, folder.id)}
-                onDragEnter={(event) => handleBreadcrumbDragOver(event, folder.id)}
+                onDragOver={(event) =>
+                  handleBreadcrumbDragOver(event, folder.id)
+                }
+                onDragEnter={(event) =>
+                  handleBreadcrumbDragOver(event, folder.id)
+                }
                 onDragLeave={() => setBreadcrumbDropTargetId(null)}
                 onDrop={(event) => handleBreadcrumbDrop(event, folder.id)}
               >
@@ -2390,13 +2492,13 @@ export function DocumentLibraryContent({
       {showNavigationSkeleton ? (
         <DokumenteTabContentSkeleton
           view={
-            pendingNavigation?.view === 'work'
-              ? 'work'
-              : pendingNavigation?.view === 'all'
-                ? 'all'
-                : pendingNavigation?.view === 'trash'
-                  ? 'trash'
-                  : 'folders'
+            pendingNavigation?.view === "work"
+              ? "work"
+              : pendingNavigation?.view === "all"
+                ? "all"
+                : pendingNavigation?.view === "trash"
+                  ? "trash"
+                  : "folders"
           }
         />
       ) : isWorkView ? (
@@ -2412,210 +2514,230 @@ export function DocumentLibraryContent({
           onRenameDocument={openRenameDocumentDialog}
           onLinkDocument={openLinkDialog}
           onMoveDocument={(document) =>
-            openMoveCopyDialog({ kind: 'document', document }, 'move')
+            openMoveCopyDialog({ kind: "document", document }, "move")
           }
           onCopyDocument={(document) =>
-            openMoveCopyDialog({ kind: 'document', document }, 'copy')
+            openMoveCopyDialog({ kind: "document", document }, "copy")
           }
           onDeleteDocument={handleDeleteDocument}
         />
       ) : (
         <>
-      <div className="space-y-2 md:hidden">
-        {folders.map((folder) => {
-          const handlers = {
-            onOpen: () => navigateToFolder(folder.id),
-            onMove: () => openMoveCopyDialog({ kind: 'folder', folder }, 'move'),
-            onCopy: () => openMoveCopyDialog({ kind: 'folder', folder }, 'copy'),
-            onRename: () => openRenameFolderDialog(folder),
-            onDelete: () => handleDeleteFolder(folder),
-          };
+          <div className="space-y-2 md:hidden">
+            {folders.map((folder) => {
+              const handlers = {
+                onOpen: () => navigateToFolder(folder.id),
+                onMove: () =>
+                  openMoveCopyDialog({ kind: "folder", folder }, "move"),
+                onCopy: () =>
+                  openMoveCopyDialog({ kind: "folder", folder }, "copy"),
+                onRename: () => openRenameFolderDialog(folder),
+                onDelete: () => handleDeleteFolder(folder),
+              };
 
-          return (
-            <ContextMenu key={folder.id} modal={false}>
-              <ContextMenuTrigger asChild>
-                <div
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-                  onClick={() => navigateToFolder(folder.id)}
-                >
-                  <div
-                    className="shrink-0"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <Checkbox
-                      checked={selectedFolderIds.has(folder.id)}
-                      onCheckedChange={() => toggleFolderSelection(folder.id)}
-                      aria-label={`Ordner ${folder.name} auswählen`}
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <Folder className="size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{folder.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Ordner · {formatDate(folder.createdAt)}
-                      </p>
+              return (
+                <ContextMenu key={folder.id} modal={false}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+                      onClick={() => navigateToFolder(folder.id)}
+                    >
+                      <div
+                        className="shrink-0"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedFolderIds.has(folder.id)}
+                          onCheckedChange={() =>
+                            toggleFolderSelection(folder.id)
+                          }
+                          aria-label={`Ordner ${folder.name} auswählen`}
+                        />
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <Folder className="size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {folder.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Ordner · {formatDate(folder.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <FolderActionsMenu
+                          folder={folder}
+                          disabled={isPending}
+                          handlers={handlers}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <FolderActionsMenu
-                      folder={folder}
-                      disabled={isPending}
-                      handlers={handlers}
-                    />
-                  </div>
-                </div>
-              </ContextMenuTrigger>
-              <FolderContextMenuContent folder={folder} handlers={handlers} />
-            </ContextMenu>
-          );
-        })}
+                  </ContextMenuTrigger>
+                  <FolderContextMenuContent
+                    folder={folder}
+                    handlers={handlers}
+                  />
+                </ContextMenu>
+              );
+            })}
 
-        {documents.map((document) => {
-          const FileIcon = getFileIcon(document);
-          const linkBadges = getLinkBadges(document);
-          const handlers = {
-            onOpen: () => openDocumentViewer(document),
-            onDetails: () => openDetailsDialog(document),
-            onRename: () => openRenameDocumentDialog(document),
-            onLink: () => openLinkDialog(document),
-            onMove: () => openMoveCopyDialog({ kind: 'document', document }, 'move'),
-            onCopy: () => openMoveCopyDialog({ kind: 'document', document }, 'copy'),
-            onDelete: () => handleDeleteDocument(document),
-            onRestore: () => handleRestoreDocument(document),
-            onPermanentDelete: () => handlePermanentDeleteDocument(document),
-          };
+            {documents.map((document) => {
+              const FileIcon = getFileIcon(document);
+              const linkBadges = getLinkBadges(document);
+              const handlers = {
+                onOpen: () => openDocumentViewer(document),
+                onDetails: () => openDetailsDialog(document),
+                onRename: () => openRenameDocumentDialog(document),
+                onLink: () => openLinkDialog(document),
+                onMove: () =>
+                  openMoveCopyDialog({ kind: "document", document }, "move"),
+                onCopy: () =>
+                  openMoveCopyDialog({ kind: "document", document }, "copy"),
+                onDelete: () => handleDeleteDocument(document),
+                onRestore: () => handleRestoreDocument(document),
+                onPermanentDelete: () =>
+                  handlePermanentDeleteDocument(document),
+              };
 
-          return (
-            <ContextMenu key={document.id} modal={false}>
-              <ContextMenuTrigger asChild>
-                <div
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-                  onClick={() => openDocumentViewer(document)}
-                >
-                  <div
-                    className="shrink-0"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <Checkbox
-                      checked={selectedDocumentIds.has(document.id)}
-                      onCheckedChange={() => toggleDocumentSelection(document.id)}
-                      aria-label={`Datei ${document.displayName} auswählen`}
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <FileIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {document.displayName}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {DOCUMENT_CATEGORY_LABELS[document.category]} ·{' '}
-                        {formatFileSize(document.sizeBytes)} ·{' '}
-                        {formatDate(document.updatedAt)}
-                      </p>
-                      {linkBadges.length > 0 && (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {linkBadges[0]}
-                          {linkBadges.length > 1 ? ` +${linkBadges.length - 1}` : ''}
-                        </p>
-                      )}
+              return (
+                <ContextMenu key={document.id} modal={false}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+                      onClick={() => openDocumentViewer(document)}
+                    >
+                      <div
+                        className="shrink-0"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedDocumentIds.has(document.id)}
+                          onCheckedChange={() =>
+                            toggleDocumentSelection(document.id)
+                          }
+                          aria-label={`Datei ${document.displayName} auswählen`}
+                        />
+                      </div>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {document.displayName}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {DOCUMENT_CATEGORY_LABELS[document.category]} ·{" "}
+                            {formatFileSize(document.sizeBytes)} ·{" "}
+                            {formatDate(document.updatedAt)}
+                          </p>
+                          {linkBadges.length > 0 && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {linkBadges[0]}
+                              {linkBadges.length > 1
+                                ? ` +${linkBadges.length - 1}`
+                                : ""}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div onClick={(event) => event.stopPropagation()}>
+                        <DocumentActionsMenu
+                          document={document}
+                          isTrashView={isTrashView}
+                          disabled={isPending}
+                          handlers={handlers}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div onClick={(event) => event.stopPropagation()}>
-                    <DocumentActionsMenu
-                      document={document}
-                      isTrashView={isTrashView}
-                      disabled={isPending}
-                      handlers={handlers}
-                    />
-                  </div>
-                </div>
-              </ContextMenuTrigger>
-              <DocumentContextMenuContent
-                document={document}
-                isTrashView={isTrashView}
-                handlers={handlers}
-              />
-            </ContextMenu>
-          );
-        })}
+                  </ContextMenuTrigger>
+                  <DocumentContextMenuContent
+                    document={document}
+                    isTrashView={isTrashView}
+                    handlers={handlers}
+                  />
+                </ContextMenu>
+              );
+            })}
 
-        {folders.length === 0 && documents.length === 0 && (
-          <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-            Noch keine Dokumente gefunden.
+            {folders.length === 0 && documents.length === 0 && (
+              <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+                Noch keine Dokumente gefunden.
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <DocumentLibraryTable
-        folders={folders}
-        documents={documents}
-        selectedFolderIds={selectedFolderIds}
-        selectedDocumentIds={selectedDocumentIds}
-        isTrashView={isTrashView}
-        isPending={isPending}
-        onOpenFolder={(folder) => navigateToFolder(folder.id)}
-        onOpenDocument={openDocumentViewer}
-        onRenameFolder={openRenameFolderDialog}
-        onMoveFolder={(folder) => openMoveCopyDialog({ kind: 'folder', folder }, 'move')}
-        onCopyFolder={(folder) => openMoveCopyDialog({ kind: 'folder', folder }, 'copy')}
-        onDeleteFolder={handleDeleteFolder}
-        onDetailsDocument={openDetailsDialog}
-        onRenameDocument={openRenameDocumentDialog}
-        onLinkDocument={openLinkDialog}
-        onMoveDocument={(document) =>
-          openMoveCopyDialog({ kind: 'document', document }, 'move')
-        }
-        onCopyDocument={(document) =>
-          openMoveCopyDialog({ kind: 'document', document }, 'copy')
-        }
-        onDeleteDocument={handleDeleteDocument}
-        onRestoreDocument={handleRestoreDocument}
-        onPermanentDeleteDocument={handlePermanentDeleteDocument}
-        onToggleFolderSelection={toggleFolderSelection}
-        onToggleDocumentSelection={toggleDocumentSelection}
-        onSelectAllVisible={() => {
-          setSelectedDocumentIds((current) => {
-            const next = new Set(current);
-            for (const document of documents) {
-              next.add(document.id);
+          <DocumentLibraryTable
+            folders={folders}
+            documents={documents}
+            selectedFolderIds={selectedFolderIds}
+            selectedDocumentIds={selectedDocumentIds}
+            isTrashView={isTrashView}
+            isPending={isPending}
+            onOpenFolder={(folder) => navigateToFolder(folder.id)}
+            onOpenDocument={openDocumentViewer}
+            onRenameFolder={openRenameFolderDialog}
+            onMoveFolder={(folder) =>
+              openMoveCopyDialog({ kind: "folder", folder }, "move")
             }
-            return next;
-          });
-          setSelectedFolderIds((current) => {
-            const next = new Set(current);
-            for (const folder of folders) {
-              next.add(folder.id);
+            onCopyFolder={(folder) =>
+              openMoveCopyDialog({ kind: "folder", folder }, "copy")
             }
-            return next;
-          });
-        }}
-        onClearSelection={clearSelection}
-        onBatchMoveSelection={openBatchMoveSelectionDialog}
-        onBatchCopySelection={openBatchCopySelectionDialog}
-        onBatchDeleteSelection={handleBatchDelete}
-        onRectangleSelectionChange={({ folderIds, documentIds }) => {
-          setSelectedFolderIds(folderIds);
-          setSelectedDocumentIds(documentIds);
-        }}
-        onRectangleSelectionComplete={() => {
-          suppressNextSelectionClearRef.current = true;
-          window.setTimeout(() => {
-            suppressNextSelectionClearRef.current = false;
-          }, 250);
-        }}
-        onDragSelectionStart={setDraggedTableSelection}
-        onDragSelectionEnd={() => {
-          setDraggedTableSelection(null);
-          setIsTrashDragOver(false);
-          setBreadcrumbDropTargetId(null);
-        }}
-        onMoveItemsToFolder={handleMoveItemsToFolder}
-        onMoveItemsToTrash={handleMoveItemsToTrash}
-        onPointerDropTargetChange={handlePointerDropTargetChange}
-        canDropSelectionIntoFolder={canDropSelectionIntoFolder}
-      />
+            onDeleteFolder={handleDeleteFolder}
+            onDetailsDocument={openDetailsDialog}
+            onRenameDocument={openRenameDocumentDialog}
+            onLinkDocument={openLinkDialog}
+            onMoveDocument={(document) =>
+              openMoveCopyDialog({ kind: "document", document }, "move")
+            }
+            onCopyDocument={(document) =>
+              openMoveCopyDialog({ kind: "document", document }, "copy")
+            }
+            onDeleteDocument={handleDeleteDocument}
+            onRestoreDocument={handleRestoreDocument}
+            onPermanentDeleteDocument={handlePermanentDeleteDocument}
+            onToggleFolderSelection={toggleFolderSelection}
+            onToggleDocumentSelection={toggleDocumentSelection}
+            onSelectAllVisible={() => {
+              setSelectedDocumentIds((current) => {
+                const next = new Set(current);
+                for (const document of documents) {
+                  next.add(document.id);
+                }
+                return next;
+              });
+              setSelectedFolderIds((current) => {
+                const next = new Set(current);
+                for (const folder of folders) {
+                  next.add(folder.id);
+                }
+                return next;
+              });
+            }}
+            onClearSelection={clearSelection}
+            onBatchMoveSelection={openBatchMoveSelectionDialog}
+            onBatchCopySelection={openBatchCopySelectionDialog}
+            onBatchDeleteSelection={handleBatchDelete}
+            onRectangleSelectionChange={({ folderIds, documentIds }) => {
+              setSelectedFolderIds(folderIds);
+              setSelectedDocumentIds(documentIds);
+            }}
+            onRectangleSelectionComplete={() => {
+              suppressNextSelectionClearRef.current = true;
+              window.setTimeout(() => {
+                suppressNextSelectionClearRef.current = false;
+              }, 250);
+            }}
+            onDragSelectionStart={setDraggedTableSelection}
+            onDragSelectionEnd={() => {
+              setDraggedTableSelection(null);
+              setIsTrashDragOver(false);
+              setBreadcrumbDropTargetId(null);
+            }}
+            onMoveItemsToFolder={handleMoveItemsToFolder}
+            onMoveItemsToTrash={handleMoveItemsToTrash}
+            onPointerDropTargetChange={handlePointerDropTargetChange}
+            canDropSelectionIntoFolder={canDropSelectionIntoFolder}
+          />
         </>
       )}
 
@@ -2628,12 +2750,12 @@ export function DocumentLibraryContent({
         onComplete={(failedCount) => {
           if (failedCount > 0) {
             showFeedback(
-              'error',
-              `${failedCount} Datei(en) konnten nicht hochgeladen werden.`
+              "error",
+              `${failedCount} Datei(en) konnten nicht hochgeladen werden.`,
             );
           }
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          if (folderInputRef.current) folderInputRef.current.value = '';
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          if (folderInputRef.current) folderInputRef.current.value = "";
           refreshDocuments();
         }}
       />
@@ -2645,7 +2767,7 @@ export function DocumentLibraryContent({
       />
 
       <DocumentLinkDialog
-        key={linkDialog?.id ?? 'closed-document-link-dialog'}
+        key={linkDialog?.id ?? "closed-document-link-dialog"}
         document={linkDialog}
         open={!!linkDialog}
         onOpenChange={(open) => !open && setLinkDialog(null)}
@@ -2666,12 +2788,13 @@ export function DocumentLibraryContent({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {renameDialog?.kind === 'folder'
-                ? 'Ordner umbenennen'
-                : 'Datei umbenennen'}
+              {renameDialog?.kind === "folder"
+                ? "Ordner umbenennen"
+                : "Datei umbenennen"}
             </DialogTitle>
             <DialogDescription>
-              Vergib einen klaren Namen, damit das Dokument später leicht gefunden wird.
+              Vergib einen klaren Namen, damit das Dokument später leicht
+              gefunden wird.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -2726,7 +2849,7 @@ export function DocumentLibraryContent({
                 onConfirm?.();
               }}
             >
-              {confirmDialog?.confirmLabel ?? 'Bestätigen'}
+              {confirmDialog?.confirmLabel ?? "Bestätigen"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2778,21 +2901,23 @@ export function DocumentLibraryContent({
       <MoveDestinationDialog
         key={
           moveCopyDialog
-            ? `${moveCopyDialog.mode}-${moveCopyDialog.sourceFolderId ?? 'root'}-${moveCopyDialog.documents.map((document) => document.id).join('-')}-${moveCopyDialog.folders.map((folder) => folder.id).join('-')}`
-            : 'move-copy-closed'
+            ? `${moveCopyDialog.mode}-${moveCopyDialog.sourceFolderId ?? "root"}-${moveCopyDialog.documents.map((document) => document.id).join("-")}-${moveCopyDialog.folders.map((folder) => folder.id).join("-")}`
+            : "move-copy-closed"
         }
         open={!!moveCopyDialog}
-        mode={moveCopyDialog?.mode ?? 'move'}
-        title={moveCopyDialog?.mode === 'copy' ? 'Kopieren nach' : 'Verschieben nach'}
+        mode={moveCopyDialog?.mode ?? "move"}
+        title={
+          moveCopyDialog?.mode === "copy" ? "Kopieren nach" : "Verschieben nach"
+        }
         description={
           moveCopyDialog &&
           moveCopyDialog.documents.length + moveCopyDialog.folders.length > 1
-            ? 'Wähle den Zielordner für die ausgewählten Einträge.'
+            ? "Wähle den Zielordner für die ausgewählten Einträge."
             : moveCopyDialog?.documents.length === 1
               ? `Wähle den Zielordner für „${moveCopyDialog.documents[0].displayName}“.`
               : moveCopyDialog?.folders.length === 1
                 ? `Wähle den Zielordner für „${moveCopyDialog.folders[0].name}“.`
-                : 'Wähle den Zielordner.'
+                : "Wähle den Zielordner."
         }
         allFolders={allFolders}
         visibleDocuments={documents}
@@ -2840,7 +2965,9 @@ export function DocumentLibraryContent({
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Originaldatei
                   </p>
-                  <p className="mt-1 break-words">{detailsDialog.originalFileName}</p>
+                  <p className="mt-1 break-words">
+                    {detailsDialog.originalFileName}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -2848,7 +2975,9 @@ export function DocumentLibraryContent({
                   </p>
                   <p className="mt-1">
                     {getFileTypeLabel(detailsDialog)}
-                    {detailsDialog.mimeType ? ` (${detailsDialog.mimeType})` : ''}
+                    {detailsDialog.mimeType
+                      ? ` (${detailsDialog.mimeType})`
+                      : ""}
                   </p>
                 </div>
                 <div>
@@ -2861,7 +2990,7 @@ export function DocumentLibraryContent({
                       onValueChange={(value) =>
                         handleUpdateCategory(
                           detailsDialog,
-                          value as DocumentCategory
+                          value as DocumentCategory,
                         )
                       }
                       disabled={isPending || isTrashView}
@@ -2878,7 +3007,7 @@ export function DocumentLibraryContent({
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
@@ -2888,7 +3017,9 @@ export function DocumentLibraryContent({
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Größe
                   </p>
-                  <p className="mt-1">{formatFileSize(detailsDialog.sizeBytes)}</p>
+                  <p className="mt-1">
+                    {formatFileSize(detailsDialog.sizeBytes)}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -2917,7 +3048,8 @@ export function DocumentLibraryContent({
                 </p>
                 {getLinkBadges(detailsDialog).length === 0 ? (
                   <p className="mt-1 text-muted-foreground">
-                    Keine Verknüpfung zu Auftrag, Projekt, Kunde oder Mitarbeiter.
+                    Keine Verknüpfung zu Auftrag, Projekt, Kunde oder
+                    Mitarbeiter.
                   </p>
                 ) : (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -2938,8 +3070,8 @@ export function DocumentLibraryContent({
                     Versionen
                   </p>
                   {!isTrashView &&
-                    ['contract', 'invoice', 'offer', 'report'].includes(
-                      detailsDialog.category
+                    ["contract", "invoice", "offer", "report"].includes(
+                      detailsDialog.category,
                     ) && (
                       <>
                         <Button
@@ -2955,7 +3087,9 @@ export function DocumentLibraryContent({
                           ref={versionInputRef}
                           type="file"
                           className="hidden"
-                          onChange={(event) => handleVersionUpload(event.target.files)}
+                          onChange={(event) =>
+                            handleVersionUpload(event.target.files)
+                          }
                         />
                       </>
                     )}
@@ -2967,7 +3101,7 @@ export function DocumentLibraryContent({
                         Aktuelle Version {detailsDialog.currentVersionNumber}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {detailsDialog.originalFileName} ·{' '}
+                        {detailsDialog.originalFileName} ·{" "}
                         {formatFileSize(detailsDialog.sizeBytes)}
                       </p>
                     </div>
@@ -2997,8 +3131,8 @@ export function DocumentLibraryContent({
                               Version {version.versionNumber}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {version.originalFileName} ·{' '}
-                              {formatFileSize(version.sizeBytes)} ·{' '}
+                              {version.originalFileName} ·{" "}
+                              {formatFileSize(version.sizeBytes)} ·{" "}
                               {formatDate(version.createdAt)}
                             </p>
                           </div>
@@ -3038,7 +3172,7 @@ export function DocumentLibraryContent({
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatDate(event.createdAt)}
-                          {event.actor?.email ? ` · ${event.actor.email}` : ''}
+                          {event.actor?.email ? ` · ${event.actor.email}` : ""}
                         </p>
                       </div>
                     ))}

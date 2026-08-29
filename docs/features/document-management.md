@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-08-29
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
@@ -12,34 +12,37 @@ This document describes the **current implementation** (Stages 1–4), the **maj
 
 Document management is **substantially implemented**, not a placeholder anymore.
 
-| Area | Status |
-| --- | --- |
-| Central manager library (`/dokumente`) | Implemented |
-| Manual folder tree | Implemented |
-| Logical linked-target overview (`Verknüpfungen`) | Implemented |
-| File upload (single, batch, folder, mixed file/folder drag/drop) | Implemented |
-| Contextual sections on job/project/customer/employee detail pages | Implemented |
-| Metadata links to jobs, projects, customers, employees | Implemented |
-| Drive-like library navigation + filters | Implemented |
-| Attach existing library document to context | Implemented |
-| Soft delete + Papierkorb + restore | Implemented |
-| Permanent delete (with Storage cleanup) | Implemented |
-| Audit history | Implemented |
-| Versioning for selected business categories | Implemented |
-| In-app PDF/image viewer | Implemented (large overlay viewer; no generated thumbnails yet) |
-| Storage orphan cleanup report + guarded delete | Implemented as server-side maintenance helpers; not exposed in the `/dokumente` UI |
-| Advanced move/copy destination modal | Implemented |
-| Auto folder creation on job/project/customer/employee create | **Not implemented** (deliberate) |
-| OCR / invoice parsing / AI classification | **Not implemented** (future build-out; extraction and generative assistance have different phase boundaries below) |
-| Thumbnail generation | **Not implemented** (Phase 1 build-out) |
-| Dedicated offer/contract/invoice entities | **Not implemented** |
-| Deterministic office-handover package document | Implemented (`P1-17`; internal access only, no delivery/public link) |
+| Area                                                              | Status                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Central manager library (`/dokumente`)                            | Implemented                                                                                                        |
+| Manual folder tree                                                | Implemented                                                                                                        |
+| Logical linked-target overview (`Verknüpfungen`)                  | Implemented                                                                                                        |
+| File upload (single, batch, folder, mixed file/folder drag/drop)  | Implemented                                                                                                        |
+| Contextual sections on job/project/customer/employee detail pages | Implemented                                                                                                        |
+| Metadata links to jobs, projects, customers, employees            | Implemented                                                                                                        |
+| Drive-like library navigation + filters                           | Implemented                                                                                                        |
+| Attach existing library document to context                       | Implemented                                                                                                        |
+| Soft delete + Papierkorb + restore                                | Implemented                                                                                                        |
+| Permanent delete (with Storage cleanup)                           | Implemented                                                                                                        |
+| Audit history                                                     | Implemented                                                                                                        |
+| Versioning for selected business categories                       | Implemented                                                                                                        |
+| In-app PDF/image viewer                                           | Implemented (large overlay viewer; no generated thumbnails yet)                                                    |
+| Storage orphan cleanup report + guarded delete                    | Implemented as server-side maintenance helpers; not exposed in the `/dokumente` UI                                 |
+| Advanced move/copy destination modal                              | Implemented                                                                                                        |
+| Auto folder creation on job/project/customer/employee create      | **Not implemented** (deliberate)                                                                                   |
+| OCR / invoice parsing / AI classification                         | **Not implemented** (future build-out; extraction and generative assistance have different phase boundaries below) |
+| Thumbnail generation                                              | **Not implemented** (Phase 1 build-out)                                                                            |
+| Dedicated offer/contract/invoice entities                         | **Not implemented**                                                                                                |
+| Deterministic office-handover package document                    | Implemented (`P1-17`; internal access only, no delivery/public link)                                               |
+| Metadata links to installed equipment                             | Implemented (`P1-18`; manager-owned, no duplicate bytes)                                                           |
 
 Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual file capture remains owned by this document system.
 
 Since P1-15, an existing document can be deliberately related to one exact work-artifact revision as supporting evidence, closure proof, signature mark or rendered export. The structured record and document metadata remain separate sources of truth connected by that relation; ordinary uploads never become evidence automatically. Instruction evidence is fulfilled only by an explicit document or artifact-revision relation and can be removed only with an attributable reason. Deterministic HTML exports retain the revision, renderer and content hash.
 
 Since P1-17, Büro/Admin can select exact accessible document versions as sources for a job/project handover draft. A release freezes document ID, version number and storage path, renders one deterministic customer-safe UTF-8 HTML file into the existing organization-scoped EU R2 path, and registers it as an ordinary document linked to the exact target. Source bytes are neither copied nor exposed implicitly. Old package documents remain addressable across withdrawal and successor release. The app does not deliver the package, create a public link or add a customer portal.
+
+Since P1-18, a document may also link to one installed-equipment record through the existing `document_links` owner. The link does not copy R2 bytes or grant an employee document access. Once an equipment-history event depends on that link, ordinary unlink and permanent document deletion are rejected so the immutable history cannot be erased; organization teardown remains a narrowly guarded exception.
 
 Since P1-16, assigned employees reach contextual documents from the focused job work pack only. View, download and direct signed R2 upload remain the same document operations; the pack does not expose the central library, attach-existing, trash, version governance or audit history and creates no duplicate file. Completed direct uploads survive a recoverable metadata failure, retain synchronized names and expire after the bounded retention window if registration is abandoned.
 
@@ -96,12 +99,12 @@ Capabilities:
 
 Reusable component: `ContextualDocumentsSection`.
 
-| Context | Route integration | Who can upload | Who can manage links/metadata |
-| --- | --- | --- | --- |
-| Job (`Auftrag`) | Job detail page | Assigned employees + managers | Managers only |
-| Project (`Projekt`) | Project detail page | Managers only | Managers only |
-| Customer (`Kunde`) | Customer detail page | Managers only | Managers only |
-| Employee (`Mitarbeiter`) | Employee detail page | Managers only | Managers only |
+| Context                  | Route integration    | Who can upload                | Who can manage links/metadata |
+| ------------------------ | -------------------- | ----------------------------- | ----------------------------- |
+| Job (`Auftrag`)          | Job detail page      | Assigned employees + managers | Managers only                 |
+| Project (`Projekt`)      | Project detail page  | Managers only                 | Managers only                 |
+| Customer (`Kunde`)       | Customer detail page | Managers only                 | Managers only                 |
+| Employee (`Mitarbeiter`) | Employee detail page | Managers only                 | Managers only                 |
 
 Field workers (`employee`) interact with documents **only through assigned job pages**. They do not see the central library, trash, versioning UI, audit history, or attach-existing flows.
 
@@ -153,13 +156,13 @@ Key principle: **Postgres holds organization, folder structure, links, categorie
 
 ### Core tables
 
-| Table | Purpose |
-| --- | --- |
-| `document_folders` | Manual folder tree per organization (`parent_folder_id`, soft-delete via `deleted_at`) |
-| `documents` | Current document metadata + latest file pointer |
-| `document_links` | Links a document to exactly one of: `job_id`, `project_id`, `client_id`, `employee_id`, or `request_id` (P1-02) |
-| `document_audit_events` | Append-only operational history |
-| `document_versions` | Previous file revisions for versioned business documents |
+| Table                   | Purpose                                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `document_folders`      | Manual folder tree per organization (`parent_folder_id`, soft-delete via `deleted_at`)                          |
+| `documents`             | Current document metadata + latest file pointer                                                                 |
+| `document_links`        | Links a document to exactly one of: `job_id`, `project_id`, `client_id`, `employee_id`, or `request_id` (P1-02) |
+| `document_audit_events` | Append-only operational history                                                                                 |
+| `document_versions`     | Previous file revisions for versioned business documents                                                        |
 
 ### Important `documents` columns
 
@@ -225,22 +228,22 @@ Authorization is enforced at two layers:
 
 ### Role behavior (effective product rules)
 
-| Action | `admin` / `buero` | `employee` (Handwerker/in) |
-| --- | --- | --- |
-| View `/dokumente` library | Yes | No (redirect) |
-| Browse all org folders/files | Yes | No |
-| Upload to library folder | Yes | No |
-| Upload on assigned job page | Yes | Yes (if assigned) |
-| Upload on project/customer/employee page | Yes | No |
-| View document on assigned job | Yes | Yes |
-| View document not linked to assigned job | Yes | No |
-| Rename/move/copy/delete in library | Yes | No |
-| Attach existing doc to job/project/customer/employee | Yes | No |
-| Unlink from context | Yes | No |
-| Trash restore / permanent delete | Yes | No |
-| Upload new version | Yes | No |
-| View audit history / versions in details | Yes (library) | No (not exposed in contextual UI) |
-| Storage cleanup helpers | Server-side maintenance only; no normal library UI | No |
+| Action                                               | `admin` / `buero`                                  | `employee` (Handwerker/in)        |
+| ---------------------------------------------------- | -------------------------------------------------- | --------------------------------- |
+| View `/dokumente` library                            | Yes                                                | No (redirect)                     |
+| Browse all org folders/files                         | Yes                                                | No                                |
+| Upload to library folder                             | Yes                                                | No                                |
+| Upload on assigned job page                          | Yes                                                | Yes (if assigned)                 |
+| Upload on project/customer/employee page             | Yes                                                | No                                |
+| View document on assigned job                        | Yes                                                | Yes                               |
+| View document not linked to assigned job             | Yes                                                | No                                |
+| Rename/move/copy/delete in library                   | Yes                                                | No                                |
+| Attach existing doc to job/project/customer/employee | Yes                                                | No                                |
+| Unlink from context                                  | Yes                                                | No                                |
+| Trash restore / permanent delete                     | Yes                                                | No                                |
+| Upload new version                                   | Yes                                                | No                                |
+| View audit history / versions in details             | Yes (library)                                      | No (not exposed in contextual UI) |
+| Storage cleanup helpers                              | Server-side maintenance only; no normal library UI | No                                |
 
 ### Employee access path
 
@@ -427,16 +430,16 @@ Audit is exposed in the manager details dialog (not in field-worker contextual U
 
 ## Major Decisions Summary
 
-| Decision | Why | Upsides | Downsides |
-| --- | --- | --- | --- |
-| Metadata links instead of duplicate files per context | Single source of truth | Attach-existing, consistent trash/version/audit | Users must learn links vs folders |
-| No auto folder on job/project/customer/employee create | Avoid rename/sync pain | Flexible office taxonomy; less magic | No default per-Auftrag folder |
-| Manual folders separate from links | Office structure ≠ operational links | Cross-link same file to multiple contexts | `Alle Dateien` can grow without folder/filter discipline |
-| Employees: job-context only, no library | Least privilege for Handwerker/in | Simple field UX; fewer permission bugs | Employees cannot browse org library |
-| Soft delete before Storage delete | Recoverability | Papierkorb, audit trail | Storage used until permanent delete |
-| Versioning only for business categories | Focus on contracts/invoices/offers/reports | Less noise for photos | Inconsistent versioning UX across categories |
-| Signed URL viewer vs forced download | Professional inspection workflow | Better UX for PDFs/photos | URLs expire; re-fetch on reopen |
-| Server actions + admin client + RLS | Matches existing WerkFlow patterns | Consistent auth; RLS defense in depth | Must keep action checks aligned with RLS |
+| Decision                                               | Why                                        | Upsides                                         | Downsides                                                |
+| ------------------------------------------------------ | ------------------------------------------ | ----------------------------------------------- | -------------------------------------------------------- |
+| Metadata links instead of duplicate files per context  | Single source of truth                     | Attach-existing, consistent trash/version/audit | Users must learn links vs folders                        |
+| No auto folder on job/project/customer/employee create | Avoid rename/sync pain                     | Flexible office taxonomy; less magic            | No default per-Auftrag folder                            |
+| Manual folders separate from links                     | Office structure ≠ operational links       | Cross-link same file to multiple contexts       | `Alle Dateien` can grow without folder/filter discipline |
+| Employees: job-context only, no library                | Least privilege for Handwerker/in          | Simple field UX; fewer permission bugs          | Employees cannot browse org library                      |
+| Soft delete before Storage delete                      | Recoverability                             | Papierkorb, audit trail                         | Storage used until permanent delete                      |
+| Versioning only for business categories                | Focus on contracts/invoices/offers/reports | Less noise for photos                           | Inconsistent versioning UX across categories             |
+| Signed URL viewer vs forced download                   | Professional inspection workflow           | Better UX for PDFs/photos                       | URLs expire; re-fetch on reopen                          |
+| Server actions + admin client + RLS                    | Matches existing WerkFlow patterns         | Consistent auth; RLS defense in depth           | Must keep action checks aligned with RLS                 |
 
 ---
 
@@ -549,15 +552,15 @@ These views should use the existing link model. Physical folder creation should 
 
 ## Connected Workflow Contracts
 
-| Feature area | Document management receives | Document management provides |
-| --- | --- | --- |
-| Customers and CRM | Customer, contact, site, request, and communication context | Findable customer files, correspondence artifacts, consent, and relationship evidence |
-| Jobs and projects | Work scope, project/job identity, field artifacts, completion and handover state | Plans, photos, reports, forms, signatures, and document packs |
-| Service and maintenance | Installed-equipment context, checklist/report type, measurement and signature requirements | Manuals, certificates, service reports, history artifacts, and customer handover |
-| Employees and time | Employee identity, role, personnel-document context, and approved time exports | Restricted personnel files, certificates, contracts, and generated time evidence |
-| Inventory and purchasing | Item, supplier, order, receipt, return, and stock-count context | Catalog files, delivery notes, supplier invoices, warranties, and equipment documents |
-| Commercial and finance | Structured offer, contract, invoice, credit, expense, payment, and accounting state | Source files, rendered outputs, versions, signatures, and reviewed extraction evidence |
-| AI automations | Authorized source scope, processing request, and review policy | Searchable content, source references, drafts, and document-trigger events |
+| Feature area             | Document management receives                                                               | Document management provides                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Customers and CRM        | Customer, contact, site, request, and communication context                                | Findable customer files, correspondence artifacts, consent, and relationship evidence  |
+| Jobs and projects        | Work scope, project/job identity, field artifacts, completion and handover state           | Plans, photos, reports, forms, signatures, and document packs                          |
+| Service and maintenance  | Installed-equipment context, checklist/report type, measurement and signature requirements | Manuals, certificates, service reports, history artifacts, and customer handover       |
+| Employees and time       | Employee identity, role, personnel-document context, and approved time exports             | Restricted personnel files, certificates, contracts, and generated time evidence       |
+| Inventory and purchasing | Item, supplier, order, receipt, return, and stock-count context                            | Catalog files, delivery notes, supplier invoices, warranties, and equipment documents  |
+| Commercial and finance   | Structured offer, contract, invoice, credit, expense, payment, and accounting state        | Source files, rendered outputs, versions, signatures, and reviewed extraction evidence |
+| AI automations           | Authorized source scope, processing request, and review policy                             | Searchable content, source references, drafts, and document-trigger events             |
 
 No feature should store a private duplicate merely to display the same file in its context.
 
@@ -615,24 +618,24 @@ Financially, legally, technically, or employment-relevant extraction remains a p
 
 ### Primary code locations
 
-| Path | Role |
-| --- | --- |
-| `app/(app)/dokumente/page.tsx` | Manager library page |
-| `components/dokumente/document-library-content.tsx` | Library UI |
-| `components/dokumente/document-library-table.tsx` | Sortable/selectable manager table |
-| `components/dokumente/contextual-documents-section.tsx` | Job/project/customer/employee sections |
-| `components/dokumente/document-upload-dialog.tsx` | Upload progress modal |
-| `components/dokumente/document-viewer-dialog.tsx` | In-app viewer |
-| `components/dokumente/attach-document-dialog.tsx` | Attach existing file |
-| `components/dokumente/document-link-dialog.tsx` | Link a library file to jobs/projects/customers/employees |
-| `components/dokumente/document-row-actions.tsx` | Shared 3-dot and right-click row actions |
-| `lib/documents/actions.ts` | Server actions, auth, mutations, audit |
-| `lib/documents/types.ts` | Domain types and labels |
-| `lib/supabase/database.types.ts` | Generated DB types |
-| `lib/data/cached.ts` | `CACHE_TAGS.documents` |
-| `components/realtime/realtime-provider.tsx` | Realtime table subscriptions |
-| `components/sidebar/app-shell.tsx` | Sidebar nav (`/dokumente`, manager-only) |
-| `proxy.ts` | Auth gate for protected routes including `/dokumente` |
+| Path                                                    | Role                                                     |
+| ------------------------------------------------------- | -------------------------------------------------------- |
+| `app/(app)/dokumente/page.tsx`                          | Manager library page                                     |
+| `components/dokumente/document-library-content.tsx`     | Library UI                                               |
+| `components/dokumente/document-library-table.tsx`       | Sortable/selectable manager table                        |
+| `components/dokumente/contextual-documents-section.tsx` | Job/project/customer/employee sections                   |
+| `components/dokumente/document-upload-dialog.tsx`       | Upload progress modal                                    |
+| `components/dokumente/document-viewer-dialog.tsx`       | In-app viewer                                            |
+| `components/dokumente/attach-document-dialog.tsx`       | Attach existing file                                     |
+| `components/dokumente/document-link-dialog.tsx`         | Link a library file to jobs/projects/customers/employees |
+| `components/dokumente/document-row-actions.tsx`         | Shared 3-dot and right-click row actions                 |
+| `lib/documents/actions.ts`                              | Server actions, auth, mutations, audit                   |
+| `lib/documents/types.ts`                                | Domain types and labels                                  |
+| `lib/supabase/database.types.ts`                        | Generated DB types                                       |
+| `lib/data/cached.ts`                                    | `CACHE_TAGS.documents`                                   |
+| `components/realtime/realtime-provider.tsx`             | Realtime table subscriptions                             |
+| `components/sidebar/app-shell.tsx`                      | Sidebar nav (`/dokumente`, manager-only)                 |
+| `proxy.ts`                                              | Auth gate for protected routes including `/dokumente`    |
 
 ### Contextual integrations
 

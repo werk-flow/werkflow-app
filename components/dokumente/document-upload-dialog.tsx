@@ -1,9 +1,16 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { CheckCircle, FileText, Loader2, XCircle } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
+import { CheckCircle, FileText, Loader2, XCircle } from "lucide-react";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,16 +18,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { createDocumentFolder } from '@/lib/documents/actions';
-import { usePendingTask } from '@/hooks/use-server-action';
-import { uploadDocumentDirect } from '@/lib/documents/upload-client';
+} from "@/components/ui/dialog";
+import { createDocumentFolder } from "@/lib/documents/actions";
+import { usePendingTask } from "@/hooks/use-server-action";
+import { uploadDocumentDirect } from "@/lib/documents/upload-client";
 import {
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   type DocumentCategory,
   type OrganizationDocument,
-} from '@/lib/documents/types';
+} from "@/lib/documents/types";
 
 export type DocumentUploadItem = {
   id: string;
@@ -29,7 +36,7 @@ export type DocumentUploadItem = {
   category?: DocumentCategory;
 };
 
-type UploadStatus = 'queued' | 'uploading' | 'done' | 'error';
+type UploadStatus = "queued" | "uploading" | "done" | "error";
 
 type UploadRow = DocumentUploadItem & {
   status: UploadStatus;
@@ -44,6 +51,7 @@ type UploadTarget = {
   clientId?: string;
   employeeId?: string;
   requestId?: string;
+  equipmentId?: string;
 };
 
 type DocumentUploadDialogProps = {
@@ -56,7 +64,7 @@ type DocumentUploadDialogProps = {
   allowFolderCreation?: boolean;
   onComplete: (
     failedCount: number,
-    uploadedDocuments: OrganizationDocument[]
+    uploadedDocuments: OrganizationDocument[],
   ) => void;
 };
 
@@ -68,15 +76,15 @@ function formatFileSize(sizeBytes: number): string {
 
 function getFolderSegments(relativePath?: string): string[] {
   if (!relativePath) return [];
-  const parts = relativePath.split('/').filter(Boolean);
+  const parts = relativePath.split("/").filter(Boolean);
   return parts.length > 1 ? parts.slice(0, -1) : [];
 }
 
 export function DocumentUploadDialog({
   open,
   onOpenChange,
-  title = 'Dateien hochladen',
-  description = 'Die Dateien werden automatisch hochgeladen.',
+  title = "Dateien hochladen",
+  description = "Die Dateien werden automatisch hochgeladen.",
   items,
   target,
   allowFolderCreation = false,
@@ -92,10 +100,10 @@ export function DocumentUploadDialog({
       items
         .map(
           (item) =>
-            `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`
+            `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`,
         )
-        .join('|'),
-    [items]
+        .join("|"),
+    [items],
   );
 
   const activeRows: UploadRow[] =
@@ -103,20 +111,20 @@ export function DocumentUploadDialog({
       ? rows
       : items.map((item) => ({
           ...item,
-          status: 'queued' as const,
+          status: "queued" as const,
         }));
   const completedCount = activeRows.filter(
-    (row) => row.status === 'done' || row.status === 'error'
+    (row) => row.status === "done" || row.status === "error",
   ).length;
   const totalProgress = activeRows.reduce(
     (sum, row) =>
       sum +
-      (row.status === 'done' || row.status === 'error'
+      (row.status === "done" || row.status === "error"
         ? 1
-        : row.status === 'uploading'
+        : row.status === "uploading"
           ? (row.progress ?? 0)
           : 0),
-    0
+    0,
   );
   const progressPercentage = activeRows.length
     ? Math.round((totalProgress / activeRows.length) * 100)
@@ -124,13 +132,15 @@ export function DocumentUploadDialog({
   const isComplete = hasStarted && completedCount === activeRows.length;
 
   const oversizedCount = useMemo(
-    () => items.filter((item) => item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES).length,
-    [items]
+    () =>
+      items.filter((item) => item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES)
+        .length,
+    [items],
   );
 
   async function ensureRelativeFolder(
     folderCache: Map<string, string | null>,
-    relativePath?: string
+    relativePath?: string,
   ): Promise<string | null> {
     if (!allowFolderCreation) return target.folderId ?? null;
 
@@ -138,7 +148,7 @@ export function DocumentUploadDialog({
     if (segments.length === 0) return target.folderId ?? null;
 
     let parentFolderId = target.folderId ?? null;
-    let currentKey = '';
+    let currentKey = "";
 
     for (const segment of segments) {
       currentKey = currentKey ? `${currentKey}/${segment}` : segment;
@@ -153,7 +163,7 @@ export function DocumentUploadDialog({
       });
 
       if (!result.success) {
-        throw new Error('folder_failed');
+        throw new Error("folder_failed");
       }
 
       parentFolderId = result.folder.id;
@@ -165,7 +175,7 @@ export function DocumentUploadDialog({
 
   function updateRow(id: string, update: Partial<UploadRow>) {
     setRows((current) =>
-      current.map((row) => (row.id === id ? { ...row, ...update } : row))
+      current.map((row) => (row.id === id ? { ...row, ...update } : row)),
     );
   }
 
@@ -179,8 +189,12 @@ export function DocumentUploadDialog({
   function handleStartUpload() {
     const initialRows: UploadRow[] = items.map((item) => ({
       ...item,
-      status: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'error' : 'queued',
-      error: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'Datei ist größer als 50 MB.' : undefined,
+      status:
+        item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? "error" : "queued",
+      error:
+        item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES
+          ? "Datei ist größer als 50 MB."
+          : undefined,
     }));
 
     setRows(initialRows);
@@ -189,17 +203,20 @@ export function DocumentUploadDialog({
     clearCloseTimeout();
 
     void runUploadTask(async () => {
-      let failures = initialRows.filter((row) => row.status === 'error').length;
+      let failures = initialRows.filter((row) => row.status === "error").length;
       const uploadedDocuments: OrganizationDocument[] = [];
       const folderCache = new Map<string, string | null>();
 
       for (const row of initialRows) {
-        if (row.status === 'error') continue;
+        if (row.status === "error") continue;
 
-        updateRow(row.id, { status: 'uploading', progress: 0 });
+        updateRow(row.id, { status: "uploading", progress: 0 });
 
         try {
-          const folderId = await ensureRelativeFolder(folderCache, row.relativePath);
+          const folderId = await ensureRelativeFolder(
+            folderCache,
+            row.relativePath,
+          );
           const result = await uploadDocumentDirect({
             file: row.file,
             target: {
@@ -209,6 +226,7 @@ export function DocumentUploadDialog({
               clientId: target.clientId ?? null,
               employeeId: target.employeeId ?? null,
               requestId: target.requestId ?? null,
+              equipmentId: target.equipmentId ?? null,
             },
             category: row.category,
             onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
@@ -216,19 +234,19 @@ export function DocumentUploadDialog({
           if (!result.success) {
             failures++;
             updateRow(row.id, {
-              status: 'error',
-              error: 'Upload fehlgeschlagen.',
+              status: "error",
+              error: "Upload fehlgeschlagen.",
             });
             continue;
           }
 
           uploadedDocuments.push(result.document);
-          updateRow(row.id, { status: 'done' });
+          updateRow(row.id, { status: "done" });
         } catch {
           failures++;
           updateRow(row.id, {
-            status: 'error',
-            error: 'Upload fehlgeschlagen.',
+            status: "error",
+            error: "Upload fehlgeschlagen.",
           });
         }
       }
@@ -320,35 +338,43 @@ export function DocumentUploadDialog({
               <div className="divide-y">
                 {activeRows.map((row) => {
                   const StatusIcon =
-                    row.status === 'done'
+                    row.status === "done"
                       ? CheckCircle
-                      : row.status === 'error'
+                      : row.status === "error"
                         ? XCircle
-                        : row.status === 'uploading'
+                        : row.status === "uploading"
                           ? Loader2
                           : FileText;
 
                   return (
-                    <div key={row.id} className="flex items-center gap-3 px-3 py-2.5">
+                    <div
+                      key={row.id}
+                      className="flex items-center gap-3 px-3 py-2.5"
+                    >
                       <StatusIcon
                         className={`size-4 shrink-0 ${
-                          row.status === 'uploading' ? 'animate-spin' : ''
+                          row.status === "uploading" ? "animate-spin" : ""
                         }`}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{row.file.name}</p>
+                        <p className="truncate text-sm font-medium">
+                          {row.file.name}
+                        </p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {row.relativePath ? `${row.relativePath} · ` : ''}
+                          {row.relativePath ? `${row.relativePath} · ` : ""}
                           {formatFileSize(row.file.size)}
                           {row.category
                             ? ` · ${DOCUMENT_CATEGORY_LABELS[row.category]}`
-                            : ''}
-                          {row.status === 'uploading' && row.progress !== undefined
+                            : ""}
+                          {row.status === "uploading" &&
+                          row.progress !== undefined
                             ? ` · ${Math.round(row.progress * 100)} %`
-                            : ''}
+                            : ""}
                         </p>
                         {row.error && (
-                          <p className="mt-0.5 text-xs text-destructive">{row.error}</p>
+                          <p className="mt-0.5 text-xs text-destructive">
+                            {row.error}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -366,7 +392,7 @@ export function DocumentUploadDialog({
             onClick={() => handleOpenChange(false)}
             disabled={isPending && !isComplete}
           >
-            {isComplete ? 'Schließen' : 'Abbrechen'}
+            {isComplete ? "Schließen" : "Abbrechen"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,22 +1,22 @@
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 import {
   MoreVertical,
   Trash2,
   Loader2,
   Briefcase,
   Receipt,
-} from 'lucide-react';
+} from "lucide-react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,40 +26,41 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
 
-import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { DetailPageHeader } from "@/components/shared/detail-page-header";
 import {
   MetadataSection,
   MetadataSaveError,
   type MetadataField,
-} from '@/components/shared/metadata-section';
-import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
-import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
-import { ClientRelationsSection } from '@/components/kunden/client-relations-section';
-import { CustomerRelationshipWorkspace } from '@/components/kunden/customer-relationship-workspace';
-import { useCommunicationContactGuard } from '@/components/kunden/use-communication-contact-guard';
-import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+} from "@/components/shared/metadata-section";
+import { EmbeddedAuftraegeSection } from "@/components/shared/embedded-auftraege-section";
+import { ContextualDocumentsSection } from "@/components/dokumente/contextual-documents-section";
+import { ClientRelationsSection } from "@/components/kunden/client-relations-section";
+import { CustomerRelationshipWorkspace } from "@/components/kunden/customer-relationship-workspace";
+import { useCommunicationContactGuard } from "@/components/kunden/use-communication-contact-guard";
+import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
 
-import { updateClient, deleteClient } from '@/lib/clients/actions';
-import type { ClientContact, ClientSite } from '@/lib/clients/types';
+import { updateClient, deleteClient } from "@/lib/clients/actions";
+import type { ClientContact, ClientSite } from "@/lib/clients/types";
 import {
   CLIENT_TYPE_LABELS,
   type Client,
   type ClientType,
   type Job,
   type ProjectWithDetails,
-} from '@/lib/jobs/types';
-import type { OrganizationDocument } from '@/lib/documents/types';
-import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
-import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
-import type { CustomerRelationshipBundle } from '@/lib/customer-relationships/types';
+} from "@/lib/jobs/types";
+import type { OrganizationDocument } from "@/lib/documents/types";
+import type { AuftraegeColumnId } from "@/lib/jobs/auftraege-table-columns";
+import type { OrgMemberOption } from "@/components/auftraege/employee-multi-select";
+import type { CustomerRelationshipBundle } from "@/lib/customer-relationships/types";
+import type { EquipmentListItem } from "@/lib/installed-equipment/types";
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+  return new Date(dateStr).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 }
 
@@ -78,6 +79,8 @@ interface KundenDetailContentProps {
   visibleColumns: AuftraegeColumnId[];
   currentUserId: string;
   relationshipBundle: CustomerRelationshipBundle | null;
+  equipment: EquipmentListItem[];
+  equipmentLoadFailed: boolean;
 }
 
 export function KundenDetailContent({
@@ -95,6 +98,8 @@ export function KundenDetailContent({
   visibleColumns,
   currentUserId,
   relationshipBundle,
+  equipment,
+  equipmentLoadFailed,
 }: KundenDetailContentProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -108,23 +113,24 @@ export function KundenDetailContent({
   useRealtimeRouterRefresh({
     enabled: !isDeleting,
     tables: [
-      'clients',
-      'client_contacts',
-      'client_sites',
-      'client_requests',
-      'client_follow_ups',
-      'client_communication_settings',
-      'client_communication_preferences',
-      'jobs',
-      'projects',
-      'document_links',
+      "clients",
+      "client_contacts",
+      "client_sites",
+      "client_requests",
+      "client_follow_ups",
+      "client_communication_settings",
+      "client_communication_preferences",
+      "jobs",
+      "projects",
+      "document_links",
+      "installed_equipment",
     ],
     eventFilter: (event) => {
       if (isDeletingRef.current) return false;
       const row = event.new ?? event.old;
       if (!row) return false;
-      if (event.table === 'clients') return row.id === client.id;
-      if (row.client_id === undefined) return event.eventType === 'DELETE';
+      if (event.table === "clients") return row.id === client.id;
+      if (row.client_id === undefined) return event.eventType === "DELETE";
       return row.client_id === client.id;
     },
   });
@@ -142,32 +148,32 @@ export function KundenDetailContent({
         // 2026-08-21 — DELETE 204 while the URL never changed). Leaving a
         // permanently deleted record's page loses no state worth keeping.
         window.location.assign(
-          `/kunden?deleted_client=${encodeURIComponent(client.name)}`
+          `/kunden?deleted_client=${encodeURIComponent(client.name)}`,
         );
         return;
       }
 
       isDeletingRef.current = false;
-      setDeleteError(result.error || 'Fehler beim Löschen des Kunden');
+      setDeleteError(result.error || "Fehler beim Löschen des Kunden");
       setIsDeleting(false);
     } catch {
       isDeletingRef.current = false;
       setIsDeleting(false);
-      setDeleteError('Fehler beim Löschen des Kunden');
+      setDeleteError("Fehler beim Löschen des Kunden");
     }
   };
 
   const clientTypeOptions: { value: string; label: string }[] = [
-    { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-    { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
+    { value: "privat", label: CLIENT_TYPE_LABELS.privat },
+    { value: "gewerblich", label: CLIENT_TYPE_LABELS.gewerblich },
   ];
 
   const metadataFields: MetadataField[] = [
     {
-      label: 'Name',
+      label: "Name",
       value: client.name,
       editableConfig: {
-        type: 'text',
+        type: "text",
         currentValue: client.name,
         onSave: async (v) => {
           await updateClient(client.id, { name: v });
@@ -175,14 +181,14 @@ export function KundenDetailContent({
       },
     },
     {
-      label: 'Typ',
+      label: "Typ",
       value: (
         <Badge variant="secondary" className="text-xs">
           {CLIENT_TYPE_LABELS[client.clientType]}
         </Badge>
       ),
       editableConfig: {
-        type: 'select',
+        type: "select",
         currentValue: client.clientType,
         onSave: async (v) => {
           await updateClient(client.id, { clientType: v as ClientType });
@@ -191,80 +197,80 @@ export function KundenDetailContent({
       },
     },
     {
-      label: 'Kundennummer',
-      value: client.customerNumber || '—',
+      label: "Kundennummer",
+      value: client.customerNumber || "—",
       editableConfig: {
-        type: 'text',
-        currentValue: client.customerNumber ?? '',
+        type: "text",
+        currentValue: client.customerNumber ?? "",
         onSave: async (v) => {
           const result = await updateClient(client.id, { customerNumber: v });
           if (!result.success) {
             throw new MetadataSaveError(
-              result.error === 'customer_number_taken'
-                ? 'Diese Kundennummer ist bereits vergeben.'
-                : 'Kundennummer konnte nicht gespeichert werden.'
+              result.error === "customer_number_taken"
+                ? "Diese Kundennummer ist bereits vergeben."
+                : "Kundennummer konnte nicht gespeichert werden.",
             );
           }
         },
-        placeholder: 'z. B. K-1001',
+        placeholder: "z. B. K-1001",
       },
     },
     {
-      label: 'E-Mail',
-      value: client.email || '—',
+      label: "E-Mail",
+      value: client.email || "—",
       editableConfig: {
-        type: 'text',
-        currentValue: client.email ?? '',
+        type: "text",
+        currentValue: client.email ?? "",
         onSave: async (v) => {
           await updateClient(client.id, { email: v });
         },
-        placeholder: 'E-Mail-Adresse',
+        placeholder: "E-Mail-Adresse",
       },
     },
     {
-      label: 'Telefon',
-      value: client.phone || '—',
+      label: "Telefon",
+      value: client.phone || "—",
       editableConfig: {
-        type: 'text',
-        currentValue: client.phone ?? '',
+        type: "text",
+        currentValue: client.phone ?? "",
         onSave: async (v) => {
           await updateClient(client.id, { phone: v });
         },
-        placeholder: 'Telefonnummer',
+        placeholder: "Telefonnummer",
       },
     },
     {
-      label: 'Adresse',
-      value: client.address || '—',
+      label: "Adresse",
+      value: client.address || "—",
       editableConfig: {
-        type: 'textarea',
-        currentValue: client.address ?? '',
+        type: "textarea",
+        currentValue: client.address ?? "",
         onSave: async (v) => {
           await updateClient(client.id, { address: v });
         },
-        placeholder: 'Straße, PLZ, Ort',
+        placeholder: "Straße, PLZ, Ort",
       },
     },
     {
-      label: 'Notizen',
-      value: client.notes || '—',
+      label: "Notizen",
+      value: client.notes || "—",
       editableConfig: {
-        type: 'textarea',
-        currentValue: client.notes ?? '',
+        type: "textarea",
+        currentValue: client.notes ?? "",
         onSave: async (v) => {
           await updateClient(client.id, { notes: v });
         },
-        placeholder: 'Interne Notizen',
+        placeholder: "Interne Notizen",
       },
     },
     {
-      label: 'Erstellt am',
+      label: "Erstellt am",
       value: formatDate(client.createdAt),
     },
   ];
 
   const breadcrumbs = [
-    { label: 'Kunden', href: '/kunden' },
+    { label: "Kunden", href: "/kunden" },
     { label: client.name },
   ];
 
@@ -323,6 +329,8 @@ export function KundenDetailContent({
               sites={sites}
               isAdminOrManager={isAdminOrManager}
               onRequestContact={contactGuard.requestContact}
+              equipment={equipment}
+              equipmentLoadFailed={equipmentLoadFailed}
             />
 
             {/* Financial Summary Placeholder */}
@@ -439,7 +447,7 @@ export function KundenDetailContent({
           <AlertDialogHeader>
             <AlertDialogTitle>Kunde löschen?</AlertDialogTitle>
             <AlertDialogDescription>
-              Bist du sicher, dass du{' '}
+              Bist du sicher, dass du{" "}
               <span className="font-medium">{client.name}</span> löschen
               möchtest? Bestehende Aufträge und Projekte verlieren die Zuordnung
               zu diesem Kunden.
@@ -466,7 +474,7 @@ export function KundenDetailContent({
                   Wird gelöscht...
                 </>
               ) : (
-                'Löschen'
+                "Löschen"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

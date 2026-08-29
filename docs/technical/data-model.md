@@ -144,6 +144,15 @@ Concepts:
 - Package release and withdrawal are transactionally coupled to the P1-14 lifecycle. A project owns its handover: handed-over children can derive project execution completion but never hand over the project automatically.
 - `work_handover_review` extends scoped responsibility without changing fixed roles. Attention remains a live projection from package/lifecycle facts rather than a materialized task row. Only the mutable package root is Realtime-published; immutable releases/items/events refetch behind that signal.
 
+### Installed Equipment Domain (P1-18)
+
+- `installed_equipment` is the mutable organization-scoped identity for one customer site. A row is either a root or one directly owned component; composite foreign keys enforce the same organization, customer and site and exclude deeper nesting.
+- Equipment numbers are immutable and organization-unique. `installed_equipment_identifiers` keeps raw and normalized typed identifiers; manufacturer/issuer-scoped serial uniqueness is distinct from non-unique product numbers.
+- `installed_equipment_work_links` retains exact job/project, work-artifact revision and immutable handover-release origins with a site/address snapshot. Existing work remains the owner; no job or artifact content is copied.
+- `document_links` gained an equipment target with composite tenant integrity. Existing private-R2 documents are reused, and equipment-history guards prevent ordinary unlink or permanent deletion from erasing an immutable event reference.
+- `installed_equipment_events` is the append-only lifecycle and correction ledger. Version-checked, request-idempotent guarded RPCs own registration, link and lifecycle/replacement mutations; terminal history is retained rather than overwritten.
+- Managers own the complete service read/write model. Employees receive only a compact projection for equipment linked to an exactly assigned job. Only `installed_equipment` is Realtime-published; successful child/history mutations touch the root to signal an authoritative refetch.
+
 Ownership rule: sites, contacts, manual follow-ups, and communication guidance belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity). Customer master and P1-10 relationship reads are manager-only under RLS; field workers receive only purpose-limited context through assigned work.
 
 Projects can have derived state based on child jobs unless manually overridden. Jobs can be scheduled, assigned, parked, completed, and connected to customers and time entries.

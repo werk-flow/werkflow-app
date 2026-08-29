@@ -1,37 +1,37 @@
-import type { Database, Json } from '@/lib/supabase/database.types';
+import type { Database, Json } from "@/lib/supabase/database.types";
 
-export const DOCUMENT_STORAGE_BUCKET = 'organization-documents';
+export const DOCUMENT_STORAGE_BUCKET = "organization-documents";
 export const DOCUMENT_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 export const DOCUMENT_CATEGORIES = [
-  'photo',
-  'contract',
-  'invoice',
-  'offer',
-  'report',
-  'other',
+  "photo",
+  "contract",
+  "invoice",
+  "offer",
+  "report",
+  "other",
 ] as const;
 
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 export const DOCUMENT_CATEGORY_LABELS: Record<DocumentCategory, string> = {
-  photo: 'Fotos',
-  contract: 'Verträge',
-  invoice: 'Rechnungen',
-  offer: 'Angebote',
-  report: 'Berichte',
-  other: 'Sonstige',
+  photo: "Fotos",
+  contract: "Verträge",
+  invoice: "Rechnungen",
+  offer: "Angebote",
+  report: "Berichte",
+  other: "Sonstige",
 };
 
 export type DocumentFolderRow =
-  Database['public']['Tables']['document_folders']['Row'];
-export type DocumentRow = Database['public']['Tables']['documents']['Row'];
+  Database["public"]["Tables"]["document_folders"]["Row"];
+export type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 export type DocumentLinkRow =
-  Database['public']['Tables']['document_links']['Row'];
+  Database["public"]["Tables"]["document_links"]["Row"];
 export type DocumentAuditEventRow =
-  Database['public']['Tables']['document_audit_events']['Row'];
+  Database["public"]["Tables"]["document_audit_events"]["Row"];
 export type DocumentVersionRow =
-  Database['public']['Tables']['document_versions']['Row'];
+  Database["public"]["Tables"]["document_versions"]["Row"];
 
 export type DocumentUploader = {
   userId: string;
@@ -47,6 +47,12 @@ export type DocumentEmployee = {
   lastName: string | null;
   email: string | null;
   role: string;
+};
+
+export type DocumentEquipment = {
+  id: string;
+  equipmentNumber: string;
+  name: string;
 };
 
 export type DocumentFolder = {
@@ -69,6 +75,7 @@ export type DocumentLink = {
   clientId: string | null;
   employeeId: string | null;
   requestId: string | null;
+  equipmentId: string | null;
   jobTitle: string | null;
   jobNumber: string | null;
   projectName: string | null;
@@ -78,6 +85,8 @@ export type DocumentLink = {
   employeeEmail: string | null;
   requestNumber: string | null;
   requestSummary: string | null;
+  equipmentNumber: string | null;
+  equipmentName: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -107,39 +116,29 @@ export type OrganizationDocument = {
 };
 
 export type DocumentLibraryView =
-  | 'all'
-  | 'unorganized'
-  | 'work'
-  | 'jobs'
-  | 'projects'
-  | 'clients'
-  | 'employees'
-  | 'folders'
-  | 'photos'
-  | 'contracts'
-  | 'invoices'
-  | 'offers'
-  | 'reports'
-  | 'other'
-  | 'trash';
+  | "all"
+  | "unorganized"
+  | "work"
+  | "jobs"
+  | "projects"
+  | "clients"
+  | "employees"
+  | "folders"
+  | "photos"
+  | "contracts"
+  | "invoices"
+  | "offers"
+  | "reports"
+  | "other"
+  | "trash";
 
 export type DocumentLibraryLinkFilter =
-  | 'all'
-  | 'unlinked'
-  | 'jobs'
-  | 'projects'
-  | 'clients'
-  | 'employees';
+  "all" | "unlinked" | "jobs" | "projects" | "clients" | "employees";
 
-export type DocumentLibraryCategoryFilter = DocumentCategory | 'all';
+export type DocumentLibraryCategoryFilter = DocumentCategory | "all";
 
 export type DocumentLibrarySort =
-  | 'name'
-  | 'created_at'
-  | 'updated_at'
-  | 'size_bytes'
-  | 'type'
-  | 'category';
+  "name" | "created_at" | "updated_at" | "size_bytes" | "type" | "category";
 
 export type DocumentLibraryResult =
   | {
@@ -155,8 +154,7 @@ export type DocumentListResult =
   | { success: false; error: string };
 
 export type DocumentMutationResult =
-  | { success: true }
-  | { success: false; error: string };
+  { success: true } | { success: false; error: string };
 
 export type UpdateDocumentLinksInput = {
   documentId: string;
@@ -164,6 +162,7 @@ export type UpdateDocumentLinksInput = {
   addProjectIds?: string[];
   addClientIds?: string[];
   addEmployeeIds?: string[];
+  addEquipmentIds?: string[];
   removeLinkIds?: string[];
 };
 
@@ -187,6 +186,7 @@ export type LinkDocumentsToTargetInput = {
   projectId?: string;
   clientId?: string;
   employeeId?: string;
+  equipmentId?: string;
 };
 
 export type LinkDocumentsToTargetResult =
@@ -218,12 +218,10 @@ export type DocumentResult =
   | { success: false; error: string };
 
 export type FolderResult =
-  | { success: true; folder: DocumentFolder }
-  | { success: false; error: string };
+  { success: true; folder: DocumentFolder } | { success: false; error: string };
 
 export type SignedDocumentUrlResult =
-  | { success: true; signedUrl: string }
-  | { success: false; error: string };
+  { success: true; signedUrl: string } | { success: false; error: string };
 
 export type DocumentUploadTicket = {
   documentId: string;
@@ -302,7 +300,7 @@ export type StorageCleanupReportResult =
 
 export function toDocumentFolder(
   row: DocumentFolderRow,
-  creator: DocumentUploader | null = null
+  creator: DocumentUploader | null = null,
 ): DocumentFolder {
   return {
     id: row.id,
@@ -328,7 +326,9 @@ export function toDocumentLink(
     employeeEmail?: string | null;
     requestNumber?: string | null;
     requestSummary?: string | null;
-  }
+    equipmentNumber?: string | null;
+    equipmentName?: string | null;
+  },
 ): DocumentLink {
   return {
     id: row.id,
@@ -339,6 +339,7 @@ export function toDocumentLink(
     clientId: row.client_id,
     employeeId: row.employee_id,
     requestId: row.request_id,
+    equipmentId: row.equipment_id,
     jobTitle: context?.jobTitle ?? null,
     jobNumber: context?.jobNumber ?? null,
     projectName: context?.projectName ?? null,
@@ -348,15 +349,19 @@ export function toDocumentLink(
     employeeEmail: context?.employeeEmail ?? null,
     requestNumber: context?.requestNumber ?? null,
     requestSummary: context?.requestSummary ?? null,
+    equipmentNumber: context?.equipmentNumber ?? null,
+    equipmentName: context?.equipmentName ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
 }
 
-export function toDocumentCategory(value: string | null | undefined): DocumentCategory {
+export function toDocumentCategory(
+  value: string | null | undefined,
+): DocumentCategory {
   return DOCUMENT_CATEGORIES.includes(value as DocumentCategory)
     ? (value as DocumentCategory)
-    : 'other';
+    : "other";
 }
 
 export function toOrganizationDocument({

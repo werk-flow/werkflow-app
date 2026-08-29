@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { Check, FileText, LinkIcon, Search } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { Check, FileText, LinkIcon, Search } from "lucide-react";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,23 +11,23 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   getAttachableDocuments,
   linkDocumentsToTarget,
-} from '@/lib/documents/actions';
-import type { OrganizationDocument } from '@/lib/documents/types';
-import { cn } from '@/lib/utils';
-import { useServerAction } from '@/hooks/use-server-action';
+} from "@/lib/documents/actions";
+import type { OrganizationDocument } from "@/lib/documents/types";
+import { cn } from "@/lib/utils";
+import { useServerAction } from "@/hooks/use-server-action";
 
 type AttachDocumentDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  targetType: 'job' | 'project' | 'client' | 'employee';
+  targetType: "job" | "project" | "client" | "employee" | "equipment";
   targetId: string;
   targetLabel?: string;
-  onAttached: (variant: 'success' | 'error', message: string) => void;
+  onAttached: (variant: "success" | "error", message: string) => void;
 };
 
 function formatFileSize(sizeBytes: number): string {
@@ -44,14 +44,18 @@ export function AttachDocumentDialog({
   targetLabel,
   onAttached,
 }: AttachDocumentDialogProps) {
-  const { run: runLinkDocuments, isPending } = useServerAction(linkDocumentsToTarget);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { run: runLinkDocuments, isPending } = useServerAction(
+    linkDocumentsToTarget,
+  );
+  const [searchQuery, setSearchQuery] = useState("");
   const [documents, setDocuments] = useState<OrganizationDocument[]>([]);
-  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   function handleDialogOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
-      setSearchQuery('');
+      setSearchQuery("");
       setSelectedDocumentIds(new Set());
     }
     onOpenChange(nextOpen);
@@ -66,7 +70,7 @@ export function AttachDocumentDialog({
         targetType,
         targetId,
         searchQuery,
-        category: 'all',
+        category: "all",
       });
 
       if (cancelled) return;
@@ -77,7 +81,7 @@ export function AttachDocumentDialog({
       }
 
       setDocuments([]);
-      onAttached('error', 'Dokumente konnten nicht geladen werden.');
+      onAttached("error", "Dokumente konnten nicht geladen werden.");
     })();
 
     return () => {
@@ -101,18 +105,19 @@ export function AttachDocumentDialog({
       const documentIds = [...selectedDocumentIds];
       const result = await runLinkDocuments({
         documentIds,
-        jobId: targetType === 'job' ? targetId : undefined,
-        projectId: targetType === 'project' ? targetId : undefined,
-        clientId: targetType === 'client' ? targetId : undefined,
-        employeeId: targetType === 'employee' ? targetId : undefined,
+        jobId: targetType === "job" ? targetId : undefined,
+        projectId: targetType === "project" ? targetId : undefined,
+        clientId: targetType === "client" ? targetId : undefined,
+        employeeId: targetType === "employee" ? targetId : undefined,
+        equipmentId: targetType === "equipment" ? targetId : undefined,
       });
 
       if (result.success) {
         onAttached(
-          'success',
+          "success",
           result.linkedCount === 1
-            ? 'Dokument wurde verknüpft.'
-            : `${result.linkedCount} Dokumente wurden verknüpft.`
+            ? "Dokument wurde verknüpft."
+            : `${result.linkedCount} Dokumente wurden verknüpft.`,
         );
         handleDialogOpenChange(false);
         return;
@@ -120,25 +125,25 @@ export function AttachDocumentDialog({
 
       if (result.linkedCount > 0) {
         onAttached(
-          'error',
-          `${result.linkedCount} Dokument(e) verknüpft, ${result.failedCount} fehlgeschlagen.`
+          "error",
+          `${result.linkedCount} Dokument(e) verknüpft, ${result.failedCount} fehlgeschlagen.`,
         );
         handleDialogOpenChange(false);
         return;
       }
 
-      onAttached('error', 'Die Dokumente konnten nicht verknüpft werden.');
+      onAttached("error", "Die Dokumente konnten nicht verknüpft werden.");
     })();
   }
 
   const targetTypeLabel =
-    targetType === 'job'
-      ? 'Auftrag'
-      : targetType === 'project'
-        ? 'Projekt'
-        : targetType === 'client'
-          ? 'Kunde'
-          : 'Mitarbeiter';
+    targetType === "job"
+      ? "Auftrag"
+      : targetType === "project"
+        ? "Projekt"
+        : targetType === "client"
+          ? "Kunde"
+          : "Mitarbeiter";
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -147,7 +152,7 @@ export function AttachDocumentDialog({
           <DialogTitle>Vorhandenes Dokument verknüpfen</DialogTitle>
           <DialogDescription>
             Wähle ein oder mehrere Dokumente aus der Dokumentenablage
-            {targetLabel ? ` für ${targetTypeLabel} „${targetLabel}“` : ''}.
+            {targetLabel ? ` für ${targetTypeLabel} „${targetLabel}“` : ""}.
           </DialogDescription>
         </DialogHeader>
 
@@ -178,8 +183,8 @@ export function AttachDocumentDialog({
                       type="button"
                       onClick={() => toggleDocument(document.id)}
                       className={cn(
-                        'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60',
-                        isSelected && 'bg-accent'
+                        "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
+                        isSelected && "bg-accent",
                       )}
                     >
                       <FileText className="size-4 shrink-0 text-muted-foreground" />
@@ -191,7 +196,7 @@ export function AttachDocumentDialog({
                           {formatFileSize(document.sizeBytes)}
                           {document.links.length > 0
                             ? ` · ${document.links.length} Verknüpfung(en)`
-                            : ''}
+                            : ""}
                         </span>
                       </span>
                       {isSelected && (
@@ -211,7 +216,11 @@ export function AttachDocumentDialog({
           <p className="mr-auto text-sm text-muted-foreground">
             {selectedDocumentIds.size} ausgewählt
           </p>
-          <Button type="button" variant="outline" onClick={() => handleDialogOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleDialogOpenChange(false)}
+          >
             Abbrechen
           </Button>
           <Button

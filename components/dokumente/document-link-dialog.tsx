@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
   Check,
@@ -9,9 +9,10 @@ import {
   Search,
   UserRound,
   Users,
-} from 'lucide-react';
+  Wrench,
+} from "lucide-react";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,19 +20,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   getDocumentLinkCatalog,
   updateDocumentLinks,
-} from '@/lib/documents/actions';
-import type { DocumentEmployee, OrganizationDocument } from '@/lib/documents/types';
-import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
-import { cn } from '@/lib/utils';
-import { useServerAction } from '@/hooks/use-server-action';
+} from "@/lib/documents/actions";
+import type {
+  DocumentEmployee,
+  DocumentEquipment,
+  OrganizationDocument,
+} from "@/lib/documents/types";
+import type { Client, Job, ProjectWithDetails } from "@/lib/jobs/types";
+import { cn } from "@/lib/utils";
+import { useServerAction } from "@/hooks/use-server-action";
 
-type LinkTargetType = 'job' | 'project' | 'client' | 'employee';
-type LinkTarget = Job | ProjectWithDetails | Client | DocumentEmployee;
+type LinkTargetType = "job" | "project" | "client" | "employee" | "equipment";
+type LinkTarget =
+  Job | ProjectWithDetails | Client | DocumentEmployee | DocumentEquipment;
 
 type DocumentLinkDialogProps = {
   document: OrganizationDocument | null;
@@ -41,7 +47,8 @@ type DocumentLinkDialogProps = {
   projects?: ProjectWithDetails[];
   clients?: Client[];
   employees?: DocumentEmployee[];
-  onComplete: (variant: 'success' | 'error', message: string) => void;
+  equipment?: DocumentEquipment[];
+  onComplete: (variant: "success" | "error", message: string) => void;
 };
 
 function getJobLabel(job: Job): string {
@@ -59,46 +66,77 @@ function getClientLabel(client: Client): string {
 }
 
 function getEmployeeLabel(employee: DocumentEmployee): string {
-  const name = [employee.firstName, employee.lastName].filter(Boolean).join(' ');
-  return name || employee.email || 'Mitarbeiter';
+  const name = [employee.firstName, employee.lastName]
+    .filter(Boolean)
+    .join(" ");
+  return name || employee.email || "Mitarbeiter";
+}
+
+function getEquipmentLabel(equipment: DocumentEquipment): string {
+  return `${equipment.equipmentNumber} · ${equipment.name}`;
 }
 
 function getTargetId(target: LinkTarget, targetType: LinkTargetType): string {
-  return targetType === 'employee'
+  return targetType === "employee"
     ? (target as DocumentEmployee).userId
-    : (target as Job | ProjectWithDetails | Client).id;
+    : (target as Job | ProjectWithDetails | Client | DocumentEquipment).id;
 }
 
 function getLinkedJobIds(document: OrganizationDocument | null): Set<string> {
   return new Set(
     document?.links
       .map((link) => link.jobId)
-      .filter((jobId): jobId is string => Boolean(jobId)) ?? []
+      .filter((jobId): jobId is string => Boolean(jobId)) ?? [],
   );
 }
 
-function getLinkedProjectIds(document: OrganizationDocument | null): Set<string> {
+function getLinkedProjectIds(
+  document: OrganizationDocument | null,
+): Set<string> {
   return new Set(
     document?.links
       .map((link) => link.projectId)
-      .filter((projectId): projectId is string => Boolean(projectId)) ?? []
+      .filter((projectId): projectId is string => Boolean(projectId)) ?? [],
   );
 }
 
-function getLinkedClientIds(document: OrganizationDocument | null): Set<string> {
+function getLinkedClientIds(
+  document: OrganizationDocument | null,
+): Set<string> {
   return new Set(
     document?.links
       .map((link) => link.clientId)
-      .filter((clientId): clientId is string => Boolean(clientId)) ?? []
+      .filter((clientId): clientId is string => Boolean(clientId)) ?? [],
   );
 }
 
-function getLinkedEmployeeIds(document: OrganizationDocument | null): Set<string> {
+function getLinkedEmployeeIds(
+  document: OrganizationDocument | null,
+): Set<string> {
   return new Set(
     document?.links
       .map((link) => link.employeeId)
-      .filter((employeeId): employeeId is string => Boolean(employeeId)) ?? []
+      .filter((employeeId): employeeId is string => Boolean(employeeId)) ?? [],
   );
+}
+
+function getLinkedEquipmentIds(
+  document: OrganizationDocument | null,
+): Set<string> {
+  return new Set(
+    document?.links
+      .map((link) => link.equipmentId)
+      .filter((equipmentId): equipmentId is string => Boolean(equipmentId)) ??
+      [],
+  );
+}
+
+function formatLinkCount(count: number): string {
+  return count === 1 ? "1 Verknüpfung" : `${count} Verknüpfungen`;
+}
+
+function formatChangeCount(count: number): string {
+  return count === 1 ? "1 Änderung" : `${count} Änderungen`;
 }
 
 function getUpdateMessage(result: {
@@ -107,47 +145,50 @@ function getUpdateMessage(result: {
   removedCount?: number;
   failedCount?: number;
   error?: string;
-}): { variant: 'success' | 'error'; message: string } {
+}): { variant: "success" | "error"; message: string } {
   const addedCount = result.addedCount ?? 0;
   const removedCount = result.removedCount ?? 0;
   const failedCount = result.failedCount ?? 0;
 
   if (result.success) {
     if (addedCount === 0 && removedCount === 0) {
-      return { variant: 'success', message: 'Keine Änderungen vorgenommen.' };
+      return { variant: "success", message: "Keine Änderungen vorgenommen." };
     }
     if (addedCount > 0 && removedCount > 0) {
       return {
-        variant: 'success',
-        message: `${addedCount} Verknüpfung(en) hinzugefügt, ${removedCount} entfernt.`,
+        variant: "success",
+        message: `${formatLinkCount(addedCount)} hinzugefügt, ${formatLinkCount(removedCount)} entfernt.`,
       };
     }
     if (addedCount > 0) {
       return {
-        variant: 'success',
+        variant: "success",
         message:
           addedCount === 1
-            ? 'Verknüpfung wurde hinzugefügt.'
+            ? "Verknüpfung wurde hinzugefügt."
             : `${addedCount} Verknüpfungen wurden hinzugefügt.`,
       };
     }
     return {
-      variant: 'success',
+      variant: "success",
       message:
         removedCount === 1
-          ? 'Verknüpfung wurde entfernt.'
+          ? "Verknüpfung wurde entfernt."
           : `${removedCount} Verknüpfungen wurden entfernt.`,
     };
   }
 
   if (failedCount > 0 && (addedCount > 0 || removedCount > 0)) {
     return {
-      variant: 'error',
-      message: `${addedCount + removedCount} Änderung(en) gespeichert, ${failedCount} fehlgeschlagen.`,
+      variant: "error",
+      message: `${formatChangeCount(addedCount + removedCount)} gespeichert, ${formatChangeCount(failedCount)} fehlgeschlagen.`,
     };
   }
 
-  return { variant: 'error', message: 'Die Verknüpfungen konnten nicht aktualisiert werden.' };
+  return {
+    variant: "error",
+    message: "Die Verknüpfungen konnten nicht aktualisiert werden.",
+  };
 }
 
 export function DocumentLinkDialog({
@@ -158,69 +199,88 @@ export function DocumentLinkDialog({
   projects: projectsProp,
   clients: clientsProp,
   employees: employeesProp,
+  equipment: equipmentProp,
   onComplete,
 }: DocumentLinkDialogProps) {
-  const { run: runSaveLinks, isPending: isSaving } = useServerAction(updateDocumentLinks);
-  const { run: runCatalogFetch, isPending: isCatalogPending } =
-    useServerAction(getDocumentLinkCatalog);
-  const [targetType, setTargetType] = useState<LinkTargetType>('job');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { run: runSaveLinks, isPending: isSaving } =
+    useServerAction(updateDocumentLinks);
+  const { run: runCatalogFetch, isPending: isCatalogPending } = useServerAction(
+    getDocumentLinkCatalog,
+  );
+  const [targetType, setTargetType] = useState<LinkTargetType>("job");
+  const [searchQuery, setSearchQuery] = useState("");
   const [fetchedCatalog, setFetchedCatalog] = useState<{
     jobs: Job[];
     projects: ProjectWithDetails[];
     clients: Client[];
     employees: DocumentEmployee[];
+    equipment: DocumentEquipment[];
   } | null>(null);
   const jobs = useMemo(
     () => jobsProp ?? fetchedCatalog?.jobs ?? [],
-    [fetchedCatalog?.jobs, jobsProp]
+    [fetchedCatalog?.jobs, jobsProp],
   );
   const projects = useMemo(
     () => projectsProp ?? fetchedCatalog?.projects ?? [],
-    [fetchedCatalog?.projects, projectsProp]
+    [fetchedCatalog?.projects, projectsProp],
   );
   const clients = useMemo(
     () => clientsProp ?? fetchedCatalog?.clients ?? [],
-    [clientsProp, fetchedCatalog?.clients]
+    [clientsProp, fetchedCatalog?.clients],
   );
   const employees = useMemo(
     () => employeesProp ?? fetchedCatalog?.employees ?? [],
-    [employeesProp, fetchedCatalog?.employees]
+    [employeesProp, fetchedCatalog?.employees],
   );
-  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(
-    () => getLinkedJobIds(document)
+  const equipment = useMemo(
+    () => equipmentProp ?? fetchedCatalog?.equipment ?? [],
+    [equipmentProp, fetchedCatalog?.equipment],
+  );
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(() =>
+    getLinkedJobIds(document),
   );
   const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
-    () => getLinkedProjectIds(document)
+    () => getLinkedProjectIds(document),
   );
-  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(
-    () => getLinkedClientIds(document)
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(() =>
+    getLinkedClientIds(document),
   );
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(
-    () => getLinkedEmployeeIds(document)
+    () => getLinkedEmployeeIds(document),
+  );
+  const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<Set<string>>(
+    () => getLinkedEquipmentIds(document),
   );
 
-  const initialLinkedJobIds = useMemo(() => getLinkedJobIds(document), [document]);
+  const initialLinkedJobIds = useMemo(
+    () => getLinkedJobIds(document),
+    [document],
+  );
   const initialLinkedProjectIds = useMemo(
     () => getLinkedProjectIds(document),
-    [document]
+    [document],
   );
   const initialLinkedClientIds = useMemo(
     () => getLinkedClientIds(document),
-    [document]
+    [document],
   );
   const initialLinkedEmployeeIds = useMemo(
     () => getLinkedEmployeeIds(document),
-    [document]
+    [document],
+  );
+  const initialLinkedEquipmentIds = useMemo(
+    () => getLinkedEquipmentIds(document),
+    [document],
   );
 
   const needsCatalogFetch =
     open &&
     !!document &&
-    (jobsProp?.length ?? 0) === 0 &&
-    (projectsProp?.length ?? 0) === 0 &&
-    (clientsProp?.length ?? 0) === 0 &&
-    (employeesProp?.length ?? 0) === 0 &&
+    (jobsProp === undefined ||
+      projectsProp === undefined ||
+      clientsProp === undefined ||
+      employeesProp === undefined ||
+      equipmentProp === undefined) &&
     fetchedCatalog === null;
 
   useEffect(() => {
@@ -238,11 +298,12 @@ export function DocumentLinkDialog({
           projects: result.projects,
           clients: result.clients,
           employees: result.employees,
+          equipment: result.equipment,
         });
       } else {
         onComplete(
-          'error',
-          'Aufträge, Projekte, Kunden und Mitarbeiter konnten nicht geladen werden.'
+          "error",
+          "Aufträge, Projekte, Kunden, Mitarbeiter und Anlagen konnten nicht geladen werden.",
         );
       }
     })();
@@ -254,57 +315,79 @@ export function DocumentLinkDialog({
 
   const isLoadingCatalog = needsCatalogFetch && isCatalogPending;
 
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase('de-DE');
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase("de-DE");
 
   const filteredJobs = useMemo(
     () =>
       jobs.filter((job) =>
-        getJobLabel(job).toLocaleLowerCase('de-DE').includes(normalizedSearchQuery)
+        getJobLabel(job)
+          .toLocaleLowerCase("de-DE")
+          .includes(normalizedSearchQuery),
       ),
-    [jobs, normalizedSearchQuery]
+    [jobs, normalizedSearchQuery],
   );
   const filteredProjects = useMemo(
     () =>
       projects.filter((project) =>
-        getProjectLabel(project).toLocaleLowerCase('de-DE').includes(normalizedSearchQuery)
+        getProjectLabel(project)
+          .toLocaleLowerCase("de-DE")
+          .includes(normalizedSearchQuery),
       ),
-    [normalizedSearchQuery, projects]
+    [normalizedSearchQuery, projects],
   );
   const filteredClients = useMemo(
     () =>
       clients.filter((client) =>
-        getClientLabel(client).toLocaleLowerCase('de-DE').includes(normalizedSearchQuery)
+        getClientLabel(client)
+          .toLocaleLowerCase("de-DE")
+          .includes(normalizedSearchQuery),
       ),
-    [clients, normalizedSearchQuery]
+    [clients, normalizedSearchQuery],
   );
   const filteredEmployees = useMemo(
     () =>
       employees.filter((employee) =>
         getEmployeeLabel(employee)
-          .toLocaleLowerCase('de-DE')
-          .includes(normalizedSearchQuery)
+          .toLocaleLowerCase("de-DE")
+          .includes(normalizedSearchQuery),
       ),
-    [employees, normalizedSearchQuery]
+    [employees, normalizedSearchQuery],
+  );
+  const filteredEquipment = useMemo(
+    () =>
+      equipment.filter((item) =>
+        getEquipmentLabel(item)
+          .toLocaleLowerCase("de-DE")
+          .includes(normalizedSearchQuery),
+      ),
+    [equipment, normalizedSearchQuery],
   );
 
   const visibleTargets: LinkTarget[] =
-    targetType === 'job'
+    targetType === "job"
       ? filteredJobs
-      : targetType === 'project'
+      : targetType === "project"
         ? filteredProjects
-        : targetType === 'client'
+        : targetType === "client"
           ? filteredClients
-          : filteredEmployees;
+          : targetType === "employee"
+            ? filteredEmployees
+            : filteredEquipment;
 
-  const addJobIds = [...selectedJobIds].filter((jobId) => !initialLinkedJobIds.has(jobId));
+  const addJobIds = [...selectedJobIds].filter(
+    (jobId) => !initialLinkedJobIds.has(jobId),
+  );
   const addProjectIds = [...selectedProjectIds].filter(
-    (projectId) => !initialLinkedProjectIds.has(projectId)
+    (projectId) => !initialLinkedProjectIds.has(projectId),
   );
   const addClientIds = [...selectedClientIds].filter(
-    (clientId) => !initialLinkedClientIds.has(clientId)
+    (clientId) => !initialLinkedClientIds.has(clientId),
   );
   const addEmployeeIds = [...selectedEmployeeIds].filter(
-    (employeeId) => !initialLinkedEmployeeIds.has(employeeId)
+    (employeeId) => !initialLinkedEmployeeIds.has(employeeId),
+  );
+  const addEquipmentIds = [...selectedEquipmentIds].filter(
+    (equipmentId) => !initialLinkedEquipmentIds.has(equipmentId),
   );
   const removeLinkIds =
     document?.links
@@ -313,6 +396,8 @@ export function DocumentLinkDialog({
         if (link.projectId) return !selectedProjectIds.has(link.projectId);
         if (link.clientId) return !selectedClientIds.has(link.clientId);
         if (link.employeeId) return !selectedEmployeeIds.has(link.employeeId);
+        if (link.equipmentId)
+          return !selectedEquipmentIds.has(link.equipmentId);
         return false;
       })
       .map((link) => link.id) ?? [];
@@ -322,16 +407,18 @@ export function DocumentLinkDialog({
     addProjectIds.length +
     addClientIds.length +
     addEmployeeIds.length +
+    addEquipmentIds.length +
     removeLinkIds.length;
   const selectedCount =
     selectedJobIds.size +
     selectedProjectIds.size +
     selectedClientIds.size +
-    selectedEmployeeIds.size;
+    selectedEmployeeIds.size +
+    selectedEquipmentIds.size;
 
   function handleTargetTypeChange(nextTargetType: LinkTargetType) {
     setTargetType(nextTargetType);
-    setSearchQuery('');
+    setSearchQuery("");
   }
 
   function toggleJob(jobId: string) {
@@ -370,6 +457,15 @@ export function DocumentLinkDialog({
     });
   }
 
+  function toggleEquipment(equipmentId: string) {
+    setSelectedEquipmentIds((current) => {
+      const next = new Set(current);
+      if (next.has(equipmentId)) next.delete(equipmentId);
+      else next.add(equipmentId);
+      return next;
+    });
+  }
+
   function handleSave() {
     if (!document || changeCount === 0) return;
 
@@ -380,13 +476,17 @@ export function DocumentLinkDialog({
         addProjectIds,
         addClientIds,
         addEmployeeIds,
+        addEquipmentIds,
         removeLinkIds,
       });
 
       const feedback = getUpdateMessage(result);
       onComplete(feedback.variant, feedback.message);
 
-      if (result.success || (result.addedCount ?? 0) + (result.removedCount ?? 0) > 0) {
+      if (
+        result.success ||
+        (result.addedCount ?? 0) + (result.removedCount ?? 0) > 0
+      ) {
         onOpenChange(false);
       }
     })();
@@ -398,17 +498,18 @@ export function DocumentLinkDialog({
         <DialogHeader>
           <DialogTitle>Verknüpfungen verwalten</DialogTitle>
           <DialogDescription>
-            Wähle Aufträge, Projekte, Kunden und Mitarbeiter für „{document?.displayName}“.
-            Abgewählte bestehende Verknüpfungen werden entfernt.
+            Wähle Aufträge, Projekte, Kunden, Mitarbeiter und Anlagen für „
+            {document?.displayName}“. Abgewählte bestehende Verknüpfungen werden
+            entfernt.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <Button
               type="button"
-              variant={targetType === 'job' ? 'secondary' : 'outline'}
-              onClick={() => handleTargetTypeChange('job')}
+              variant={targetType === "job" ? "secondary" : "outline"}
+              onClick={() => handleTargetTypeChange("job")}
             >
               <BriefcaseBusiness className="size-4" />
               Aufträge
@@ -420,8 +521,8 @@ export function DocumentLinkDialog({
             </Button>
             <Button
               type="button"
-              variant={targetType === 'project' ? 'secondary' : 'outline'}
-              onClick={() => handleTargetTypeChange('project')}
+              variant={targetType === "project" ? "secondary" : "outline"}
+              onClick={() => handleTargetTypeChange("project")}
             >
               <FolderKanban className="size-4" />
               Projekte
@@ -433,8 +534,8 @@ export function DocumentLinkDialog({
             </Button>
             <Button
               type="button"
-              variant={targetType === 'client' ? 'secondary' : 'outline'}
-              onClick={() => handleTargetTypeChange('client')}
+              variant={targetType === "client" ? "secondary" : "outline"}
+              onClick={() => handleTargetTypeChange("client")}
             >
               <Users className="size-4" />
               Kunden
@@ -446,14 +547,27 @@ export function DocumentLinkDialog({
             </Button>
             <Button
               type="button"
-              variant={targetType === 'employee' ? 'secondary' : 'outline'}
-              onClick={() => handleTargetTypeChange('employee')}
+              variant={targetType === "employee" ? "secondary" : "outline"}
+              onClick={() => handleTargetTypeChange("employee")}
             >
               <UserRound className="size-4" />
               Mitarbeiter
               {selectedEmployeeIds.size > 0 && (
                 <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
                   {selectedEmployeeIds.size}
+                </span>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant={targetType === "equipment" ? "secondary" : "outline"}
+              onClick={() => handleTargetTypeChange("equipment")}
+            >
+              <Wrench className="size-4" />
+              Anlagen
+              {selectedEquipmentIds.size > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                  {selectedEquipmentIds.size}
                 </span>
               )}
             </Button>
@@ -465,13 +579,15 @@ export function DocumentLinkDialog({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={
-                targetType === 'job'
-                  ? 'Auftrag suchen...'
-                  : targetType === 'project'
-                    ? 'Projekt suchen...'
-                    : targetType === 'client'
-                      ? 'Kunde suchen...'
-                      : 'Mitarbeiter suchen...'
+                targetType === "job"
+                  ? "Auftrag suchen..."
+                  : targetType === "project"
+                    ? "Projekt suchen..."
+                    : targetType === "client"
+                      ? "Kunde suchen..."
+                      : targetType === "employee"
+                        ? "Mitarbeiter suchen..."
+                        : "Anlage suchen..."
               }
               className="border-0 bg-transparent shadow-none focus-visible:ring-0"
             />
@@ -489,9 +605,10 @@ export function DocumentLinkDialog({
             ) : (
               <div className="divide-y">
                 {visibleTargets.map((target) => {
-                  const isJob = targetType === 'job';
-                  const isProject = targetType === 'project';
-                  const isClient = targetType === 'client';
+                  const isJob = targetType === "job";
+                  const isProject = targetType === "project";
+                  const isClient = targetType === "client";
+                  const isEmployee = targetType === "employee";
                   const targetId = getTargetId(target, targetType);
                   const isSelected = isJob
                     ? selectedJobIds.has(targetId)
@@ -499,21 +616,27 @@ export function DocumentLinkDialog({
                       ? selectedProjectIds.has(targetId)
                       : isClient
                         ? selectedClientIds.has(targetId)
-                        : selectedEmployeeIds.has(targetId);
+                        : isEmployee
+                          ? selectedEmployeeIds.has(targetId)
+                          : selectedEquipmentIds.has(targetId);
                   const wasLinked = isJob
                     ? initialLinkedJobIds.has(targetId)
                     : isProject
                       ? initialLinkedProjectIds.has(targetId)
                       : isClient
                         ? initialLinkedClientIds.has(targetId)
-                        : initialLinkedEmployeeIds.has(targetId);
+                        : isEmployee
+                          ? initialLinkedEmployeeIds.has(targetId)
+                          : initialLinkedEquipmentIds.has(targetId);
                   const label = isJob
                     ? getJobLabel(target as Job)
                     : isProject
                       ? getProjectLabel(target as ProjectWithDetails)
                       : isClient
                         ? getClientLabel(target as Client)
-                        : getEmployeeLabel(target as DocumentEmployee);
+                        : isEmployee
+                          ? getEmployeeLabel(target as DocumentEmployee)
+                          : getEquipmentLabel(target as DocumentEquipment);
 
                   return (
                     <button
@@ -523,11 +646,12 @@ export function DocumentLinkDialog({
                         if (isJob) toggleJob(targetId);
                         else if (isProject) toggleProject(targetId);
                         else if (isClient) toggleClient(targetId);
-                        else toggleEmployee(targetId);
+                        else if (isEmployee) toggleEmployee(targetId);
+                        else toggleEquipment(targetId);
                       }}
                       className={cn(
-                        'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60',
-                        isSelected && 'bg-accent'
+                        "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
+                        isSelected && "bg-accent",
                       )}
                     >
                       {isJob ? (
@@ -536,25 +660,31 @@ export function DocumentLinkDialog({
                         <FolderKanban className="size-4 shrink-0 text-muted-foreground" />
                       ) : isClient ? (
                         <Users className="size-4 shrink-0 text-muted-foreground" />
-                      ) : (
+                      ) : isEmployee ? (
                         <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <Wrench className="size-4 shrink-0 text-muted-foreground" />
                       )}
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{label}</span>
+                        <span className="block truncate text-sm font-medium">
+                          {label}
+                        </span>
                         <span className="block text-xs text-muted-foreground">
                           {isSelected
                             ? wasLinked
-                              ? 'Verknüpft'
-                              : 'Neu ausgewählt'
+                              ? "Verknüpft"
+                              : "Neu ausgewählt"
                             : wasLinked
-                              ? 'Wird entfernt'
-                              : targetType === 'job'
-                                ? 'Auftrag'
-                                : targetType === 'project'
-                                  ? 'Projekt'
-                                  : targetType === 'client'
-                                    ? 'Kunde'
-                                    : 'Mitarbeiter'}
+                              ? "Wird entfernt"
+                              : targetType === "job"
+                                ? "Auftrag"
+                                : targetType === "project"
+                                  ? "Projekt"
+                                  : targetType === "client"
+                                    ? "Kunde"
+                                    : targetType === "employee"
+                                      ? "Mitarbeiter"
+                                      : "Anlage"}
                         </span>
                       </span>
                       {isSelected && (
@@ -573,9 +703,13 @@ export function DocumentLinkDialog({
         <DialogFooter>
           <p className="mr-auto text-sm text-muted-foreground">
             {selectedCount} verknüpft
-            {changeCount > 0 ? ` · ${changeCount} Änderung(en)` : ''}
+            {changeCount > 0 ? ` · ${formatChangeCount(changeCount)}` : ""}
           </p>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             Abbrechen
           </Button>
           <Button

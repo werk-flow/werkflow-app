@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Pages often render the same text twice (desktop table + hidden mobile card);
 // assertions must target the visible instance.
@@ -13,11 +13,13 @@ export function textInDom(page: Page, text: string): Locator {
   return page.getByText(text);
 }
 
-export async function selectAllHandoverSources(section: Locator): Promise<void> {
-  await expect(section.getByRole('checkbox').first()).toBeAttached({
+export async function selectAllHandoverSources(
+  section: Locator,
+): Promise<void> {
+  await expect(section.getByRole("checkbox").first()).toBeAttached({
     timeout: 20_000,
   });
-  const sourceCheckboxes = await section.getByRole('checkbox').all();
+  const sourceCheckboxes = await section.getByRole("checkbox").all();
   for (const checkbox of sourceCheckboxes) {
     if (!(await checkbox.isChecked())) await checkbox.check();
   }
@@ -56,11 +58,31 @@ export async function retryDialogTransaction(input: {
   await expect(input.dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
+export async function openDialogWithRetry(input: {
+  trigger: Locator;
+  dialog: Locator;
+  attempts?: number;
+}): Promise<void> {
+  const attempts = input.attempts ?? 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await input.trigger.click({ timeout: 15_000 });
+    if (
+      await input.dialog
+        .waitFor({ state: "visible", timeout: 2_500 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      return;
+    }
+  }
+  throw new Error("Dialog did not open after bounded retries");
+}
+
 /** Finds the labelled input whose current DOM value matches exactly. */
 export async function inputByValue(
   container: Page | Locator,
   label: string,
-  value: string
+  value: string,
 ): Promise<Locator> {
   const inputs = container.getByLabel(label);
   await expect(inputs).not.toHaveCount(0, { timeout: 15_000 });
@@ -78,21 +100,26 @@ export async function inputByValue(
 export async function createCustomer(
   page: Page,
   name: string,
-  options?: { type?: 'Privat' | 'Gewerblich'; address?: string }
+  options?: { type?: "Privat" | "Gewerblich"; address?: string },
 ): Promise<void> {
-  await page.goto('/kunden');
-  await page.getByRole('button', { name: 'Kunde hinzufügen' }).click();
-  await expect(page.getByRole('heading', { name: 'Neuen Kunden anlegen' })).toBeVisible();
-  await page.locator('#client-name').fill(name);
+  await page.goto("/kunden");
+  await page.getByRole("button", { name: "Kunde hinzufügen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Neuen Kunden anlegen" }),
+  ).toBeVisible();
+  await page.locator("#client-name").fill(name);
   if (options?.type) {
-    await page.locator('#client-type').click();
-    await page.getByRole('option', { name: options.type, exact: true }).click();
+    await page.locator("#client-type").click();
+    await page.getByRole("option", { name: options.type, exact: true }).click();
   }
-  if (options?.address) await page.locator('#client-address').fill(options.address);
-  await page.getByRole('button', { name: 'Kunde erstellen' }).click();
-  await expect(page.getByText('Kunde erfolgreich erstellt!')).toBeVisible();
+  if (options?.address)
+    await page.locator("#client-address").fill(options.address);
+  await page.getByRole("button", { name: "Kunde erstellen" }).click();
+  await expect(page.getByText("Kunde erfolgreich erstellt!")).toBeVisible();
   // Dialog closes itself after the success flash.
-  await expect(page.getByRole('heading', { name: 'Neuen Kunden anlegen' })).toBeHidden({
+  await expect(
+    page.getByRole("heading", { name: "Neuen Kunden anlegen" }),
+  ).toBeHidden({
     timeout: 10_000,
   });
 }
@@ -114,111 +141,147 @@ export async function createJob(
     qualificationOverrideReason?: string;
     plannedDateDigits?: string;
     workTemplateName?: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/auftraege');
-  await page.getByRole('button', { name: 'Erstellen', exact: true }).click();
+  await page.goto("/auftraege");
+  await page.getByRole("button", { name: "Erstellen", exact: true }).click();
   await expect(
-    page.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' })
+    page.getByRole("heading", { name: "Neuen Auftrag oder Projekt erstellen" }),
   ).toBeVisible();
-  await page.getByRole('tab', { name: 'Auftrag erstellen' }).click();
+  await page.getByRole("tab", { name: "Auftrag erstellen" }).click();
 
-  await page.locator('#job-number').fill(options.jobNumber);
-  await page.locator('#job-title').fill(options.title);
-  if (options.description) await page.locator('#job-description').fill(options.description);
+  await page.locator("#job-number").fill(options.jobNumber);
+  await page.locator("#job-title").fill(options.title);
+  if (options.description)
+    await page.locator("#job-description").fill(options.description);
 
   if (options.workTemplateName) {
-    await expect(page.locator('#work-template-job')).toBeVisible({
+    await expect(page.locator("#work-template-job")).toBeVisible({
       timeout: 15_000,
     });
-    await selectFromSearchable(page, page.locator('#work-template-job'), options.workTemplateName);
+    await selectFromSearchable(
+      page,
+      page.locator("#work-template-job"),
+      options.workTemplateName,
+    );
   }
 
   if (options.plannedDateDigits) {
-    await typeIntoDatePicker(page.getByRole('dialog'), 'Datum', options.plannedDateDigits);
+    await typeIntoDatePicker(
+      page.getByRole("dialog"),
+      "Datum",
+      options.plannedDateDigits,
+    );
   }
 
   if (options.clientName) {
     // The customer picker is a searchable combobox showing "Kein Kunde".
-    await page.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page.getByRole("combobox").filter({ hasText: "Kein Kunde" }).click();
+    await page.getByPlaceholder("Kunde suchen...").fill(options.clientName);
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.clientName })
       .first()
       .click();
   }
 
   if ((options.siteName || options.contactName) && !options.clientName) {
-    throw new Error('createJob: siteName/contactName require clientName');
+    throw new Error("createJob: siteName/contactName require clientName");
   }
 
   if (options.projectNumber) {
-    await page.getByRole('combobox').filter({ hasText: 'Kein Projekt' }).click();
-    await page.getByPlaceholder('Projekt suchen...').fill(options.projectNumber);
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Kein Projekt" })
+      .click();
+    await page
+      .getByPlaceholder("Projekt suchen...")
+      .fill(options.projectNumber);
     const projectOption = page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: `${options.projectNumber} –` });
     await expect(projectOption).toHaveCount(1, { timeout: 15_000 });
     await projectOption.click();
     if (options.expectedInheritedSiteName) {
-      await expect(page.locator('#job-site')).toContainText(options.expectedInheritedSiteName, {
-        timeout: 15_000,
-      });
+      await expect(page.locator("#job-site")).toContainText(
+        options.expectedInheritedSiteName,
+        {
+          timeout: 15_000,
+        },
+      );
     }
     if (options.expectedInheritedContactName) {
-      await expect(page.locator('#job-contact')).toContainText(
+      await expect(page.locator("#job-contact")).toContainText(
         options.expectedInheritedContactName,
-        { timeout: 15_000 }
+        { timeout: 15_000 },
       );
     }
   }
 
   if (options.siteName) {
     // The site picker appears once the customer's sites finished loading.
-    await expect(page.locator('#job-site')).toBeEnabled({ timeout: 15_000 });
-    await selectFromSearchable(page, page.locator('#job-site'), options.siteName);
+    await expect(page.locator("#job-site")).toBeEnabled({ timeout: 15_000 });
+    await selectFromSearchable(
+      page,
+      page.locator("#job-site"),
+      options.siteName,
+    );
   }
 
   if (options.contactName) {
-    await expect(page.locator('#job-contact')).toBeEnabled({ timeout: 15_000 });
-    await selectFromSearchable(page, page.locator('#job-contact'), options.contactName);
+    await expect(page.locator("#job-contact")).toBeEnabled({ timeout: 15_000 });
+    await selectFromSearchable(
+      page,
+      page.locator("#job-contact"),
+      options.contactName,
+    );
   }
 
   if (options.assignEmployeeName) {
     // The employee picker renders as a combobox showing its placeholder text.
-    await page.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
-    await page.getByPlaceholder('Mitarbeiter suchen...').fill(options.assignEmployeeName);
+    await page
+      .getByRole("combobox")
+      .filter({ hasText: "Mitarbeiter zuweisen" })
+      .click();
+    await page
+      .getByPlaceholder("Mitarbeiter suchen...")
+      .fill(options.assignEmployeeName);
     // Options render as buttons inside the picker's listbox.
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.assignEmployeeName })
       .first()
       .click();
     // Dismiss the picker by clicking elsewhere in the dialog; Escape would
     // close the whole creation dialog.
-    await page.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' }).click();
-    await expect(page.getByPlaceholder('Mitarbeiter suchen...')).toBeHidden();
+    await page
+      .getByRole("heading", { name: "Neuen Auftrag oder Projekt erstellen" })
+      .click();
+    await expect(page.getByPlaceholder("Mitarbeiter suchen...")).toBeHidden();
   }
 
-  await page.getByRole('button', { name: 'Auftrag erstellen', exact: true }).click();
+  await page
+    .getByRole("button", { name: "Auftrag erstellen", exact: true })
+    .click();
   if (options.qualificationOverrideReason) {
     const warningDialog = page
-      .getByRole('dialog')
-      .filter({ has: page.getByRole('heading', { name: 'Zuweisung prüfen' }) });
+      .getByRole("dialog")
+      .filter({ has: page.getByRole("heading", { name: "Zuweisung prüfen" }) });
     await expect(warningDialog).toBeVisible({ timeout: 15_000 });
     await warningDialog
-      .locator('#qualification-override-reason')
+      .locator("#qualification-override-reason")
       .fill(options.qualificationOverrideReason);
-    await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
+    await warningDialog
+      .getByRole("button", { name: "Trotz Hinweis zuweisen" })
+      .click();
     await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
   }
   // The dialog closes on success; the caller asserts the job row afterwards.
   await expect(
-    page.getByRole('heading', { name: 'Neuen Auftrag oder Projekt erstellen' })
+    page.getByRole("heading", { name: "Neuen Auftrag oder Projekt erstellen" }),
   ).toBeHidden({ timeout: 15_000 });
 }
 
@@ -231,60 +294,69 @@ export async function createProject(
     siteName?: string;
     contactName?: string;
     workTemplateName?: string;
-  }
+  },
 ): Promise<void> {
   if ((options.siteName || options.contactName) && !options.clientName) {
-    throw new Error('createProject: siteName/contactName require clientName');
+    throw new Error("createProject: siteName/contactName require clientName");
   }
-  await page.goto('/auftraege');
-  await page.getByRole('button', { name: 'Erstellen', exact: true }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', {
-      name: 'Neuen Auftrag oder Projekt erstellen',
+  await page.goto("/auftraege");
+  await page.getByRole("button", { name: "Erstellen", exact: true }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", {
+      name: "Neuen Auftrag oder Projekt erstellen",
     }),
   });
-  await dialog.getByRole('tab', { name: 'Projekt erstellen' }).click();
-  const projectNumberInput = dialog.locator('#create-project-number');
-  await expect(projectNumberInput).not.toHaveValue('', { timeout: 15_000 });
+  await dialog.getByRole("tab", { name: "Projekt erstellen" }).click();
+  const projectNumberInput = dialog.locator("#create-project-number");
+  await expect(projectNumberInput).not.toHaveValue("", { timeout: 15_000 });
   await projectNumberInput.fill(options.projectNumber);
-  await dialog.locator('#create-project-name').fill(options.title);
+  await dialog.locator("#create-project-name").fill(options.title);
   if (options.workTemplateName) {
-    await expect(dialog.locator('#work-template-project')).toBeVisible({
+    await expect(dialog.locator("#work-template-project")).toBeVisible({
       timeout: 15_000,
     });
     await selectFromSearchable(
       page,
-      dialog.locator('#work-template-project'),
-      options.workTemplateName
+      dialog.locator("#work-template-project"),
+      options.workTemplateName,
     );
   }
   if (options.clientName) {
-    await dialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await dialog
+      .getByRole("combobox")
+      .filter({ hasText: "Kein Kunde" })
+      .click();
+    await page.getByPlaceholder("Kunde suchen...").fill(options.clientName);
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.clientName })
       .first()
       .click();
   }
   if (options.siteName) {
-    await expect(dialog.locator('#create-project-site')).toBeVisible({
-      timeout: 15_000,
-    });
-    await selectFromSearchable(page, dialog.locator('#create-project-site'), options.siteName);
-  }
-  if (options.contactName) {
-    await expect(dialog.locator('#create-project-contact')).toBeVisible({
+    await expect(dialog.locator("#create-project-site")).toBeVisible({
       timeout: 15_000,
     });
     await selectFromSearchable(
       page,
-      dialog.locator('#create-project-contact'),
-      options.contactName
+      dialog.locator("#create-project-site"),
+      options.siteName,
     );
   }
-  await dialog.getByRole('button', { name: 'Projekt erstellen', exact: true }).click();
+  if (options.contactName) {
+    await expect(dialog.locator("#create-project-contact")).toBeVisible({
+      timeout: 15_000,
+    });
+    await selectFromSearchable(
+      page,
+      dialog.locator("#create-project-contact"),
+      options.contactName,
+    );
+  }
+  await dialog
+    .getByRole("button", { name: "Projekt erstellen", exact: true })
+    .click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
@@ -292,58 +364,67 @@ export async function createAndPublishWorkTemplate(
   page: Page,
   options: {
     name: string;
-    targetType: 'job' | 'project';
+    targetType: "job" | "project";
     firstItem: string;
     secondItem?: string;
     evidenceDescription?: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/arbeitsvorlagen');
+  await page.goto("/arbeitsvorlagen");
   await page
-    .getByRole('button', { name: /Vorlage erstellen|Erste Vorlage erstellen/ })
+    .getByRole("button", { name: /Vorlage erstellen|Erste Vorlage erstellen/ })
     .first()
     .click();
-  const createDialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Arbeitsvorlage erstellen' }),
+  const createDialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Arbeitsvorlage erstellen" }),
   });
-  await createDialog.locator('#new-template-name').fill(options.name);
-  if (options.targetType === 'project') {
-    await createDialog.locator('#new-template-target').click();
-    await page.getByRole('option', { name: 'Projekte', exact: true }).click();
+  await createDialog.locator("#new-template-name").fill(options.name);
+  if (options.targetType === "project") {
+    await createDialog.locator("#new-template-target").click();
+    await page.getByRole("option", { name: "Projekte", exact: true }).click();
   }
-  await createDialog.getByRole('button', { name: 'Erstellen', exact: true }).click();
+  await createDialog
+    .getByRole("button", { name: "Erstellen", exact: true })
+    .click();
   await expect(createDialog).toHaveCount(0, { timeout: 15_000 });
 
-  const editor = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: /Entwurf · Version 1/ }),
+  const editor = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: /Entwurf · Version 1/ }),
   });
   await expect(editor).toBeVisible({ timeout: 20_000 });
-  await editor.getByRole('button', { name: 'Eintrag', exact: true }).click();
-  await editor.getByLabel('Bezeichnung').last().fill(options.firstItem);
+  await editor.getByRole("button", { name: "Eintrag", exact: true }).click();
+  await editor.getByLabel("Bezeichnung").last().fill(options.firstItem);
   if (options.evidenceDescription) {
-    await editor.getByRole('button', { name: 'Nachweis', exact: true }).click();
-    await editor.getByLabel('Nachweisbeschreibung').last().fill(options.evidenceDescription);
+    await editor.getByRole("button", { name: "Nachweis", exact: true }).click();
+    await editor
+      .getByLabel("Nachweisbeschreibung")
+      .last()
+      .fill(options.evidenceDescription);
   }
   if (options.secondItem) {
-    await editor.getByRole('button', { name: 'Eintrag', exact: true }).click();
-    const labels = editor.getByLabel('Bezeichnung');
+    await editor.getByRole("button", { name: "Eintrag", exact: true }).click();
+    const labels = editor.getByLabel("Bezeichnung");
     await labels.last().fill(options.secondItem);
-    const secondCard = labels.last().locator('xpath=ancestor::*[@data-slot="card"][1]');
+    const secondCard = labels
+      .last()
+      .locator('xpath=ancestor::*[@data-slot="card"][1]');
     await secondCard
-      .getByRole('combobox', {
+      .getByRole("combobox", {
         name: `Verbindlichkeit für ${options.secondItem}`,
       })
       .click();
-    await page.getByRole('option', { name: 'Optional', exact: true }).click();
+    await page.getByRole("option", { name: "Optional", exact: true }).click();
     await toggleInSearchableMulti(
       page,
-      secondCard.getByRole('combobox', {
+      secondCard.getByRole("combobox", {
         name: `Voraussetzungen für ${options.secondItem}`,
       }),
-      [options.firstItem]
+      [options.firstItem],
     );
   }
-  await editor.getByRole('button', { name: 'Veröffentlichen', exact: true }).click();
+  await editor
+    .getByRole("button", { name: "Veröffentlichen", exact: true })
+    .click();
   await expect(editor).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -352,15 +433,15 @@ export async function createAndPublishWorkTemplate(
 export async function uploadIntoDocumentsSection(
   page: Page,
   filePath: string,
-  expectedFileName: string
+  expectedFileName: string,
 ): Promise<void> {
-  await expect(page.getByText('Dokumente & Bilder')).toBeVisible({
+  await expect(page.getByText("Dokumente & Bilder")).toBeVisible({
     timeout: 30_000,
   });
 
   const section = page
-    .locator('section, div')
-    .filter({ has: page.getByText('Dokumente & Bilder') });
+    .locator("section, div")
+    .filter({ has: page.getByText("Dokumente & Bilder") });
   await section.locator('input[type="file"]').first().setInputFiles(filePath);
 
   // Direct-to-R2 upload dialog: the dialog closes itself 650 ms after a fully
@@ -373,29 +454,32 @@ export async function uploadIntoDocumentsSection(
   await expect
     .poll(
       async () => {
-        if (await page.getByText('1 von 1 abgeschlossen').isVisible()) {
-          return 'complete';
+        if (await page.getByText("1 von 1 abgeschlossen").isVisible()) {
+          return "complete";
         }
         const dialogOpen =
-          (await page.getByRole('dialog').filter({ hasText: 'abgeschlossen' }).count()) > 0;
+          (await page
+            .getByRole("dialog")
+            .filter({ hasText: "abgeschlossen" })
+            .count()) > 0;
         if (dialogOpen) {
           uploadDialogSeen = true;
-          return 'uploading';
+          return "uploading";
         }
-        return uploadDialogSeen ? 'closed' : 'starting';
+        return uploadDialogSeen ? "closed" : "starting";
       },
-      { timeout: 60_000 }
+      { timeout: 60_000 },
     )
     .toMatch(/^(complete|closed)$/);
-  await expect(page.getByText('Upload fehlgeschlagen.')).toHaveCount(0);
+  await expect(page.getByText("Upload fehlgeschlagen.")).toHaveCount(0);
 
-  const closeButton = page.getByRole('button', { name: 'Schließen' });
+  const closeButton = page.getByRole("button", { name: "Schließen" });
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click();
   }
   // Dialog must be gone before asserting, so the file name match can only come
   // from the documents section itself, not from the dialog's row list.
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 10_000 });
 
   await expect(visibleText(page, expectedFileName)).toBeVisible({
     timeout: 15_000,
@@ -406,14 +490,14 @@ export async function uploadDocumentOnJobPage(
   page: Page,
   jobNumber: string,
   filePath: string,
-  expectedFileName: string
+  expectedFileName: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
   await uploadIntoDocumentsSection(page, filePath, expectedFileName);
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // The job picker is deliberately a FLAT LIST (search bar + always-visible
@@ -421,27 +505,34 @@ function escapeRegExp(value: string): string {
 // A row's accessible name is its full text (title + number/client/project
 // line), so match by substring, never exact.
 async function selectJobInPicker(
-  dialog: ReturnType<Page['getByRole']>,
-  jobTitle: string
+  dialog: ReturnType<Page["getByRole"]>,
+  jobTitle: string,
 ): Promise<void> {
   await dialog
-    .getByRole('radio', { name: new RegExp(escapeRegExp(jobTitle)) })
+    .getByRole("radio", { name: new RegExp(escapeRegExp(jobTitle)) })
     .first()
     .click();
 }
 
-export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void> {
-  await page.goto('/dashboard');
+export async function clockInOnJob(
+  page: Page,
+  jobTitle?: string,
+): Promise<void> {
+  await page.goto("/dashboard");
   // The clock control is a floating action button named via its title attribute.
   await page.locator('button[title="Einstempeln"]').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Einstempeln" }),
+  ).toBeVisible();
 
   if (jobTitle) {
     await selectJobInPicker(dialog, jobTitle);
   }
 
-  await dialog.getByRole('button', { name: 'Einstempeln', exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Einstempeln", exact: true })
+    .click();
   await expect(page.locator('button[title="Ausstempeln"]')).toBeVisible({
     timeout: 15_000,
   });
@@ -461,16 +552,23 @@ export async function startClockBreak(page: Page): Promise<void> {
   });
 }
 
-export async function endClockBreak(page: Page, jobTitle?: string): Promise<void> {
+export async function endClockBreak(
+  page: Page,
+  jobTitle?: string,
+): Promise<void> {
   await page.locator('button[title="Arbeit fortsetzen"]').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Arbeit fortsetzen" }),
+  ).toBeVisible();
   if (jobTitle) {
     await selectJobInPicker(dialog, jobTitle);
   }
   // Without a job the picker keeps its default „Ohne Auftrag" selection.
-  await dialog.getByRole('button', { name: 'Fortsetzen', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Arbeit fortsetzen' })).toBeHidden({
+  await dialog.getByRole("button", { name: "Fortsetzen", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Arbeit fortsetzen" }),
+  ).toBeHidden({
     timeout: 15_000,
   });
   await expect(page.locator('button[title="Pause starten"]')).toBeVisible({
@@ -478,25 +576,35 @@ export async function endClockBreak(page: Page, jobTitle?: string): Promise<void
   });
 }
 
-export async function switchClockJob(page: Page, jobTitle: string): Promise<void> {
+export async function switchClockJob(
+  page: Page,
+  jobTitle: string,
+): Promise<void> {
   await page.locator('button[title="Auftrag wechseln"]').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Auftrag wechseln' })).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Auftrag wechseln" }),
+  ).toBeVisible();
   await selectJobInPicker(dialog, jobTitle);
-  await dialog.getByRole('button', { name: 'Wechseln', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Auftrag wechseln' })).toBeHidden({
+  await dialog.getByRole("button", { name: "Wechseln", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Auftrag wechseln" }),
+  ).toBeHidden({
     timeout: 15_000,
   });
 }
 
-export async function createInventoryLocation(page: Page, name: string): Promise<void> {
-  await page.goto('/inventar');
-  await page.getByRole('button', { name: 'Lager', exact: true }).click();
+export async function createInventoryLocation(
+  page: Page,
+  name: string,
+): Promise<void> {
+  await page.goto("/inventar");
+  await page.getByRole("button", { name: "Lager", exact: true }).click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Lager anlegen' }) });
-  await dialog.locator('#inventory-location-name').fill(name);
-  await dialog.getByRole('button', { name: 'Speichern' }).click();
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Lager anlegen" }) });
+  await dialog.locator("#inventory-location-name").fill(name);
+  await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
@@ -507,71 +615,82 @@ export async function createInventoryItem(
     locationName?: string;
     initialQuantity?: number;
     supplierName?: string;
-  }
+  },
 ): Promise<void> {
   if (options.initialQuantity !== undefined) {
     if (!options.locationName) {
-      throw new Error('createInventoryItem: initialQuantity requires a locationName');
+      throw new Error(
+        "createInventoryItem: initialQuantity requires a locationName",
+      );
     }
     if (!Number.isFinite(options.initialQuantity)) {
-      throw new Error('createInventoryItem: initialQuantity must be finite');
+      throw new Error("createInventoryItem: initialQuantity must be finite");
     }
   }
 
-  await page.goto('/inventar');
-  await page.getByRole('button', { name: 'Artikel', exact: true }).click();
+  await page.goto("/inventar");
+  await page.getByRole("button", { name: "Artikel", exact: true }).click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Artikel anlegen' }) });
-  await dialog.locator('#inventory-item-name').fill(options.name);
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Artikel anlegen" }) });
+  await dialog.locator("#inventory-item-name").fill(options.name);
   if (options.locationName) {
-    await dialog.locator('#inventory-item-initial-location').click();
+    await dialog.locator("#inventory-item-initial-location").click();
     const locationPicker = page
-      .getByRole('dialog')
-      .filter({ has: page.getByPlaceholder('Lager suchen...') });
-    await locationPicker.getByRole('button').filter({ hasText: options.locationName }).click();
+      .getByRole("dialog")
+      .filter({ has: page.getByPlaceholder("Lager suchen...") });
+    await locationPicker
+      .getByRole("button")
+      .filter({ hasText: options.locationName })
+      .click();
     await dialog
-      .locator('#inventory-item-initial-quantity')
+      .locator("#inventory-item-initial-quantity")
       .fill(String(options.initialQuantity ?? 0));
   }
   if (options.supplierName) {
     // SelectWithCreate: the action row opens a quick-create dialog that stages
     // the new supplier name; the supplier row is created on item save.
-    await dialog.locator('#inventory-item-supplier').click();
+    await dialog.locator("#inventory-item-supplier").click();
     await page
-      .getByRole('listbox')
-      .getByRole('button', { name: 'Neuen Lieferanten anlegen' })
+      .getByRole("listbox")
+      .getByRole("button", { name: "Neuen Lieferanten anlegen" })
       .click();
-    const supplierDialog = page.getByRole('dialog').filter({
-      has: page.getByRole('heading', { name: 'Neuen Lieferanten anlegen' }),
+    const supplierDialog = page.getByRole("dialog").filter({
+      has: page.getByRole("heading", { name: "Neuen Lieferanten anlegen" }),
     });
-    await supplierDialog.locator('#inventory-new-supplier-name').fill(options.supplierName);
-    await supplierDialog.getByRole('button', { name: 'Übernehmen' }).click();
+    await supplierDialog
+      .locator("#inventory-new-supplier-name")
+      .fill(options.supplierName);
+    await supplierDialog.getByRole("button", { name: "Übernehmen" }).click();
     await expect(supplierDialog).toHaveCount(0, { timeout: 10_000 });
   }
-  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function inviteMember(
   page: Page,
   email: string,
-  roleLabel: 'Büro' | 'Handwerker/in'
+  roleLabel: "Büro" | "Handwerker/in",
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('button', { name: 'Mitarbeiter hinzufügen' }).click();
-  await expect(page.getByRole('heading', { name: 'Mitarbeiter einladen' })).toBeVisible();
-  await page.locator('#email').fill(email);
+  await page.goto("/mitarbeiter");
+  await page.getByRole("button", { name: "Mitarbeiter hinzufügen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Mitarbeiter einladen" }),
+  ).toBeVisible();
+  await page.locator("#email").fill(email);
   // Role picker is a Radix select; its options render with role "option".
-  await page.locator('#role').click();
-  await page.getByRole('option', { name: roleLabel, exact: true }).click();
-  await page.getByRole('button', { name: 'Einladung senden' }).click();
+  await page.locator("#role").click();
+  await page.getByRole("option", { name: roleLabel, exact: true }).click();
+  await page.getByRole("button", { name: "Einladung senden" }).click();
   // The invite action inserts the invite and sends the email before reporting
   // success; the dialog closes itself two seconds after the flash.
-  await expect(page.getByText('Einladung erfolgreich gesendet!')).toBeVisible({
+  await expect(page.getByText("Einladung erfolgreich gesendet!")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole('heading', { name: 'Mitarbeiter einladen' })).toBeHidden({
+  await expect(
+    page.getByRole("heading", { name: "Mitarbeiter einladen" }),
+  ).toBeHidden({
     timeout: 10_000,
   });
 }
@@ -583,11 +702,13 @@ export async function joinOrganizationViaInviteLink(
   page: Page,
   inviteCode: string,
   credentials: { email: string; password: string },
-  expectedOrgId: string
+  expectedOrgId: string,
 ): Promise<void> {
   // already_member also counts: it means an earlier (slow) attempt already
   // redeemed the invite before the retry re-opened the link.
-  const confirmationUrl = new RegExp(`/dashboard\\?(joined|already_member)=${expectedOrgId}`);
+  const confirmationUrl = new RegExp(
+    `/dashboard\\?(joined|already_member)=${expectedOrgId}`,
+  );
 
   let joined = false;
   for (let attempt = 1; attempt <= 3 && !joined; attempt++) {
@@ -599,15 +720,17 @@ export async function joinOrganizationViaInviteLink(
       joined = true;
       break;
     }
-    if (!page.url().includes('/login')) {
+    if (!page.url().includes("/login")) {
       continue;
     }
 
     // Same pre-hydration caution as the global setup's login helper.
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState("networkidle");
     await page.locator('input[autocomplete="email"]').fill(credentials.email);
-    await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
-    await page.getByRole('button', { name: 'Anmelden' }).click();
+    await page
+      .locator('input[autocomplete="current-password"]')
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Anmelden" }).click();
     joined = await page
       .waitForURL(confirmationUrl, { timeout: 30_000 })
       .then(() => true)
@@ -615,7 +738,7 @@ export async function joinOrganizationViaInviteLink(
   }
   if (!joined) {
     throw new Error(
-      `Invited user ${credentials.email} did not reach /dashboard?joined=${expectedOrgId}`
+      `Invited user ${credentials.email} did not reach /dashboard?joined=${expectedOrgId}`,
     );
   }
 }
@@ -624,47 +747,66 @@ export async function takeMaterialOnJobPage(
   page: Page,
   jobNumber: string,
   itemName: string,
-  quantity: number
+  quantity: number,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(page.getByText('Material & Inventar')).toBeVisible({
+  await expect(visibleText(page, "Material & Inventar")).toBeVisible({
     timeout: 20_000,
   });
-  await page.getByRole('button', { name: 'Aus Lager entnehmen' }).click();
-  await expect(page.getByRole('heading', { name: 'Entnahme buchen' })).toBeVisible();
+  await page.getByRole("button", { name: "Aus Lager entnehmen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Entnahme buchen" }),
+  ).toBeVisible();
 
   // Pick the item from the search list; a row with quantity 1 appears.
-  await page.getByRole('dialog').getByRole('button').filter({ hasText: itemName }).first().click();
-  await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
+  await page
+    .getByRole("dialog")
+    .getByRole("button")
+    .filter({ hasText: itemName })
+    .first()
+    .click();
+  await page
+    .locator('input[id^="material-row-"][id$="-quantity"]')
+    .fill(String(quantity));
 
   // The line rows outside the dialog also carry an "Entnahme buchen" button,
   // so the confirm click must stay scoped to the dialog.
-  await page.getByRole('dialog').getByRole('button', { name: 'Entnahme buchen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Entnahme buchen" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function returnMaterialOnJobPage(
   page: Page,
   jobNumber: string,
   itemName: string,
-  quantity: number
+  quantity: number,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(page.getByText('Material & Inventar')).toBeVisible({
+  await expect(visibleText(page, "Material & Inventar")).toBeVisible({
     timeout: 20_000,
   });
   await page
-    .getByTestId('job-material-line')
+    .getByTestId("job-material-line")
     .filter({ hasText: itemName })
-    .locator('button:enabled')
-    .filter({ hasText: 'Zurücklegen' })
+    .locator("button:enabled")
+    .filter({ hasText: "Zurücklegen" })
     .first()
     .click();
-  await expect(page.getByRole('heading', { name: 'Material zurücklegen' })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Material zurücklegen" }),
+  ).toBeVisible();
 
-  await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
-  await page.getByRole('dialog').getByRole('button', { name: 'Zurücklegen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .locator('input[id^="material-row-"][id$="-quantity"]')
+    .fill(String(quantity));
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Zurücklegen" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function planMaterialOnJobPage(
@@ -672,18 +814,26 @@ export async function planMaterialOnJobPage(
   jobNumber: string,
   itemName: string,
   locationName: string,
-  quantity: number
+  quantity: number,
 ): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
-  await page.getByRole('button', { name: 'Material planen' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Material planen' }),
+  await page.getByRole("button", { name: "Material planen" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Material planen" }),
   });
-  await dialog.getByLabel('Artikel suchen').fill(itemName);
-  await dialog.getByRole('button').filter({ hasText: itemName }).first().click();
+  await dialog.getByLabel("Artikel suchen").fill(itemName);
+  await dialog
+    .getByRole("button")
+    .filter({ hasText: itemName })
+    .first()
+    .click();
   await dialog.locator('input[id$="-quantity"]').first().fill(String(quantity));
-  await selectFromSearchable(page, dialog.locator('button[id$="-location"]').first(), locationName);
-  await dialog.getByRole('button', { name: 'Speichern' }).click();
+  await selectFromSearchable(
+    page,
+    dialog.locator('button[id$="-location"]').first(),
+    locationName,
+  );
+  await dialog.getByRole("button", { name: "Speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -692,18 +842,18 @@ export async function planMaterialOnJobPage(
 export async function openFieldWorkPack(
   page: Page,
   jobNumber: string,
-  projectNumber?: string
+  projectNumber?: string,
 ): Promise<Locator> {
   const path = projectNumber
     ? `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`
     : `/auftraege/${encodeURIComponent(jobNumber)}`;
   await page.goto(path);
-  const pack = page.getByTestId('field-work-pack');
+  const pack = page.getByTestId("field-work-pack");
   await expect(pack).toBeVisible({ timeout: 20_000 });
-  await expect(pack.getByTestId('field-work-pack-overview')).toHaveAttribute(
-    'data-realtime-ready',
-    'true',
-    { timeout: 20_000 }
+  await expect(pack.getByTestId("field-work-pack-overview")).toHaveAttribute(
+    "data-realtime-ready",
+    "true",
+    { timeout: 20_000 },
   );
   return pack;
 }
@@ -711,73 +861,88 @@ export async function openFieldWorkPack(
 export async function setInstructionCompletionOnJobPage(
   page: Page,
   label: string,
-  completed: boolean
+  completed: boolean,
 ): Promise<void> {
-  const actionName = completed ? 'Punkt als erledigt markieren' : 'Punkt als offen markieren';
-  const item = page.getByTestId('job-instruction-item').filter({
+  const actionName = completed
+    ? "Punkt als erledigt markieren"
+    : "Punkt als offen markieren";
+  const item = page.getByTestId("job-instruction-item").filter({
     has: page.getByText(label, { exact: true }),
   });
-  const action = item.getByRole('button', { name: actionName });
+  const action = item.getByRole("button", { name: actionName });
   await expect(action).toBeEnabled({ timeout: 20_000 });
   await action.click();
   await expect(
-    item.getByRole('button', {
-      name: completed ? 'Punkt als offen markieren' : 'Punkt als erledigt markieren',
-    })
+    item.getByRole("button", {
+      name: completed
+        ? "Punkt als offen markieren"
+        : "Punkt als erledigt markieren",
+    }),
   ).toBeEnabled({ timeout: 20_000 });
 }
 
 export async function transitionWorkOnJobPage(
   page: Page,
   label: string,
-  reason?: string
+  reason?: string,
 ): Promise<void> {
-  const lifecycle = page.getByTestId('work-lifecycle-card');
-  await lifecycle.getByRole('button', { name: label, exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  if (reason) await dialog.locator('#work-transition-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
+  const lifecycle = page.getByTestId("work-lifecycle-card");
+  await lifecycle.getByRole("button", { name: label, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  if (reason) await dialog.locator("#work-transition-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Änderung speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 export async function changeTimeOnWorkPack(
   page: Page,
-  action: 'start' | 'stop' | 'switch'
+  action: "start" | "stop" | "switch",
 ): Promise<void> {
-  const pack = page.getByTestId('field-work-pack');
+  const pack = page.getByTestId("field-work-pack");
   const label =
-    action === 'start'
-      ? 'Arbeitszeit starten'
-      : action === 'stop'
-        ? 'Arbeitszeit beenden'
-        : 'Zu diesem Auftrag wechseln';
-  await pack.getByRole('button', { name: label, exact: true }).click();
-  const expected = action === 'stop' ? 'Arbeitszeit starten' : 'Arbeitszeit beenden';
-  await expect(pack.getByRole('button', { name: label, exact: true })).toHaveCount(0, {
+    action === "start"
+      ? "Arbeitszeit starten"
+      : action === "stop"
+        ? "Arbeitszeit beenden"
+        : "Zu diesem Auftrag wechseln";
+  await pack.getByRole("button", { name: label, exact: true }).click();
+  const expected =
+    action === "stop" ? "Arbeitszeit starten" : "Arbeitszeit beenden";
+  await expect(
+    pack.getByRole("button", { name: label, exact: true }),
+  ).toHaveCount(0, {
     timeout: 20_000,
   });
-  await expect(pack.getByRole('button', { name: expected, exact: true })).toBeVisible({
+  await expect(
+    pack.getByRole("button", { name: expected, exact: true }),
+  ).toBeVisible({
     timeout: 20_000,
   });
 }
 
-export async function reportOwnBlockerOnJobPage(page: Page, details: string): Promise<void> {
-  const lifecycle = page.getByTestId('work-lifecycle-card');
-  await lifecycle.getByRole('button', { name: 'Blocker', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.locator('#work-blocker-reason').click();
-  await page.getByRole('option', { name: 'Zugang zum Einsatzort' }).click();
-  await dialog.locator('#work-blocker-details').fill(details);
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+export async function reportOwnBlockerOnJobPage(
+  page: Page,
+  details: string,
+): Promise<void> {
+  const lifecycle = page.getByTestId("work-lifecycle-card");
+  await lifecycle.getByRole("button", { name: "Blocker", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#work-blocker-reason").click();
+  await page.getByRole("option", { name: "Zugang zum Einsatzort" }).click();
+  await dialog.locator("#work-blocker-details").fill(details);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
-export async function resolveOwnBlockerOnJobPage(page: Page, reason: string): Promise<void> {
-  const lifecycle = page.getByTestId('work-lifecycle-card');
-  await lifecycle.getByRole('button', { name: 'Lösen', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.locator('#work-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Lösen', exact: true }).click();
+export async function resolveOwnBlockerOnJobPage(
+  page: Page,
+  reason: string,
+): Promise<void> {
+  const lifecycle = page.getByTestId("work-lifecycle-card");
+  await lifecycle.getByRole("button", { name: "Lösen", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#work-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Lösen", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -786,36 +951,40 @@ export async function parkJobOnJobPage(
   jobNumber: string,
   details: string,
   responsibleName: string,
-  reviewDate: string
+  reviewDate: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
-  const lifecycle = page.getByTestId('work-lifecycle-card');
-  await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.locator('#work-blocker-reason').click();
-  await page.getByRole('option', { name: 'Material', exact: true }).click();
-  await dialog.locator('#work-blocker-details').fill(details);
-  await selectFromSearchable(page, dialog.locator('#work-blocker-owner'), responsibleName);
-  await typeIntoDatePickerById(dialog, 'work-blocker-review', reviewDate);
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  const lifecycle = page.getByTestId("work-lifecycle-card");
+  await lifecycle.getByRole("button", { name: "Parken", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#work-blocker-reason").click();
+  await page.getByRole("option", { name: "Material", exact: true }).click();
+  await dialog.locator("#work-blocker-details").fill(details);
+  await selectFromSearchable(
+    page,
+    dialog.locator("#work-blocker-owner"),
+    responsibleName,
+  );
+  await typeIntoDatePickerById(dialog, "work-blocker-review", reviewDate);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 export async function removeJobAssignment(
   page: Page,
   jobNumber: string,
-  employeeName: string
+  employeeName: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Zuweisung für ${employeeName} entfernen`,
     })
     .click();
   await expect(
-    page.getByRole('button', {
+    page.getByRole("button", {
       name: `Zuweisung für ${employeeName} entfernen`,
-    })
+    }),
   ).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -828,7 +997,10 @@ export async function removeJobAssignment(
 // envelope first, then use the one sanctioned reload as an explicit goto to
 // the captured route — a bare reload racing a concurrent router refresh has
 // landed on Dashboard before — and assert the server-rendered persisted row.
-export async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
+export async function expectVisibleAfterSave(
+  page: Page,
+  text: string,
+): Promise<void> {
   try {
     await expect(visibleText(page, text)).toBeVisible({ timeout: 30_000 });
   } catch {
@@ -838,13 +1010,21 @@ export async function expectVisibleAfterSave(page: Page, text: string): Promise<
   }
 }
 
-export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
-  await page.goto('/kunden');
-  const customerRow = page.locator('tbody tr:visible').filter({ hasText: customerName }).first();
+export async function openCustomerDetail(
+  page: Page,
+  customerName: string,
+): Promise<void> {
+  await page.goto("/kunden");
+  const customerRow = page
+    .locator("tbody tr:visible")
+    .filter({ hasText: customerName })
+    .first();
   await expect(customerRow).toBeVisible({ timeout: 15_000 });
-  await customerRow.click();
+  await customerRow
+    .getByRole("link", { name: customerName, exact: true })
+    .click();
   await page.waitForURL(/\/kunden\/[0-9a-f-]{36}$/, { timeout: 15_000 });
-  await expect(visibleText(page, 'Kundendetails')).toBeVisible({
+  await expect(visibleText(page, "Kundendetails")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -858,23 +1038,30 @@ export async function addContactOnCustomerDetail(
     email?: string;
     notes?: string;
     isPrimary?: boolean;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Ansprechpartner hinzufügen' }).click();
-  await expect(page.getByRole('heading', { name: 'Ansprechpartner hinzufügen' })).toBeVisible();
-  await page.locator('#contact-name').fill(contact.name);
-  if (contact.role) await page.locator('#contact-role').fill(contact.role);
-  if (contact.phone) await page.locator('#contact-phone').fill(contact.phone);
-  if (contact.email) await page.locator('#contact-email').fill(contact.email);
-  if (contact.notes) await page.locator('#contact-notes').fill(contact.notes);
+  await page
+    .getByRole("button", { name: "Ansprechpartner hinzufügen" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ansprechpartner hinzufügen" }),
+  ).toBeVisible();
+  await page.locator("#contact-name").fill(contact.name);
+  if (contact.role) await page.locator("#contact-role").fill(contact.role);
+  if (contact.phone) await page.locator("#contact-phone").fill(contact.phone);
+  if (contact.email) await page.locator("#contact-email").fill(contact.email);
+  if (contact.notes) await page.locator("#contact-notes").fill(contact.notes);
   if (contact.isPrimary) {
-    const checkbox = page.getByRole('checkbox', {
-      name: 'Als Hauptkontakt festlegen',
+    const checkbox = page.getByRole("checkbox", {
+      name: "Als Hauptkontakt festlegen",
     });
     if (!(await checkbox.isChecked())) await checkbox.click();
   }
-  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Speichern" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, contact.name);
 }
 
@@ -887,30 +1074,41 @@ export async function createFollowUpOnCustomerDetail(
     dueAtLocal: string;
     ownerName?: string;
     note?: string;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Nachfassaktion', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Nachfassaktion anlegen' })).toBeVisible();
-  await dialog.locator('#follow-up-title').fill(input.title);
-  await typeIntoDateTimeField(dialog, 'follow-up-due', input.dueAtLocal);
-  if (input.note) await dialog.locator('#follow-up-note').fill(input.note);
+  await page
+    .getByRole("button", { name: "Nachfassaktion", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Nachfassaktion anlegen" }),
+  ).toBeVisible();
+  await dialog.locator("#follow-up-title").fill(input.title);
+  await typeIntoDateTimeField(dialog, "follow-up-due", input.dueAtLocal);
+  if (input.note) await dialog.locator("#follow-up-note").fill(input.note);
   if (input.ownerName) {
-    await selectFromSearchable(page, dialog.locator('#follow-up-owner'), input.ownerName);
+    await selectFromSearchable(
+      page,
+      dialog.locator("#follow-up-owner"),
+      input.ownerName,
+    );
   }
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, input.title);
 }
 
-export async function completeFollowUpOnCustomerDetail(page: Page, title: string): Promise<void> {
+export async function completeFollowUpOnCustomerDetail(
+  page: Page,
+  title: string,
+): Promise<void> {
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Nachfassaktion ${title} erledigen`,
       exact: true,
     })
     .click();
-  await expect(page.getByText('Nachfassaktion erledigt.')).toBeVisible({
+  await expect(page.getByText("Nachfassaktion erledigt.")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -919,50 +1117,56 @@ export async function configureCustomerCommunicationSettings(
   page: Page,
   input: {
     preferredContactName?: string;
-    preferredChannel?: 'Telefon' | 'E-Mail' | 'SMS' | 'Brief' | 'Persönlich';
+    preferredChannel?: "Telefon" | "E-Mail" | "SMS" | "Brief" | "Persönlich";
     doNotContactInstruction?: string;
     contactTimeNote?: string;
     languageNote?: string;
     accessibilityNote?: string;
     sourceNote?: string;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Allgemein bearbeiten' }).click();
-  const dialog = page.getByRole('dialog');
+  await page.getByRole("button", { name: "Allgemein bearbeiten" }).click();
+  const dialog = page.getByRole("dialog");
   if (input.preferredContactName) {
     await selectFromSearchable(
       page,
-      dialog.locator('#preferred-contact'),
-      input.preferredContactName
+      dialog.locator("#preferred-contact"),
+      input.preferredContactName,
     );
   }
   if (input.preferredChannel) {
-    await dialog.locator('#preferred-channel').click();
-    await page.getByRole('option', { name: input.preferredChannel, exact: true }).click();
+    await dialog.locator("#preferred-channel").click();
+    await page
+      .getByRole("option", { name: input.preferredChannel, exact: true })
+      .click();
   }
   if (input.doNotContactInstruction) {
-    await dialog.locator('#dnc-note').fill(input.doNotContactInstruction);
+    await dialog.locator("#dnc-note").fill(input.doNotContactInstruction);
   }
   if (input.contactTimeNote) {
-    await dialog.locator('#contact-time').fill(input.contactTimeNote);
+    await dialog.locator("#contact-time").fill(input.contactTimeNote);
   }
   if (input.languageNote) {
-    await dialog.locator('#language-note').fill(input.languageNote);
+    await dialog.locator("#language-note").fill(input.languageNote);
   }
   if (input.accessibilityNote) {
-    await dialog.locator('#accessibility-note').fill(input.accessibilityNote);
+    await dialog.locator("#accessibility-note").fill(input.accessibilityNote);
   }
   if (input.sourceNote) {
-    await dialog.locator('#settings-source').fill(input.sourceNote);
+    await dialog.locator("#settings-source").fill(input.sourceNote);
   }
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
   if (input.preferredContactName) {
-    const communicationSection = page.locator('section[aria-labelledby="communication-heading"]');
+    const communicationSection = page.locator(
+      'section[aria-labelledby="communication-heading"]',
+    );
     const preferredContactEntry = communicationSection
-      .locator('dl > div')
-      .filter({ hasText: 'Bevorzugter Kontakt' });
-    await expect(preferredContactEntry).toContainText(input.preferredContactName);
+      .locator("dl > div")
+      .filter({ hasText: "Bevorzugter Kontakt" });
+    await expect(preferredContactEntry).toContainText(
+      input.preferredContactName,
+    );
   }
 }
 
@@ -970,44 +1174,55 @@ export async function setCustomerCommunicationPreference(
   page: Page,
   input: {
     contactName?: string;
-    channel: 'Telefon' | 'E-Mail' | 'SMS' | 'Brief' | 'Persönlich';
-    state: 'Erlaubt' | 'Nicht erlaubt' | 'Unbekannt';
-    purpose?: 'Termin und Service' | 'Marketing' | 'Erforderliche kaufmännische Kommunikation';
+    channel: "Telefon" | "E-Mail" | "SMS" | "Brief" | "Persönlich";
+    state: "Erlaubt" | "Nicht erlaubt" | "Unbekannt";
+    purpose?:
+      | "Termin und Service"
+      | "Marketing"
+      | "Erforderliche kaufmännische Kommunikation";
     sourceNote?: string;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Präferenz', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  await page.getByRole("button", { name: "Präferenz", exact: true }).click();
+  const dialog = page.getByRole("dialog");
   if (input.contactName) {
-    await selectFromSearchable(page, dialog.locator('#preference-contact'), input.contactName);
+    await selectFromSearchable(
+      page,
+      dialog.locator("#preference-contact"),
+      input.contactName,
+    );
   }
-  await dialog.locator('#preference-channel').click();
-  await page.getByRole('option', { name: input.channel, exact: true }).click();
-  await dialog.locator('#preference-state').click();
-  await page.getByRole('option', { name: input.state, exact: true }).click();
+  await dialog.locator("#preference-channel").click();
+  await page.getByRole("option", { name: input.channel, exact: true }).click();
+  await dialog.locator("#preference-state").click();
+  await page.getByRole("option", { name: input.state, exact: true }).click();
   if (input.purpose) {
-    await dialog.locator('#preference-purpose').click();
-    await page.getByRole('option', { name: input.purpose, exact: true }).click();
+    await dialog.locator("#preference-purpose").click();
+    await page
+      .getByRole("option", { name: input.purpose, exact: true })
+      .click();
   }
   if (input.sourceNote) {
-    await dialog.locator('#preference-source').fill(input.sourceNote);
+    await dialog.locator("#preference-source").fill(input.sourceNote);
   }
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function proceedThroughContactWarning(
   page: Page,
   contactHrefText: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
-  await page.getByRole('link', { name: contactHrefText, exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Kontaktvorgabe prüfen' })).toBeVisible();
-  await dialog.locator('#contact-exception-reason').fill(reason);
+  await page.getByRole("link", { name: contactHrefText, exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Kontaktvorgabe prüfen" }),
+  ).toBeVisible();
+  await dialog.locator("#contact-exception-reason").fill(reason);
   // Chromium keeps the page open when no external tel:/mailto: handler is
   // registered; the database assertion proves the exception write.
-  await dialog.getByRole('button', { name: 'Begründet fortfahren' }).click();
+  await dialog.getByRole("button", { name: "Begründet fortfahren" }).click();
 }
 
 export async function addSiteOnCustomerDetail(
@@ -1021,57 +1236,66 @@ export async function addSiteOnCustomerDetail(
     notes?: string;
     primaryContactName?: string;
     isPrimary?: boolean;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Einsatzort hinzufügen' }).click();
-  await expect(page.getByRole('heading', { name: 'Einsatzort hinzufügen' })).toBeVisible();
-  await page.locator('#site-name').fill(site.name);
-  if (site.street) await page.locator('#site-street').fill(site.street);
-  if (site.postalCode) await page.locator('#site-postal-code').fill(site.postalCode);
-  if (site.city) await page.locator('#site-city').fill(site.city);
-  if (site.accessNotes) await page.locator('#site-access-notes').fill(site.accessNotes);
-  if (site.notes) await page.locator('#site-notes').fill(site.notes);
+  await page.getByRole("button", { name: "Einsatzort hinzufügen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Einsatzort hinzufügen" }),
+  ).toBeVisible();
+  await page.locator("#site-name").fill(site.name);
+  if (site.street) await page.locator("#site-street").fill(site.street);
+  if (site.postalCode)
+    await page.locator("#site-postal-code").fill(site.postalCode);
+  if (site.city) await page.locator("#site-city").fill(site.city);
+  if (site.accessNotes)
+    await page.locator("#site-access-notes").fill(site.accessNotes);
+  if (site.notes) await page.locator("#site-notes").fill(site.notes);
   if (site.primaryContactName) {
     await selectFromSearchable(
       page,
-      page.locator('#site-primary-contact'),
-      site.primaryContactName
+      page.locator("#site-primary-contact"),
+      site.primaryContactName,
     );
   }
   if (site.isPrimary) {
-    const checkbox = page.getByRole('checkbox', {
-      name: 'Als Hauptstandort festlegen',
+    const checkbox = page.getByRole("checkbox", {
+      name: "Als Hauptstandort festlegen",
     });
     if (!(await checkbox.isChecked())) await checkbox.click();
   }
-  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Speichern" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, site.name);
 }
 
 export async function archiveCustomerRelation(
   page: Page,
-  kind: 'Ansprechpartner' | 'Einsatzort',
-  name: string
+  kind: "Ansprechpartner" | "Einsatzort",
+  name: string,
 ): Promise<void> {
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const row = page
-    .locator('li')
-    .filter({ has: page.getByRole('button', { name: `${kind} archivieren` }) })
+    .locator("li")
+    .filter({ has: page.getByRole("button", { name: `${kind} archivieren` }) })
     .filter({
-      has: page.locator('p').filter({ hasText: new RegExp(`^${escapedName}$`) }),
+      has: page
+        .locator("p")
+        .filter({ hasText: new RegExp(`^${escapedName}$`) }),
     })
     .filter({ visible: true })
     .first();
-  await row.getByRole('button', { name: `${kind} archivieren` }).click();
+  await row.getByRole("button", { name: `${kind} archivieren` }).click();
   await expect(
     page
-      .locator('li')
+      .locator("li")
       .filter({
-        has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
+        has: page.getByRole("button", { name: `${kind} wiederherstellen` }),
       })
       .filter({ hasText: name })
-      .filter({ visible: true })
+      .filter({ visible: true }),
   ).toHaveCount(1, {
     timeout: 15_000,
   });
@@ -1079,65 +1303,81 @@ export async function archiveCustomerRelation(
 
 export async function restoreCustomerRelation(
   page: Page,
-  kind: 'Ansprechpartner' | 'Einsatzort',
-  name: string
+  kind: "Ansprechpartner" | "Einsatzort",
+  name: string,
 ): Promise<void> {
   const row = page
-    .locator('li')
+    .locator("li")
     .filter({
-      has: page.getByRole('button', { name: `${kind} wiederherstellen` }),
+      has: page.getByRole("button", { name: `${kind} wiederherstellen` }),
     })
     .filter({ hasText: name })
     .filter({ visible: true })
     .first();
-  await row.getByRole('button', { name: `${kind} wiederherstellen` }).click();
-  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await row.getByRole("button", { name: `${kind} wiederherstellen` }).click();
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const activeRow = () =>
     page
-      .locator('li')
+      .locator("li")
       .filter({
-        has: page.getByRole('button', { name: `${kind} archivieren` }),
+        has: page.getByRole("button", { name: `${kind} archivieren` }),
       })
       .filter({
-        has: page.locator('p').filter({ hasText: new RegExp(`^${escapedName}$`) }),
+        has: page
+          .locator("p")
+          .filter({ hasText: new RegExp(`^${escapedName}$`) }),
       })
       .filter({ visible: true })
       .first();
-  await expect(activeRow().getByRole('button', { name: `${kind} archivieren` })).toBeVisible({
+  await expect(
+    activeRow().getByRole("button", { name: `${kind} archivieren` }),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function adoptCustomerAddressAsSite(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Adresse als Einsatzort übernehmen' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Einsatzort hinzufügen' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await page
+    .getByRole("button", { name: "Adresse als Einsatzort übernehmen" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Einsatzort hinzufügen" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expectVisibleAfterSave(page, 'Hauptstandort');
+  await expectVisibleAfterSave(page, "Hauptstandort");
 }
 
 export async function editSiteStreetOnCustomerDetail(
   page: Page,
   siteName: string,
-  newStreet: string
+  newStreet: string,
 ): Promise<void> {
   const siteRow = page
-    .locator('li')
+    .locator("li")
     .filter({ hasText: siteName })
     .filter({ visible: true })
     .first();
-  await siteRow.getByRole('button', { name: 'Einsatzort bearbeiten' }).click();
-  await expect(page.getByRole('heading', { name: 'Einsatzort bearbeiten' })).toBeVisible();
-  await page.locator('#site-street').fill(newStreet);
-  await page.getByRole('dialog').getByRole('button', { name: 'Speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await siteRow.getByRole("button", { name: "Einsatzort bearbeiten" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Einsatzort bearbeiten" }),
+  ).toBeVisible();
+  await page.locator("#site-street").fill(newStreet);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Speichern" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, newStreet);
 }
 
-export async function searchCustomers(page: Page, query: string): Promise<void> {
-  await page.goto('/kunden');
-  await page.getByLabel('Kunden durchsuchen').fill(query);
+export async function searchCustomers(
+  page: Page,
+  query: string,
+): Promise<void> {
+  await page.goto("/kunden");
+  await page.getByLabel("Kunden durchsuchen").fill(query);
 }
 
 // P1-02: Anfragen (customer requests) and their conversion into work.
@@ -1160,88 +1400,113 @@ export async function createRequestViaDialog(
     sourceLabel?: string;
     receivedAtLocal?: string;
     assigneeName?: string;
-  }
+  },
 ): Promise<string> {
   if ((options.siteName || options.contactName) && !options.clientName) {
-    throw new Error('createRequestViaDialog: siteName/contactName require clientName');
+    throw new Error(
+      "createRequestViaDialog: siteName/contactName require clientName",
+    );
   }
 
-  await page.goto('/anfragen');
-  await page.getByRole('button', { name: 'Anfrage erfassen' }).click();
-  await expect(page.getByRole('heading', { name: 'Neue Anfrage erfassen' })).toBeVisible();
+  await page.goto("/anfragen");
+  await page.getByRole("button", { name: "Anfrage erfassen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Neue Anfrage erfassen" }),
+  ).toBeVisible();
 
-  await page.locator('#request-summary').fill(options.summary);
+  await page.locator("#request-summary").fill(options.summary);
   if (options.requestNumber !== undefined) {
-    await page.locator('#request-number').fill(options.requestNumber);
+    await page.locator("#request-number").fill(options.requestNumber);
   }
 
   if (options.categoryLabel) {
-    await page.locator('#request-category').click();
-    await page.getByRole('option', { name: options.categoryLabel, exact: true }).click();
+    await page.locator("#request-category").click();
+    await page
+      .getByRole("option", { name: options.categoryLabel, exact: true })
+      .click();
   }
   if (options.urgencyLabel) {
-    await page.locator('#request-urgency').click();
-    await page.getByRole('option', { name: options.urgencyLabel, exact: true }).click();
+    await page.locator("#request-urgency").click();
+    await page
+      .getByRole("option", { name: options.urgencyLabel, exact: true })
+      .click();
   }
   if (options.receivedAtLocal) {
     await typeIntoDateTimeField(
-      page.getByRole('dialog'),
-      'request-received-at',
-      options.receivedAtLocal
+      page.getByRole("dialog"),
+      "request-received-at",
+      options.receivedAtLocal,
     );
   }
 
   if (options.clientName) {
     // Same searchable customer combobox as the job dialog.
-    await page.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
+    await page.getByRole("combobox").filter({ hasText: "Kein Kunde" }).click();
+    await page.getByPlaceholder("Kunde suchen...").fill(options.clientName);
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.clientName })
       .first()
       .click();
   }
 
   if (options.siteName) {
-    await expect(page.locator('#request-site')).toBeVisible({
+    await expect(page.locator("#request-site")).toBeVisible({
       timeout: 15_000,
     });
-    await selectFromSearchable(page, page.locator('#request-site'), options.siteName);
+    await selectFromSearchable(
+      page,
+      page.locator("#request-site"),
+      options.siteName,
+    );
   }
   if (options.contactName) {
-    await expect(page.locator('#request-contact')).toBeVisible({
+    await expect(page.locator("#request-contact")).toBeVisible({
       timeout: 15_000,
     });
-    await selectFromSearchable(page, page.locator('#request-contact'), options.contactName);
+    await selectFromSearchable(
+      page,
+      page.locator("#request-contact"),
+      options.contactName,
+    );
   }
 
   if (options.callerName) {
-    await page.locator('#request-caller-name').fill(options.callerName);
+    await page.locator("#request-caller-name").fill(options.callerName);
   }
   if (options.callerPhone) {
-    await page.locator('#request-caller-phone').fill(options.callerPhone);
+    await page.locator("#request-caller-phone").fill(options.callerPhone);
   }
   if (options.callerEmail) {
-    await page.locator('#request-caller-email').fill(options.callerEmail);
+    await page.locator("#request-caller-email").fill(options.callerEmail);
   }
   if (options.callerAddress) {
-    await page.locator('#request-caller-address').fill(options.callerAddress);
+    await page.locator("#request-caller-address").fill(options.callerAddress);
   }
   if (options.details) {
-    await page.locator('#request-details').fill(options.details);
+    await page.locator("#request-details").fill(options.details);
   }
   if (options.sourceLabel) {
-    await page.locator('#request-source').click();
-    await page.getByRole('option', { name: options.sourceLabel, exact: true }).click();
+    await page.locator("#request-source").click();
+    await page
+      .getByRole("option", { name: options.sourceLabel, exact: true })
+      .click();
   }
   if (options.assigneeName) {
-    await selectFromSearchable(page, page.locator('#request-assignee'), options.assigneeName);
+    await selectFromSearchable(
+      page,
+      page.locator("#request-assignee"),
+      options.assigneeName,
+    );
   }
 
   // The submit button carries the same label as the header trigger; scope it
   // to the dialog. Success navigates straight to the new request detail.
-  await page.getByRole('dialog').getByRole('button', { name: 'Anfrage erfassen' }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Anfrage erfassen" })
+    .click();
   await page.waitForURL(/\/anfragen\/[0-9a-f-]{36}/, { timeout: 20_000 });
   await expect(visibleText(page, options.summary)).toBeVisible({
     timeout: 15_000,
@@ -1249,7 +1514,9 @@ export async function createRequestViaDialog(
 
   const match = page.url().match(/\/anfragen\/([0-9a-f-]{36})/);
   if (!match) {
-    throw new Error('createRequestViaDialog: could not read the request id from the URL');
+    throw new Error(
+      "createRequestViaDialog: could not read the request id from the URL",
+    );
   }
   return match[1];
 }
@@ -1257,7 +1524,7 @@ export async function createRequestViaDialog(
 export async function uploadDocumentOnRequestDetail(
   page: Page,
   filePath: string,
-  expectedFileName: string
+  expectedFileName: string,
 ): Promise<void> {
   // Assumes the request detail page is already open.
   await uploadIntoDocumentsSection(page, filePath, expectedFileName);
@@ -1270,73 +1537,94 @@ export async function convertRequestToJobViaDialog(
     plannedDate?: string;
     workTemplateName?: string;
     qualificationOverrideReason?: string;
-  }
+  },
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Umwandeln' }).click();
-  await expect(page.getByRole('heading', { name: 'Anfrage umwandeln' })).toBeVisible();
+  await page.getByRole("button", { name: "Umwandeln" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Anfrage umwandeln" }),
+  ).toBeVisible();
 
   if (options?.clientName) {
     // Unknown-caller requests must resolve the customer inside the dialog.
-    await page.getByRole('dialog').getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-    await page.getByPlaceholder('Kunde suchen...').fill(options.clientName);
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByRole("dialog")
+      .getByRole("combobox")
+      .filter({ hasText: "Kein Kunde" })
+      .click();
+    await page.getByPlaceholder("Kunde suchen...").fill(options.clientName);
+    await page
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.clientName })
       .first()
       .click();
   }
 
   if (options?.plannedDate) {
-    await typeIntoDatePickerById(page.getByRole('dialog'), 'convert-date', options.plannedDate);
+    await typeIntoDatePickerById(
+      page.getByRole("dialog"),
+      "convert-date",
+      options.plannedDate,
+    );
   }
   if (options?.workTemplateName) {
     await selectFromSearchable(
       page,
-      page.getByRole('dialog').locator('#work-template-job'),
-      options.workTemplateName
+      page.getByRole("dialog").locator("#work-template-job"),
+      options.workTemplateName,
     );
   }
 
   // The job number is suggested asynchronously after the dialog opens;
   // submitting before it arrives fails validation like it would for a user.
-  await expect(page.locator('#convert-number')).toHaveValue(/.+/, {
+  await expect(page.locator("#convert-number")).toHaveValue(/.+/, {
     timeout: 15_000,
   });
 
-  await page.getByRole('dialog').getByRole('button', { name: 'In Auftrag umwandeln' }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "In Auftrag umwandeln" })
+    .click();
   if (options?.qualificationOverrideReason) {
     const warningDialog = page
-      .getByRole('dialog')
-      .filter({ has: page.getByRole('heading', { name: 'Zuweisung prüfen' }) });
+      .getByRole("dialog")
+      .filter({ has: page.getByRole("heading", { name: "Zuweisung prüfen" }) });
     await expect(warningDialog).toBeVisible({ timeout: 15_000 });
     await warningDialog
-      .locator('#qualification-override-reason')
+      .locator("#qualification-override-reason")
       .fill(options.qualificationOverrideReason);
-    await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
+    await warningDialog
+      .getByRole("button", { name: "Trotz Hinweis zuweisen" })
+      .click();
   }
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
-  await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 20_000 });
+  await expect(
+    visibleText(page, "Diese Anfrage wurde umgewandelt"),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function matchRequestToExistingCustomer(
   page: Page,
-  clientName: string
+  clientName: string,
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Vorhandenem Kunden zuordnen' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Kunden zuordnen' })).toBeVisible();
-  await dialog.getByRole('combobox').filter({ hasText: 'Kein Kunde' }).click();
-  await page.getByPlaceholder('Kunde suchen...').fill(clientName);
   await page
-    .getByRole('listbox')
-    .getByRole('button')
+    .getByRole("button", { name: "Vorhandenem Kunden zuordnen" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Kunden zuordnen" }),
+  ).toBeVisible();
+  await dialog.getByRole("combobox").filter({ hasText: "Kein Kunde" }).click();
+  await page.getByPlaceholder("Kunde suchen...").fill(clientName);
+  await page
+    .getByRole("listbox")
+    .getByRole("button")
     .filter({ hasText: clientName })
     .first()
     .click();
-  await dialog.getByRole('button', { name: 'Zuordnen', exact: true }).click();
+  await dialog.getByRole("button", { name: "Zuordnen", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, clientName);
 }
@@ -1344,33 +1632,42 @@ export async function matchRequestToExistingCustomer(
 export async function convertRequestToProjectViaDialog(
   page: Page,
   projectNumber: string,
-  workTemplateName?: string
+  workTemplateName?: string,
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Umwandeln' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Anfrage umwandeln' })).toBeVisible();
-  await dialog.getByRole('tab', { name: 'Projekt' }).click();
-  await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, {
+  await page.getByRole("button", { name: "Umwandeln" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Anfrage umwandeln" }),
+  ).toBeVisible();
+  await dialog.getByRole("tab", { name: "Projekt" }).click();
+  await expect(dialog.locator("#convert-number")).toHaveValue(/.+/, {
     timeout: 15_000,
   });
-  await dialog.locator('#convert-number').fill(projectNumber);
+  await dialog.locator("#convert-number").fill(projectNumber);
   if (workTemplateName) {
-    await selectFromSearchable(page, dialog.locator('#work-template-project'), workTemplateName);
+    await selectFromSearchable(
+      page,
+      dialog.locator("#work-template-project"),
+      workTemplateName,
+    );
   }
-  await dialog.getByRole('button', { name: 'In Projekt umwandeln' }).click();
+  await dialog.getByRole("button", { name: "In Projekt umwandeln" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(visibleText(page, 'Diese Anfrage wurde umgewandelt')).toBeVisible({
+  await expect(
+    visibleText(page, "Diese Anfrage wurde umgewandelt"),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function setRequestStatusFromDetail(
   page: Page,
-  action: 'In Klärung setzen' | 'Wieder öffnen'
+  action: "In Klärung setzen" | "Wieder öffnen",
 ): Promise<void> {
-  await page.getByRole('button', { name: action, exact: true }).click();
-  const expectedAction = page.getByRole('button', {
-    name: action === 'In Klärung setzen' ? 'Zurück auf Offen' : 'In Klärung setzen',
+  await page.getByRole("button", { name: action, exact: true }).click();
+  const expectedAction = page.getByRole("button", {
+    name:
+      action === "In Klärung setzen" ? "Zurück auf Offen" : "In Klärung setzen",
     exact: true,
   });
   await expect(expectedAction).toBeVisible({ timeout: 15_000 });
@@ -1378,7 +1675,10 @@ export async function setRequestStatusFromDetail(
   await expect(expectedAction).toBeVisible({ timeout: 15_000 });
 }
 
-export async function closeRequestViaDialog(page: Page, reasonLabel: string): Promise<void> {
+export async function closeRequestViaDialog(
+  page: Page,
+  reasonLabel: string,
+): Promise<void> {
   const detailUrl = page.url();
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (page.url() !== detailUrl) await page.goto(detailUrl);
@@ -1387,24 +1687,29 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;
-      throw new Error('closeRequestViaDialog: detail route refreshed away');
+      throw new Error("closeRequestViaDialog: detail route refreshed away");
     }
 
-    await page.getByRole('button', { name: 'Schließen', exact: true }).click();
+    await page.getByRole("button", { name: "Schließen", exact: true }).click();
     await expect(
-      page.getByRole('heading', { name: 'Anfrage ohne Auftrag schließen' })
+      page.getByRole("heading", { name: "Anfrage ohne Auftrag schließen" }),
     ).toBeVisible();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole("dialog");
     try {
-      await dialog.locator('#close-reason').click({ timeout: 5_000 });
-      await page.getByRole('option', { name: reasonLabel, exact: true }).click({ timeout: 5_000 });
-      await dialog.getByRole('button', { name: 'Anfrage schließen' }).click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
+      await dialog.locator("#close-reason").click({ timeout: 5_000 });
+      await page
+        .getByRole("option", { name: reasonLabel, exact: true })
+        .click({ timeout: 5_000 });
+      await dialog
+        .getByRole("button", { name: "Anfrage schließen" })
+        .click({ timeout: 5_000 });
+      await expect(page.getByRole("dialog")).toHaveCount(0, {
         timeout: 15_000,
       });
     } catch (error) {
       const dialogWasInterrupted =
-        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+        page.url() !== detailUrl ||
+        !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;
     }
@@ -1412,26 +1717,36 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
     // Reload from the server so success cannot be confused with a client-side
     // modal close that raced the Realtime refresh.
     await page.goto(detailUrl);
-    const persistedClosedReason = await expect(visibleText(page, 'Ohne Auftrag geschlossen:'))
+    const persistedClosedReason = await expect(
+      visibleText(page, "Ohne Auftrag geschlossen:"),
+    )
       .toBeVisible({ timeout: 5_000 })
       .then(() => true)
       .catch(() => false);
     if (persistedClosedReason) return;
     if (attempt === 1) {
-      throw new Error('closeRequestViaDialog: request remained open after retry');
+      throw new Error(
+        "closeRequestViaDialog: request remained open after retry",
+      );
     }
   }
 }
 
 // P1-03: personnel identity and date-effective employment conditions.
 
-export async function openMemberDetailFromList(page: Page, name: string): Promise<void> {
-  await page.goto('/mitarbeiter');
-  const desktopRow = page.locator('tbody tr:visible').filter({ hasText: name }).first();
+export async function openMemberDetailFromList(
+  page: Page,
+  name: string,
+): Promise<void> {
+  await page.goto("/mitarbeiter");
+  const desktopRow = page
+    .locator("tbody tr:visible")
+    .filter({ hasText: name })
+    .first();
   await expect(desktopRow).toBeVisible({ timeout: 20_000 });
   await desktopRow.click();
   await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
-  await expect(visibleText(page, 'Personalien')).toBeVisible({
+  await expect(visibleText(page, "Personalien")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -1441,7 +1756,7 @@ export async function openMemberDetailFromList(page: Page, name: string): Promis
 export async function editPersonnelTextField(
   page: Page,
   fieldLabel: string,
-  value: string
+  value: string,
 ): Promise<void> {
   await editMetadataTextField(page, fieldLabel, value);
 }
@@ -1449,15 +1764,17 @@ export async function editPersonnelTextField(
 export async function editMetadataTextField(
   page: Page,
   fieldLabel: string,
-  value: string
+  value: string,
 ): Promise<void> {
-  await page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true }).click();
+  await page
+    .getByRole("button", { name: `${fieldLabel} bearbeiten`, exact: true })
+    .click();
   // The field editor autofocuses its input; targeting :focus avoids matching
   // unrelated inputs elsewhere on the detail page (e.g. table search boxes).
-  const input = page.locator('input:focus, textarea:focus');
+  const input = page.locator("input:focus, textarea:focus");
   await expect(input).toBeVisible();
   await input.fill(value);
-  await page.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await page.getByRole("button", { name: "Speichern", exact: true }).click();
   await expectVisibleAfterSave(page, value);
 }
 
@@ -1468,14 +1785,14 @@ export async function typeIntoDatePicker(
   scope: Locator,
   groupName: string,
   digits: string,
-  delayMs = 50
+  delayMs = 50,
 ): Promise<void> {
-  const group = scope.getByRole('group', { name: groupName });
+  const group = scope.getByRole("group", { name: groupName });
   await group.click();
   // The click may land on any segment; ArrowLeft twice normalizes to the day
   // segment because the control has exactly day, month, and year segments.
-  await group.press('ArrowLeft');
-  await group.press('ArrowLeft');
+  await group.press("ArrowLeft");
+  await group.press("ArrowLeft");
   await group.pressSequentially(digits, { delay: delayMs });
 }
 
@@ -1487,13 +1804,13 @@ export async function typeIntoDatePicker(
 export async function typeIntoDatePickerById(
   scope: Locator,
   id: string,
-  isoDate: string // 'YYYY-MM-DD'
+  isoDate: string, // 'YYYY-MM-DD'
 ): Promise<void> {
   const digits = `${isoDate.slice(8, 10)}${isoDate.slice(5, 7)}${isoDate.slice(0, 4)}`;
   const group = scope.locator(`#${id}`);
   await group.click();
-  await group.press('ArrowLeft');
-  await group.press('ArrowLeft');
+  await group.press("ArrowLeft");
+  await group.press("ArrowLeft");
   await group.pressSequentially(digits, { delay: 50 });
 }
 
@@ -1502,12 +1819,16 @@ export async function typeIntoDatePickerById(
 export async function typeIntoDateTimeField(
   scope: Locator,
   idPrefix: string,
-  localValue: string // 'YYYY-MM-DDTHH:mm'
+  localValue: string, // 'YYYY-MM-DDTHH:mm'
 ): Promise<void> {
-  const [datePart, timePart] = localValue.split('T');
+  const [datePart, timePart] = localValue.split("T");
   await typeIntoDatePickerById(scope, `${idPrefix}-date`, datePart);
   if (timePart) {
-    await typeIntoTimeInput(scope, `${idPrefix}-time`, timePart.replace(':', ''));
+    await typeIntoTimeInput(
+      scope,
+      `${idPrefix}-time`,
+      timePart.replace(":", ""),
+    );
   }
 }
 
@@ -1522,15 +1843,22 @@ export async function selectFromSearchable(
   page: Page,
   trigger: Locator,
   optionText: string,
-  options?: { searchFirst?: boolean }
+  options?: { searchFirst?: boolean },
 ): Promise<void> {
   await trigger.click();
-  const listbox = page.getByRole('listbox');
+  const listbox = page.getByRole("listbox");
   await expect(listbox).toBeVisible();
   if (options?.searchFirst ?? true) {
-    await listbox.locator('..').getByRole('textbox').fill(optionText);
+    await listbox.locator("..").getByRole("textbox").fill(optionText);
   }
-  await listbox.getByRole('button').filter({ hasText: optionText }).first().click();
+  const optionName = new RegExp(
+    `(?:^|\\s|·)${escapeRegExp(optionText)}(?:$|\\s)`,
+  );
+  const optionButton = listbox
+    .getByRole("button", { name: optionName })
+    .first();
+  await expect(optionButton).toBeVisible({ timeout: 15_000 });
+  await optionButton.click();
   // Single select closes its popover on selection.
   await expect(listbox).toBeHidden();
 }
@@ -1538,15 +1866,19 @@ export async function selectFromSearchable(
 export async function toggleInSearchableMulti(
   page: Page,
   trigger: Locator,
-  optionTexts: string[]
+  optionTexts: string[],
 ): Promise<void> {
   await trigger.click();
-  const listbox = page.getByRole('listbox');
+  const listbox = page.getByRole("listbox");
   await expect(listbox).toBeVisible();
-  const search = listbox.locator('..').getByRole('textbox');
+  const search = listbox.locator("..").getByRole("textbox");
   for (const optionText of optionTexts) {
     await search.fill(optionText);
-    await listbox.getByRole('button').filter({ hasText: optionText }).first().click();
+    await listbox
+      .getByRole("button")
+      .filter({ hasText: optionText })
+      .first()
+      .click();
   }
   // The multi popover stays open; close by toggling the trigger. Never press
   // Escape here — inside a dialog it closes the whole dialog (known gotcha).
@@ -1559,39 +1891,41 @@ export async function toggleInSearchableMulti(
 export async function previewResponsibilityChange(
   page: Page,
   options: {
-    responsibility: 'time_approval' | 'leave_approval';
+    responsibility: "time_approval" | "leave_approval";
     selectedNames?: string[];
     gainedNames?: string[];
     lostNames?: string[];
-  }
+  },
 ): Promise<void> {
-  await page.goto('/einstellungen/mitarbeiter');
+  await page.goto("/einstellungen/mitarbeiter");
   const card = page.getByTestId(`responsibility-${options.responsibility}`);
-  await card.getByRole('button', { name: 'Verantwortung ändern' }).click();
-  const dialog = page.getByRole('dialog');
+  await card.getByRole("button", { name: "Verantwortung ändern" }).click();
+  const dialog = page.getByRole("dialog");
 
   if (options.selectedNames) {
     await dialog.locator(`#${options.responsibility}-mode`).click();
-    await page.getByRole('option', { name: 'Bestimmte Personen' }).click();
-    await expect(dialog.getByRole('checkbox').first()).toBeVisible({
+    await page.getByRole("option", { name: "Bestimmte Personen" }).click();
+    await expect(dialog.getByRole("checkbox").first()).toBeVisible({
       timeout: 15_000,
     });
-    for (const checkbox of await dialog.getByRole('checkbox').all()) {
+    for (const checkbox of await dialog.getByRole("checkbox").all()) {
       if (await checkbox.isChecked()) await checkbox.uncheck();
     }
     for (const name of options.selectedNames) {
-      await dialog.getByRole('checkbox', { name: new RegExp(name) }).check();
+      await dialog.getByRole("checkbox", { name: new RegExp(name) }).check();
     }
   } else {
     await dialog.locator(`#${options.responsibility}-mode`).click();
-    await page.getByRole('option', { name: 'Standardrollen: Admin und Büro' }).click();
+    await page
+      .getByRole("option", { name: "Standardrollen: Admin und Büro" })
+      .click();
   }
 
-  await dialog.getByRole('button', { name: 'Wirkung prüfen' }).click();
-  const preview = page.getByTestId('effective-access-preview');
+  await dialog.getByRole("button", { name: "Wirkung prüfen" }).click();
+  const preview = page.getByTestId("effective-access-preview");
   await expect(preview).toBeVisible({ timeout: 15_000 });
-  const gainedSection = preview.getByTestId('preview-gained');
-  const lostSection = preview.getByTestId('preview-lost');
+  const gainedSection = preview.getByTestId("preview-gained");
+  const lostSection = preview.getByTestId("preview-lost");
   for (const name of options.gainedNames ?? []) {
     await expect(gainedSection.getByText(name, { exact: false })).toBeVisible();
   }
@@ -1601,74 +1935,83 @@ export async function previewResponsibilityChange(
 }
 
 export async function confirmResponsibilityPreview(page: Page): Promise<void> {
-  await page.getByRole('dialog').getByRole('button', { name: 'Änderung bestätigen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Änderung bestätigen" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function createResponsibilityDelegationViaSettings(
   page: Page,
   options: {
-    responsibility: 'time_approval' | 'leave_approval';
+    responsibility: "time_approval" | "leave_approval";
     delegatorName: string;
     substituteName: string;
     validFromDigits: string;
     validUntilDigits: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/einstellungen/mitarbeiter');
+  await page.goto("/einstellungen/mitarbeiter");
   const card = page.getByTestId(`responsibility-${options.responsibility}`);
-  await card.getByRole('button', { name: 'Vertretung eintragen' }).click();
-  const dialog = page.getByRole('dialog');
+  await card.getByRole("button", { name: "Vertretung eintragen" }).click();
+  const dialog = page.getByRole("dialog");
 
-  const delegatorTrigger = dialog.locator(`#${options.responsibility}-delegator`);
+  const delegatorTrigger = dialog.locator(
+    `#${options.responsibility}-delegator`,
+  );
   await expect(delegatorTrigger).toBeVisible({ timeout: 15_000 });
-  if (!(await delegatorTrigger.textContent())?.includes(options.delegatorName)) {
+  if (
+    !(await delegatorTrigger.textContent())?.includes(options.delegatorName)
+  ) {
     await selectFromSearchable(page, delegatorTrigger, options.delegatorName);
   }
   await selectFromSearchable(
     page,
     dialog.locator(`#${options.responsibility}-substitute`),
-    options.substituteName
+    options.substituteName,
   );
-  await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits);
-  await typeIntoDatePicker(dialog, 'Gültig bis', options.validUntilDigits);
-  await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await typeIntoDatePicker(dialog, "Gültig ab", options.validFromDigits);
+  await typeIntoDatePicker(dialog, "Gültig bis", options.validUntilDigits);
+  await dialog.getByRole("button", { name: "Vertretung speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   const activeDelegationRow = (scope: Locator) =>
     scope
-      .locator('li')
+      .locator("li")
       .filter({ hasText: options.substituteName })
-      .filter({ has: page.getByRole('button', { name: 'Heute beenden' }) })
+      .filter({ has: page.getByRole("button", { name: "Heute beenden" }) })
       .first();
   try {
     await expect(activeDelegationRow(card)).toBeVisible({ timeout: 15_000 });
   } catch {
     await page.reload();
     await expect(
-      activeDelegationRow(page.getByTestId(`responsibility-${options.responsibility}`))
+      activeDelegationRow(
+        page.getByTestId(`responsibility-${options.responsibility}`),
+      ),
     ).toBeVisible({ timeout: 15_000 });
   }
 }
 
 export async function endResponsibilityDelegationViaSettings(
   page: Page,
-  responsibility: 'time_approval' | 'leave_approval',
-  substituteName: string
+  responsibility: "time_approval" | "leave_approval",
+  substituteName: string,
 ): Promise<void> {
-  await page.goto('/einstellungen/mitarbeiter');
+  await page.goto("/einstellungen/mitarbeiter");
   const card = page.getByTestId(`responsibility-${responsibility}`);
   const row = card
-    .locator('li')
+    .locator("li")
     .filter({ hasText: substituteName })
-    .filter({ has: page.getByRole('button', { name: 'Heute beenden' }) })
+    .filter({ has: page.getByRole("button", { name: "Heute beenden" }) })
     .first();
-  await row.getByRole('button', { name: 'Heute beenden' }).click();
+  await row.getByRole("button", { name: "Heute beenden" }).click();
   const endedRow = card
-    .locator('li')
+    .locator("li")
     .filter({ hasText: substituteName })
-    .filter({ has: page.getByText('Beendet', { exact: true }) })
+    .filter({ has: page.getByText("Beendet", { exact: true }) })
     .first();
-  await expect(endedRow.getByText('Beendet', { exact: true })).toBeVisible({
+  await expect(endedRow.getByText("Beendet", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -1676,18 +2019,18 @@ export async function endResponsibilityDelegationViaSettings(
 export async function typeIntoTimeInput(
   dialog: Locator,
   id: string,
-  digits: string
+  digits: string,
 ): Promise<void> {
   if (!/^\d{4}$/.test(digits)) {
-    throw new Error('typeIntoTimeInput requires exactly four HHMM digits');
+    throw new Error("typeIntoTimeInput requires exactly four HHMM digits");
   }
   const group = dialog.locator(`#${id}`);
   await group.focus();
-  await group.press('ArrowLeft');
-  await group.press('Delete');
+  await group.press("ArrowLeft");
+  await group.press("Delete");
   await group.pressSequentially(digits.slice(0, 2), { delay: 50 });
-  await group.press('ArrowRight');
-  await group.press('Delete');
+  await group.press("ArrowRight");
+  await group.press("Delete");
   await group.pressSequentially(digits.slice(2), { delay: 50 });
 }
 
@@ -1698,50 +2041,66 @@ export async function createOwnManualTimeEntry(
     dateDigits: string;
     clockInDigits: string;
     clockOutDigits: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/zeiterfassung');
-  await page.getByRole('button', { name: 'Manuelle Eintragung' }).click();
-  const dialog = page.getByRole('dialog');
+  await page.goto("/zeiterfassung");
+  await page.getByRole("button", { name: "Manuelle Eintragung" }).click();
+  const dialog = page.getByRole("dialog");
   if (options.memberName) {
-    await dialog.locator('#manual-entry-member').click();
-    await dialog.getByRole('button', { name: new RegExp(options.memberName) }).click();
+    await dialog.locator("#manual-entry-member").click();
+    await dialog
+      .getByRole("button", { name: new RegExp(options.memberName) })
+      .click();
   }
-  await typeIntoDatePicker(dialog, 'Datum', options.dateDigits);
-  await typeIntoTimeInput(dialog, 'clockInTime', options.clockInDigits);
-  await typeIntoTimeInput(dialog, 'clockOutTime', options.clockOutDigits);
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+  await typeIntoDatePicker(dialog, "Datum", options.dateDigits);
+  await typeIntoTimeInput(dialog, "clockInTime", options.clockInDigits);
+  await typeIntoTimeInput(dialog, "clockOutTime", options.clockOutDigits);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   // Close-then-banner: the dialog closes immediately and the global banner
   // confirms the save (M5).
   await expect(
-    page.getByText(/Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/)
+    page.getByText(
+      /Antrag wurde zur Genehmigung eingereicht\.|Eintrag erfolgreich erstellt!/,
+    ),
   ).toBeVisible({ timeout: 15_000 });
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function openTimeApprovals(page: Page): Promise<void> {
-  await page.goto('/zeiterfassung?tab=approvals');
-  await expect(page.getByRole('tab', { name: /Anträge/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-    { timeout: 15_000 }
+  await page.goto("/zeiterfassung?tab=approvals");
+  await expect(page.getByRole("tab", { name: /Anträge/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+    { timeout: 15_000 },
   );
-  await expect(page.getByTestId('pending-approvals-panel')).toHaveAttribute('data-loaded', 'true', {
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId("pending-approvals-panel")).toHaveAttribute(
+    "data-loaded",
+    "true",
+    {
+      timeout: 30_000,
+    },
+  );
 }
 
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {
-  return page.locator(`[data-testid^="pending-session-"][data-user-id="${userId}"]`);
+  return page.locator(
+    `[data-testid^="pending-session-"][data-user-id="${userId}"]`,
+  );
 }
 
-export async function expectPendingTimeApprovalVisible(page: Page, userId: string): Promise<void> {
+export async function expectPendingTimeApprovalVisible(
+  page: Page,
+  userId: string,
+): Promise<void> {
   await expect(pendingTimeApprovalCard(page, userId)).toBeVisible({
     timeout: 15_000,
   });
 }
 
-export async function expectPendingTimeApprovalHidden(page: Page, userId: string): Promise<void> {
+export async function expectPendingTimeApprovalHidden(
+  page: Page,
+  userId: string,
+): Promise<void> {
   await expect(pendingTimeApprovalCard(page, userId)).toHaveCount(0, {
     timeout: 15_000,
   });
@@ -1750,43 +2109,45 @@ export async function expectPendingTimeApprovalHidden(page: Page, userId: string
 export async function approvePendingTimeEntry(
   page: Page,
   userId: string,
-  visibleText?: string | RegExp
+  visibleText?: string | RegExp,
 ): Promise<void> {
   const cards = pendingTimeApprovalCard(page, userId);
   const card = visibleText ? cards.filter({ hasText: visibleText }) : cards;
   await expect(card).toHaveCount(1, { timeout: 15_000 });
-  await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
+  await card.getByTitle("Genehmigen - Eintrag bleibt erhalten").click();
   await expect(card).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function expectExpiredResponsibilityDeniedAtAction(
   page: Page,
-  userId: string
+  userId: string,
 ): Promise<void> {
   const card = pendingTimeApprovalCard(page, userId);
-  await card.getByTitle('Genehmigen - Eintrag bleibt erhalten').click();
+  await card.getByTitle("Genehmigen - Eintrag bleibt erhalten").click();
   await expect(
     page.getByText(
-      'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.'
-    )
+      "Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.",
+    ),
   ).toBeVisible({ timeout: 15_000 });
   await expect(card).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function expectMemberRemovalBlockedByResponsibility(
   page: Page,
-  memberName: string
+  memberName: string,
 ): Promise<void> {
   await openMemberDetailFromList(page, memberName);
-  await page.getByRole('button', { name: 'Aktionen', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Entfernen' }).click();
-  const dialog = page.getByRole('alertdialog');
+  await page.getByRole("button", { name: "Aktionen", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Entfernen" }).click();
+  const dialog = page.getByRole("alertdialog");
   await expect(
     dialog.getByText(
-      'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.'
-    )
+      "Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.",
+    ),
   ).toBeVisible({ timeout: 15_000 });
-  await expect(dialog.getByRole('button', { name: 'Zuerst neu zuweisen' })).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Zuerst neu zuweisen" }),
+  ).toBeDisabled();
 }
 
 export async function addConditionViaDialog(
@@ -1798,7 +2159,7 @@ export async function addConditionViaDialog(
     weeklyHours?: string;
     vacationDays?: string;
     note?: string;
-  }
+  },
 ): Promise<void> {
   const detailUrl = page.url();
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1808,47 +2169,57 @@ export async function addConditionViaDialog(
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;
-      throw new Error('addConditionViaDialog: detail route refreshed away');
+      throw new Error("addConditionViaDialog: detail route refreshed away");
     }
-    await page.getByRole('button', { name: 'Kondition hinzufügen' }).click();
-    await expect(page.getByRole('heading', { name: 'Kondition hinzufügen' })).toBeVisible();
+    await page.getByRole("button", { name: "Kondition hinzufügen" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Kondition hinzufügen" }),
+    ).toBeVisible();
 
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole("dialog");
     try {
       if (options.validFromDigits) {
         // Keep controlled date entry below the shared 150 ms Realtime debounce.
-        await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits, 10);
+        await typeIntoDatePicker(
+          dialog,
+          "Gültig ab",
+          options.validFromDigits,
+          10,
+        );
       }
 
-      await dialog.locator('#condition-type').click({ timeout: 5_000 });
+      await dialog.locator("#condition-type").click({ timeout: 5_000 });
       await page
-        .getByRole('option', { name: options.employmentTypeLabel, exact: true })
+        .getByRole("option", { name: options.employmentTypeLabel, exact: true })
         .click({ timeout: 5_000 });
 
       if (options.weeklyHours !== undefined) {
         await dialog
-          .locator('#condition-weekly-hours')
+          .locator("#condition-weekly-hours")
           .fill(options.weeklyHours, { timeout: 5_000 });
       }
       if (options.vacationDays !== undefined) {
         await dialog
-          .locator('#condition-vacation-days')
+          .locator("#condition-vacation-days")
           .fill(options.vacationDays, { timeout: 5_000 });
       }
       if (options.note !== undefined) {
-        await dialog.locator('#condition-note').fill(options.note, { timeout: 5_000 });
+        await dialog
+          .locator("#condition-note")
+          .fill(options.note, { timeout: 5_000 });
       }
 
       await dialog
-        .getByRole('button', { name: 'Speichern', exact: true })
+        .getByRole("button", { name: "Speichern", exact: true })
         .click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
+      await expect(page.getByRole("dialog")).toHaveCount(0, {
         timeout: 15_000,
       });
       return;
     } catch (error) {
       const dialogWasInterrupted =
-        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+        page.url() !== detailUrl ||
+        !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;
     }
@@ -1858,23 +2229,28 @@ export async function addConditionViaDialog(
 export async function editConditionWeeklyHours(
   page: Page,
   validFromLabel: string,
-  weeklyHours: string
+  weeklyHours: string,
 ): Promise<void> {
   const row = page
-    .locator('li')
+    .locator("li")
     .filter({ hasText: `Gültig ab ${validFromLabel}` })
     .filter({ visible: true })
     .first();
   await row
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Aktionen für Kondition vom ${validFromLabel}`,
     })
     .click();
-  await page.getByRole('menuitem', { name: 'Bearbeiten' }).click();
-  await expect(page.getByRole('heading', { name: 'Kondition bearbeiten' })).toBeVisible();
-  await page.locator('#condition-weekly-hours').fill(weeklyHours);
-  await page.getByRole('dialog').getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page.getByRole("menuitem", { name: "Bearbeiten" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Kondition bearbeiten" }),
+  ).toBeVisible();
+  await page.locator("#condition-weekly-hours").fill(weeklyHours);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Speichern", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function createPersonnelRecordViaDialog(
@@ -1884,31 +2260,35 @@ export async function createPersonnelRecordViaDialog(
     lastName: string;
     entryDateDigits?: string;
     employeeNumber?: string;
-  }
+  },
 ): Promise<string> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('button', { name: 'Personalakte anlegen' }).click();
-  await expect(page.getByRole('heading', { name: 'Personalakte anlegen' })).toBeVisible();
+  await page.goto("/mitarbeiter");
+  await page.getByRole("button", { name: "Personalakte anlegen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Personalakte anlegen" }),
+  ).toBeVisible();
 
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   if (options.firstName) {
-    await page.locator('#personnel-first-name').fill(options.firstName);
+    await page.locator("#personnel-first-name").fill(options.firstName);
   }
-  await page.locator('#personnel-last-name').fill(options.lastName);
+  await page.locator("#personnel-last-name").fill(options.lastName);
   if (options.employeeNumber !== undefined) {
-    await page.locator('#personnel-number').fill(options.employeeNumber);
+    await page.locator("#personnel-number").fill(options.employeeNumber);
   } else {
     // The number suggestion arrives asynchronously; wait so the submit cannot
     // race it (mirrors the request/job dialogs).
-    await expect(page.locator('#personnel-number')).toHaveValue(/.+/, {
+    await expect(page.locator("#personnel-number")).toHaveValue(/.+/, {
       timeout: 15_000,
     });
   }
   if (options.entryDateDigits) {
-    await typeIntoDatePicker(dialog, 'Eintrittsdatum', options.entryDateDigits);
+    await typeIntoDatePicker(dialog, "Eintrittsdatum", options.entryDateDigits);
   }
 
-  await dialog.getByRole('button', { name: 'Personalakte anlegen', exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Personalakte anlegen", exact: true })
+    .click();
   const reachedDetail = await page
     .waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 })
     .then(() => true)
@@ -1916,8 +2296,10 @@ export async function createPersonnelRecordViaDialog(
   if (!reachedDetail) {
     // Realtime can refresh the list after the insert and win the race against
     // the action's detail redirect. Follow the persisted row instead.
-    const recordName = [options.firstName, options.lastName].filter(Boolean).join(' ');
-    const recordLink = page.getByRole('link', {
+    const recordName = [options.firstName, options.lastName]
+      .filter(Boolean)
+      .join(" ");
+    const recordLink = page.getByRole("link", {
       name: recordName,
       exact: true,
     });
@@ -1928,7 +2310,9 @@ export async function createPersonnelRecordViaDialog(
 
   const match = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
   if (!match) {
-    throw new Error('createPersonnelRecordViaDialog: could not read the record id');
+    throw new Error(
+      "createPersonnelRecordViaDialog: could not read the record id",
+    );
   }
   return match[1];
 }
@@ -1936,21 +2320,23 @@ export async function createPersonnelRecordViaDialog(
 export async function sendInviteFromPersonnelRecord(
   page: Page,
   email: string,
-  roleLabel: 'Büro' | 'Handwerker/in'
+  roleLabel: "Büro" | "Handwerker/in",
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Zugang einladen' }).click();
-  await expect(page.getByRole('heading', { name: /Zugang für .* einladen/ })).toBeVisible();
-  await page.locator('#personnel-invite-email').fill(email);
-  await page.locator('#personnel-invite-role').click();
-  await page.getByRole('option', { name: roleLabel, exact: true }).click();
-  await page.getByRole('button', { name: 'Einladung senden' }).click();
+  await page.getByRole("button", { name: "Zugang einladen" }).click();
+  await expect(
+    page.getByRole("heading", { name: /Zugang für .* einladen/ }),
+  ).toBeVisible();
+  await page.locator("#personnel-invite-email").fill(email);
+  await page.locator("#personnel-invite-role").click();
+  await page.getByRole("option", { name: roleLabel, exact: true }).click();
+  await page.getByRole("button", { name: "Einladung senden" }).click();
   // A Realtime refresh can replace the dialog before its short success flash
   // is observed. Assert the persisted personnel state and audit entry instead.
-  await expect(page.getByRole('dialog')).toHaveCount(0, {
+  await expect(page.getByRole("dialog")).toHaveCount(0, {
     timeout: 30_000,
   });
-  await expect(visibleText(page, 'Eingeladen')).toBeVisible();
-  await expect(visibleText(page, 'Einladung versendet')).toBeVisible();
+  await expect(visibleText(page, "Eingeladen")).toBeVisible();
+  await expect(visibleText(page, "Einladung versendet")).toBeVisible();
 }
 
 // P1-04: date-effective work schedules and holiday/closure context.
@@ -1964,7 +2350,7 @@ export async function addWorkScheduleViaDialog(
     // omitted = keep the dialog's full-time default (Mo–Fr 8, weekend 0).
     dayHours?: string[];
     note?: string;
-  }
+  },
 ): Promise<void> {
   const detailUrl = page.url();
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1974,16 +2360,23 @@ export async function addWorkScheduleViaDialog(
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;
-      throw new Error('addWorkScheduleViaDialog: detail route refreshed away');
+      throw new Error("addWorkScheduleViaDialog: detail route refreshed away");
     }
-    await page.getByRole('button', { name: 'Wochenplan hinzufügen' }).click();
-    await expect(page.getByRole('heading', { name: 'Wochenplan hinzufügen' })).toBeVisible();
+    await page.getByRole("button", { name: "Wochenplan hinzufügen" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Wochenplan hinzufügen" }),
+    ).toBeVisible();
 
-    const dialog = page.getByRole('dialog');
+    const dialog = page.getByRole("dialog");
     try {
       if (options.validFromDigits) {
         // Keep this controlled input below the shared 150 ms Realtime debounce.
-        await typeIntoDatePicker(dialog, 'Gültig ab', options.validFromDigits, 10);
+        await typeIntoDatePicker(
+          dialog,
+          "Gültig ab",
+          options.validFromDigits,
+          10,
+        );
       }
       if (options.dayHours) {
         for (let index = 0; index < options.dayHours.length; index++) {
@@ -1993,112 +2386,172 @@ export async function addWorkScheduleViaDialog(
         }
       }
       if (options.note !== undefined) {
-        await dialog.locator('#schedule-note').fill(options.note, { timeout: 5_000 });
+        await dialog
+          .locator("#schedule-note")
+          .fill(options.note, { timeout: 5_000 });
       }
       await dialog
-        .getByRole('button', { name: 'Speichern', exact: true })
+        .getByRole("button", { name: "Speichern", exact: true })
         .click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
+      await expect(page.getByRole("dialog")).toHaveCount(0, {
         timeout: 15_000,
       });
       return;
     } catch (error) {
       const dialogWasInterrupted =
-        page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
+        page.url() !== detailUrl ||
+        !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;
     }
   }
 }
 
-export async function setHolidayRegionViaSettings(page: Page, regionLabel: string): Promise<void> {
-  await page.goto('/einstellungen/zeiterfassung');
-  await selectFromSearchable(page, page.locator('#holiday-region'), regionLabel);
-  await page.getByRole('button', { name: 'Feiertagskalender speichern' }).click();
-  await expect(page.getByText('Der Feiertagskalender wurde gespeichert.')).toBeVisible({
+export async function setHolidayRegionViaSettings(
+  page: Page,
+  regionLabel: string,
+): Promise<void> {
+  await page.goto("/einstellungen/zeiterfassung");
+  await selectFromSearchable(
+    page,
+    page.locator("#holiday-region"),
+    regionLabel,
+  );
+  await page
+    .getByRole("button", { name: "Feiertagskalender speichern" })
+    .click();
+  await expect(
+    page.getByText("Der Feiertagskalender wurde gespeichert."),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function addClosureDayViaSettings(
   page: Page,
-  options: { dateDigits: string; label?: string }
+  options: { dateDigits: string; label?: string },
 ): Promise<void> {
-  await page.goto('/einstellungen/zeiterfassung');
-  await typeIntoDatePicker(page.locator('body'), 'Datum der Betriebsruhe', options.dateDigits);
+  await page.goto("/einstellungen/zeiterfassung");
+  await typeIntoDatePicker(
+    page.locator("body"),
+    "Datum der Betriebsruhe",
+    options.dateDigits,
+  );
   if (options.label !== undefined) {
-    await page.locator('#closure-label').fill(options.label);
+    await page.locator("#closure-label").fill(options.label);
   }
-  await page.getByRole('button', { name: 'Eintragen' }).click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde eingetragen.')).toBeVisible({
+  await page.getByRole("button", { name: "Eintragen" }).click();
+  await expect(
+    page.getByText("Der Betriebsruhe-Tag wurde eingetragen."),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 // dateLabel: dd.mm.yyyy — the aria-label also contains the weekday, so match
 // via regular expression around the date.
-export async function removeClosureDayViaSettings(page: Page, dateLabel: string): Promise<void> {
-  await page.goto('/einstellungen/zeiterfassung');
-  const escaped = dateLabel.replace(/\./g, '\\.');
+export async function removeClosureDayViaSettings(
+  page: Page,
+  dateLabel: string,
+): Promise<void> {
+  await page.goto("/einstellungen/zeiterfassung");
+  const escaped = dateLabel.replace(/\./g, "\\.");
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: new RegExp(`Betriebsruhe am .*${escaped} entfernen`),
     })
     .click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde entfernt.')).toBeVisible({
+  await expect(
+    page.getByText("Der Betriebsruhe-Tag wurde entfernt."),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
-export async function removeMemberFromDetail(page: Page, name: string): Promise<void> {
+export async function removeMemberFromDetail(
+  page: Page,
+  name: string,
+): Promise<void> {
   await openMemberDetailFromList(page, name);
-  await page.getByRole('button', { name: 'Aktionen' }).click();
-  await page.getByRole('menuitem', { name: 'Entfernen' }).click();
-  await expect(page.getByRole('heading', { name: 'Mitglied entfernen?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Entfernen', exact: true }).click();
+  await page.getByRole("button", { name: "Aktionen" }).click();
+  await page.getByRole("menuitem", { name: "Entfernen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Mitglied entfernen?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Entfernen", exact: true }).click();
   await page.waitForURL(/\/mitarbeiter\?removed_member=/, { timeout: 20_000 });
 }
 
-export async function expectRedirectedAway(page: Page, path: string): Promise<void> {
+export async function expectRedirectedAway(
+  page: Page,
+  path: string,
+): Promise<void> {
   await page.goto(path);
-  await expect(page).not.toHaveURL(new RegExp(`${path.replace('/', '\\/')}$`), {
+  await expect(page).not.toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`), {
     timeout: 15_000,
   });
 }
 
 export async function loginViaUi(
   page: Page,
-  credentials: { email: string; password: string }
+  credentials: { email: string; password: string },
 ): Promise<void> {
   let loggedIn = false;
   // Same pre-hydration retry the global setup uses.
   for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
-    await page.goto('/login');
-    await page.waitForLoadState('networkidle');
+    await page.goto("/login");
+    await page.waitForLoadState("networkidle");
     await page.locator('input[autocomplete="email"]').fill(credentials.email);
-    await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
-    await page.getByRole('button', { name: 'Anmelden' }).click();
+    await page
+      .locator('input[autocomplete="current-password"]')
+      .fill(credentials.password);
+    await page.getByRole("button", { name: "Anmelden" }).click();
     loggedIn = await page
-      .waitForURL('**/dashboard**', { timeout: 20_000 })
+      .waitForURL("**/dashboard**", { timeout: 20_000 })
       .then(() => true)
       .catch(() => false);
   }
   if (!loggedIn) {
-    throw new Error(`Login did not reach the dashboard for ${credentials.email}`);
+    throw new Error(
+      `Login did not reach the dashboard for ${credentials.email}`,
+    );
   }
 }
 
 export async function signOutViaUi(page: Page): Promise<void> {
-  await page.goto('/dashboard');
-  const directButton = page.getByRole('button', { name: 'Abmelden' });
+  await page.goto("/dashboard");
+  const directButton = page.getByRole("button", { name: "Abmelden" });
   if (await directButton.isVisible().catch(() => false)) {
     await directButton.click();
   } else {
     // The sign-out control sits in the sidebar profile card menu.
-    await page.locator('[data-sidebar="footer"] button, aside button').last().click();
-    await page.getByRole('menuitem', { name: 'Abmelden' }).click();
+    const accountMenuButton = page
+      .getByRole("button", { name: "Kontomenü öffnen" })
+      .filter({ visible: true })
+      .first();
+    await expect(accountMenuButton).toBeVisible();
+    const menuItem = page
+      .getByRole("menuitem", { name: "Abmelden" })
+      .filter({ visible: true })
+      .first();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await accountMenuButton.click();
+      await expect(menuItem).toBeVisible({ timeout: 2_000 });
+      const reachedLogin = page
+        .waitForURL("**/login", { timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      await menuItem
+        .click({ force: true, timeout: 2_000 })
+        .catch(() => undefined);
+      if (await reachedLogin) return;
+      await page.keyboard.press("Escape");
+    }
+    throw new Error(
+      "Sign-out menu did not navigate to login after three attempts.",
+    );
   }
-  await page.waitForURL('**/login', { timeout: 20_000 });
+  await page.waitForURL("**/login", { timeout: 20_000 });
 }
 
 // ============================================
@@ -2108,8 +2561,8 @@ export async function signOutViaUi(page: Page): Promise<void> {
 // The employee vacation surface lives on the /zeiterfassung overview
 // (dashboard) for every role.
 export async function openOwnVacationSection(page: Page): Promise<void> {
-  await page.goto('/zeiterfassung');
-  await expect(visibleText(page, 'Urlaub & Abwesenheit')).toBeVisible({
+  await page.goto("/zeiterfassung");
+  await expect(visibleText(page, "Urlaub & Abwesenheit")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -2121,116 +2574,127 @@ export async function createOwnVacationRequestViaDialog(
     endDigits: string;
     halfDay?: boolean;
     comment?: string;
-  }
+  },
 ): Promise<void> {
   await openOwnVacationSection(page);
-  await page.getByRole('button', { name: 'Urlaub beantragen' }).click();
-  await expect(page.getByRole('heading', { name: 'Urlaub beantragen' })).toBeVisible();
+  await page.getByRole("button", { name: "Urlaub beantragen" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Urlaub beantragen" }),
+  ).toBeVisible();
 
-  const dialog = page.getByRole('dialog');
-  await typeIntoDatePicker(dialog, 'Von', options.startDigits);
-  await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
+  const dialog = page.getByRole("dialog");
+  await typeIntoDatePicker(dialog, "Von", options.startDigits);
+  await typeIntoDatePicker(dialog, "Bis", options.endDigits);
   if (options.halfDay) {
-    await dialog.locator('#vacation-half-day').click();
+    await dialog.locator("#vacation-half-day").click();
   }
   if (options.comment !== undefined) {
-    await dialog.locator('#vacation-comment').fill(options.comment);
+    await dialog.locator("#vacation-comment").fill(options.comment);
   }
-  await dialog.getByRole('button', { name: 'Antrag einreichen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.getByRole("button", { name: "Antrag einreichen" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Submitting an overlapping range must fail with an understandable message
 // while the dialog stays open (the database exclusion constraint decides).
 export async function expectVacationOverlapRejectedViaDialog(
   page: Page,
-  options: { startDigits: string; endDigits: string }
+  options: { startDigits: string; endDigits: string },
 ): Promise<void> {
   await openOwnVacationSection(page);
-  await page.getByRole('button', { name: 'Urlaub beantragen' }).click();
-  const dialog = page.getByRole('dialog');
-  await typeIntoDatePicker(dialog, 'Von', options.startDigits);
-  await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
-  await dialog.getByRole('button', { name: 'Antrag einreichen' }).click();
+  await page.getByRole("button", { name: "Urlaub beantragen" }).click();
+  const dialog = page.getByRole("dialog");
+  await typeIntoDatePicker(dialog, "Von", options.startDigits);
+  await typeIntoDatePicker(dialog, "Bis", options.endDigits);
+  await dialog.getByRole("button", { name: "Antrag einreichen" }).click();
   await expect(
     dialog.getByText(
-      'Für diesen Zeitraum existiert bereits ein offener oder genehmigter Urlaubsantrag.'
-    )
+      "Für diesen Zeitraum existiert bereits ein offener oder genehmigter Urlaubsantrag.",
+    ),
   ).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole('button', { name: 'Abbrechen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
-export async function withdrawOwnPendingVacationRequest(page: Page): Promise<void> {
+export async function withdrawOwnPendingVacationRequest(
+  page: Page,
+): Promise<void> {
   await openOwnVacationSection(page);
   // Exactly one pending request is expected when this step runs. The button's
   // accessible name carries the request's date range. Success is the button
   // disappearing — a "Zurückgezogen" text alone would be satisfied by an
   // older withdrawn request inherited from an earlier spec before the new
   // withdrawal has actually committed (a race GG-02's full run exposed).
-  const withdrawButton = page.getByRole('button', {
+  const withdrawButton = page.getByRole("button", {
     name: /^Urlaubsantrag vom .* zurückziehen$/,
   });
   await withdrawButton.click();
   await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, 'Zurückgezogen')).toBeVisible({
+  await expect(visibleText(page, "Zurückgezogen")).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function openVacationApprovals(page: Page): Promise<void> {
-  await page.goto('/zeiterfassung?tab=approvals');
-  await expect(page.getByRole('tab', { name: /Anträge/ })).toBeVisible({
+  await page.goto("/zeiterfassung?tab=approvals");
+  await expect(page.getByRole("tab", { name: /Anträge/ })).toBeVisible({
     timeout: 15_000,
   });
 }
 
-export async function approveVacationRequestFor(page: Page, personName: string): Promise<void> {
+export async function approveVacationRequestFor(
+  page: Page,
+  personName: string,
+): Promise<void> {
   await openVacationApprovals(page);
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Urlaubsantrag von ${personName} genehmigen`,
     })
     .click();
   await expect(
-    page.getByRole('button', {
+    page.getByRole("button", {
       name: `Urlaubsantrag von ${personName} genehmigen`,
-    })
+    }),
   ).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function rejectVacationRequestFor(
   page: Page,
   personName: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
   await openVacationApprovals(page);
-  await page.getByRole('button', { name: `Urlaubsantrag von ${personName} ablehnen` }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('heading', { name: 'Urlaubsantrag ablehnen' })).toBeVisible();
-  await dialog.locator('#vacation-decision-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Ablehnen', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await page
+    .getByRole("button", { name: `Urlaubsantrag von ${personName} ablehnen` })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Urlaubsantrag ablehnen" }),
+  ).toBeVisible();
+  await dialog.locator("#vacation-decision-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Ablehnen", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function cancelApprovedVacationFor(
   page: Page,
   personName: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
   await openVacationApprovals(page);
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Genehmigten Urlaub von ${personName} stornieren`,
     })
     .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole('heading', { name: 'Genehmigten Urlaub stornieren' })
+    dialog.getByRole("heading", { name: "Genehmigten Urlaub stornieren" }),
   ).toBeVisible();
-  await dialog.locator('#vacation-decision-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.locator("#vacation-decision-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Stornieren", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 // ============================================
@@ -2238,8 +2702,10 @@ export async function cancelApprovedVacationFor(
 // ============================================
 
 export async function openAufgaben(page: Page): Promise<void> {
-  await page.goto('/aufgaben');
-  await expect(page.locator('[data-testid="aufgaben-content"][data-loaded="true"]')).toBeVisible({
+  await page.goto("/aufgaben");
+  await expect(
+    page.locator('[data-testid="aufgaben-content"][data-loaded="true"]'),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -2248,30 +2714,37 @@ export async function openAufgaben(page: Page): Promise<void> {
 // `Zeitfreigabe von X öffnen`, `Anfrage <Nummer> öffnen`). Counting via the
 // accessible name doubles as the per-viewer deduplication assertion.
 export function attentionTaskLink(page: Page, ariaLabel: string): Locator {
-  return page.getByRole('link', { name: ariaLabel, exact: true });
+  return page.getByRole("link", { name: ariaLabel, exact: true });
 }
 
-export function attentionNotificationRow(page: Page, sourceId: string): Locator {
+export function attentionNotificationRow(
+  page: Page,
+  sourceId: string,
+): Locator {
   return page.locator(`[data-notification-source="${sourceId}"]`);
 }
 
 export async function markAttentionNotificationReadViaButton(
   page: Page,
-  sourceId: string
+  sourceId: string,
 ): Promise<void> {
   const row = attentionNotificationRow(page, sourceId);
   await row
-    .getByRole('button', {
+    .getByRole("button", {
       name: /^Benachrichtigung vom .* als gelesen markieren$/,
     })
     .click();
-  await expect(row).toHaveAttribute('data-unread', 'false', {
+  await expect(row).toHaveAttribute("data-unread", "false", {
     timeout: 15_000,
   });
 }
 
-export async function markAllAttentionNotificationsReadViaButton(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Alle als gelesen markieren' }).click();
+export async function markAllAttentionNotificationsReadViaButton(
+  page: Page,
+): Promise<void> {
+  await page
+    .getByRole("button", { name: "Alle als gelesen markieren" })
+    .click();
   await expect(page.locator('[data-unread="true"]')).toHaveCount(0, {
     timeout: 15_000,
   });
@@ -2280,21 +2753,27 @@ export async function markAllAttentionNotificationsReadViaButton(page: Page): Pr
 // The sidebar badge on the Aufgaben entry (desktop sidebar only; the mobile
 // drawer is unmounted while closed, so this locator never double-matches).
 export function aufgabenSidebarBadge(page: Page): Locator {
-  return page.locator('aside a[href="/aufgaben"] [data-testid="sidebar-badge"]');
+  return page.locator(
+    'aside a[href="/aufgaben"] [data-testid="sidebar-badge"]',
+  );
 }
 
 // Assigns a responsible person on the currently open request detail page via
 // the edit dialog (P1-02 storage, first surfaced as an ownership signal here).
 export async function assignRequestAssigneeViaEditDialog(
   page: Page,
-  assigneeName: string
+  assigneeName: string,
 ): Promise<void> {
-  await page.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  await page.getByRole("button", { name: "Bearbeiten", exact: true }).click();
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await selectFromSearchable(page, dialog.locator('#edit-request-assignee'), assigneeName);
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await selectFromSearchable(
+    page,
+    dialog.locator("#edit-request-assignee"),
+    assigneeName,
+  );
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   await expectVisibleAfterSave(page, assigneeName);
 }
 
@@ -2305,33 +2784,37 @@ export async function cancelApprovedVacationForRangeText(
   page: Page,
   personName: string,
   rangeText: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
   await openVacationApprovals(page);
   await page
     .locator('[data-slot="card"]')
     .filter({ hasText: rangeText })
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Genehmigten Urlaub von ${personName} stornieren`,
     })
     .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole('heading', { name: 'Genehmigten Urlaub stornieren' })
+    dialog.getByRole("heading", { name: "Genehmigten Urlaub stornieren" }),
   ).toBeVisible();
-  await dialog.locator('#vacation-decision-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.locator("#vacation-decision-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Stornieren", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 // The clock-in contradiction rule: on an approved full-day vacation day the
 // FAB flow is denied server-side with an understandable banner.
-export async function expectClockInBlockedByVacation(page: Page): Promise<void> {
-  await page.goto('/dashboard');
+export async function expectClockInBlockedByVacation(
+  page: Page,
+): Promise<void> {
+  await page.goto("/dashboard");
   await page.locator('button[title="Einstempeln"]').click();
-  await expect(page.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
-  await page.locator('button:not([title])', { hasText: 'Einstempeln' }).click();
-  await expect(visibleText(page, 'Heute ist Urlaub genehmigt')).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Einstempeln" }),
+  ).toBeVisible();
+  await page.locator("button:not([title])", { hasText: "Einstempeln" }).click();
+  await expect(visibleText(page, "Heute ist Urlaub genehmigt")).toBeVisible({
     timeout: 15_000,
   });
   // Still clocked out: the FAB keeps offering Einstempeln, never Ausstempeln.
@@ -2343,8 +2826,8 @@ export async function expectClockInBlockedByVacation(page: Page): Promise<void> 
 // transient flash (inherited rows could satisfy texts alone).
 
 export async function openOwnSicknessSection(page: Page): Promise<void> {
-  await page.goto('/zeiterfassung');
-  await expect(visibleText(page, 'Krankmeldung')).toBeVisible({
+  await page.goto("/zeiterfassung");
+  await expect(visibleText(page, "Krankmeldung")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -2358,58 +2841,66 @@ export async function reportOwnSicknessViaDialog(
     startDigits: string;
     endDigits?: string;
     halfDay?: boolean;
-    typeLabel?: 'Krankheit' | 'Kind krank' | 'Sonstige Abwesenheit';
+    typeLabel?: "Krankheit" | "Kind krank" | "Sonstige Abwesenheit";
     expectVacationOverlapHint?: boolean;
-  }
+  },
 ): Promise<void> {
   await openOwnSicknessSection(page);
-  await page.getByRole('button', { name: 'Krank melden' }).click();
-  await expect(page.getByRole('heading', { name: 'Krank melden' })).toBeVisible();
+  await page.getByRole("button", { name: "Krank melden" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Krank melden" }),
+  ).toBeVisible();
 
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   if (options.typeLabel) {
-    await dialog.locator('#sickness-type').click();
-    await page.getByRole('option', { name: options.typeLabel, exact: true }).click();
+    await dialog.locator("#sickness-type").click();
+    await page
+      .getByRole("option", { name: options.typeLabel, exact: true })
+      .click();
   }
-  await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
+  await typeIntoDatePicker(dialog, "Ab", options.startDigits);
   if (options.endDigits !== undefined) {
-    await dialog.locator('#sickness-end-known').click();
-    await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
+    await dialog.locator("#sickness-end-known").click();
+    await typeIntoDatePicker(dialog, "Bis", options.endDigits);
     if (options.halfDay) {
-      await dialog.locator('#sickness-half-day').click();
+      await dialog.locator("#sickness-half-day").click();
     }
   }
-  await dialog.getByRole('button', { name: 'Krank melden' }).click();
+  await dialog.getByRole("button", { name: "Krank melden" }).click();
   if (options.expectVacationOverlapHint) {
     // The saved report shows the overlap hint until explicitly acknowledged.
-    await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
+    await expect(
+      dialog.getByText("überschneidet sich mit genehmigtem Urlaub"),
+    ).toBeVisible({
       timeout: 15_000,
     });
-    await dialog.getByRole('button', { name: 'Verstanden' }).click();
+    await dialog.getByRole("button", { name: "Verstanden" }).click();
   }
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Overlapping own active sickness is impossible (gist exclusion constraint);
 // the dialog stays open with an understandable error.
 export async function expectSicknessOverlapRejectedViaDialog(
   page: Page,
-  options: { startDigits: string; endDigits?: string }
+  options: { startDigits: string; endDigits?: string },
 ): Promise<void> {
   await openOwnSicknessSection(page);
-  await page.getByRole('button', { name: 'Krank melden' }).click();
-  const dialog = page.getByRole('dialog');
-  await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
+  await page.getByRole("button", { name: "Krank melden" }).click();
+  const dialog = page.getByRole("dialog");
+  await typeIntoDatePicker(dialog, "Ab", options.startDigits);
   if (options.endDigits !== undefined) {
-    await dialog.locator('#sickness-end-known').click();
-    await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
+    await dialog.locator("#sickness-end-known").click();
+    await typeIntoDatePicker(dialog, "Bis", options.endDigits);
   }
-  await dialog.getByRole('button', { name: 'Krank melden' }).click();
+  await dialog.getByRole("button", { name: "Krank melden" }).click();
   await expect(
-    dialog.getByText('Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.')
+    dialog.getByText(
+      "Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.",
+    ),
   ).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole('button', { name: 'Abbrechen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 // Own close-out: set the end date on an active report identified by its
@@ -2417,19 +2908,19 @@ export async function expectSicknessOverlapRejectedViaDialog(
 // shows the new range.
 export async function setOwnSicknessEndDateViaDialog(
   page: Page,
-  options: { rangeText: string; endDigits: string; expectedRangeText: string }
+  options: { rangeText: string; endDigits: string; expectedRangeText: string },
 ): Promise<void> {
   await openOwnSicknessSection(page);
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Enddatum für die Krankmeldung vom ${options.rangeText} setzen`,
     })
     .click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await typeIntoDatePicker(dialog, 'Letzter Tag', options.endDigits);
-  await dialog.getByRole('button', { name: 'Enddatum speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await typeIntoDatePicker(dialog, "Letzter Tag", options.endDigits);
+  await dialog.getByRole("button", { name: "Enddatum speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   await expect(visibleText(page, options.expectedRangeText)).toBeVisible({
     timeout: 15_000,
   });
@@ -2443,54 +2934,65 @@ export async function recordSicknessForMemberViaSection(
     startDigits: string;
     endDigits?: string;
     halfDay?: boolean;
-    typeLabel?: 'Krankheit' | 'Kind krank' | 'Sonstige Abwesenheit';
+    typeLabel?: "Krankheit" | "Kind krank" | "Sonstige Abwesenheit";
     evidenceRequired?: boolean;
     expectVacationOverlapHint?: boolean;
-  }
+  },
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await page.waitForTimeout(300);
-    await page.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
-    await expect(page.getByRole('heading', { name: 'Krankmeldung erfassen' })).toBeVisible();
-    const dialog = page.getByRole('dialog');
+    await page.getByRole("button", { name: "Krankmeldung erfassen" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Krankmeldung erfassen" }),
+    ).toBeVisible();
+    const dialog = page.getByRole("dialog");
     let submitted = false;
     try {
       if (options.typeLabel) {
-        await dialog.locator('#record-sickness-type').click();
-        await page.getByRole('option', { name: options.typeLabel, exact: true }).click();
+        await dialog.locator("#record-sickness-type").click();
+        await page
+          .getByRole("option", { name: options.typeLabel, exact: true })
+          .click();
       }
-      await typeIntoDatePicker(dialog, 'Ab', options.startDigits);
+      await typeIntoDatePicker(dialog, "Ab", options.startDigits);
       if (options.endDigits !== undefined) {
-        await dialog.locator('#record-sickness-end-known').click();
-        await typeIntoDatePicker(dialog, 'Bis', options.endDigits);
+        await dialog.locator("#record-sickness-end-known").click();
+        await typeIntoDatePicker(dialog, "Bis", options.endDigits);
         if (options.halfDay) {
-          await dialog.locator('#record-sickness-half-day').click();
+          await dialog.locator("#record-sickness-half-day").click();
         }
       }
       if (options.evidenceRequired) {
-        await dialog.locator('#record-sickness-evidence').click();
+        await dialog.locator("#record-sickness-evidence").click();
       }
       submitted = true;
-      await dialog.getByRole('button', { name: 'Krankmeldung erfassen' }).click();
+      await dialog
+        .getByRole("button", { name: "Krankmeldung erfassen" })
+        .click();
       if (options.expectVacationOverlapHint) {
         // The saved report shows the overlap hint until explicitly acknowledged.
-        await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
+        await expect(
+          dialog.getByText("überschneidet sich mit genehmigtem Urlaub"),
+        ).toBeVisible({
           timeout: 15_000,
         });
-        await dialog.getByRole('button', { name: 'Verstanden' }).click();
+        await dialog.getByRole("button", { name: "Verstanden" }).click();
       }
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
+      await expect(page.getByRole("dialog")).toHaveCount(0, {
         timeout: 15_000,
       });
       return;
     } catch (error) {
-      const interruptedBeforeSubmit = !submitted && !(await dialog.isVisible().catch(() => false));
+      const interruptedBeforeSubmit =
+        !submitted && !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && interruptedBeforeSubmit) continue;
       throw error;
     }
   }
 
-  throw new Error('recordSicknessForMemberViaSection: dialog remained interrupted');
+  throw new Error(
+    "recordSicknessForMemberViaSection: dialog remained interrupted",
+  );
 }
 
 // Manager actions on one report row of the member-detail section, addressed
@@ -2498,82 +3000,90 @@ export async function recordSicknessForMemberViaSection(
 async function openSicknessReportMenu(
   page: Page,
   rangeText: string,
-  itemName: string | RegExp
+  itemName: string | RegExp,
 ): Promise<void> {
   await page
-    .getByRole('button', {
+    .getByRole("button", {
       name: `Aktionen für die Krankmeldung vom ${rangeText}`,
     })
     .click();
-  await page.getByRole('menuitem', { name: itemName }).click();
+  await page.getByRole("menuitem", { name: itemName }).click();
 }
 
 export async function setSicknessEvidenceViaMenu(
   page: Page,
   rangeText: string,
-  options: { required: boolean; received?: boolean }
+  options: { required: boolean; received?: boolean },
 ): Promise<void> {
-  await openSicknessReportMenu(page, rangeText, 'Nachweis verwalten');
-  const dialog = page.getByRole('dialog');
+  await openSicknessReportMenu(page, rangeText, "Nachweis verwalten");
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  const requiredBox = dialog.locator('#evidence-required');
-  const isChecked = (await requiredBox.getAttribute('data-state')) === 'checked';
+  const requiredBox = dialog.locator("#evidence-required");
+  const isChecked =
+    (await requiredBox.getAttribute("data-state")) === "checked";
   if (isChecked !== options.required) {
     await requiredBox.click();
   }
   if (options.required) {
-    const receivedBox = dialog.locator('#evidence-received');
-    const receivedChecked = (await receivedBox.getAttribute('data-state')) === 'checked';
+    const receivedBox = dialog.locator("#evidence-received");
+    const receivedChecked =
+      (await receivedBox.getAttribute("data-state")) === "checked";
     if (receivedChecked !== (options.received ?? false)) {
       await receivedBox.click();
     }
   }
-  await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function endSicknessReportViaMenu(
   page: Page,
   rangeText: string,
-  endDigits: string
+  endDigits: string,
 ): Promise<void> {
   await openSicknessReportMenu(page, rangeText, /Enddatum (setzen|ändern)/);
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await typeIntoDatePicker(dialog, 'Letzter Tag', endDigits);
-  await dialog.getByRole('button', { name: 'Enddatum speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await typeIntoDatePicker(dialog, "Letzter Tag", endDigits);
+  await dialog.getByRole("button", { name: "Enddatum speichern" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function cancelSicknessReportViaMenuWithReason(
   page: Page,
   rangeText: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
-  await openSicknessReportMenu(page, rangeText, 'Stornieren');
-  const dialog = page.getByRole('dialog');
+  await openSicknessReportMenu(page, rangeText, "Stornieren");
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.locator('#cancel-sickness-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await dialog.locator("#cancel-sickness-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Stornieren", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 15_000 });
   // The row flips to the terminal state — the precise transition, not a text
   // an inherited row could already satisfy.
   await expect(
     page
-      .locator('[data-sickness-report]')
+      .locator("[data-sickness-report]")
       .filter({ hasText: rangeText })
-      .getByText('Storniert')
-      .first()
+      .getByText("Storniert")
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
 }
 
 // Clock-in on a sick day succeeds with a visible notice (warn, never block).
-export async function expectClockInNoticeForSickness(page: Page): Promise<void> {
-  await page.goto('/dashboard');
+export async function expectClockInNoticeForSickness(
+  page: Page,
+): Promise<void> {
+  await page.goto("/dashboard");
   await page.locator('button[title="Einstempeln"]').click();
-  await expect(page.getByRole('heading', { name: 'Einstempeln' })).toBeVisible();
-  await page.locator('button:not([title])', { hasText: 'Einstempeln' }).click();
-  await expect(visibleText(page, 'Für heute liegt eine Krankmeldung vor')).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Einstempeln" }),
+  ).toBeVisible();
+  await page.locator("button:not([title])", { hasText: "Einstempeln" }).click();
+  await expect(
+    visibleText(page, "Für heute liegt eine Krankmeldung vor"),
+  ).toBeVisible({
     timeout: 15_000,
   });
   // Clocked IN despite the notice — the warn-not-block contract.
@@ -2584,47 +3094,58 @@ export async function expectClockInNoticeForSickness(page: Page): Promise<void> 
 
 // P1-09: teams and qualifications. These steps use stable semantic controls
 // and data identities because Realtime refreshes may replace rows mid-step.
-export async function createTeamViaManagement(page: Page, teamName: string): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Teams', exact: true }).click();
-  await page.locator('#new-team-name').fill(teamName);
-  await page.getByRole('button', { name: 'Team anlegen' }).click();
-  await expect(page.getByTestId('team-card').filter({ hasText: teamName })).toBeVisible({
+export async function createTeamViaManagement(
+  page: Page,
+  teamName: string,
+): Promise<void> {
+  await page.goto("/mitarbeiter");
+  await page.getByRole("tab", { name: "Teams", exact: true }).click();
+  await page.locator("#new-team-name").fill(teamName);
+  await page.getByRole("button", { name: "Team anlegen" }).click();
+  await expect(
+    page.getByTestId("team-card").filter({ hasText: teamName }),
+  ).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function addTeamMemberViaManagement(
   page: Page,
-  options: { teamName: string; employeeName: string; validFrom?: string }
+  options: { teamName: string; employeeName: string; validFrom?: string },
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.goto('/mitarbeiter');
-    await page.getByRole('tab', { name: 'Teams', exact: true }).click();
-    const card = page.getByTestId('team-card').filter({ hasText: options.teamName });
+    await page.goto("/mitarbeiter");
+    await page.getByRole("tab", { name: "Teams", exact: true }).click();
+    const card = page
+      .getByTestId("team-card")
+      .filter({ hasText: options.teamName });
     await expect(card).toBeVisible({ timeout: 15_000 });
     const memberRow = card
-      .getByTestId('team-member-row')
+      .getByTestId("team-member-row")
       .filter({ hasText: options.employeeName })
       .first();
     if (await memberRow.isVisible().catch(() => false)) return;
 
     await selectFromSearchable(
       page,
-      card.getByRole('combobox', {
+      card.getByRole("combobox", {
         name: `Mitglied zu ${options.teamName} hinzufügen`,
       }),
-      options.employeeName
+      options.employeeName,
     );
     if (options.validFrom) {
       // ISO date → DDMMYYYY segment digits for the DatePicker group.
       const digits = `${options.validFrom.slice(8, 10)}${options.validFrom.slice(5, 7)}${options.validFrom.slice(0, 4)}`;
-      await typeIntoDatePicker(card, `Teamzugehörigkeit zu ${options.teamName} gültig ab`, digits);
+      await typeIntoDatePicker(
+        card,
+        `Teamzugehörigkeit zu ${options.teamName} gültig ab`,
+        digits,
+      );
     }
-    await card.getByRole('button', { name: 'Hinzufügen' }).click();
+    await card.getByRole("button", { name: "Hinzufügen" }).click();
     if (
       await memberRow
-        .waitFor({ state: 'visible', timeout: 10_000 })
+        .waitFor({ state: "visible", timeout: 10_000 })
         .then(() => true)
         .catch(() => false)
     ) {
@@ -2639,27 +3160,31 @@ export async function createCapabilityViaManagement(
   page: Page,
   options: {
     name: string;
-    kind: 'Fähigkeit' | 'Zertifizierung';
+    kind: "Fähigkeit" | "Zertifizierung";
     warningDays?: number;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
-  await page.locator('#capability-kind').click();
-  await page.getByRole('option', { name: options.kind, exact: true }).click();
-  await page.locator('#capability-name').fill(options.name);
-  if (options.kind === 'Zertifizierung' && options.warningDays !== undefined) {
-    await page.locator('#capability-warning-days').fill(String(options.warningDays));
+  await page.goto("/mitarbeiter");
+  await page.getByRole("tab", { name: "Qualifikationen", exact: true }).click();
+  await page.locator("#capability-kind").click();
+  await page.getByRole("option", { name: options.kind, exact: true }).click();
+  await page.locator("#capability-name").fill(options.name);
+  if (options.kind === "Zertifizierung" && options.warningDays !== undefined) {
+    await page
+      .locator("#capability-warning-days")
+      .fill(String(options.warningDays));
   }
-  await page.getByRole('button', { name: 'Anlegen', exact: true }).click();
+  await page.getByRole("button", { name: "Anlegen", exact: true }).click();
   const definitionRow = page
-    .getByTestId('capability-definition-row')
+    .getByTestId("capability-definition-row")
     .filter({ hasText: options.name });
   try {
     await expect(definitionRow).toBeVisible({ timeout: 15_000 });
   } catch {
     await page.reload();
-    await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
+    await page
+      .getByRole("tab", { name: "Qualifikationen", exact: true })
+      .click();
     await expect(definitionRow).toBeVisible({ timeout: 15_000 });
   }
 }
@@ -2674,57 +3199,65 @@ export async function assignCapabilityViaManagement(
     issuer?: string;
     renewalDueDate?: string;
     confirmed?: boolean;
-    evidence?: 'Nicht erforderlich' | 'Ausstehend' | 'Erhalten';
+    evidence?: "Nicht erforderlich" | "Ausstehend" | "Erhalten";
     operationalNote?: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
+  await page.goto("/mitarbeiter");
+  await page.getByRole("tab", { name: "Qualifikationen", exact: true }).click();
   await selectFromSearchable(
     page,
-    page.getByRole('combobox', { name: 'Mitarbeiter für Qualifikation' }),
-    options.employeeName
+    page.getByRole("combobox", { name: "Mitarbeiter für Qualifikation" }),
+    options.employeeName,
   );
   await selectFromSearchable(
     page,
-    page.getByRole('combobox', { name: 'Qualifikation auswählen' }),
-    options.capabilityName
+    page.getByRole("combobox", { name: "Qualifikation auswählen" }),
+    options.capabilityName,
   );
-  await typeIntoDatePickerById(page.locator('body'), 'qualification-valid-from', options.validFrom);
+  await typeIntoDatePickerById(
+    page.locator("body"),
+    "qualification-valid-from",
+    options.validFrom,
+  );
   if (options.validUntil) {
     await typeIntoDatePickerById(
-      page.locator('body'),
-      'qualification-valid-until',
-      options.validUntil
+      page.locator("body"),
+      "qualification-valid-until",
+      options.validUntil,
     );
   }
   if (options.issuer !== undefined) {
-    await page.locator('#qualification-issuer').fill(options.issuer);
+    await page.locator("#qualification-issuer").fill(options.issuer);
   }
   if (options.renewalDueDate) {
     await typeIntoDatePickerById(
-      page.locator('body'),
-      'qualification-renewal-date',
-      options.renewalDueDate
+      page.locator("body"),
+      "qualification-renewal-date",
+      options.renewalDueDate,
     );
   }
   if (options.evidence) {
-    await page.getByRole('combobox', { name: 'Nachweisstatus' }).click();
-    await page.getByRole('option', { name: options.evidence, exact: true }).click();
+    await page.getByRole("combobox", { name: "Nachweisstatus" }).click();
+    await page
+      .getByRole("option", { name: options.evidence, exact: true })
+      .click();
   }
-  const confirmation = page.locator('#qualification-confirmed');
+  const confirmation = page.locator("#qualification-confirmed");
   if (options.confirmed && !(await confirmation.isChecked())) {
     await confirmation.click();
   }
   if (options.operationalNote) {
-    await page.locator('#qualification-operational-note').fill(options.operationalNote);
+    await page
+      .locator("#qualification-operational-note")
+      .fill(options.operationalNote);
   }
-  await page.getByRole('button', { name: 'Eintrag speichern' }).click();
+  await page.getByRole("button", { name: "Eintrag speichern" }).click();
   await expect(
     page
-      .getByTestId('employee-capability-row')
+      .getByTestId("employee-capability-row")
       .filter({ hasText: options.employeeName })
-      .filter({ hasText: options.capabilityName })
+      .filter({ hasText: options.capabilityName }),
   ).toBeVisible({ timeout: 15_000 });
 }
 
@@ -2735,42 +3268,46 @@ export async function renewCapabilityViaManagement(
     capabilityName: string;
     validFrom: string;
     validUntil: string;
-  }
+  },
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
+  await page.goto("/mitarbeiter");
+  await page.getByRole("tab", { name: "Qualifikationen", exact: true }).click();
   const row = page
-    .getByTestId('employee-capability-row')
+    .getByTestId("employee-capability-row")
     .filter({ hasText: options.employeeName })
     .filter({ hasText: options.capabilityName });
-  await row.getByRole('button', { name: 'Erneuern' }).click();
-  await typeIntoDatePickerById(page.locator('body'), 'qualification-valid-from', options.validFrom);
+  await row.getByRole("button", { name: "Erneuern" }).click();
   await typeIntoDatePickerById(
-    page.locator('body'),
-    'qualification-valid-until',
-    options.validUntil
+    page.locator("body"),
+    "qualification-valid-from",
+    options.validFrom,
   );
-  await page.getByRole('button', { name: 'Erneuerung speichern' }).click();
+  await typeIntoDatePickerById(
+    page.locator("body"),
+    "qualification-valid-until",
+    options.validUntil,
+  );
+  await page.getByRole("button", { name: "Erneuerung speichern" }).click();
   await expect(
     page
-      .getByTestId('employee-capability-row')
+      .getByTestId("employee-capability-row")
       .filter({ hasText: options.capabilityName })
-      .filter({ hasText: `bis ${options.validUntil}` })
+      .filter({ hasText: `bis ${options.validUntil}` }),
   ).toBeVisible({ timeout: 15_000 });
 }
 
 export async function setApprenticeWarningViaManagement(
   page: Page,
-  enabled: boolean
+  enabled: boolean,
 ): Promise<void> {
-  await page.goto('/mitarbeiter');
-  await page.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
-  const checkbox = page.getByRole('checkbox', {
-    name: 'Ausbildungs-Hinweis aktivieren',
+  await page.goto("/mitarbeiter");
+  await page.getByRole("tab", { name: "Qualifikationen", exact: true }).click();
+  const checkbox = page.getByRole("checkbox", {
+    name: "Ausbildungs-Hinweis aktivieren",
   });
   if ((await checkbox.isChecked()) !== enabled) {
     await checkbox.click();
-    await expect(page.getByText('Einstellung gespeichert.')).toBeVisible({
+    await expect(page.getByText("Einstellung gespeichert.")).toBeVisible({
       timeout: 15_000,
     });
   }
@@ -2783,23 +3320,27 @@ export async function addJobCapabilityRequirement(
     jobNumber: string;
     capabilityName: string;
     requireConfirmation?: boolean;
-  }
+  },
 ): Promise<void> {
   await page.goto(`/auftraege/${options.jobNumber}`);
-  await expect(page.getByRole('heading', { name: 'Qualifikationsabdeckung' })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Qualifikationsabdeckung" }),
+  ).toBeVisible({
     timeout: 15_000,
   });
   await selectFromSearchable(
     page,
-    page.locator('#job-qualification-capability'),
-    options.capabilityName
+    page.locator("#job-qualification-capability"),
+    options.capabilityName,
   );
   if (options.requireConfirmation) {
-    await page.locator('#job-require-confirmation').click();
+    await page.locator("#job-require-confirmation").click();
   }
-  await page.getByRole('button', { name: 'Hinzufügen' }).click();
+  await page.getByRole("button", { name: "Hinzufügen" }).click();
   await expect(
-    page.getByTestId('qualification-coverage-row').filter({ hasText: options.capabilityName })
+    page
+      .getByTestId("qualification-coverage-row")
+      .filter({ hasText: options.capabilityName }),
   ).toBeVisible({ timeout: 15_000 });
 }
 
@@ -2811,37 +3352,49 @@ export async function assignJobWithQualificationWarning(
     teamName?: string;
     expectedStatus: string;
     overrideReason: string;
-  }
+  },
 ): Promise<void> {
   await page.goto(`/auftraege/${options.jobNumber}`);
-  await page.getByRole('button', { name: 'Zuweisen', exact: true }).click();
-  const assignmentDialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Mitarbeiter zuweisen' }),
+  await page.getByRole("button", { name: "Zuweisen", exact: true }).click();
+  const assignmentDialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Mitarbeiter zuweisen" }),
   });
   if (options.teamName) {
-    await assignmentDialog.getByRole('button', { name: options.teamName, exact: true }).click();
+    await assignmentDialog
+      .getByRole("button", { name: options.teamName, exact: true })
+      .click();
   } else if (options.employeeName) {
     await assignmentDialog
-      .getByRole('combobox')
-      .filter({ hasText: 'Mitarbeiter zuweisen' })
+      .getByRole("combobox")
+      .filter({ hasText: "Mitarbeiter zuweisen" })
       .click();
-    await page.getByPlaceholder('Mitarbeiter suchen...').fill(options.employeeName);
     await page
-      .getByRole('listbox')
-      .getByRole('button')
+      .getByPlaceholder("Mitarbeiter suchen...")
+      .fill(options.employeeName);
+    await page
+      .getByRole("listbox")
+      .getByRole("button")
       .filter({ hasText: options.employeeName })
       .first()
       .click();
-    await assignmentDialog.getByRole('heading', { name: 'Mitarbeiter zuweisen' }).click();
+    await assignmentDialog
+      .getByRole("heading", { name: "Mitarbeiter zuweisen" })
+      .click();
   }
-  await assignmentDialog.getByRole('button', { name: 'Speichern' }).click();
+  await assignmentDialog.getByRole("button", { name: "Speichern" }).click();
   const warningDialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Zuweisung prüfen' }) });
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Zuweisung prüfen" }) });
   await expect(warningDialog).toBeVisible({ timeout: 15_000 });
-  await expect(warningDialog.getByText(options.expectedStatus).first()).toBeVisible();
-  await warningDialog.locator('#qualification-override-reason').fill(options.overrideReason);
-  await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
+  await expect(
+    warningDialog.getByText(options.expectedStatus).first(),
+  ).toBeVisible();
+  await warningDialog
+    .locator("#qualification-override-reason")
+    .fill(options.overrideReason);
+  await warningDialog
+    .getByRole("button", { name: "Trotz Hinweis zuweisen" })
+    .click();
   await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
   if (options.employeeName) {
     await page.reload();
@@ -2854,10 +3407,10 @@ export async function assignJobWithQualificationWarning(
 // P1-11: recurring and multi-visit planning. These helpers keep the golden
 // spec at the business-action level while the controls remain keyboard-usable.
 export type PlanningEntryStepOptions = {
-  kind: 'job_visit' | 'internal';
+  kind: "job_visit" | "internal";
   jobSearch?: string;
   internalTitle?: string;
-  internalType?: 'meeting' | 'internal_work' | 'training' | 'other';
+  internalType?: "meeting" | "internal_work" | "training" | "other";
   date: string;
   time?: string;
   durationHours?: number;
@@ -2865,7 +3418,7 @@ export type PlanningEntryStepOptions = {
   employeeNames?: string[];
   teamNames?: string[];
   recurrence?: {
-    frequency?: 'daily' | 'weekly' | 'monthly';
+    frequency?: "daily" | "weekly" | "monthly";
     count: number;
     // German weekday labels (Mo/Di/…) that must be pressed for weekly series;
     // the form preselects the start date's weekday automatically.
@@ -2878,9 +3431,9 @@ async function selectPlanningOption(
   dialog: Locator,
   triggerText: string,
   searchPlaceholder: RegExp,
-  optionText: string
+  optionText: string,
 ): Promise<void> {
-  const comboboxes = dialog.getByRole('combobox');
+  const comboboxes = dialog.getByRole("combobox");
   const alreadySelected = comboboxes.filter({ hasText: optionText }).first();
   if (await alreadySelected.isVisible().catch(() => false)) return;
 
@@ -2891,46 +3444,50 @@ async function selectPlanningOption(
   const page = dialog.page();
   await page.getByPlaceholder(searchPlaceholder).fill(optionText);
   await page
-    .getByRole('listbox')
-    .getByRole('button')
+    .getByRole("listbox")
+    .getByRole("button")
     .filter({ hasText: optionText })
     .first()
     .click();
-  await dialog.getByRole('heading').first().click();
+  await dialog.getByRole("heading").first().click();
 }
 
 async function finishPlanningSave(
   dialog: Locator,
   firstButtonName: RegExp,
-  overrideReason?: string
+  overrideReason?: string,
 ): Promise<void> {
-  await dialog.getByRole('button', { name: firstButtonName }).click();
+  await dialog.getByRole("button", { name: firstButtonName }).click();
   await expect
     .poll(
       async () => {
-        if (!(await dialog.isVisible().catch(() => false))) return 'closed';
+        if (!(await dialog.isVisible().catch(() => false))) return "closed";
         if (
           await dialog
-            .locator('[data-planning-warning]')
+            .locator("[data-planning-warning]")
             .isVisible()
             .catch(() => false)
         ) {
-          return 'warning';
+          return "warning";
         }
-        return 'pending';
+        return "pending";
       },
-      { timeout: 30_000 }
+      { timeout: 30_000 },
     )
-    .not.toBe('pending');
+    .not.toBe("pending");
 
   if (!(await dialog.isVisible().catch(() => false))) return;
   if (!overrideReason) {
-    throw new Error('Planning produced warnings but no override reason was supplied');
+    throw new Error(
+      "Planning produced warnings but no override reason was supplied",
+    );
   }
-  const reasonInput = dialog.locator('#planning-override, #planning-edit-reason').first();
+  const reasonInput = dialog
+    .locator("#planning-override, #planning-edit-reason")
+    .first();
   await reasonInput.fill(overrideReason);
   await dialog
-    .getByRole('button', {
+    .getByRole("button", {
       name: /Mit Begr.ndung planen|.nderung speichern/,
     })
     .click();
@@ -2939,118 +3496,153 @@ async function finishPlanningSave(
 
 export async function createPlannedCalendarEntry(
   page: Page,
-  options: PlanningEntryStepOptions
+  options: PlanningEntryStepOptions,
 ): Promise<void> {
-  await page.goto('/kalender');
-  await page.getByRole('button', { name: 'Kalendereintrag' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
+  await page.goto("/kalender");
+  await page.getByRole("button", { name: "Kalendereintrag" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Kalendereintrag erstellen" }),
   });
-  await expect(dialog.getByRole('tab', { name: 'Termin planen' })).toBeVisible({
+  await expect(dialog.getByRole("tab", { name: "Termin planen" })).toBeVisible({
     timeout: 15_000,
   });
-  await dialog.getByRole('tab', { name: 'Termin planen' }).click();
-  await expect(dialog.locator('#planning-date')).toBeVisible({
+  await dialog.getByRole("tab", { name: "Termin planen" }).click();
+  await expect(dialog.locator("#planning-date")).toBeVisible({
     timeout: 15_000,
   });
 
-  if (options.kind === 'job_visit') {
-    if (!options.jobSearch) throw new Error('A job search value is required');
-    await selectPlanningOption(dialog, 'Auftrag auswählen', /Auftrag suchen/, options.jobSearch);
+  if (options.kind === "job_visit") {
+    if (!options.jobSearch) throw new Error("A job search value is required");
+    await selectPlanningOption(
+      dialog,
+      "Auftrag auswählen",
+      /Auftrag suchen/,
+      options.jobSearch,
+    );
   } else {
-    await dialog.getByRole('button', { name: 'Interner Termin' }).click();
-    if (options.internalType && options.internalType !== 'meeting') {
-      await dialog.locator('#planning-internal-type').click();
+    await dialog.getByRole("button", { name: "Interner Termin" }).click();
+    if (options.internalType && options.internalType !== "meeting") {
+      await dialog.locator("#planning-internal-type").click();
       const internalTypeLabels = {
         internal_work: /Interne Arbeit/,
         training: /Schulung/,
         other: /Sonstiges/,
       } as const;
-      await page.getByRole('option', { name: internalTypeLabels[options.internalType] }).click();
+      await page
+        .getByRole("option", { name: internalTypeLabels[options.internalType] })
+        .click();
     }
-    await dialog.locator('#planning-title').fill(options.internalTitle ?? 'Interner Termin');
+    await dialog
+      .locator("#planning-title")
+      .fill(options.internalTitle ?? "Interner Termin");
   }
 
-  await typeIntoDatePickerById(dialog, 'planning-date', options.date);
+  await typeIntoDatePickerById(dialog, "planning-date", options.date);
   if (options.durationDays !== undefined) {
-    await dialog.locator('#planning-time-kind').click();
-    await page.getByRole('option', { name: /Ganzt.gig/ }).click();
-    await dialog.locator('#planning-days').fill(String(options.durationDays));
+    await dialog.locator("#planning-time-kind").click();
+    await page.getByRole("option", { name: /Ganzt.gig/ }).click();
+    await dialog.locator("#planning-days").fill(String(options.durationDays));
   } else {
-    await typeIntoTimeInput(dialog, 'planning-time', (options.time ?? '09:00').replace(':', ''));
+    await typeIntoTimeInput(
+      dialog,
+      "planning-time",
+      (options.time ?? "09:00").replace(":", ""),
+    );
     // DurationHoursInput keeps the element id on its inner text input.
-    await dialog.locator('#planning-duration').fill(String(options.durationHours ?? 1));
+    await dialog
+      .locator("#planning-duration")
+      .fill(String(options.durationHours ?? 1));
   }
 
   for (const employeeName of options.employeeNames ?? []) {
     await selectPlanningOption(
       dialog,
-      (options.employeeNames?.length ?? 0) > 1 ? 'Mitarbeiter' : 'Mitarbeiter zuweisen',
+      (options.employeeNames?.length ?? 0) > 1
+        ? "Mitarbeiter"
+        : "Mitarbeiter zuweisen",
       /Mitarbeiter suchen/,
-      employeeName
+      employeeName,
     );
   }
   for (const teamName of options.teamNames ?? []) {
-    await dialog.getByRole('button', { name: teamName, exact: true }).click();
+    await dialog.getByRole("button", { name: teamName, exact: true }).click();
   }
 
   if (options.recurrence) {
-    await dialog.getByText('Wiederholen', { exact: true }).click();
+    await dialog.getByText("Wiederholen", { exact: true }).click();
     if (options.recurrence.frequency) {
       const frequencyLabels = {
         daily: /T.glich/,
         weekly: /W.chentlich/,
         monthly: /Monatlich/,
       } as const;
-      const recurrenceBlock = dialog.getByText('Rhythmus', { exact: true }).locator('..');
-      await recurrenceBlock.getByRole('combobox').click();
+      const recurrenceBlock = dialog
+        .getByText("Rhythmus", { exact: true })
+        .locator("..");
+      await recurrenceBlock.getByRole("combobox").click();
       await page
-        .getByRole('option', {
+        .getByRole("option", {
           name: frequencyLabels[options.recurrence.frequency],
         })
         .click();
     }
     // Scope weekday toggles to the Wochentage row so short labels (Mo/Di/…)
     // can never match another dialog button (e.g. a team named alike).
-    const weekdayRow = dialog.getByText('Wochentage', { exact: true }).locator('..');
+    const weekdayRow = dialog
+      .getByText("Wochentage", { exact: true })
+      .locator("..");
     for (const weekdayLabel of options.recurrence.weekdayLabels ?? []) {
-      const weekdayButton = weekdayRow.getByRole('button', {
+      const weekdayButton = weekdayRow.getByRole("button", {
         name: weekdayLabel,
         exact: true,
       });
-      if ((await weekdayButton.getAttribute('aria-pressed')) !== 'true') {
+      if ((await weekdayButton.getAttribute("aria-pressed")) !== "true") {
         await weekdayButton.click();
       }
     }
-    await dialog.locator('#planning-count').fill(String(options.recurrence.count));
+    await dialog
+      .locator("#planning-count")
+      .fill(String(options.recurrence.count));
   }
 
-  await finishPlanningSave(dialog, /Planung pr.fen und speichern/, options.overrideReason);
+  await finishPlanningSave(
+    dialog,
+    /Planung pr.fen und speichern/,
+    options.overrideReason,
+  );
 }
 
-export function plannedCalendarEvent(page: Page, title: string, index = 0): Locator {
-  return page.locator('.fc-event-job').filter({ hasText: title }).nth(index);
+export function plannedCalendarEvent(
+  page: Page,
+  title: string,
+  index = 0,
+): Locator {
+  return page.locator(".fc-event-job").filter({ hasText: title }).nth(index);
 }
 
-export async function showPlanningMonth(page: Page, targetDate?: string): Promise<void> {
-  await page.goto('/kalender');
-  await page.getByRole('tab', { name: 'Monat', exact: true }).click();
+export async function showPlanningMonth(
+  page: Page,
+  targetDate?: string,
+): Promise<void> {
+  await page.goto("/kalender");
+  await page.getByRole("tab", { name: "Monat", exact: true }).click();
   if (!targetDate) return;
   const todayParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Europe/Berlin',
-      year: 'numeric',
-      month: '2-digit',
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin",
+      year: "numeric",
+      month: "2-digit",
     })
       .formatToParts(new Date())
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, Number(part.value)])
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
   );
-  const [targetYear, targetMonth] = targetDate.split('-').map(Number);
-  const monthDifference = (targetYear - todayParts.year) * 12 + (targetMonth - todayParts.month);
-  const direction = monthDifference >= 0 ? 'Weiter' : /Zur.ck/;
+  const [targetYear, targetMonth] = targetDate.split("-").map(Number);
+  const monthDifference =
+    (targetYear - todayParts.year) * 12 + (targetMonth - todayParts.month);
+  const direction = monthDifference >= 0 ? "Weiter" : /Zur.ck/;
   for (let index = 0; index < Math.abs(monthDifference); index += 1) {
-    await page.getByRole('button', { name: direction }).click();
+    await page.getByRole("button", { name: direction }).click();
   }
 }
 
@@ -3059,40 +3651,58 @@ export async function editPlannedCalendarOccurrence(
   options: {
     title: string;
     eventIndex?: number;
-    scope: 'one' | 'future' | 'series';
+    scope: "one" | "future" | "series";
     date?: string;
     time?: string;
     durationHours?: number;
     overrideReason?: string;
     calendarDate?: string;
-  }
+  },
 ): Promise<void> {
   await showPlanningMonth(page, options.calendarDate);
-  const event = plannedCalendarEvent(page, options.title, options.eventIndex ?? 0);
+  const event = plannedCalendarEvent(
+    page,
+    options.title,
+    options.eventIndex ?? 0,
+  );
   await expect(event).toBeVisible({ timeout: 20_000 });
   await event.click();
-  await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }),
+  await page.getByRole("button", { name: "Termin bearbeiten" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Geplanten Termin bearbeiten" }),
   });
-  if (options.scope !== 'one') {
-    await dialog.locator('#planning-edit-scope').click();
+  if (options.scope !== "one") {
+    await dialog.locator("#planning-edit-scope").click();
     const scopeLabels = {
       future: /Dieser und zuk.nftige/,
       series: /Ganze Serie/,
     } as const;
-    await page.getByRole('option').filter({ hasText: scopeLabels[options.scope] }).first().click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: scopeLabels[options.scope] })
+      .first()
+      .click();
   }
   if (options.date) {
-    await typeIntoDatePickerById(dialog, 'planning-edit-date', options.date);
+    await typeIntoDatePickerById(dialog, "planning-edit-date", options.date);
   }
   if (options.time) {
-    await typeIntoTimeInput(dialog, 'planning-edit-time', options.time.replace(':', ''));
+    await typeIntoTimeInput(
+      dialog,
+      "planning-edit-time",
+      options.time.replace(":", ""),
+    );
   }
   if (options.durationHours !== undefined) {
-    await dialog.locator('#planning-edit-duration').fill(String(options.durationHours));
+    await dialog
+      .locator("#planning-edit-duration")
+      .fill(String(options.durationHours));
   }
-  await finishPlanningSave(dialog, /.nderung speichern/, options.overrideReason);
+  await finishPlanningSave(
+    dialog,
+    /.nderung speichern/,
+    options.overrideReason,
+  );
 }
 
 export async function setPlannedCalendarOccurrenceStatus(
@@ -3101,60 +3711,72 @@ export async function setPlannedCalendarOccurrenceStatus(
     title: string;
     eventIndex?: number;
     calendarDate: string;
-    status: 'skip' | 'cancel';
+    status: "skip" | "cancel";
     reason: string;
-  }
+  },
 ): Promise<void> {
   await showPlanningMonth(page, options.calendarDate);
-  const event = plannedCalendarEvent(page, options.title, options.eventIndex ?? 0);
+  const event = plannedCalendarEvent(
+    page,
+    options.title,
+    options.eventIndex ?? 0,
+  );
   await expect(event).toBeVisible({ timeout: 20_000 });
   await event.click();
-  await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }),
+  await page.getByRole("button", { name: "Termin bearbeiten" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Geplanten Termin bearbeiten" }),
   });
   await dialog
-    .getByRole('button', {
+    .getByRole("button", {
       // The cancel action renders as "Termin absagen" in the dialog footer.
-      name: options.status === 'skip' ? 'Auslassen' : 'Termin absagen',
+      name: options.status === "skip" ? "Auslassen" : "Termin absagen",
       exact: true,
     })
     .click();
-  await dialog.locator('#planning-status-reason').fill(options.reason);
-  await dialog.getByRole('button', { name: 'Status speichern' }).click();
+  await dialog.locator("#planning-status-reason").fill(options.reason);
+  await dialog.getByRole("button", { name: "Status speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 // P1-12: dispatch, Parkplatz context, customer commitments, batch moves.
 
-export async function openDispatchPanel(page: Page, calendarDate?: string): Promise<void> {
+export async function openDispatchPanel(
+  page: Page,
+  calendarDate?: string,
+): Promise<void> {
   await showPlanningMonth(page, calendarDate);
-  await page.getByTestId('dispatch-panel-toggle').click();
-  await expect(page.locator('[data-dispatch-panel]')).toBeVisible({
+  await page.getByTestId("dispatch-panel-toggle").click();
+  await expect(page.locator("[data-dispatch-panel]")).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export function dispatchOccurrenceRow(page: Page, title: string): Locator {
-  return page.locator('[data-dispatch-occurrence]').filter({ hasText: title });
+  return page.locator("[data-dispatch-occurrence]").filter({ hasText: title });
 }
 
 // Issues the dispatch for the earliest panel row matching the title, and
 // asserts the honest readiness picture on the way: tools are never assessed
 // in this slice and must render as the labeled unknown, never as success.
-export async function issueDispatchForOccurrence(page: Page, title: string): Promise<void> {
+export async function issueDispatchForOccurrence(
+  page: Page,
+  title: string,
+): Promise<void> {
   const row = dispatchOccurrenceRow(page, title).first();
   await expect(row).toBeVisible({ timeout: 20_000 });
-  await row.getByRole('button', { name: 'Einsatz senden' }).click();
+  await row.getByRole("button", { name: "Einsatz senden" }).click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Einsatz senden' }) });
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Einsatz senden" }) });
   await expect(
-    dialog.locator('[data-readiness-key="tools"][data-readiness-state="unknown"]')
+    dialog.locator(
+      '[data-readiness-key="tools"][data-readiness-state="unknown"]',
+    ),
   ).toBeVisible({ timeout: 20_000 });
-  await dialog.getByRole('button', { name: 'Einsatz senden' }).click();
+  await dialog.getByRole("button", { name: "Einsatz senden" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(row.locator('[data-recipient-state]').first()).toBeVisible({
+  await expect(row.locator("[data-recipient-state]").first()).toBeVisible({
     timeout: 20_000,
   });
 }
@@ -3162,21 +3784,28 @@ export async function issueDispatchForOccurrence(page: Page, title: string): Pro
 export async function expectDispatchStateOnJobPage(
   page: Page,
   jobNumber: string,
-  state: string
+  state: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  const section = page.getByTestId('job-dispatch-section');
-  await expect(section.locator(`[data-dispatch-state="${state}"]`)).toBeVisible({
-    timeout: 20_000,
-  });
+  const section = page.getByTestId("job-dispatch-section");
+  await expect(section.locator(`[data-dispatch-state="${state}"]`)).toBeVisible(
+    {
+      timeout: 20_000,
+    },
+  );
 }
 
-export async function acknowledgeDispatchOnJobPage(page: Page, jobNumber: string): Promise<void> {
+export async function acknowledgeDispatchOnJobPage(
+  page: Page,
+  jobNumber: string,
+): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  const section = page.getByTestId('job-dispatch-section');
+  const section = page.getByTestId("job-dispatch-section");
   await expect(section).toBeVisible({ timeout: 20_000 });
-  await section.getByRole('button', { name: 'Einsatz bestätigen' }).click();
-  await expect(section.locator('[data-dispatch-state="bestaetigt"]')).toBeVisible({
+  await section.getByRole("button", { name: "Einsatz bestätigen" }).click();
+  await expect(
+    section.locator('[data-dispatch-state="bestaetigt"]'),
+  ).toBeVisible({
     timeout: 20_000,
   });
 }
@@ -3184,42 +3813,49 @@ export async function acknowledgeDispatchOnJobPage(page: Page, jobNumber: string
 export async function challengeDispatchOnJobPage(
   page: Page,
   jobNumber: string,
-  reason: string
+  reason: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  const section = page.getByTestId('job-dispatch-section');
+  const section = page.getByTestId("job-dispatch-section");
   await expect(section).toBeVisible({ timeout: 20_000 });
-  await section.getByRole('button', { name: 'Rückfrage stellen' }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Rückfrage zum Einsatz' }),
+  await section.getByRole("button", { name: "Rückfrage stellen" }).click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Rückfrage zum Einsatz" }),
   });
-  await dialog.locator('#dispatch-challenge-reason').fill(reason);
-  await dialog.getByRole('button', { name: 'Rückfrage senden' }).click();
+  await dialog.locator("#dispatch-challenge-reason").fill(reason);
+  await dialog.getByRole("button", { name: "Rückfrage senden" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(section.locator('[data-dispatch-state="rueckfrage"]')).toBeVisible({
+  await expect(
+    section.locator('[data-dispatch-state="rueckfrage"]'),
+  ).toBeVisible({
     timeout: 20_000,
   });
 }
 
-export async function resolveDispatchChallengeInPanel(page: Page, reason: string): Promise<void> {
-  const panel = page.locator('[data-dispatch-panel]');
+export async function resolveDispatchChallengeInPanel(
+  page: Page,
+  reason: string,
+): Promise<void> {
+  const panel = page.locator("[data-dispatch-panel]");
   await panel
-    .getByRole('button', { name: /Plan beibehalten/ })
+    .getByRole("button", { name: /Plan beibehalten/ })
     .first()
     .click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Plan beibehalten' }) });
-  await dialog.locator('#dispatch-reason-dialog').fill(reason);
-  await dialog.getByRole('button', { name: 'Beibehalten', exact: true }).click();
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Plan beibehalten" }) });
+  await dialog.locator("#dispatch-reason-dialog").fill(reason);
+  await dialog
+    .getByRole("button", { name: "Beibehalten", exact: true })
+    .click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 export async function openParkplatzPanel(page: Page): Promise<void> {
-  await page.goto('/kalender');
+  await page.goto("/kalender");
   // The button's accessible name includes the live count badge.
-  await page.getByRole('button', { name: /^Parkplatz/ }).click();
-  await expect(page.locator('[data-parkplatz-panel]')).toBeVisible({
+  await page.getByRole("button", { name: /^Parkplatz/ }).click();
+  await expect(page.locator("[data-parkplatz-panel]")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -3227,7 +3863,7 @@ export async function openParkplatzPanel(page: Page): Promise<void> {
 export function parkplatzCard(page: Page, title: string): Locator {
   // Filter instead of interpolating the title into a CSS selector.
   return page
-    .locator('[data-parkplatz-pill]')
+    .locator("[data-parkplatz-pill]")
     .filter({ has: page.getByText(title, { exact: true }) });
 }
 
@@ -3239,65 +3875,80 @@ export async function setParkingContextFromParkplatz(
     note?: string;
     responsibleName?: string;
     reviewDigits?: string;
-  }
+  },
 ): Promise<void> {
   const card = parkplatzCard(page, options.jobTitle);
   await expect(card).toBeVisible({ timeout: 20_000 });
   // The buttons carry job-specific aria-labels ("Parkplatz-Kontext für <Titel>
   // ergänzen"); match the full accessible name.
-  await card.getByRole('button', { name: /Kontext.*(ergänzen|bearbeiten)/ }).click();
+  await card
+    .getByRole("button", { name: /Kontext.*(ergänzen|bearbeiten)/ })
+    .click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Parkplatz-Kontext' }) });
-  await dialog.locator('#parking-reason').click();
-  await page.getByRole('option', { name: options.reasonLabel, exact: true }).click();
-  if (options.note) await dialog.locator('#parking-note').fill(options.note);
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Parkplatz-Kontext" }) });
+  await dialog.locator("#parking-reason").click();
+  await page
+    .getByRole("option", { name: options.reasonLabel, exact: true })
+    .click();
+  if (options.note) await dialog.locator("#parking-note").fill(options.note);
   if (options.responsibleName) {
     await selectFromSearchable(
       page,
-      dialog.locator('#parking-responsible'),
-      options.responsibleName
+      dialog.locator("#parking-responsible"),
+      options.responsibleName,
     );
   }
   if (options.reviewDigits) {
-    await typeIntoDatePicker(dialog, 'Wiedervorlagedatum', options.reviewDigits);
+    await typeIntoDatePicker(
+      dialog,
+      "Wiedervorlagedatum",
+      options.reviewDigits,
+    );
   }
-  await dialog.getByRole('button', { name: 'Kontext speichern' }).click();
+  await dialog.getByRole("button", { name: "Kontext speichern" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 export async function dispatchParkedJobFromParkplatz(
   page: Page,
-  options: { jobTitle: string; recipientName: string }
+  options: { jobTitle: string; recipientName: string },
 ): Promise<void> {
   const card = parkplatzCard(page, options.jobTitle);
   await expect(card).toBeVisible({ timeout: 20_000 });
-  await card.getByRole('button', { name: /^Einsatz für .* senden$/ }).click();
+  await card.getByRole("button", { name: /^Einsatz für .* senden$/ }).click();
   const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Einsatz senden' }) });
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Einsatz senden" }) });
   await expect(
-    dialog.locator('[data-readiness-key="tools"][data-readiness-state="unknown"]')
+    dialog.locator(
+      '[data-readiness-key="tools"][data-readiness-state="unknown"]',
+    ),
   ).toBeVisible({ timeout: 20_000 });
   await dialog
-    .getByRole('checkbox', {
+    .getByRole("checkbox", {
       name: `${options.recipientName} als Empfänger auswählen`,
     })
     .check();
-  await dialog.getByRole('button', { name: 'Einsatz senden' }).click();
+  await dialog.getByRole("button", { name: "Einsatz senden" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
 // Records a date-only customer commitment for the panel row (the dialog
 // prefills the occurrence's Berlin date). Recording sends NO message.
-export async function recordCommitmentForOccurrence(page: Page, title: string): Promise<void> {
+export async function recordCommitmentForOccurrence(
+  page: Page,
+  title: string,
+): Promise<void> {
   const row = dispatchOccurrenceRow(page, title).first();
   await expect(row).toBeVisible({ timeout: 20_000 });
-  await row.getByRole('button', { name: /^(Zusage erfassen|Neue Zusage erfassen)$/ }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Kundenzusage erfassen' }),
+  await row
+    .getByRole("button", { name: /^(Zusage erfassen|Neue Zusage erfassen)$/ })
+    .click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Kundenzusage erfassen" }),
   });
-  await dialog.getByRole('button', { name: 'Zusage erfassen' }).click();
+  await dialog.getByRole("button", { name: "Zusage erfassen" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -3309,30 +3960,32 @@ export async function startBatchRescheduleInPanel(
     expectedCount: number;
     dayShiftText: string;
     reason: string;
-  }
+  },
 ): Promise<Locator> {
-  const panel = page.locator('[data-dispatch-panel]');
-  await panel.getByRole('button', { name: 'Verschieben', exact: true }).click();
+  const panel = page.locator("[data-dispatch-panel]");
+  await panel.getByRole("button", { name: "Verschieben", exact: true }).click();
   for (const title of options.titles) {
-    const rows = panel.locator('[data-dispatch-occurrence]').filter({ hasText: title });
+    const rows = panel
+      .locator("[data-dispatch-occurrence]")
+      .filter({ hasText: title });
     const rowCount = await rows.count();
     for (let index = 0; index < rowCount; index += 1) {
-      await rows.nth(index).getByRole('checkbox').check();
+      await rows.nth(index).getByRole("checkbox").check();
     }
   }
   // A Realtime re-render between clicks could reorder rows; the panel's own
   // selection counter is the authoritative proof every row got selected.
   await expect(
     panel.getByText(
-      `${options.expectedCount} Besuch${options.expectedCount === 1 ? '' : 'e'} ausgewählt`,
-      { exact: true }
-    )
+      `${options.expectedCount} Besuch${options.expectedCount === 1 ? "" : "e"} ausgewählt`,
+      { exact: true },
+    ),
   ).toBeVisible({ timeout: 10_000 });
-  await panel.locator('#batch-day-shift').fill(options.dayShiftText);
-  await panel.locator('#batch-reason').fill(options.reason);
-  await panel.getByRole('button', { name: 'Auswirkungen prüfen' }).click();
-  const preview = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Verschiebung prüfen' }),
+  await panel.locator("#batch-day-shift").fill(options.dayShiftText);
+  await panel.locator("#batch-reason").fill(options.reason);
+  await panel.getByRole("button", { name: "Auswirkungen prüfen" }).click();
+  const preview = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Verschiebung prüfen" }),
   });
   await expect(preview).toBeVisible({ timeout: 30_000 });
   return preview;
@@ -3344,25 +3997,340 @@ export async function startBatchRescheduleInPanel(
 export async function confirmBatchReschedule(
   page: Page,
   preview: Locator,
-  overrideReason: string
+  overrideReason: string,
 ): Promise<void> {
-  await preview.getByRole('button', { name: 'Jetzt verschieben' }).click();
-  const warning = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Planungshinweise prüfen' }),
+  await preview.getByRole("button", { name: "Jetzt verschieben" }).click();
+  const warning = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Planungshinweise prüfen" }),
   });
   await expect
     .poll(
       async () => {
-        if (await warning.isVisible().catch(() => false)) return 'warning';
-        if (!(await preview.isVisible().catch(() => false))) return 'closed';
-        return 'pending';
+        if (await warning.isVisible().catch(() => false)) return "warning";
+        if (!(await preview.isVisible().catch(() => false))) return "closed";
+        return "pending";
       },
-      { timeout: 30_000 }
+      { timeout: 30_000 },
     )
-    .not.toBe('pending');
+    .not.toBe("pending");
   if (await warning.isVisible().catch(() => false)) {
-    await warning.locator('#planning-warning-reason').fill(overrideReason);
-    await warning.getByRole('button', { name: 'Mit Begründung speichern' }).click();
+    await warning.locator("#planning-warning-reason").fill(overrideReason);
+    await warning
+      .getByRole("button", { name: "Mit Begründung speichern" })
+      .click();
   }
   await expect(preview).toHaveCount(0, { timeout: 30_000 });
+}
+
+export async function createInstalledEquipment(
+  page: Page,
+  options: {
+    customerName: string;
+    siteName: string;
+    name: string;
+    category?: string;
+    parentName?: string;
+    state?: "Unbekannt" | "Aktiv" | "Vorübergehend außer Betrieb";
+    manufacturer?: string;
+    model?: string;
+    serialNumber?: string;
+    location?: string;
+    installationDate?: string;
+    commissioningDate?: string;
+    warrantyProvider?: string;
+    warrantyEndDate?: string;
+  },
+): Promise<string> {
+  await page.goto("/service/anlagen");
+  await page.getByRole("button", { name: "Anlage erfassen" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Anlage erfassen" }),
+  ).toBeVisible();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-client"),
+    options.customerName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-site"),
+    options.siteName,
+  );
+  await dialog.getByLabel("Bezeichnung").fill(options.name);
+  if (options.category) {
+    await dialog.locator("#equipment-category").click();
+    await page
+      .getByRole("option", { name: options.category, exact: true })
+      .click();
+  }
+  if (options.parentName) {
+    await selectFromSearchable(
+      page,
+      dialog.locator("#equipment-parent"),
+      options.parentName,
+    );
+  }
+  if (options.state) {
+    await dialog.locator("#equipment-state").click();
+    await page
+      .getByRole("option", { name: options.state, exact: true })
+      .click();
+  }
+  if (options.location)
+    await dialog.getByLabel("Position am Einsatzort").fill(options.location);
+  if (options.manufacturer || options.model || options.serialNumber) {
+    await dialog
+      .getByRole("button", { name: "Technische Angaben und Kennungen" })
+      .click();
+    if (options.manufacturer) {
+      await dialog
+        .getByLabel("Hersteller", { exact: true })
+        .fill(options.manufacturer);
+    }
+    if (options.model)
+      await dialog.getByLabel("Modell", { exact: true }).fill(options.model);
+    if (options.serialNumber) {
+      await dialog
+        .getByLabel("Seriennummer", { exact: true })
+        .fill(options.serialNumber);
+    }
+  }
+  if (
+    options.installationDate ||
+    options.commissioningDate ||
+    options.warrantyProvider ||
+    options.warrantyEndDate
+  ) {
+    await dialog
+      .getByRole("button", {
+        name: "Installation, Inbetriebnahme und Gewährleistung",
+      })
+      .click();
+    if (options.installationDate) {
+      await typeIntoDatePickerById(
+        dialog,
+        "equipment-installation-date",
+        options.installationDate,
+      );
+    }
+    if (options.commissioningDate) {
+      await typeIntoDatePickerById(
+        dialog,
+        "equipment-commissioning-date",
+        options.commissioningDate,
+      );
+    }
+    if (options.warrantyProvider) {
+      await dialog
+        .getByLabel("Gewährleistungsgeber")
+        .fill(options.warrantyProvider);
+    }
+    if (options.warrantyEndDate) {
+      await typeIntoDatePickerById(
+        dialog,
+        "equipment-warranty-end",
+        options.warrantyEndDate,
+      );
+    }
+  }
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.waitForURL(/\/service\/anlagen\/ANL-\d{4}-\d{3}$/i, {
+    timeout: 20_000,
+  });
+  const equipmentNumber = page.url().split("/").at(-1);
+  if (!equipmentNumber)
+    throw new Error("Equipment number missing from detail route.");
+  return decodeURIComponent(equipmentNumber);
+}
+
+export async function linkInstalledEquipmentToJob(
+  page: Page,
+  jobNumber: string,
+): Promise<void> {
+  const dialog = await openInstalledEquipmentWorkLinkDialog(page);
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-work-target"),
+    jobNumber,
+  );
+  await dialog.getByRole("button", { name: "Verknüpfen", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  const section = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Verknüpfte Arbeit" }),
+  });
+  await expect(
+    section.getByRole("link").filter({ hasText: jobNumber }),
+  ).toBeVisible();
+}
+
+export async function openInstalledEquipmentWorkLinkDialog(
+  page: Page,
+): Promise<Locator> {
+  const section = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "Verknüpfte Arbeit" }),
+  });
+  await section.getByRole("button", { name: "Verknüpfen" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Arbeit verknüpfen" }),
+  ).toBeVisible();
+  return dialog;
+}
+
+export async function transitionInstalledEquipment(
+  page: Page,
+  stateLabel: string,
+  reason: string,
+): Promise<void> {
+  await page.getByRole("button", { name: "Zustand ändern" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#equipment-target-state").click();
+  await page.getByRole("option", { name: stateLabel, exact: true }).click();
+  await dialog.getByLabel("Begründung").fill(reason);
+  await dialog.getByRole("button", { name: "Änderung speichern" }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(
+    page.getByText(stateLabel, { exact: true }).first(),
+  ).toBeVisible();
+}
+
+export async function openInstalledEquipmentByName(
+  page: Page,
+  equipmentName: string,
+): Promise<string> {
+  await page.goto("/service/anlagen");
+  await page.getByLabel("Anlagen durchsuchen").fill(equipmentName);
+  const link = page
+    .getByRole("link")
+    .filter({ hasText: equipmentName })
+    .first();
+  await expect(link).toBeVisible({ timeout: 20_000 });
+  const href = await link.getAttribute("href");
+  if (!href)
+    throw new Error(`Equipment detail link missing for ${equipmentName}.`);
+  await page.goto(href);
+  await expect(page).toHaveURL(/\/service\/anlagen\/ANL-\d{4}-\d{3}$/i, {
+    timeout: 20_000,
+  });
+  return decodeURIComponent(href.split("/").at(-1) ?? "");
+}
+
+export async function updateInstalledEquipmentModel(
+  page: Page,
+  model: string,
+  reason: string,
+): Promise<void> {
+  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Modell", { exact: true }).fill(model);
+  await dialog.getByLabel("Grund der Änderung").fill(reason);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(visibleText(page, model)).toBeVisible({ timeout: 20_000 });
+}
+
+export async function linkInstalledEquipmentSourceToJob(
+  page: Page,
+  jobNumber: string,
+  reason: string,
+): Promise<void> {
+  await page
+    .getByRole("button", { name: "Herkunftsnachweis verknüpfen" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-source"),
+    jobNumber,
+  );
+  await dialog.getByLabel("Bedeutung des Nachweises").fill(reason);
+  await dialog.getByRole("button", { name: "Verknüpfen", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(
+    page.getByRole("link").filter({ hasText: jobNumber }).last(),
+  ).toBeVisible();
+}
+
+export async function replaceInstalledEquipment(
+  page: Page,
+  options: { successorName: string; serialNumber: string; reason: string },
+): Promise<string> {
+  const predecessorUrl = page.url();
+  await page.getByRole("button", { name: "Ersetzen" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Bezeichnung").fill(options.successorName);
+  await dialog
+    .getByRole("button", { name: "Technische Angaben und Kennungen" })
+    .click();
+  await dialog
+    .getByLabel("Seriennummer", { exact: true })
+    .fill(options.serialNumber);
+  await dialog.getByLabel("Grund der Änderung").fill(options.reason);
+  await dialog.getByRole("button", { name: "Nachfolger anlegen" }).click();
+  await page.waitForURL(
+    (url) =>
+      url.href !== predecessorUrl &&
+      /\/service\/anlagen\/ANL-\d{4}-\d{3}$/i.test(url.pathname),
+    { timeout: 20_000 },
+  );
+  await expect(
+    page.getByRole("heading", { name: options.successorName }),
+  ).toBeVisible();
+  return decodeURIComponent(page.url().split("/").at(-1) ?? "");
+}
+
+export async function expectDuplicateInstalledEquipmentRejected(
+  page: Page,
+  options: {
+    customerName: string;
+    siteName: string;
+    name: string;
+    manufacturer: string;
+    serialNumber: string;
+  },
+): Promise<void> {
+  await page.goto("/service/anlagen");
+  await page.getByRole("button", { name: "Anlage erfassen" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-client"),
+    options.customerName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#equipment-site"),
+    options.siteName,
+  );
+  await dialog.getByLabel("Bezeichnung").fill(options.name);
+  await dialog
+    .getByRole("button", { name: "Technische Angaben und Kennungen" })
+    .click();
+  await dialog
+    .getByLabel("Hersteller", { exact: true })
+    .fill(options.manufacturer);
+  await dialog
+    .getByLabel("Seriennummer", { exact: true })
+    .fill(options.serialNumber);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Diese Kennung wird bereits verwendet.",
+  );
+  await dialog.getByRole("button", { name: "Abbrechen" }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+export async function correctInstalledEquipmentTerminalAction(
+  page: Page,
+  reason: string,
+): Promise<void> {
+  await page
+    .getByRole("button", { name: "Abschlussaktion korrigieren" })
+    .click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByLabel("Korrekturgrund").fill(reason);
+  await dialog.getByRole("button", { name: "Korrektur festhalten" }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(visibleText(page, "Abschlussaktion korrigiert")).toBeVisible();
 }

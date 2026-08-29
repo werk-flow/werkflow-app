@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   createContext,
@@ -7,29 +7,29 @@ import {
   useRef,
   useMemo,
   useCallback,
-  type ReactNode
-} from 'react';
+  type ReactNode,
+} from "react";
 import type {
   RealtimeChannel,
-  RealtimePostgresChangesPayload
-} from '@supabase/supabase-js';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { useOrganization } from '@/components/organization/organization-context';
+  RealtimePostgresChangesPayload,
+} from "@supabase/supabase-js";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useOrganization } from "@/components/organization/organization-context";
 import {
   coalesceRealtimeEvents,
-  REALTIME_DEBOUNCE_MS
-} from '@/lib/realtime/events';
+  REALTIME_DEBOUNCE_MS,
+} from "@/lib/realtime/events";
 import {
   REALTIME_TABLES,
   UNFILTERED_REALTIME_TABLES,
   type RealtimeTable,
-} from '@/lib/realtime/tables';
+} from "@/lib/realtime/tables";
 
-export type { RealtimeTable } from '@/lib/realtime/tables';
+export type { RealtimeTable } from "@/lib/realtime/tables";
 
 export type RealtimeChangeEvent = {
   table: RealtimeTable;
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  eventType: "INSERT" | "UPDATE" | "DELETE";
   new: Record<string, unknown> | null;
   old: Record<string, unknown> | null;
 };
@@ -40,19 +40,22 @@ type RealtimeContextValue = {
   subscribe: (table: RealtimeTable, cb: RealtimeCallback) => () => void;
 };
 
-
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === "development";
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { activeOrgId } = useOrganization();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const listenersRef = useRef<Map<RealtimeTable, Set<RealtimeCallback>>>(
-    new Map(REALTIME_TABLES.map((t) => [t, new Set<RealtimeCallback>()]))
+    new Map(REALTIME_TABLES.map((t) => [t, new Set<RealtimeCallback>()])),
   );
 
-  const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(new Map());
-  const pendingEventsRef = useRef<Map<RealtimeTable, RealtimeChangeEvent>>(new Map());
+  const debounceTimersRef = useRef<Map<RealtimeTable, NodeJS.Timeout>>(
+    new Map(),
+  );
+  const pendingEventsRef = useRef<Map<RealtimeTable, RealtimeChangeEvent>>(
+    new Map(),
+  );
 
   const dispatchAll = useCallback(() => {
     for (const table of REALTIME_TABLES) {
@@ -60,7 +63,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (!listeners || listeners.size === 0) continue;
       const syntheticEvent: RealtimeChangeEvent = {
         table,
-        eventType: 'UPDATE',
+        eventType: "UPDATE",
         new: null,
         old: null,
       };
@@ -76,7 +79,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     function dispatch(
       table: RealtimeTable,
-      payload: RealtimePostgresChangesPayload<Record<string, unknown>>
+      payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
     ) {
       const listeners = listenersRef.current.get(table);
       const count = listeners?.size ?? 0;
@@ -84,9 +87,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
       const event: RealtimeChangeEvent = {
         table,
-        eventType: payload.eventType as RealtimeChangeEvent['eventType'],
+        eventType: payload.eventType as RealtimeChangeEvent["eventType"],
         new: (payload.new as Record<string, unknown>) ?? null,
-        old: (payload.old as Record<string, unknown>) ?? null
+        old: (payload.old as Record<string, unknown>) ?? null,
       };
 
       if (isDev) {
@@ -96,13 +99,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         const commitTimestamp = (payload as { commit_timestamp?: string })
           .commit_timestamp;
         const commitMs = commitTimestamp ? Date.parse(commitTimestamp) : NaN;
-        console.info('[Realtime] event received', {
+        console.info("[Realtime] event received", {
           channel: `org-${activeOrgId}`,
           table,
           eventType: event.eventType,
           propagationMs: Number.isFinite(commitMs)
             ? Math.max(0, Date.now() - commitMs)
-            : null
+            : null,
         });
       }
 
@@ -113,7 +116,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (existing) clearTimeout(existing);
       pendingEventsRef.current.set(
         table,
-        coalesceRealtimeEvents(pendingEventsRef.current.get(table), event)
+        coalesceRealtimeEvents(pendingEventsRef.current.get(table), event),
       );
 
       debounceTimersRef.current.set(
@@ -123,12 +126,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           const pendingEvent = pendingEventsRef.current.get(table);
           pendingEventsRef.current.delete(table);
           if (pendingEvent) listeners!.forEach((cb) => cb(pendingEvent));
-        }, REALTIME_DEBOUNCE_MS)
+        }, REALTIME_DEBOUNCE_MS),
       );
     }
 
     async function setup() {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (cancelled) return;
 
       if (session?.access_token) {
@@ -146,55 +151,57 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           ? undefined
           : `organization_id=eq.${activeOrgId}`;
         channel = channel.on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
+            event: "*",
+            schema: "public",
             table,
-            ...(filter ? { filter } : {})
+            ...(filter ? { filter } : {}),
           },
           (p: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-            dispatch(table, p)
+            dispatch(table, p),
         );
       }
-      let hadChannelGap = false;
-      channel
-        .subscribe((status: string, err?: Error) => {
-          if (isDev) {
-            console.info('[Realtime] channel status', {
-              channel: `org-${activeOrgId}`,
-              status
-            });
-          }
-          if (err) {
-            console.error('[Realtime] subscription error:', err);
-          }
-          if (status === 'SUBSCRIBED') {
-            console.info(`[Realtime] subscribed to org-${activeOrgId}`);
-            if (hadChannelGap) {
-              // Gap recovery: events during the outage are gone, so treat the
-              // re-join like a tab return and let every subscriber refetch.
-              hadChannelGap = false;
-              dispatchAll();
-            }
-          }
-          if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-            hadChannelGap = true;
-            console.warn(`[Realtime] ${status} — will reconnect automatically`);
-          }
-        });
+      channel.subscribe((status: string, err?: Error) => {
+        if (isDev) {
+          console.info("[Realtime] channel status", {
+            channel: `org-${activeOrgId}`,
+            status,
+          });
+        }
+        if (err) {
+          console.error("[Realtime] subscription error:", err);
+        }
+        if (status === "SUBSCRIBED") {
+          console.info(`[Realtime] subscribed to org-${activeOrgId}`);
+          // The first join has a gap between the server-rendered snapshot
+          // and the active database subscription; reconnects have the same
+          // gap while offline. Refetch active listeners after every join so
+          // a commit in either window cannot leave last-known data behind.
+          dispatchAll();
+        }
+        if (
+          status === "TIMED_OUT" ||
+          status === "CHANNEL_ERROR" ||
+          status === "CLOSED"
+        ) {
+          console.warn(`[Realtime] ${status} — will reconnect automatically`);
+        }
+      });
 
       channelRef.current = channel;
     }
 
     setup();
 
-    const { data: { subscription: authListener } } = supabase.auth.onAuthStateChange(
+    const {
+      data: { subscription: authListener },
+    } = supabase.auth.onAuthStateChange(
       (_event: string, session: { access_token?: string } | null) => {
         if (session?.access_token) {
           supabase.realtime.setAuth(session.access_token);
         }
-      }
+      },
     );
 
     // Refresh all listeners when the tab becomes visible again.
@@ -209,23 +216,23 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }, 50);
     }
     function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         scheduleCatchUp();
       }
     }
     function handleWindowFocus() {
       scheduleCatchUp();
     }
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
     const debounceTimers = debounceTimersRef.current;
     const pendingEvents = pendingEventsRef.current;
 
     return () => {
       cancelled = true;
       authListener.unsubscribe();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
       if (catchUpTimer) clearTimeout(catchUpTimer);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
@@ -239,16 +246,19 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
   }, [activeOrgId, dispatchAll]);
 
-  const subscribe = useCallback((table: RealtimeTable, cb: RealtimeCallback) => {
-    listenersRef.current.get(table)?.add(cb);
-    return () => {
-      listenersRef.current.get(table)?.delete(cb);
-    };
-  }, []);
+  const subscribe = useCallback(
+    (table: RealtimeTable, cb: RealtimeCallback) => {
+      listenersRef.current.get(table)?.add(cb);
+      return () => {
+        listenersRef.current.get(table)?.delete(cb);
+      };
+    },
+    [],
+  );
 
   const ctxValue = useMemo<RealtimeContextValue>(
     () => ({ subscribe }),
-    [subscribe]
+    [subscribe],
   );
 
   return (
@@ -263,7 +273,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
  * subscribe to a dynamic table list in one effect (the live-view primitive).
  * Returns null outside the provider (auth/onboarding shells).
  */
-export function useRealtimeSubscribe(): RealtimeContextValue['subscribe'] | null {
+export function useRealtimeSubscribe():
+  RealtimeContextValue["subscribe"] | null {
   const ctx = useContext(RealtimeContext);
   return ctx ? ctx.subscribe : null;
 }
@@ -274,7 +285,7 @@ export function useRealtimeSubscribe(): RealtimeContextValue['subscribe'] | null
  */
 export function useRealtimeEvent(
   table: RealtimeTable,
-  callback: RealtimeCallback
+  callback: RealtimeCallback,
 ) {
   const ctx = useContext(RealtimeContext);
   const callbackRef = useRef(callback);
@@ -293,4 +304,3 @@ export function useRealtimeEvent(
     return ctx.subscribe(table, stableCallback);
   }, [ctx, table]);
 }
-

@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
@@ -13,11 +14,12 @@ import {
   Plus,
   Star,
   Users,
-} from 'lucide-react';
+  Wrench,
+} from "lucide-react";
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogBody,
@@ -26,14 +28,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { ErrorText } from '@/components/ui/error-text';
-import { useBanner } from '@/components/ui/banner';
-import { usePendingTask } from '@/hooks/use-server-action';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { ErrorText } from "@/components/ui/error-text";
+import { useBanner } from "@/components/ui/banner";
+import { usePendingTask } from "@/hooks/use-server-action";
 
 import {
   createClientContact,
@@ -42,53 +44,60 @@ import {
   updateClientSite,
   type SaveClientContactInput,
   type SaveClientSiteInput,
-} from '@/lib/clients/actions';
+} from "@/lib/clients/actions";
 import {
   CONTACT_ROLE_SUGGESTIONS,
   formatSiteAddress,
   type ClientContact,
   type ClientSite,
-} from '@/lib/clients/types';
+} from "@/lib/clients/types";
+import {
+  EQUIPMENT_STATE_LABELS,
+  type EquipmentListItem,
+} from "@/lib/installed-equipment/types";
 
 const ERROR_MESSAGES: Record<string, string> = {
-  name_required: 'Bitte gib einen Namen ein.',
-  not_authorized: 'Du hast keine Berechtigung für diese Aktion.',
-  client_not_found: 'Der Kunde wurde nicht gefunden.',
-  contact_not_found: 'Der Ansprechpartner wurde nicht gefunden.',
-  site_not_found: 'Der Einsatzort wurde nicht gefunden.',
-  no_changes: 'Keine Änderungen zum Speichern.',
+  name_required: "Bitte gib einen Namen ein.",
+  not_authorized: "Du hast keine Berechtigung für diese Aktion.",
+  client_not_found: "Der Kunde wurde nicht gefunden.",
+  contact_not_found: "Der Ansprechpartner wurde nicht gefunden.",
+  site_not_found: "Der Einsatzort wurde nicht gefunden.",
+  no_changes: "Keine Änderungen zum Speichern.",
   primary_flag_failed:
-    'Gespeichert, aber die bisherige Hauptmarkierung konnte nicht entfernt werden. Bitte prüfe die Markierungen.',
+    "Gespeichert, aber die bisherige Hauptmarkierung konnte nicht entfernt werden. Bitte prüfe die Markierungen.",
 };
 
 function errorMessage(error: string): string {
-  return ERROR_MESSAGES[error] ?? 'Speichern fehlgeschlagen. Bitte versuche es erneut.';
+  return (
+    ERROR_MESSAGES[error] ??
+    "Speichern fehlgeschlagen. Bitte versuche es erneut."
+  );
 }
 
 // tel: links work most reliably with digits and a leading + only.
 function normalizePhoneHref(phone: string): string {
-  return phone.replace(/(?!^\+)[^\d]/g, '');
+  return phone.replace(/(?!^\+)[^\d]/g, "");
 }
 
 type ContactDraft = SaveClientContactInput;
 type SiteDraft = SaveClientSiteInput;
 
 const EMPTY_CONTACT: ContactDraft = {
-  name: '',
-  role: '',
-  email: '',
-  phone: '',
-  notes: '',
+  name: "",
+  role: "",
+  email: "",
+  phone: "",
+  notes: "",
   isPrimary: false,
 };
 
 const EMPTY_SITE: SiteDraft = {
-  name: '',
-  street: '',
-  postalCode: '',
-  city: '',
-  accessNotes: '',
-  notes: '',
+  name: "",
+  street: "",
+  postalCode: "",
+  city: "",
+  accessNotes: "",
+  notes: "",
   primaryContactId: null,
   isPrimary: false,
 };
@@ -99,10 +108,12 @@ interface ClientRelationsSectionProps {
   contacts: ClientContact[];
   sites: ClientSite[];
   isAdminOrManager: boolean;
+  equipment: EquipmentListItem[];
+  equipmentLoadFailed: boolean;
   onRequestContact?: (input: {
     contactId: string;
     contactName: string;
-    channel: 'phone' | 'email';
+    channel: "phone" | "email";
     href: string;
   }) => void;
 }
@@ -113,6 +124,8 @@ export function ClientRelationsSection({
   contacts,
   sites,
   isAdminOrManager,
+  equipment,
+  equipmentLoadFailed,
   onRequestContact,
 }: ClientRelationsSectionProps) {
   const router = useRouter();
@@ -146,12 +159,15 @@ export function ClientRelationsSection({
 
       if (!result.success) {
         setContactDialog((current) =>
-          current ? { ...current, error: errorMessage(result.error) } : current
+          current ? { ...current, error: errorMessage(result.error) } : current,
         );
         return;
       }
       setContactDialog(null);
-      showBanner({ variant: 'success', message: 'Ansprechpartner gespeichert.' });
+      showBanner({
+        variant: "success",
+        message: "Ansprechpartner gespeichert.",
+      });
       router.refresh();
     });
   }
@@ -166,12 +182,12 @@ export function ClientRelationsSection({
 
       if (!result.success) {
         setSiteDialog((current) =>
-          current ? { ...current, error: errorMessage(result.error) } : current
+          current ? { ...current, error: errorMessage(result.error) } : current,
         );
         return;
       }
       setSiteDialog(null);
-      showBanner({ variant: 'success', message: 'Einsatzort gespeichert.' });
+      showBanner({ variant: "success", message: "Einsatzort gespeichert." });
       router.refresh();
     });
   }
@@ -193,7 +209,9 @@ export function ClientRelationsSection({
   function toggleSiteActive(site: ClientSite) {
     setSectionError(null);
     void runRelationTask(async () => {
-      const result = await updateClientSite(site.id, { isActive: !site.isActive });
+      const result = await updateClientSite(site.id, {
+        isActive: !site.isActive,
+      });
       if (!result.success) {
         setSectionError(errorMessage(result.error));
         return;
@@ -208,7 +226,7 @@ export function ClientRelationsSection({
       siteId: null,
       draft: {
         ...EMPTY_SITE,
-        name: 'Hauptstandort',
+        name: "Hauptstandort",
         street: clientAddress,
         isPrimary: activeSites.length === 0,
       },
@@ -216,12 +234,17 @@ export function ClientRelationsSection({
     });
   }
 
-  const contactNameById = new Map(contacts.map((contact) => [contact.id, contact.name]));
+  const contactNameById = new Map(
+    contacts.map((contact) => [contact.id, contact.name]),
+  );
 
   return (
     <div className="space-y-4">
       {/* Ansprechpartner */}
-      <div id="ansprechpartner" className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5">
+      <div
+        id="ansprechpartner"
+        className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <Users className="size-4" />
@@ -235,7 +258,10 @@ export function ClientRelationsSection({
               onClick={() =>
                 setContactDialog({
                   contactId: null,
-                  draft: { ...EMPTY_CONTACT, isPrimary: activeContacts.length === 0 },
+                  draft: {
+                    ...EMPTY_CONTACT,
+                    isPrimary: activeContacts.length === 0,
+                  },
                   error: null,
                 })
               }
@@ -253,7 +279,10 @@ export function ClientRelationsSection({
         ) : (
           <ul className="space-y-2">
             {activeContacts.map((contact) => (
-              <li key={contact.id} className="rounded-md border bg-background p-3">
+              <li
+                key={contact.id}
+                className="rounded-md border bg-background p-3"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -281,8 +310,8 @@ export function ClientRelationsSection({
                             onRequestContact({
                               contactId: contact.id,
                               contactName: contact.name,
-                              channel: 'phone',
-                              href: `tel:${normalizePhoneHref(contact.phone ?? '')}`,
+                              channel: "phone",
+                              href: `tel:${normalizePhoneHref(contact.phone ?? "")}`,
                             });
                           }}
                         >
@@ -300,8 +329,8 @@ export function ClientRelationsSection({
                             onRequestContact({
                               contactId: contact.id,
                               contactName: contact.name,
-                              channel: 'email',
-                              href: `mailto:${contact.email ?? ''}`,
+                              channel: "email",
+                              href: `mailto:${contact.email ?? ""}`,
                             });
                           }}
                         >
@@ -310,7 +339,9 @@ export function ClientRelationsSection({
                       )}
                     </div>
                     {contact.notes && (
-                      <p className="mt-1 text-xs text-muted-foreground">{contact.notes}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {contact.notes}
+                      </p>
                     )}
                   </div>
                   {isAdminOrManager && (
@@ -325,10 +356,10 @@ export function ClientRelationsSection({
                             contactId: contact.id,
                             draft: {
                               name: contact.name,
-                              role: contact.role ?? '',
-                              email: contact.email ?? '',
-                              phone: contact.phone ?? '',
-                              notes: contact.notes ?? '',
+                              role: contact.role ?? "",
+                              email: contact.email ?? "",
+                              phone: contact.phone ?? "",
+                              notes: contact.notes ?? "",
                               isPrimary: contact.isPrimary,
                             },
                             error: null,
@@ -336,7 +367,9 @@ export function ClientRelationsSection({
                         }
                       >
                         <Pencil className="size-3.5" />
-                        <span className="sr-only">Ansprechpartner bearbeiten</span>
+                        <span className="sr-only">
+                          Ansprechpartner bearbeiten
+                        </span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -347,7 +380,9 @@ export function ClientRelationsSection({
                         onClick={() => toggleContactActive(contact)}
                       >
                         <Archive className="size-3.5" />
-                        <span className="sr-only">Ansprechpartner archivieren</span>
+                        <span className="sr-only">
+                          Ansprechpartner archivieren
+                        </span>
                       </Button>
                     </div>
                   )}
@@ -370,7 +405,7 @@ export function ClientRelationsSection({
                 >
                   <span className="truncate">
                     {contact.name}
-                    {contact.role ? ` · ${contact.role}` : ''}
+                    {contact.role ? ` · ${contact.role}` : ""}
                   </span>
                   {isAdminOrManager && (
                     <Button
@@ -382,7 +417,9 @@ export function ClientRelationsSection({
                       onClick={() => toggleContactActive(contact)}
                     >
                       <ArchiveRestore className="size-3.5" />
-                      <span className="sr-only">Ansprechpartner wiederherstellen</span>
+                      <span className="sr-only">
+                        Ansprechpartner wiederherstellen
+                      </span>
                     </Button>
                   )}
                 </li>
@@ -393,7 +430,10 @@ export function ClientRelationsSection({
       </div>
 
       {/* Einsatzorte */}
-      <div id="einsatzorte" className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5">
+      <div
+        id="einsatzorte"
+        className="scroll-mt-4 rounded-lg border bg-card p-4 sm:p-5"
+      >
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <MapPin className="size-4" />
@@ -417,6 +457,15 @@ export function ClientRelationsSection({
             </Button>
           )}
         </div>
+
+        {equipmentLoadFailed && (
+          <p
+            role="alert"
+            className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          >
+            Anlagen und Geräte konnten nicht geladen werden.
+          </p>
+        )}
 
         {activeSites.length === 0 ? (
           <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center">
@@ -442,7 +491,10 @@ export function ClientRelationsSection({
                 ? contactNameById.get(site.primaryContactId)
                 : null;
               return (
-                <li key={site.id} className="rounded-md border bg-background p-3">
+                <li
+                  key={site.id}
+                  className="rounded-md border bg-background p-3"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -455,7 +507,9 @@ export function ClientRelationsSection({
                         )}
                       </div>
                       {address && (
-                        <p className="mt-1 text-sm text-muted-foreground">{address}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {address}
+                        </p>
                       )}
                       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
                         {primaryContactName && (
@@ -472,8 +526,42 @@ export function ClientRelationsSection({
                         )}
                       </div>
                       {site.notes && (
-                        <p className="mt-1 text-xs text-muted-foreground">{site.notes}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {site.notes}
+                        </p>
                       )}
+                      {!equipmentLoadFailed &&
+                        equipment.some(
+                          (item) => item.siteId === site.id && !item.archivedAt,
+                        ) && (
+                          <div className="mt-3 border-t pt-3">
+                            <p className="mb-2 flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              <Wrench className="size-3" />
+                              Anlagen & Geräte
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {equipment
+                                .filter(
+                                  (item) =>
+                                    item.siteId === site.id && !item.archivedAt,
+                                )
+                                .map((item) => (
+                                  <Link
+                                    key={item.id}
+                                    href={`/service/anlagen/${encodeURIComponent(item.equipmentNumber)}`}
+                                    className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50"
+                                  >
+                                    <span className="font-medium">
+                                      {item.name}
+                                    </span>
+                                    <span className="ml-1 text-muted-foreground">
+                                      · {EQUIPMENT_STATE_LABELS[item.state]}
+                                    </span>
+                                  </Link>
+                                ))}
+                            </div>
+                          </div>
+                        )}
                     </div>
                     {isAdminOrManager && (
                       <div className="flex shrink-0 gap-1">
@@ -487,11 +575,11 @@ export function ClientRelationsSection({
                               siteId: site.id,
                               draft: {
                                 name: site.name,
-                                street: site.street ?? '',
-                                postalCode: site.postalCode ?? '',
-                                city: site.city ?? '',
-                                accessNotes: site.accessNotes ?? '',
-                                notes: site.notes ?? '',
+                                street: site.street ?? "",
+                                postalCode: site.postalCode ?? "",
+                                city: site.city ?? "",
+                                accessNotes: site.accessNotes ?? "",
+                                notes: site.notes ?? "",
                                 primaryContactId: site.primaryContactId,
                                 isPrimary: site.isPrimary,
                               },
@@ -511,7 +599,9 @@ export function ClientRelationsSection({
                           onClick={() => toggleSiteActive(site)}
                         >
                           <Archive className="size-3.5" />
-                          <span className="sr-only">Einsatzort archivieren</span>
+                          <span className="sr-only">
+                            Einsatzort archivieren
+                          </span>
                         </Button>
                       </div>
                     )}
@@ -535,7 +625,9 @@ export function ClientRelationsSection({
                 >
                   <span className="truncate">
                     {site.name}
-                    {formatSiteAddress(site) ? ` · ${formatSiteAddress(site)}` : ''}
+                    {formatSiteAddress(site)
+                      ? ` · ${formatSiteAddress(site)}`
+                      : ""}
                   </span>
                   {isAdminOrManager && (
                     <Button
@@ -547,7 +639,9 @@ export function ClientRelationsSection({
                       onClick={() => toggleSiteActive(site)}
                     >
                       <ArchiveRestore className="size-3.5" />
-                      <span className="sr-only">Einsatzort wiederherstellen</span>
+                      <span className="sr-only">
+                        Einsatzort wiederherstellen
+                      </span>
                     </Button>
                   )}
                 </li>
@@ -568,8 +662,8 @@ export function ClientRelationsSection({
           <DialogHeader>
             <DialogTitle>
               {contactDialog?.contactId
-                ? 'Ansprechpartner bearbeiten'
-                : 'Ansprechpartner hinzufügen'}
+                ? "Ansprechpartner bearbeiten"
+                : "Ansprechpartner hinzufügen"}
             </DialogTitle>
             <DialogDescription>
               Ansprechpartner gehören zu diesem Kunden und können Aufträgen
@@ -604,7 +698,7 @@ export function ClientRelationsSection({
                 <Label htmlFor="contact-role">Rolle</Label>
                 <Input
                   id="contact-role"
-                  value={contactDialog.draft.role ?? ''}
+                  value={contactDialog.draft.role ?? ""}
                   onChange={(e) =>
                     setContactDialog({
                       ...contactDialog,
@@ -625,11 +719,14 @@ export function ClientRelationsSection({
                   <Label htmlFor="contact-phone">Telefon</Label>
                   <Input
                     id="contact-phone"
-                    value={contactDialog.draft.phone ?? ''}
+                    value={contactDialog.draft.phone ?? ""}
                     onChange={(e) =>
                       setContactDialog({
                         ...contactDialog,
-                        draft: { ...contactDialog.draft, phone: e.target.value },
+                        draft: {
+                          ...contactDialog.draft,
+                          phone: e.target.value,
+                        },
                       })
                     }
                   />
@@ -640,11 +737,14 @@ export function ClientRelationsSection({
                     id="contact-email"
                     type="text"
                     inputMode="email"
-                    value={contactDialog.draft.email ?? ''}
+                    value={contactDialog.draft.email ?? ""}
                     onChange={(e) =>
                       setContactDialog({
                         ...contactDialog,
-                        draft: { ...contactDialog.draft, email: e.target.value },
+                        draft: {
+                          ...contactDialog.draft,
+                          email: e.target.value,
+                        },
                       })
                     }
                   />
@@ -655,7 +755,7 @@ export function ClientRelationsSection({
                 <Textarea
                   id="contact-notes"
                   rows={2}
-                  value={contactDialog.draft.notes ?? ''}
+                  value={contactDialog.draft.notes ?? ""}
                   onChange={(e) =>
                     setContactDialog({
                       ...contactDialog,
@@ -693,7 +793,9 @@ export function ClientRelationsSection({
                   type="submit"
                   disabled={isPending || !contactDialog.draft.name.trim()}
                 >
-                  {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  {isPending && (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  )}
                   Speichern
                 </Button>
               </DialogFooter>
@@ -710,7 +812,9 @@ export function ClientRelationsSection({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {siteDialog?.siteId ? 'Einsatzort bearbeiten' : 'Einsatzort hinzufügen'}
+              {siteDialog?.siteId
+                ? "Einsatzort bearbeiten"
+                : "Einsatzort hinzufügen"}
             </DialogTitle>
             <DialogDescription>
               Ein Einsatzort ist ein dauerhafter Arbeitsort dieses Kunden, z. B.
@@ -726,157 +830,170 @@ export function ClientRelationsSection({
               noValidate
               className="flex min-h-0 flex-1 flex-col"
             >
-            <DialogBody className="grid gap-4 py-1">
-              <div className="grid gap-2">
-                <Label htmlFor="site-name">Bezeichnung</Label>
-                <Input
-                  id="site-name"
-                  value={siteDialog.draft.name}
-                  onChange={(e) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, name: e.target.value },
-                      error: null,
-                    })
-                  }
-                  placeholder="z. B. Hauptgebäude, Wohnung 3. OG"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="site-street">Straße und Hausnummer</Label>
-                <Input
-                  id="site-street"
-                  value={siteDialog.draft.street ?? ''}
-                  onChange={(e) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, street: e.target.value },
-                    })
-                  }
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
+              <DialogBody className="grid gap-4 py-1">
                 <div className="grid gap-2">
-                  <Label htmlFor="site-postal-code">PLZ</Label>
+                  <Label htmlFor="site-name">Bezeichnung</Label>
                   <Input
-                    id="site-postal-code"
-                    inputMode="numeric"
-                    value={siteDialog.draft.postalCode ?? ''}
+                    id="site-name"
+                    value={siteDialog.draft.name}
                     onChange={(e) =>
                       setSiteDialog({
                         ...siteDialog,
-                        draft: { ...siteDialog.draft, postalCode: e.target.value },
+                        draft: { ...siteDialog.draft, name: e.target.value },
+                        error: null,
+                      })
+                    }
+                    placeholder="z. B. Hauptgebäude, Wohnung 3. OG"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="site-street">Straße und Hausnummer</Label>
+                  <Input
+                    id="site-street"
+                    value={siteDialog.draft.street ?? ""}
+                    onChange={(e) =>
+                      setSiteDialog({
+                        ...siteDialog,
+                        draft: { ...siteDialog.draft, street: e.target.value },
                       })
                     }
                   />
                 </div>
+                <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
+                  <div className="grid gap-2">
+                    <Label htmlFor="site-postal-code">PLZ</Label>
+                    <Input
+                      id="site-postal-code"
+                      inputMode="numeric"
+                      value={siteDialog.draft.postalCode ?? ""}
+                      onChange={(e) =>
+                        setSiteDialog({
+                          ...siteDialog,
+                          draft: {
+                            ...siteDialog.draft,
+                            postalCode: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="site-city">Ort</Label>
+                    <Input
+                      id="site-city"
+                      value={siteDialog.draft.city ?? ""}
+                      onChange={(e) =>
+                        setSiteDialog({
+                          ...siteDialog,
+                          draft: { ...siteDialog.draft, city: e.target.value },
+                        })
+                      }
+                    />
+                  </div>
+                </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="site-city">Ort</Label>
-                  <Input
-                    id="site-city"
-                    value={siteDialog.draft.city ?? ''}
+                  <Label htmlFor="site-access-notes">Zugang & Schlüssel</Label>
+                  <Textarea
+                    id="site-access-notes"
+                    rows={2}
+                    value={siteDialog.draft.accessNotes ?? ""}
                     onChange={(e) =>
                       setSiteDialog({
                         ...siteDialog,
-                        draft: { ...siteDialog.draft, city: e.target.value },
+                        draft: {
+                          ...siteDialog.draft,
+                          accessNotes: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="z. B. Schlüssel bei Hausmeister, Parken im Hof"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="site-primary-contact">
+                    Ansprechpartner vor Ort
+                  </Label>
+                  <SearchableSelect
+                    id="site-primary-contact"
+                    options={contacts
+                      // Archived contacts stay visible only while they are the
+                      // current selection, so editing never silently drops them.
+                      .filter(
+                        (contact) =>
+                          contact.isActive ||
+                          contact.id === siteDialog.draft.primaryContactId,
+                      )
+                      .map((contact) => ({
+                        value: contact.id,
+                        label: `${contact.name}${contact.role ? ` (${contact.role})` : ""}${!contact.isActive ? " · archiviert" : ""}`,
+                      }))}
+                    value={siteDialog.draft.primaryContactId ?? ""}
+                    onChange={(value) =>
+                      setSiteDialog({
+                        ...siteDialog,
+                        draft: {
+                          ...siteDialog.draft,
+                          primaryContactId: value || null,
+                        },
+                      })
+                    }
+                    placeholder="Nicht festgelegt"
+                    searchPlaceholder="Ansprechpartner suchen..."
+                    emptyMessage="Kein Ansprechpartner gefunden"
+                    allowNone
+                    noneLabel="Nicht festgelegt"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="site-notes">Notizen</Label>
+                  <Textarea
+                    id="site-notes"
+                    rows={2}
+                    value={siteDialog.draft.notes ?? ""}
+                    onChange={(e) =>
+                      setSiteDialog({
+                        ...siteDialog,
+                        draft: { ...siteDialog.draft, notes: e.target.value },
                       })
                     }
                   />
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="site-access-notes">Zugang & Schlüssel</Label>
-                <Textarea
-                  id="site-access-notes"
-                  rows={2}
-                  value={siteDialog.draft.accessNotes ?? ''}
-                  onChange={(e) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, accessNotes: e.target.value },
-                    })
-                  }
-                  placeholder="z. B. Schlüssel bei Hausmeister, Parken im Hof"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="site-primary-contact">Ansprechpartner vor Ort</Label>
-                <SearchableSelect
-                  id="site-primary-contact"
-                  options={contacts
-                    // Archived contacts stay visible only while they are the
-                    // current selection, so editing never silently drops them.
-                    .filter(
-                      (contact) =>
-                        contact.isActive ||
-                        contact.id === siteDialog.draft.primaryContactId
-                    )
-                    .map((contact) => ({
-                      value: contact.id,
-                      label: `${contact.name}${contact.role ? ` (${contact.role})` : ''}${!contact.isActive ? ' · archiviert' : ''}`,
-                    }))}
-                  value={siteDialog.draft.primaryContactId ?? ''}
-                  onChange={(value) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: {
-                        ...siteDialog.draft,
-                        primaryContactId: value || null,
-                      },
-                    })
-                  }
-                  placeholder="Nicht festgelegt"
-                  searchPlaceholder="Ansprechpartner suchen..."
-                  emptyMessage="Kein Ansprechpartner gefunden"
-                  allowNone
-                  noneLabel="Nicht festgelegt"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="site-notes">Notizen</Label>
-                <Textarea
-                  id="site-notes"
-                  rows={2}
-                  value={siteDialog.draft.notes ?? ''}
-                  onChange={(e) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, notes: e.target.value },
-                    })
-                  }
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={siteDialog.draft.isPrimary ?? false}
-                  onCheckedChange={(checked) =>
-                    setSiteDialog({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, isPrimary: checked === true },
-                    })
-                  }
-                />
-                Als Hauptstandort festlegen
-              </label>
-              <ErrorText>{siteDialog.error}</ErrorText>
-            </DialogBody>
-            <DialogFooter className="pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setSiteDialog(null)}
-                disabled={isPending}
-              >
-                Abbrechen
-              </Button>
-              <Button
-                type="submit"
-                disabled={isPending || !siteDialog.draft.name.trim()}
-              >
-                {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Speichern
-              </Button>
-            </DialogFooter>
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={siteDialog.draft.isPrimary ?? false}
+                    onCheckedChange={(checked) =>
+                      setSiteDialog({
+                        ...siteDialog,
+                        draft: {
+                          ...siteDialog.draft,
+                          isPrimary: checked === true,
+                        },
+                      })
+                    }
+                  />
+                  Als Hauptstandort festlegen
+                </label>
+                <ErrorText>{siteDialog.error}</ErrorText>
+              </DialogBody>
+              <DialogFooter className="pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSiteDialog(null)}
+                  disabled={isPending}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isPending || !siteDialog.draft.name.trim()}
+                >
+                  {isPending && (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  )}
+                  Speichern
+                </Button>
+              </DialogFooter>
             </form>
           )}
         </DialogContent>
