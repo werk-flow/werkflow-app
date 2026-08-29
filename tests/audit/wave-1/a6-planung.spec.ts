@@ -3,10 +3,7 @@ import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../../golden/support/fixtures';
 import { requireEnv } from '../../golden/support/env';
-import {
-  getOrganizationTimeEntryCount,
-  getPlanningState,
-} from '../../golden/support/db';
+import { getOrganizationTimeEntryCount, getPlanningState } from '../../golden/support/db';
 import {
   addClosureDayViaSettings,
   approveVacationRequestFor,
@@ -25,11 +22,18 @@ import {
   showPlanningMonth,
   typeIntoDatePickerById,
   typeIntoTimeInput,
+  visibleText,
 } from '../../golden/support/steps';
+import { requireChainedValue, requireSerialPrecondition } from '../../golden/support/preconditions';
+import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
-  addLocalMonthsClamped,
-  formatBerlinLocalDateTime,
-} from '../../../lib/planning/date-time';
+  closePlanningDialogWithNamedControl,
+  markAllUnreadNotificationsRead,
+  pendingVacationWithdrawButton,
+  planningDateCellStatus,
+  planningOccurrenceInDateCell,
+} from '../support/a6-steps';
+import { addLocalMonthsClamped, formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
 import { getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 
 // A6 — Planung (P1-11). Serial journeys over the shared audit world; every
@@ -42,15 +46,6 @@ import { getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 test.describe.configure({ mode: 'serial' });
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] as const;
-
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
@@ -70,9 +65,7 @@ function formatGermanDate(dateIso: string): string {
 
 // Stored original_start_local values carry seconds ('T06:00:00'); minute
 // precision is the honest comparison unit for series identities.
-function originalStartMinute(occurrence: {
-  originalStartLocal: string | null;
-}): string {
+function originalStartMinute(occurrence: { originalStartLocal: string | null }): string {
   return occurrence.originalStartLocal?.slice(0, 16) ?? '';
 }
 
@@ -92,7 +85,7 @@ function mondayWeekdayIndex(dateIso: string): number {
 // Deterministic allocation of A6's uniqueness-constrained weekday offsets
 // inside the owned +45 … +54 reserve: one consecutive weekday pair for the
 // two-date changed-facts series, plus three further distinct weekdays.
-function a6WeekdayOffsets(todayIso: string): {
+function a6WeekdayOffsets(): {
   pendingOffset: number;
   pairOffsets: [number, number];
   closureOffset: number;
@@ -100,7 +93,9 @@ function a6WeekdayOffsets(todayIso: string): {
 } {
   const weekdayOffsets: number[] = [];
   for (let offset = 45; offset <= 54; offset++) {
-    if (isWeekday(shiftIsoDate(todayIso, offset))) weekdayOffsets.push(offset);
+    if (isWeekday(ownedBerlinDateAtOffset('a6-planung', offset))) {
+      weekdayOffsets.push(offset);
+    }
   }
   let pairOffsets: [number, number] | null = null;
   for (const offset of weekdayOffsets) {
@@ -142,10 +137,7 @@ function createReadOnlyAdminClient(): SupabaseClient {
   return readOnlyAdminClient;
 }
 
-async function getInternalOccurrenceTypes(
-  orgId: string,
-  internalTitle: string
-): Promise<string[]> {
+async function getInternalOccurrenceTypes(orgId: string, internalTitle: string): Promise<string[]> {
   const admin = createReadOnlyAdminClient();
   const { data, error } = await admin
     .from('planning_occurrences')
@@ -184,14 +176,16 @@ async function getOccurrenceAssignmentRecordIds(
 async function openPlanningCreationDialog(page: Page): Promise<Locator> {
   await page.goto('/kalender');
   await page.getByRole('button', { name: 'Kalendereintrag' }).click();
-  const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Kalendereintrag erstellen' }) });
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
+  });
   await expect(dialog.getByRole('tab', { name: 'Termin planen' })).toBeVisible({
     timeout: 15_000,
   });
   await dialog.getByRole('tab', { name: 'Termin planen' }).click();
-  await expect(dialog.locator('#planning-date')).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.locator('#planning-date')).toBeVisible({
+    timeout: 15_000,
+  });
   return dialog;
 }
 
@@ -204,18 +198,14 @@ async function fillInternalPlanningDraft(
   await dialog.locator('#planning-title').fill(options.title);
   await typeIntoDatePickerById(dialog, 'planning-date', options.dateIso);
   if (options.assignEmployeeName) {
-    await dialog
-      .getByRole('combobox')
-      .filter({ hasText: 'Mitarbeiter zuweisen' })
-      .click();
+    await dialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
     await page.getByPlaceholder(/Mitarbeiter suchen/).fill(options.assignEmployeeName);
     await page
       .getByRole('listbox')
       .getByRole('button')
       .filter({ hasText: options.assignEmployeeName })
-      .first()
       .click();
-    await dialog.getByRole('heading').first().click();
+    await dialog.getByRole('heading', { name: 'Kalendereintrag erstellen' }).click();
   }
 }
 
@@ -223,7 +213,12 @@ async function fillInternalPlanningDraft(
 // warning line (person AND date), and leaves WITHOUT saving anything.
 async function probePlanningWarningLine(
   page: Page,
-  options: { title: string; dateIso: string; employeeName: string; expectedLine: string }
+  options: {
+    title: string;
+    dateIso: string;
+    employeeName: string;
+    expectedLine: string;
+  }
 ): Promise<void> {
   const dialog = await openPlanningCreationDialog(page);
   await fillInternalPlanningDraft(page, dialog, {
@@ -231,9 +226,7 @@ async function probePlanningWarningLine(
     dateIso: options.dateIso,
     assignEmployeeName: options.employeeName,
   });
-  await dialog
-    .getByRole('button', { name: /Planung pr.fen und speichern/ })
-    .click();
+  await dialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
   const warning = dialog.locator('[data-planning-warning]');
   await expect(warning).toBeVisible({ timeout: 30_000 });
   await expect(warning.getByText(options.expectedLine)).toBeVisible();
@@ -241,16 +234,8 @@ async function probePlanningWarningLine(
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
-function occurrenceEventInCell(
-  page: Page,
-  dateIso: string,
-  title: string
-): Locator {
-  return page
-    .locator(`.fc-daygrid-day[data-date="${dateIso}"]`)
-    .locator('.fc-event-job')
-    .filter({ hasText: title })
-    .first();
+function occurrenceEventInCell(page: Page, dateIso: string, title: string): Locator {
+  return planningOccurrenceInDateCell(page, dateIso, title);
 }
 
 async function openOccurrenceEditDialogByDate(
@@ -263,9 +248,9 @@ async function openOccurrenceEditDialogByDate(
   await expect(event).toBeVisible({ timeout: 20_000 });
   await event.click();
   await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
-  const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }) });
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }),
+  });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
   return dialog;
 }
@@ -275,31 +260,14 @@ async function withdrawOwnPendingVacationRequestByDate(
   germanDate: string
 ): Promise<void> {
   await openOwnVacationSection(page);
-  const escaped = germanDate.replace(/\./g, '\\.');
-  const withdrawButton = page
-    .getByRole('button', {
-      name: new RegExp(`^Urlaubsantrag vom .*${escaped}.* zurückziehen$`),
-    })
-    .first();
+  const withdrawButton = pendingVacationWithdrawButton(page, germanDate);
   await withdrawButton.click();
   await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
 }
 
 async function markAllOwnNotificationsRead(page: Page): Promise<void> {
   await openAufgaben(page);
-  const unreadRows = page.locator('[data-unread="true"]');
-  for (let iteration = 0; iteration < 10; iteration++) {
-    const unreadCount = await unreadRows.count();
-    if (unreadCount === 0) break;
-    await unreadRows
-      .first()
-      .getByRole('button', { name: /^Benachrichtigung vom .* als gelesen markieren$/ })
-      .click();
-    await expect
-      .poll(async () => unreadRows.count(), { timeout: 15_000 })
-      .toBeLessThan(unreadCount);
-  }
-  await expect(unreadRows).toHaveCount(0, { timeout: 15_000 });
+  await markAllUnreadNotificationsRead(page);
 }
 
 // Shared across the serial A6 tests: the organization-wide actual-time count
@@ -309,8 +277,8 @@ let organizationTimeBaseline: number | null = null;
 // The Berlin base date and the weekday allocation are frozen at module load so
 // every serial test shares identical dates even when a battery run crosses
 // midnight (T7 relocates fixtures created by T5).
-const A6_TODAY_ISO = berlinTodayIso();
-const A6_OFFSETS = a6WeekdayOffsets(A6_TODAY_ISO);
+const A6_TODAY_ISO = berlinDateAtOffset(0);
+const A6_OFFSETS = a6WeekdayOffsets();
 
 test.describe('A6 Planung @AUDIT-W1-A6', () => {
   test('A6-T1: Ganztägige Besuche und alle vier internen Terminarten, auch durch das Büro geplant [P1-11-F01]', async ({
@@ -318,7 +286,6 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     bueroPage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
     organizationTimeBaseline = await getOrganizationTimeEntryCount(world.orgId);
 
     // The four internal entry types are offered with their exact German labels.
@@ -328,9 +295,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     const typeOptions = adminPage.getByRole('option');
     await expect(typeOptions).toHaveCount(4);
     for (const label of ['Interne Arbeit', 'Besprechung', 'Schulung', 'Sonstiges']) {
-      await expect(
-        adminPage.getByRole('option', { name: label, exact: true })
-      ).toBeVisible();
+      await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
     }
     await adminPage.keyboard.press('Escape');
     await adminPage.keyboard.press('Escape');
@@ -339,7 +304,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // Büro plans a Besprechung (the default type) — the planner role includes
     // Büro, not only Admin.
     const besprechungTitle = `A6 Baustellenrunde ${world.runId}`;
-    const besprechungDate = shiftIsoDate(todayIso, 48);
+    const besprechungDate = berlinDateAtOffset(48);
     await createPlannedCalendarEntry(bueroPage, {
       kind: 'internal',
       internalTitle: besprechungTitle,
@@ -352,9 +317,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await expect(plannedCalendarEvent(bueroPage, besprechungTitle)).toBeVisible({
       timeout: 20_000,
     });
-    expect(
-      await getInternalOccurrenceTypes(world.orgId, besprechungTitle)
-    ).toEqual(['meeting']);
+    expect(await getInternalOccurrenceTypes(world.orgId, besprechungTitle)).toEqual(['meeting']);
 
     // Admin plans a Sonstiges entry through the visible label.
     const sonstigesTitle = `A6 Werkstatttag ${world.runId}`;
@@ -362,19 +325,20 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       kind: 'internal',
       internalTitle: sonstigesTitle,
       internalType: 'other',
-      date: shiftIsoDate(todayIso, 49),
+      date: berlinDateAtOffset(49),
       time: '08:00',
       durationHours: 2,
     });
-    expect(
-      await getInternalOccurrenceTypes(world.orgId, sonstigesTitle)
-    ).toEqual(['other']);
+    expect(await getInternalOccurrenceTypes(world.orgId, sonstigesTitle)).toEqual(['other']);
 
     // A JOB visit can be all-day and multi-day, not only internal entries.
     const visitJobNumber = `A6-VISIT-${world.runId}`;
     const visitTitle = `A6 Ganztagsbesuch ${world.runId}`;
-    const visitDate = shiftIsoDate(todayIso, 47);
-    await createJob(adminPage, { jobNumber: visitJobNumber, title: visitTitle });
+    const visitDate = berlinDateAtOffset(47);
+    await createJob(adminPage, {
+      jobNumber: visitJobNumber,
+      title: visitTitle,
+    });
     await createPlannedCalendarEntry(adminPage, {
       kind: 'job_visit',
       jobSearch: visitJobNumber,
@@ -387,9 +351,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     expect(visitState.occurrenceCount).toBe(1);
     expect(visitState.occurrences[0].startAt).toBeNull();
     expect(visitState.occurrences[0].startDate).toBe(visitDate);
-    expect(visitState.occurrences[0].endDateExclusive).toBe(
-      shiftIsoDate(visitDate, 2)
-    );
+    expect(visitState.occurrences[0].endDateExclusive).toBe(shiftIsoDate(visitDate, 2));
     await showPlanningMonth(adminPage, visitDate);
     await expect(plannedCalendarEvent(adminPage, visitTitle)).toBeVisible({
       timeout: 20_000,
@@ -401,11 +363,10 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     world,
   }) => {
     const todayIso = A6_TODAY_ISO;
-
     // Weekly series across two explicit weekdays: the materialized dates use
     // exactly the selected weekdays in calendar order.
     const weeklyTitle = `A6 Wochenserie ${world.runId}`;
-    const weeklyStart = shiftIsoDate(todayIso, 70);
+    const weeklyStart = berlinDateAtOffset(70);
     const startWeekdayIndex = mondayWeekdayIndex(weeklyStart);
     const secondWeekdayIndex = (startWeekdayIndex + 1) % 7;
     await createPlannedCalendarEntry(adminPage, {
@@ -422,11 +383,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       },
     });
     const expectedWeeklyDates: string[] = [];
-    for (
-      let date = weeklyStart;
-      expectedWeeklyDates.length < 6;
-      date = shiftIsoDate(date, 1)
-    ) {
+    for (let date = weeklyStart; expectedWeeklyDates.length < 6; date = shiftIsoDate(date, 1)) {
       const weekday = mondayWeekdayIndex(date);
       if (weekday === startWeekdayIndex || weekday === secondWeekdayIndex) {
         expectedWeeklyDates.push(date);
@@ -453,14 +410,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     if (!monthlyStart) throw new Error('A6: no month with a 31st found');
     const expectedMonthlyDates: string[] = [];
     const [startYear, startMonth] = monthlyStart.split('-').map(Number);
-    for (
-      let monthOffset = 0;
-      expectedMonthlyDates.length < 4;
-      monthOffset += 1
-    ) {
-      const candidate = new Date(
-        Date.UTC(startYear, startMonth - 1 + monthOffset, 31)
-      );
+    for (let monthOffset = 0; expectedMonthlyDates.length < 4; monthOffset += 1) {
+      const candidate = new Date(Date.UTC(startYear, startMonth - 1 + monthOffset, 31));
       if (candidate.getUTCDate() !== 31) continue;
       expectedMonthlyDates.push(
         `${candidate.getUTCFullYear()}-${String(candidate.getUTCMonth() + 1).padStart(2, '0')}-31`
@@ -491,9 +442,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     adminPage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
     const horizonTitle = `A6 Horizontserie ${world.runId}`;
-    const horizonStart = shiftIsoDate(todayIso, 77);
+    const horizonStart = berlinDateAtOffset(77);
 
     // 730 requested weekly occurrences must clamp at the 18-month horizon.
     const initialHorizonDate = addLocalMonthsClamped(horizonStart, 18);
@@ -515,7 +465,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       recurrence: { frequency: 'weekly', count: 730 },
     });
     await expect(
-      adminPage.getByText(`${expectedInitialDates.length} Termine wurden geplant.`)
+      visibleText(adminPage, `${expectedInitialDates.length} Termine wurden geplant.`)
     ).toBeVisible({ timeout: 20_000 });
     const initialState = await getPlanningState(world.orgId, {
       internalTitle: horizonTitle,
@@ -544,16 +494,11 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     for (let clickIndex = 0; clickIndex < 2; clickIndex++) {
       const addedDates = computeExtension(expectedDates);
       expect(addedDates.length).toBeGreaterThan(0);
-      const dialog = await openOccurrenceEditDialogByDate(
-        adminPage,
-        horizonTitle,
-        horizonStart
-      );
-      await dialog
-        .getByRole('button', { name: 'Serie um sechs Monate verlängern' })
-        .click();
+      const dialog = await openOccurrenceEditDialogByDate(adminPage, horizonTitle, horizonStart);
+      await dialog.getByRole('button', { name: 'Serie um sechs Monate verlängern' }).click();
       await expect(
-        adminPage.getByText(
+        visibleText(
+          adminPage,
           `Serie wurde um sechs Monate verlängert (${addedDates.length} neue Termine).`
         )
       ).toBeVisible({ timeout: 30_000 });
@@ -571,8 +516,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     adminPage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
-    const yesterdayIso = shiftIsoDate(todayIso, -1);
+    const yesterdayIso = berlinDateAtOffset(-1);
     const title = `A6 Rückblick ${world.runId}`;
 
     // Daily series starting YESTERDAY: the first occurrence is irrevocably in
@@ -597,34 +541,24 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
 
     // Editing the past occurrence directly is refused understandably; the
     // dialog offers exactly the three documented scopes.
-    const pastDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      title,
-      yesterdayIso
-    );
+    const pastDialog = await openOccurrenceEditDialogByDate(adminPage, title, yesterdayIso);
     await pastDialog.locator('#planning-edit-scope').click();
     for (const scopeLabel of [
       'Nur dieser Termin',
       'Dieser und zukünftige',
       'Ganze Serie ab frühestem änderbaren Termin',
     ]) {
-      await expect(
-        adminPage.getByRole('option', { name: scopeLabel, exact: true })
-      ).toBeVisible();
+      await expect(adminPage.getByRole('option', { name: scopeLabel, exact: true })).toBeVisible();
     }
-    await adminPage
-      .getByRole('option', { name: 'Nur dieser Termin', exact: true })
-      .click();
+    await adminPage.getByRole('option', { name: 'Nur dieser Termin', exact: true }).click();
     await typeIntoTimeInput(pastDialog, 'planning-edit-time', '0930');
-    await pastDialog
-      .getByRole('button', { name: 'Änderung speichern', exact: true })
-      .click();
+    await pastDialog.getByRole('button', { name: 'Änderung speichern', exact: true }).click();
     await expect(
-      adminPage.getByText('Begonnene oder vergangene Termine bleiben unverändert.')
+      visibleText(adminPage, 'Begonnene oder vergangene Termine bleiben unverändert.')
     ).toBeVisible({ timeout: 20_000 });
     await expect(pastDialog).toBeVisible();
     // Both the footer button and the dialog X are named "Schließen".
-    await pastDialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await closePlanningDialogWithNamedControl(pastDialog);
     await expect(pastDialog).toHaveCount(0, { timeout: 15_000 });
 
     // Whole-series edit: only future occurrences move; the past occurrence is
@@ -636,16 +570,16 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     const seriesDialog = await openOccurrenceEditDialogByDate(
       adminPage,
       title,
-      shiftIsoDate(todayIso, 2)
+      berlinDateAtOffset(2)
     );
     await seriesDialog.locator('#planning-edit-scope').click();
     await adminPage
-      .getByRole('option', { name: 'Ganze Serie ab frühestem änderbaren Termin' })
+      .getByRole('option', {
+        name: 'Ganze Serie ab frühestem änderbaren Termin',
+      })
       .click();
     await typeIntoTimeInput(seriesDialog, 'planning-edit-time', '1000');
-    await seriesDialog
-      .getByRole('button', { name: 'Änderung speichern', exact: true })
-      .click();
+    await seriesDialog.getByRole('button', { name: 'Änderung speichern', exact: true }).click();
     await expect(seriesDialog).toHaveCount(0, { timeout: 20_000 });
     const postEditState = await getPlanningState(world.orgId, {
       internalTitle: title,
@@ -673,74 +607,46 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
 
     // Cancel tomorrow's occurrence and skip the day after: both keep a
     // traceably VISIBLE calendar presence instead of disappearing.
-    const cancelDate = shiftIsoDate(todayIso, 1);
-    const skipDate = shiftIsoDate(todayIso, 2);
-    const cancelDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      title,
-      cancelDate
-    );
-    await cancelDialog
-      .getByRole('button', { name: 'Termin absagen', exact: true })
-      .click();
+    const cancelDate = berlinDateAtOffset(1);
+    const skipDate = berlinDateAtOffset(2);
+    const cancelDialog = await openOccurrenceEditDialogByDate(adminPage, title, cancelDate);
+    await cancelDialog.getByRole('button', { name: 'Termin absagen', exact: true }).click();
     await cancelDialog
       .locator('#planning-status-reason')
       .fill('A6 Termin bewusst abgesagt und dokumentiert.');
-    await cancelDialog
-      .getByRole('button', { name: 'Status speichern', exact: true })
-      .click();
+    await cancelDialog.getByRole('button', { name: 'Status speichern', exact: true }).click();
     await expect(cancelDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(
-      adminPage.getByText('Termin wurde abgesagt.')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Termin wurde abgesagt.')).toBeVisible({
+      timeout: 15_000,
+    });
 
-    const skipDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      title,
-      skipDate
-    );
-    await skipDialog
-      .getByRole('button', { name: 'Auslassen', exact: true })
-      .click();
+    const skipDialog = await openOccurrenceEditDialogByDate(adminPage, title, skipDate);
+    await skipDialog.getByRole('button', { name: 'Auslassen', exact: true }).click();
     await skipDialog
       .locator('#planning-status-reason')
       .fill('A6 Termin betrieblich nicht benötigt.');
-    await skipDialog
-      .getByRole('button', { name: 'Status speichern', exact: true })
-      .click();
+    await skipDialog.getByRole('button', { name: 'Status speichern', exact: true }).click();
     await expect(skipDialog).toHaveCount(0, { timeout: 20_000 });
 
     await showPlanningMonth(adminPage, cancelDate);
     const cancelledEvent = occurrenceEventInCell(adminPage, cancelDate, title);
     await expect(cancelledEvent).toBeVisible({ timeout: 20_000 });
-    await expect(
-      adminPage
-        .locator(`.fc-daygrid-day[data-date="${cancelDate}"]`)
-        .getByText('Abgesagt')
-    ).toBeVisible();
+    await expect(planningDateCellStatus(adminPage, cancelDate, 'Abgesagt')).toBeVisible();
     await showPlanningMonth(adminPage, skipDate);
-    await expect(
-      occurrenceEventInCell(adminPage, skipDate, title)
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(
-      adminPage
-        .locator(`.fc-daygrid-day[data-date="${skipDate}"]`)
-        .getByText('Ausgelassen')
-    ).toBeVisible();
+    await expect(occurrenceEventInCell(adminPage, skipDate, title)).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(planningDateCellStatus(adminPage, skipDate, 'Ausgelassen')).toBeVisible();
 
     // The cancelled occurrence is read-only: its popover explains the status
     // and offers no editing.
     await showPlanningMonth(adminPage, cancelDate);
     await occurrenceEventInCell(adminPage, cancelDate, title).click();
-    await expect(
-      adminPage.getByRole('button', { name: 'Terminübersicht schließen' })
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      adminPage.getByRole('button', { name: 'Termin bearbeiten' })
-    ).toHaveCount(0);
-    await adminPage
-      .getByRole('button', { name: 'Terminübersicht schließen' })
-      .click();
+    await expect(adminPage.getByRole('button', { name: 'Terminübersicht schließen' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(adminPage.getByRole('button', { name: 'Termin bearbeiten' })).toHaveCount(0);
+    await adminPage.getByRole('button', { name: 'Terminübersicht schließen' }).click();
 
     const finalState = await getPlanningState(world.orgId, {
       internalTitle: title,
@@ -755,9 +661,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
         (occurrence) => originalStartMinute(occurrence) === `${skipDate}T06:00`
       )?.status
     ).toBe('skipped');
-    expect(finalState.eventTypes).toEqual(
-      expect.arrayContaining(['cancelled', 'skipped'])
-    );
+    expect(finalState.eventTypes).toEqual(expect.arrayContaining(['cancelled', 'skipped']));
   });
 
   test('A6-T5: Schwebende Urlaubsanträge warnen mit Person und Datum; geänderte Fakten erzwingen eine neue Entscheidung [P1-11-F04]', async ({
@@ -765,14 +669,12 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     employeePage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
     const { pendingOffset, pairOffsets } = A6_OFFSETS;
-    const pendingDate = shiftIsoDate(todayIso, pendingOffset);
+    const pendingDate = ownedBerlinDateAtOffset('a6-planung', pendingOffset);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const fallbackMessage =
       'Für diese Person gilt nur der gekennzeichnete Standardwert, weil kein Arbeitszeitmodell hinterlegt ist.';
-    const pendingMessage =
-      'Für diesen Tag liegt ein noch offener Abwesenheitsantrag vor.';
+    const pendingMessage = 'Für diesen Tag liegt ein noch offener Abwesenheitsantrag vor.';
 
     // A pending (undecided) vacation request is a capacity source: the warning
     // names the person and the date, and saving requires a reason.
@@ -788,20 +690,14 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       dateIso: pendingDate,
       assignEmployeeName: employeeName,
     });
-    await pendingDialog
-      .getByRole('button', { name: /Planung pr.fen und speichern/ })
-      .click();
+    await pendingDialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
     const pendingWarning = pendingDialog.locator('[data-planning-warning]');
     await expect(pendingWarning).toBeVisible({ timeout: 30_000 });
     await expect(
-      pendingWarning.getByText(
-        `${employeeName}: ${pendingMessage} (${pendingDate})`
-      )
+      pendingWarning.getByText(`${employeeName}: ${pendingMessage} (${pendingDate})`)
     ).toBeVisible();
     await expect(
-      pendingWarning.getByText(
-        `${employeeName}: ${fallbackMessage} (${pendingDate})`
-      )
+      pendingWarning.getByText(`${employeeName}: ${fallbackMessage} (${pendingDate})`)
     ).toBeVisible();
     await expect(
       pendingDialog.getByRole('button', { name: 'Mit Begründung planen' })
@@ -809,13 +705,11 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await pendingDialog
       .locator('#planning-override')
       .fill(`A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`);
-    await pendingDialog
-      .getByRole('button', { name: 'Mit Begründung planen' })
-      .click();
+    await pendingDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
     await expect(pendingDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(
-      adminPage.getByText('Termin wurde geplant.')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Termin wurde geplant.')).toBeVisible({
+      timeout: 15_000,
+    });
     const pendingState = await getPlanningState(world.orgId, {
       internalTitle: pendingTitle,
     });
@@ -831,8 +725,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // refreshed hints show the new fact, and only the second confirmation
     // saves. The two-date series also proves per-date attribution.
     const staleTitle = `A6 Faktenlage ${world.runId}`;
-    const staleDateFirst = shiftIsoDate(todayIso, pairOffsets[0]);
-    const staleDateSecond = shiftIsoDate(todayIso, pairOffsets[1]);
+    const staleDateFirst = ownedBerlinDateAtOffset('a6-planung', pairOffsets[0]);
+    const staleDateSecond = ownedBerlinDateAtOffset('a6-planung', pairOffsets[1]);
     const staleDialog = await openPlanningCreationDialog(adminPage);
     await fillInternalPlanningDraft(adminPage, staleDialog, {
       title: staleTitle,
@@ -840,26 +734,18 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       assignEmployeeName: employeeName,
     });
     await staleDialog.getByText('Wiederholen', { exact: true }).click();
-    const rhythmBlock = staleDialog
-      .getByText('Rhythmus', { exact: true })
-      .locator('..');
+    const rhythmBlock = staleDialog.getByText('Rhythmus', { exact: true }).locator('..');
     await rhythmBlock.getByRole('combobox').click();
     await adminPage.getByRole('option', { name: /T.glich/ }).click();
     await staleDialog.locator('#planning-count').fill('2');
-    await staleDialog
-      .getByRole('button', { name: /Planung pr.fen und speichern/ })
-      .click();
+    await staleDialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();
     const staleWarning = staleDialog.locator('[data-planning-warning]');
     await expect(staleWarning).toBeVisible({ timeout: 30_000 });
     await expect(
-      staleWarning.getByText(
-        `${employeeName}: ${fallbackMessage} (${staleDateFirst})`
-      )
+      staleWarning.getByText(`${employeeName}: ${fallbackMessage} (${staleDateFirst})`)
     ).toBeVisible();
     await expect(
-      staleWarning.getByText(
-        `${employeeName}: ${fallbackMessage} (${staleDateSecond})`
-      )
+      staleWarning.getByText(`${employeeName}: ${fallbackMessage} (${staleDateSecond})`)
     ).toBeVisible();
     await expect(staleWarning.getByText(pendingMessage)).toHaveCount(0);
 
@@ -872,27 +758,19 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await staleDialog
       .locator('#planning-override')
       .fill(`A6 Einsatz bewusst bestätigt ${world.runId}`);
-    await staleDialog
-      .getByRole('button', { name: 'Mit Begründung planen' })
-      .click();
+    await staleDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
     await expect(
-      adminPage.getByText(
-        'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.'
-      )
+      visibleText(adminPage, 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.')
     ).toBeVisible({ timeout: 30_000 });
     await expect(staleDialog).toBeVisible();
     await expect(
-      staleWarning.getByText(
-        `${employeeName}: ${pendingMessage} (${staleDateFirst})`
-      )
+      staleWarning.getByText(`${employeeName}: ${pendingMessage} (${staleDateFirst})`)
     ).toBeVisible({ timeout: 15_000 });
-    await staleDialog
-      .getByRole('button', { name: 'Mit Begründung planen' })
-      .click();
+    await staleDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
     await expect(staleDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(
-      adminPage.getByText('2 Termine wurden geplant.')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, '2 Termine wurden geplant.')).toBeVisible({
+      timeout: 15_000,
+    });
     const staleState = await getPlanningState(world.orgId, {
       internalTitle: staleTitle,
     });
@@ -900,20 +778,15 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     expect(staleState.capacityConflictKinds).toEqual(
       expect.arrayContaining(['no_schedule', 'pending_absence'])
     );
-    expect(staleState.overrideReasons).toContain(
-      `A6 Einsatz bewusst bestätigt ${world.runId}`
-    );
+    expect(staleState.overrideReasons).toContain(`A6 Einsatz bewusst bestätigt ${world.runId}`);
 
     // Terminal state: the employee withdraws both pending requests (a
     // self-action without decision notifications).
     await withdrawOwnPendingVacationRequestByDate(
       employeePage,
-      formatGermanDate(shiftIsoDate(todayIso, pairOffsets[0]))
+      formatGermanDate(ownedBerlinDateAtOffset('a6-planung', pairOffsets[0]))
     );
-    await withdrawOwnPendingVacationRequestByDate(
-      employeePage,
-      formatGermanDate(pendingDate)
-    );
+    await withdrawOwnPendingVacationRequestByDate(employeePage, formatGermanDate(pendingDate));
   });
 
   test('A6-T6: Kapazitätsquellen — Betriebsruhe, Feiertag, genehmigter Urlaub und Krankheit erklären Person und Datum [P1-11-F04]', async ({
@@ -923,12 +796,11 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
   }) => {
     const todayIso = A6_TODAY_ISO;
     const { closureOffset, vacationOffset } = A6_OFFSETS;
-    const closureDate = shiftIsoDate(todayIso, closureOffset);
-    const vacationDate = shiftIsoDate(todayIso, vacationOffset);
+    const closureDate = ownedBerlinDateAtOffset('a6-planung', closureOffset);
+    const vacationDate = ownedBerlinDateAtOffset('a6-planung', vacationOffset);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const freeDayMessage = 'Der Termin liegt auf einem arbeitsfreien Tag.';
-    const absenceMessage =
-      'Für diesen Zeitraum liegt eine genehmigte Abwesenheit vor.';
+    const absenceMessage = 'Für diesen Zeitraum liegt eine genehmigte Abwesenheit vor.';
 
     // Betriebsruhe: a closure day is a capacity source.
     await addClosureDayViaSettings(adminPage, {
@@ -1008,11 +880,11 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       .click();
     const cancelSicknessDialog = employeePage.getByRole('dialog');
     await expect(
-      cancelSicknessDialog.getByRole('heading', { name: 'Krankmeldung stornieren' })
+      cancelSicknessDialog.getByRole('heading', {
+        name: 'Krankmeldung stornieren',
+      })
     ).toBeVisible();
-    await cancelSicknessDialog
-      .getByRole('button', { name: 'Stornieren', exact: true })
-      .click();
+    await cancelSicknessDialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
     await expect(cancelSicknessDialog).toHaveCount(0, { timeout: 15_000 });
 
     // The employee reads the decision notifications produced by the approval
@@ -1025,11 +897,25 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     employeePage,
     world,
   }) => {
-    const todayIso = A6_TODAY_ISO;
     const { pendingOffset } = A6_OFFSETS;
+    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+      test: 'A6-T7',
+      needs: 'the organization time-entry baseline captured before A6 planning',
+      grep: 'A6-T1|A6-T5|A6-T7',
+      suite: 'audit',
+    });
+    const inheritedEmployeeOccurrence = await getPlanningState(world.orgId, {
+      internalTitle: `A6 Kapazität ${world.runId}`,
+    });
+    requireSerialPrecondition(inheritedEmployeeOccurrence.occurrenceCount > 0, {
+      test: 'A6-T7',
+      needs: 'the employee planning occurrence created by A6-T5',
+      grep: 'A6-T1|A6-T5|A6-T7',
+      suite: 'audit',
+    });
     const noLoginName = `Nora Nachweis-${world.runId}`;
     const noLoginTitle = `A6 Ohne Login ${world.runId}`;
-    const noLoginDate = shiftIsoDate(todayIso, 50);
+    const noLoginDate = berlinDateAtOffset(50);
 
     // A6 creates its own no-login personnel record (never an earlier
     // session's fixture) and plans ONLY that record.
@@ -1052,55 +938,41 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     expect(noLoginState.occurrenceCount).toBe(1);
     expect(
-      await getOccurrenceAssignmentRecordIds(
-        world.orgId,
-        noLoginState.occurrences[0].id
-      )
+      await getOccurrenceAssignmentRecordIds(world.orgId, noLoginState.occurrences[0].id)
     ).toEqual([noLoginRecordId]);
 
     // Managers SEE the planned no-login person: the occurrence renders on the
     // manager calendar and the edit dialog carries the assignment visibly.
-    const editDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      noLoginTitle,
-      noLoginDate
+    const editDialog = await openOccurrenceEditDialogByDate(adminPage, noLoginTitle, noLoginDate);
+    await expect(editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' })).toBeVisible(
+      { timeout: 15_000 }
     );
-    await expect(
-      editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' })
-    ).toBeVisible({ timeout: 15_000 });
-    await editDialog
-      .getByRole('combobox')
-      .filter({ hasText: '1 Mitarbeiter' })
-      .click();
+    await editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' }).click();
     await adminPage.getByPlaceholder(/Mitarbeiter suchen/).fill('Nora');
     const noLoginOption = adminPage
       .getByRole('listbox')
       .getByRole('button')
-      .filter({ hasText: noLoginName })
-      .first();
+      .filter({ hasText: noLoginName });
     await expect(noLoginOption).toBeVisible({ timeout: 15_000 });
     await expect(noLoginOption.getByText('Ohne App-Zugang')).toBeVisible();
-    await editDialog.getByRole('heading').first().click();
-    await editDialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await editDialog.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }).click();
+    await closePlanningDialogWithNamedControl(editDialog);
     await expect(editDialog).toHaveCount(0, { timeout: 15_000 });
 
     // Field workers see EXACTLY their assigned occurrences: their own A6
     // entry is visible, the no-login-only entry is not.
-    const ownDate = shiftIsoDate(todayIso, pendingOffset);
+    const ownDate = ownedBerlinDateAtOffset('a6-planung', pendingOffset);
     await showPlanningMonth(employeePage, ownDate);
     await expect(
       occurrenceEventInCell(employeePage, ownDate, `A6 Kapazität ${world.runId}`)
     ).toBeVisible({ timeout: 20_000 });
     await showPlanningMonth(employeePage, noLoginDate);
-    await expect(
-      employeePage.locator('.fc-event-job').filter({ hasText: noLoginTitle })
-    ).toHaveCount(0);
+    await expect(planningOccurrenceInDateCell(employeePage, noLoginDate, noLoginTitle)).toHaveCount(
+      0
+    );
 
     // Planned occurrences never create actual work time: the organization-wide
     // time-entry count is unchanged since before any A6 planning existed.
-    expect(organizationTimeBaseline).not.toBeNull();
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(
-      organizationTimeBaseline!
-    );
+    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(organizationTimeStart);
   });
 });

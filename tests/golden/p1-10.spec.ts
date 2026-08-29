@@ -2,10 +2,7 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './support/fixtures';
 import { ARTIFACTS_DIR } from './support/world';
-import {
-  getCustomerRelationshipState,
-  getVisibleCustomerRelationshipStateAs,
-} from './support/db';
+import { getCustomerRelationshipState, getVisibleCustomerRelationshipStateAs } from './support/db';
 import {
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -52,7 +49,9 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     await createCustomer(adminPage, customer);
     await openCustomerDetail(adminPage, customer);
     await expect(
-      adminPage.getByText('Noch nicht konfiguriert', { exact: true })
+      adminPage
+        .getByRole('region', { name: 'Kontaktvorgaben' })
+        .getByText('Noch nicht konfiguriert', { exact: true })
     ).toBeVisible();
     await addContactOnCustomerDetail(adminPage, {
       name: `Anna Ansprechpartnerin ${world.runId}`,
@@ -82,25 +81,28 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     );
     await openCustomerDetail(adminPage, customer);
 
-    const timeline = adminPage.locator('[data-testid="customer-timeline"]');
+    const timeline = adminPage.getByTestId('customer-timeline');
     await expect(timeline.getByText('Kunde angelegt')).toBeVisible();
-    await expect(timeline.getByText('Ansprechpartner angelegt').first()).toBeVisible();
+    await expect(
+      timeline.getByText('Ansprechpartner angelegt').filter({ visible: true })
+    ).not.toHaveCount(0);
     await expect(timeline.getByText('Einsatzort angelegt')).toBeVisible();
     await expect(timeline.getByText(jobTitle)).toBeVisible();
-    const keys = await timeline.locator('[data-timeline-key]').evaluateAll((rows) =>
-      rows.map((row) => row.getAttribute('data-timeline-key'))
-    );
+    const keys = await timeline
+      .locator('[data-timeline-key]')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-timeline-key')));
     expect(new Set(keys).size).toBe(keys.length);
-    await expect(timeline.getByRole('link', { name: 'Quelle öffnen' }).first()).toHaveAttribute(
-      'href',
-      /\//
-    );
+    const sourceLinks = timeline.getByRole('link', { name: 'Quelle öffnen' });
+    await expect(sourceLinks).not.toHaveCount(0);
+    expect(
+      await sourceLinks.evaluateAll((links) =>
+        links.every((link) => link.getAttribute('href')?.includes('/'))
+      )
+    ).toBe(true);
 
     await adminPage.getByRole('button', { name: 'Arbeit', exact: true }).click();
     await expect(timeline.getByText(jobTitle)).toBeVisible();
-    await expect(
-      timeline.getByText(`Anna Ansprechpartnerin ${world.runId}`)
-    ).toHaveCount(0);
+    await expect(timeline.getByText(`Anna Ansprechpartnerin ${world.runId}`)).toHaveCount(0);
 
     await adminPage.getByRole('button', { name: 'Dokumente', exact: true }).click();
     const documentEntry = timeline
@@ -128,14 +130,14 @@ test.describe('P1-10 customer relationships @P1-10', () => {
       dueAtLocal: berlinDateTime(-1, 9),
       note: 'Kundenzusage zum Angebot prüfen',
     });
-    const followUpRow = bueroPage.locator('[data-follow-up-id]').filter({ hasText: title });
+    const followUpRow = bueroPage
+      .getByRole('region', { name: 'Nachfassaktionen' })
+      .locator('[data-follow-up-id]')
+      .filter({ hasText: title });
     await expect(followUpRow).toHaveAttribute('data-overdue', 'true');
 
     await openAufgaben(bueroPage);
-    const task = attentionTaskLink(
-      bueroPage,
-      `Nachfassaktion ${title} für ${customer} öffnen`
-    );
+    const task = attentionTaskLink(bueroPage, `Nachfassaktion ${title} für ${customer} öffnen`);
     await expect(task).toHaveCount(1, { timeout: 15_000 });
     await task.click();
     await expect(followUpRow).toBeVisible({ timeout: 15_000 });
@@ -143,10 +145,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
 
     await openAufgaben(bueroPage);
     await expect(
-      attentionTaskLink(
-        bueroPage,
-        `Nachfassaktion ${title} für ${customer} öffnen`
-      )
+      attentionTaskLink(bueroPage, `Nachfassaktion ${title} für ${customer} öffnen`)
     ).toHaveCount(0, { timeout: 15_000 });
 
     const state = await getCustomerRelationshipState(world.orgId, customer);
@@ -184,15 +183,9 @@ test.describe('P1-10 customer relationships @P1-10', () => {
 
     await adminPage.getByRole('link', { name: '+49 30 555002' }).click();
     const warningDialog = adminPage.getByRole('dialog');
-    await expect(
-      warningDialog.getByText(/Nicht-kontaktieren-Hinweis/)
-    ).toBeVisible();
-    await expect(
-      warningDialog.getByText(/anderer Ansprechpartner/)
-    ).toBeVisible();
-    await expect(
-      warningDialog.getByText(/Kontaktweg.*nicht erlaubt/)
-    ).toBeVisible();
+    await expect(warningDialog.getByText(/Nicht-kontaktieren-Hinweis/)).toBeVisible();
+    await expect(warningDialog.getByText(/anderer Ansprechpartner/)).toBeVisible();
+    await expect(warningDialog.getByText(/Kontaktweg.*nicht erlaubt/)).toBeVisible();
     await warningDialog.getByRole('button', { name: 'Abbrechen' }).click();
 
     await proceedThroughContactWarning(
@@ -202,10 +195,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     );
     await expect
       .poll(async () => {
-        const state = await getCustomerRelationshipState(
-          world.orgId,
-          customerName(world.runId)
-        );
+        const state = await getCustomerRelationshipState(world.orgId, customerName(world.runId));
         return state.preferenceEventTypes;
       })
       .toContain('exception_acknowledged');
@@ -236,10 +226,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
     outsiderPage,
     world,
   }) => {
-    const state = await getCustomerRelationshipState(
-      world.orgId,
-      customerName(world.runId)
-    );
+    const state = await getCustomerRelationshipState(world.orgId, customerName(world.runId));
     await employeePage.goto(`/kunden/${state.clientId}`);
     await employeePage.waitForURL('**/dashboard', { timeout: 15_000 });
     await outsiderPage.goto(`/kunden/${state.clientId}`);

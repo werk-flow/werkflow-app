@@ -68,9 +68,9 @@ import {
 } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import {
-  useMemberStatusPolling,
+  useMemberStatus,
   type MemberStatus,
-} from '@/hooks/use-member-status-polling';
+} from '@/hooks/use-member-status';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import {
   formatDuration,
@@ -226,6 +226,7 @@ export function MitarbeiterDetailContent({
 
   useRealtimeRouterRefresh({
     tables: [
+      'organization_settings',
       'employee_records',
       'employment_conditions',
       'work_schedules',
@@ -238,7 +239,7 @@ export function MitarbeiterDetailContent({
 
   const memberIds = useMemo(() => [member.userId], [member.userId]);
 
-  const { statusMap } = useMemberStatusPolling({
+  const { statusMap } = useMemberStatus({
     organizationId,
     memberIds,
     breakMode,

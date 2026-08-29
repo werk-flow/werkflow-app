@@ -39,9 +39,7 @@ const TODAY_ISO = new Intl.DateTimeFormat('sv-SE', {
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 // P1-12 owns run-day+3 through run-day+10 at 06:00 Berlin (early times keep
@@ -85,19 +83,13 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     const parkingDialog = adminPage.getByRole('dialog');
     await parkingDialog.locator('#work-blocker-reason').click();
     await adminPage.getByRole('option', { name: 'Material', exact: true }).click();
-    await parkingDialog
-      .locator('#work-blocker-details')
-      .fill('Rückstau bis zur Lieferung.');
+    await parkingDialog.locator('#work-blocker-details').fill('Rückstau bis zur Lieferung.');
     await selectFromSearchable(
       adminPage,
       parkingDialog.locator('#work-blocker-owner'),
-      world.users.admin.firstName,
+      world.users.admin.firstName
     );
-    await typeIntoDatePickerById(
-      parkingDialog,
-      'work-blocker-review',
-      REVIEW_DATE,
-    );
+    await typeIntoDatePickerById(parkingDialog, 'work-blocker-review', REVIEW_DATE);
     await parkingDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
 
@@ -132,7 +124,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await employeePage.goto('/aufgaben');
     const taskGroup = employeePage.getByTestId('attention-dispatch-tasks');
     await expect(taskGroup).toBeVisible({ timeout: 20_000 });
-    await expect(taskGroup.getByText(title).first()).toBeVisible();
+    await expect(taskGroup.getByText(title, { exact: true })).toBeVisible();
   });
 
   test('scheduling dispatched backlog work is a traceable target transition', async ({
@@ -153,10 +145,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     expect(state.dispatches).toHaveLength(1);
     expect(state.dispatches[0].status).toBe('active');
     expect(state.dispatches[0].targetKind).toBe('occurrence');
-    expect(state.dispatches[0].revisionChangeKinds).toEqual([
-      'issued',
-      'target_scheduled',
-    ]);
+    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'target_scheduled']);
     expect(state.dispatches[0].currentRevisionNumber).toBe(2);
     expect(state.dispatches[0].eventTypes).toContain('target_scheduled');
 
@@ -211,10 +200,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     });
     state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
     expect(state.dispatches[0].currentRevisionNumber).toBe(2);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual([
-      'issued',
-      'schedule_changed',
-    ]);
+    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'schedule_changed']);
     // The old acknowledgement stays verbatim on revision 1; revision 2 has none.
     expect(
       state.dispatches[0].acknowledgements.filter(
@@ -222,15 +208,9 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       )
     ).toHaveLength(1);
     expect(
-      state.dispatches[0].acknowledgements.filter(
-        (ack) => ack.revisionNumber === 2
-      )
+      state.dispatches[0].acknowledgements.filter((ack) => ack.revisionNumber === 2)
     ).toHaveLength(0);
-    await expectDispatchStateOnJobPage(
-      employeePage,
-      mainJobNumber(world.runId),
-      'ausstehend'
-    );
+    await expectDispatchStateOnJobPage(employeePage, mainJobNumber(world.runId), 'ausstehend');
   });
 
   test('a challenge reaches the office and a kept plan is re-confirmed', async ({
@@ -239,27 +219,21 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     world,
   }) => {
     const challengeReason = 'Terminüberschneidung mit anderem Einsatz.';
-    await challengeDispatchOnJobPage(
-      employeePage,
-      mainJobNumber(world.runId),
-      challengeReason
-    );
+    await challengeDispatchOnJobPage(employeePage, mainJobNumber(world.runId), challengeReason);
 
     await openDispatchPanel(adminPage);
-    const panel = adminPage.locator('[data-dispatch-panel]');
+    const panel = adminPage.getByRole('complementary', { name: 'Einsätze' });
     await expect(
-      panel.getByText(challengeReason, { exact: false }).first()
+      panel
+        .getByRole('region', { name: 'Offene Rückfragen' })
+        .getByText(challengeReason, { exact: false })
     ).toBeVisible({ timeout: 20_000 });
     await resolveDispatchChallengeInPanel(
       adminPage,
       'Kunde besteht auf dem Termin, Einsatz bleibt.'
     );
 
-    await expectDispatchStateOnJobPage(
-      employeePage,
-      mainJobNumber(world.runId),
-      'ausstehend'
-    );
+    await expectDispatchStateOnJobPage(employeePage, mainJobNumber(world.runId), 'ausstehend');
     await acknowledgeDispatchOnJobPage(employeePage, mainJobNumber(world.runId));
 
     const state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
@@ -273,9 +247,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       )
     ).toHaveLength(1);
     expect(
-      acks.filter(
-        (ack) => ack.revisionNumber === 2 && ack.state === 'acknowledged'
-      )
+      acks.filter((ack) => ack.revisionNumber === 2 && ack.state === 'acknowledged')
     ).toHaveLength(1);
     for (const expected of [
       'issued',
@@ -311,10 +283,10 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     await openDispatchPanel(adminPage);
     await recordCommitmentForOccurrence(adminPage, mainTitle);
-    const mainRow = dispatchOccurrenceRow(adminPage, mainTitle).first();
-    await expect(
-      mainRow.locator('[data-commitment-mismatch="false"]')
-    ).toBeVisible({ timeout: 20_000 });
+    const mainRow = dispatchOccurrenceRow(adminPage, mainTitle);
+    await expect(mainRow.locator('[data-commitment-mismatch="false"]')).toBeVisible({
+      timeout: 20_000,
+    });
 
     const preview = await startBatchRescheduleInPanel(adminPage, {
       titles: [mainTitle, batchTitle],
@@ -328,9 +300,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await expect(
       preview.getByText('Kundenzusagen weichen danach ab', { exact: false })
     ).toBeVisible();
-    await expect(
-      preview.getByText(/1 Bestätigung wird ungültig/)
-    ).toBeVisible();
+    await expect(preview.getByText(/1 Bestätigung wird ungültig/)).toBeVisible();
     await confirmBatchReschedule(adminPage, preview, OVERRIDE_REASON);
 
     // All-or-nothing move: every selected occurrence shifted one day.
@@ -341,40 +311,31 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       jobNumber: batchJobNumber(world.runId),
     });
     expect(batchPlanning.occurrenceCount).toBe(2);
-    const allEventTypes = [
-      ...mainPlanning.eventTypes,
-      ...batchPlanning.eventTypes,
-    ];
+    const allEventTypes = [...mainPlanning.eventTypes, ...batchPlanning.eventTypes];
     expect(allEventTypes).toContain('batch_rescheduled');
     expect(mainPlanning.eventTypes).toContain('edited');
 
     // The commitment record itself never moved — the mismatch is the visible
     // required action, and no message was sent by the move.
-    let commitments = await getCommitmentState(
-      world.orgId,
-      mainJobNumber(world.runId)
-    );
+    let commitments = await getCommitmentState(world.orgId, mainJobNumber(world.runId));
     expect(commitments).toHaveLength(1);
     expect(commitments[0].status).toBe('active');
     expect(commitments[0].committedDate).toBe(MAIN_MOVED_DATE);
-    await expect(
-      mainRow.locator('[data-commitment-mismatch="true"]')
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(mainRow.locator('[data-commitment-mismatch="true"]')).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Re-committing supersedes the old promise traceably.
     await recordCommitmentForOccurrence(adminPage, mainTitle);
-    commitments = await getCommitmentState(
-      world.orgId,
-      mainJobNumber(world.runId)
-    );
+    commitments = await getCommitmentState(world.orgId, mainJobNumber(world.runId));
     expect(commitments).toHaveLength(2);
     expect(commitments[0].status).toBe('superseded');
     expect(commitments[1].status).toBe('active');
     expect(commitments[1].committedDate).toBe(MAIN_BATCH_DATE);
     expect(commitments[1].supersedesId).not.toBeNull();
-    await expect(
-      mainRow.locator('[data-commitment-mismatch="false"]')
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(mainRow.locator('[data-commitment-mismatch="false"]')).toBeVisible({
+      timeout: 20_000,
+    });
 
     // The batch move superseded the acknowledged dispatch revision again.
     const state = await getDispatchState(world.orgId, mainJobNumber(world.runId));
@@ -416,38 +377,27 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     // A second office user's open panel learns about a new dispatch live.
     await openDispatchPanel(bueroPage);
     const bueroRow = bueroPage
+      .getByRole('complementary', { name: 'Einsätze' })
       .locator('[data-dispatch-occurrence]')
-      .filter({ hasText: liveTitle })
-      .first();
+      .filter({ hasText: liveTitle });
     await expect(bueroRow).toBeVisible({ timeout: 20_000 });
     await expect(bueroRow.locator('[data-recipient-state]')).toHaveCount(0);
 
     await openDispatchPanel(adminPage);
     await issueDispatchForOccurrence(adminPage, liveTitle);
-    await expectLiveWithin(bueroRow.locator('[data-recipient-state]').first(), {
+    await expectLiveWithin(bueroRow.locator('[data-recipient-state]'), {
       label: 'p1-12 dispatch state cross-session',
     });
 
     // Employees never see the office dispatch surface.
     await employeePage.goto('/kalender');
-    await expect(
-      employeePage.getByTestId('dispatch-panel-toggle')
-    ).toHaveCount(0);
+    await expect(employeePage.getByTestId('dispatch-panel-toggle')).toHaveCount(0);
 
     // RLS matrix with real credentials: managers see the organization,
     // recipients see exactly their own rows, outsiders see nothing.
-    const adminView = await getVisibleDispatchStateAs(
-      world.users.admin,
-      world.orgId
-    );
-    const employeeView = await getVisibleDispatchStateAs(
-      world.users.employee,
-      world.orgId
-    );
-    const outsiderView = await getVisibleDispatchStateAs(
-      world.outsider.admin,
-      world.orgId
-    );
+    const adminView = await getVisibleDispatchStateAs(world.users.admin, world.orgId);
+    const employeeView = await getVisibleDispatchStateAs(world.users.employee, world.orgId);
+    const outsiderView = await getVisibleDispatchStateAs(world.outsider.admin, world.orgId);
     expect(adminView.planning_dispatches).toBeGreaterThan(0);
     expect(adminView.planning_dispatch_events).toBeGreaterThan(0);
     expect(adminView.planning_customer_commitments).toBeGreaterThan(0);

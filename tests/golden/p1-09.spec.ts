@@ -21,6 +21,7 @@ import {
   renewCapabilityViaManagement,
   setApprenticeWarningViaManagement,
   visibleText,
+  textInDom,
 } from './support/steps';
 
 // P1-09 sorts last. It therefore runs after the complete inherited P1-08
@@ -132,7 +133,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     });
     await expect(visibleText(employeePage, 'Abgelaufen')).toBeVisible();
     await expect(visibleText(employeePage, 'Nachweis: erhalten')).toBeVisible();
-    await expect(employeePage.getByText(officeSkill)).toHaveCount(0);
+    await expect(textInDom(employeePage, officeSkill)).toHaveCount(0);
   });
 
   test('Auftragsanforderung erklärt die stärkste Abdeckung; Teamübernahme bleibt mit Begründung möglich und wird attribuiert', async ({
@@ -164,9 +165,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     expect(state.requirementCount).toBe(1);
     expect(state.assessments.length).toBeGreaterThan(0);
     const latest = state.assessments[state.assessments.length - 1];
-    expect(latest.overrideReason).toBe(
-      'Erfahrener Kollege begleitet den Einsatz'
-    );
+    expect(latest.overrideReason).toBe('Erfahrener Kollege begleitet den Einsatz');
     expect(latest.teamSourceId).not.toBeNull();
     expect(latest.fingerprint).toMatch(/^p1-09:/);
   });
@@ -179,9 +178,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const apprenticeEffectiveDate = shiftIsoDate(TODAY_ISO, 90);
     await bueroPage.goto('/mitarbeiter');
-    await bueroPage
-      .getByRole('tab', { name: 'Qualifikationen', exact: true })
-      .click();
+    await bueroPage.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
     await expect(
       bueroPage.getByRole('checkbox', {
         name: 'Ausbildungs-Hinweis aktivieren',
@@ -208,8 +205,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     expect(state.requirementCount).toBe(0);
     expect(
       state.assessments.some(
-        (assessment) =>
-          assessment.overrideReason === 'Einsatz wird im Betrieb begleitet'
+        (assessment) => assessment.overrideReason === 'Einsatz wird im Betrieb begleitet'
       )
     ).toBe(true);
   });
@@ -218,16 +214,9 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     adminPage,
     world,
   }) => {
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const certification = certificationName(world.runId);
-    const before = await getCapabilityHistoryState(
-      world.orgId,
-      employeeRecord.id,
-      certification
-    );
+    const before = await getCapabilityHistoryState(world.orgId, employeeRecord.id, certification);
     expect(before.rows).toHaveLength(1);
     const expiredRecordId = before.rows[0].id;
 
@@ -243,38 +232,24 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
       validFrom: TODAY_ISO,
       validUntil: shiftIsoDate(TODAY_ISO, 365),
     });
-    const after = await getCapabilityHistoryState(
-      world.orgId,
-      employeeRecord.id,
-      certification
-    );
+    const after = await getCapabilityHistoryState(world.orgId, employeeRecord.id, certification);
     expect(after.rows).toHaveLength(2);
     expect(after.rows[0].supersededAt).not.toBeNull();
     expect(after.rows[1].supersedesId).toBe(after.rows[0].id);
-    expect(after.employeeEventTypes).toEqual([
-      'qualification_added',
-      'qualification_renewed',
-    ]);
+    expect(after.employeeEventTypes).toEqual(['qualification_added', 'qualification_renewed']);
 
     await openAufgaben(adminPage);
-    await expect(attentionNotificationRow(adminPage, expiredRecordId)).toHaveCount(
-      0,
-      { timeout: 15_000 }
-    );
+    await expect(attentionNotificationRow(adminPage, expiredRecordId)).toHaveCount(0, {
+      timeout: 15_000,
+    });
   });
 
   test('Privacy-Matrix per RLS: eigene operative Daten, Manager-Übersicht, keine Kollegendetails oder fremde Organisation', async ({
     employeePage,
     world,
   }) => {
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const bueroRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.buero.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
     const [employeeView, managerView, outsiderView] = await Promise.all([
       getVisibleQualificationStateAs(world.users.employee, world.orgId),
       getVisibleQualificationStateAs(world.users.admin, world.orgId),
@@ -282,16 +257,12 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     ]);
 
     expect(employeeView.teamEmployeeRecordIds).toEqual([employeeRecord.id]);
-    expect(employeeView.capabilityEmployeeRecordIds).toEqual([
-      employeeRecord.id,
-    ]);
+    expect(employeeView.capabilityEmployeeRecordIds).toEqual([employeeRecord.id]);
     expect(employeeView.evidenceStates).toEqual(['pending', 'received']);
     expect(employeeView.requirementCount).toBe(0);
     expect(employeeView.assessmentCount).toBe(0);
 
-    expect(managerView.teamEmployeeRecordIds).toEqual(
-      [employeeRecord.id, bueroRecord.id].sort()
-    );
+    expect(managerView.teamEmployeeRecordIds).toEqual([employeeRecord.id, bueroRecord.id].sort());
     expect(managerView.capabilityEmployeeRecordIds).toEqual(
       [employeeRecord.id, bueroRecord.id].sort()
     );
@@ -307,11 +278,9 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
     });
 
     await employeePage.goto('/qualifikationen');
-    await expect(
-      visibleText(employeePage, certificationName(world.runId))
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      employeePage.getByText(officeSkillName(world.runId))
-    ).toHaveCount(0);
+    await expect(visibleText(employeePage, certificationName(world.runId))).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(textInDom(employeePage, officeSkillName(world.runId))).toHaveCount(0);
   });
 });

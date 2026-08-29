@@ -1,17 +1,21 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { Page } from '@playwright/test';
 
 import { VACATION_STATUS_LABELS } from '../../../lib/vacation/types';
 import { expect, test } from '../../golden/support/fixtures';
+import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { requireEnv } from '../../golden/support/env';
 import {
   getAttentionPatternStateForUser,
   getCapabilityHistoryState,
   getEmployeeRecordStateByUser,
+  findJobQualificationState,
   getJobQualificationState,
   getLatestManualTimeEntryState,
   getPlanningState,
   getVacationRequestIdsByStartDate,
 } from '../../golden/support/db';
+import { requireSerialPrecondition } from '../../golden/support/preconditions';
 import {
   addConditionViaDialog,
   addJobCapabilityRequirement,
@@ -40,7 +44,23 @@ import {
   showPlanningMonth,
   typeIntoDatePicker,
   visibleText,
+  textInDom,
 } from '../../golden/support/steps';
+import {
+  calendarDayCell,
+  notificationRow,
+  ownQualificationCard,
+  ownRequestRow,
+  qualificationCoverageRow,
+  qualificationWarningGapRow,
+  sidebarBadge,
+  type SidebarBadgeTarget,
+  taskRowByText,
+  taskRows,
+  unreadRows,
+  visibleStrongestQualificationEntry,
+  visibleSearchResult,
+} from '../support/a5-steps';
 
 // A5 — Aufgaben & Qualifikationen (P1-07, P1-09). Serial journeys over the
 // shared audit world; every business mutation runs through the real UI and
@@ -49,21 +69,6 @@ import {
 // because the dialog rejects future times (documented fixture exception).
 
 test.describe.configure({ mode: 'serial' });
-
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-function shiftIsoDate(dateIso: string, days: number): string {
-  const [year, month, day] = dateIso.split('-').map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
-  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
-}
 
 function toDatePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -84,16 +89,16 @@ function isWeekday(dateIso: string): boolean {
 // The first N weekday offsets inside A5's owned +40 … +44 reserve. Vacation
 // requests must land on weekdays so counting is deterministic in every run
 // week (weekends never consume vacation).
-function ownedWeekdayOffsets(count: number): number[] {
-  const todayIso = berlinTodayIso();
-  const offsets: number[] = [];
-  for (let offset = 40; offset <= 44 && offsets.length < count; offset++) {
-    if (isWeekday(shiftIsoDate(todayIso, offset))) offsets.push(offset);
+function ownedWeekdayDates(count: number): string[] {
+  const dates: string[] = [];
+  for (let offset = 40; offset <= 44 && dates.length < count; offset += 1) {
+    const dateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', offset);
+    if (isWeekday(dateIso)) dates.push(dateIso);
   }
-  if (offsets.length < count) {
+  if (dates.length < count) {
     throw new Error('A5: not enough weekdays inside the owned +40…+44 window');
   }
-  return offsets;
+  return dates;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,10 +169,7 @@ async function getTeamStateByName(
   };
 }
 
-async function getJobAssignmentUserIds(
-  orgId: string,
-  jobNumber: string
-): Promise<string[]> {
+async function getJobAssignmentUserIds(orgId: string, jobNumber: string): Promise<string[]> {
   const admin = createReadOnlyAdminClient();
   const { data: job, error: jobError } = await admin
     .from('jobs')
@@ -192,16 +194,7 @@ async function getJobAssignmentUserIds(
 // vacation approvals for the viewer (never anything the viewer cannot decide).
 // ---------------------------------------------------------------------------
 
-type RolePage = import('@playwright/test').Page;
-
-function sidebarBadge(page: RolePage, href: '/aufgaben' | '/zeiterfassung') {
-  return page.locator(`aside a[href="${href}"] [data-testid="sidebar-badge"]`);
-}
-
-async function readBadgeCount(
-  page: RolePage,
-  href: '/aufgaben' | '/zeiterfassung'
-): Promise<number> {
+async function readBadgeCount(page: Page, href: SidebarBadgeTarget): Promise<number> {
   const badge = sidebarBadge(page, href);
   if ((await badge.count()) === 0) return 0;
   const text = (await badge.textContent())?.trim() ?? '';
@@ -209,13 +202,11 @@ async function readBadgeCount(
 }
 
 async function expectBadgeCount(
-  page: RolePage,
-  href: '/aufgaben' | '/zeiterfassung',
+  page: Page,
+  href: SidebarBadgeTarget,
   expected: number
 ): Promise<void> {
-  await expect
-    .poll(async () => readBadgeCount(page, href), { timeout: 20_000 })
-    .toBe(expected);
+  await expect.poll(async () => readBadgeCount(page, href), { timeout: 20_000 }).toBe(expected);
 }
 
 test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
@@ -225,13 +216,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(300_000);
-
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const todayIso = berlinTodayIso();
-    const [firstOffset, secondOffset] = ownedWeekdayOffsets(2);
-    const firstDayIso = shiftIsoDate(todayIso, firstOffset);
-    const secondDayIso = shiftIsoDate(todayIso, secondOffset);
+    const [firstDayIso, secondDayIso] = ownedWeekdayDates(2);
     const rejectionReason = `A5 Personalplanung im Zeitraum ${world.runId}`;
 
     // Baseline before any A5 fact exists: inherited state is never assumed
@@ -243,14 +229,13 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // day 12:15–12:45 stays clear of every documented inherited slot.
     await createOwnManualTimeEntry(bueroPage, {
       memberName: `${world.users.buero.firstName} ${world.users.buero.lastName}`,
-      dateDigits: toDatePickerDigits(shiftIsoDate(todayIso, -1)),
+      dateDigits: toDatePickerDigits(berlinDateAtOffset(-1)),
       clockInDigits: '1215',
       clockOutDigits: '1245',
     });
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('pending');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
+      'pending'
+    );
     // The Zeiterfassung badge counts the new pending TIME approval …
     await expectBadgeCount(adminPage, '/zeiterfassung', adminZeitBaseline + 1);
 
@@ -273,13 +258,11 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await createRequestViaDialog(adminPage, {
       summary: `A5 Heizungswartung Rückfrage ${world.runId}`,
       requestNumber,
-      receivedAtLocal: `${shiftIsoDate(todayIso, -1)}T10:00`,
+      receivedAtLocal: `${berlinDateAtOffset(-1)}T10:00`,
       assigneeName: `${world.users.buero.firstName} ${world.users.buero.lastName}`,
     });
     await openAufgaben(adminPage);
-    const adminRequestTask = adminPage.locator('[data-task-source]').filter({
-      hasText: requestNumber,
-    });
+    const adminRequestTask = taskRowByText(adminPage, requestNumber);
     await expect(adminRequestTask).toHaveCount(1, { timeout: 15_000 });
     await expect(adminRequestTask.getByText('offen seit 1 Tag')).toBeVisible();
     await expect(
@@ -298,39 +281,21 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // The Aufgaben badge is exactly "actionable + unread" — asserted as a
     // page-internal equality that is valid in fresh and inherited runs alike.
-    const adminTaskCount = await adminPage.locator('[data-task-source]').count();
-    const adminUnreadCount = await adminPage
-      .locator('[data-unread="true"]')
-      .count();
-    await expectBadgeCount(
-      adminPage,
-      '/aufgaben',
-      adminTaskCount + adminUnreadCount
-    );
+    const adminTaskCount = await taskRows(adminPage).count();
+    const adminUnreadCount = await unreadRows(adminPage).count();
+    await expectBadgeCount(adminPage, '/aufgaben', adminTaskCount + adminUnreadCount);
 
     // Meine Anträge (employee transparency): the pending request is listed
     // with range, day count and status.
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const pendingRequests = await getVacationRequestIdsByStartDate(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const pendingRequests = await getVacationRequestIdsByStartDate(world.orgId, employeeRecord.id);
     const firstRequest = pendingRequests.get(firstDayIso);
     expect(firstRequest?.status).toBe('pending');
     await openAufgaben(employeePage);
-    const firstOwnRow = employeePage.locator(
-      `[data-own-request-source="${firstRequest!.id}"]`
-    );
+    const firstOwnRow = ownRequestRow(employeePage, firstRequest!.id);
     await expect(firstOwnRow).toHaveCount(1, { timeout: 15_000 });
-    await expect(
-      firstOwnRow.getByText(formatGermanDate(firstDayIso))
-    ).toBeVisible();
-    await expect(
-      firstOwnRow.getByText(VACATION_STATUS_LABELS.pending)
-    ).toBeVisible();
+    await expect(firstOwnRow.getByText(formatGermanDate(firstDayIso))).toBeVisible();
+    await expect(firstOwnRow.getByText(VACATION_STATUS_LABELS.pending)).toBeVisible();
 
     // Decide both requests sequentially (approve first, then submit and
     // reject the second) so each approver control is unambiguous.
@@ -343,10 +308,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // Both vacation approvals are gone; only Büro's time entry remains.
     await expectBadgeCount(adminPage, '/zeiterfassung', adminZeitBaseline + 1);
 
-    const decidedRequests = await getVacationRequestIdsByStartDate(
-      world.orgId,
-      employeeRecord.id
-    );
+    const decidedRequests = await getVacationRequestIdsByStartDate(world.orgId, employeeRecord.id);
     const approvedRequest = decidedRequests.get(firstDayIso);
     const rejectedRequest = decidedRequests.get(secondDayIso);
     expect(approvedRequest?.status).toBe('approved');
@@ -355,12 +317,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // Exactly one unread notification per decided request; with two or more
     // unread rows the bulk action is deterministically available.
     await openAufgaben(employeePage);
-    const approvedRow = employeePage.locator(
-      `[data-notification-source="${approvedRequest!.id}"]`
-    );
-    const rejectedRow = employeePage.locator(
-      `[data-notification-source="${rejectedRequest!.id}"]`
-    );
+    const approvedRow = notificationRow(employeePage, approvedRequest!.id);
+    const rejectedRow = notificationRow(employeePage, rejectedRequest!.id);
     await expect(approvedRow).toHaveCount(1, { timeout: 15_000 });
     await expect(approvedRow).toHaveAttribute('data-unread', 'true');
     await expect(rejectedRow).toHaveCount(1);
@@ -370,9 +328,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // Employee badge equality: nothing actionable for this viewer, so the
     // badge equals the unread notification count.
-    const employeeUnread = await employeePage
-      .locator('[data-unread="true"]')
-      .count();
+    const employeeUnread = await unreadRows(employeePage).count();
     expect(employeeUnread).toBeGreaterThanOrEqual(2);
     await expectBadgeCount(employeePage, '/aufgaben', employeeUnread);
 
@@ -386,33 +342,22 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       world.users.employee.id
     );
     for (const sourceId of [approvedRequest!.id, rejectedRequest!.id]) {
-      expect(
-        patternState.readStates.some((state) => state.sourceId === sourceId)
-      ).toBe(true);
+      expect(patternState.readStates.some((state) => state.sourceId === sourceId)).toBe(true);
       expect(
         patternState.events.some(
-          (event) =>
-            event.sourceId === sourceId && event.eventType === 'marked_read'
+          (event) => event.sourceId === sourceId && event.eventType === 'marked_read'
         )
       ).toBe(true);
     }
 
     // Meine Anträge carries status AND the decision reason (P1-07-F01).
-    const approvedOwnRow = employeePage.locator(
-      `[data-own-request-source="${approvedRequest!.id}"]`
-    );
-    const rejectedOwnRow = employeePage.locator(
-      `[data-own-request-source="${rejectedRequest!.id}"]`
-    );
-    await expect(
-      approvedOwnRow.getByText(VACATION_STATUS_LABELS.approved)
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      rejectedOwnRow.getByText(VACATION_STATUS_LABELS.rejected)
-    ).toBeVisible();
-    await expect(
-      rejectedOwnRow.getByText(`Grund: ${rejectionReason}`)
-    ).toBeVisible();
+    const approvedOwnRow = ownRequestRow(employeePage, approvedRequest!.id);
+    const rejectedOwnRow = ownRequestRow(employeePage, rejectedRequest!.id);
+    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.approved)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(rejectedOwnRow.getByText(VACATION_STATUS_LABELS.rejected)).toBeVisible();
+    await expect(rejectedOwnRow.getByText(`Grund: ${rejectionReason}`)).toBeVisible();
 
     // Retroactive correction: cancelling the approved request surfaces the
     // CANCELLATION reason in Meine Anträge (the cancelled branch of the
@@ -425,18 +370,13 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       cancellationReason
     );
     await openAufgaben(employeePage);
-    await expect(
-      approvedOwnRow.getByText(VACATION_STATUS_LABELS.cancelled)
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      approvedOwnRow.getByText(`Grund: ${cancellationReason}`)
-    ).toBeVisible();
+    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.cancelled)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(approvedOwnRow.getByText(`Grund: ${cancellationReason}`)).toBeVisible();
     // The re-surfaced unread notification is read again so A5 leaves no
     // unread employee state behind.
-    await markAttentionNotificationReadViaButton(
-      employeePage,
-      approvedRequest!.id
-    );
+    await markAttentionNotificationReadViaButton(employeePage, approvedRequest!.id);
 
     // Resolve the remaining A5 items in their owning surfaces: close the
     // request over its deep link, approve Büro's entry. The Zeiterfassung
@@ -446,14 +386,15 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await adminPage.waitForURL('**/anfragen/**', { timeout: 20_000 });
     await closeRequestViaDialog(adminPage, 'Anderweitig gelöst');
     await adminPage.goto('/zeiterfassung?tab=approvals');
-    await expect(
-      adminPage.getByTestId('pending-approvals-panel')
-    ).toHaveAttribute('data-loaded', 'true', { timeout: 15_000 });
+    await expect(adminPage.getByTestId('pending-approvals-panel')).toHaveAttribute(
+      'data-loaded',
+      'true',
+      { timeout: 15_000 }
+    );
     await approvePendingTimeEntry(adminPage, world.users.buero.id);
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
+      'approved'
+    );
     await expectBadgeCount(adminPage, '/zeiterfassung', adminZeitBaseline);
   });
 
@@ -462,14 +403,14 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     bueroPage,
     world,
   }) => {
-    const todayIso = berlinTodayIso();
+    const todayIso = berlinDateAtOffset(0);
     const teamName = `A5 Einsatzteam ${world.runId}`;
     const bueroSkillName = `A5 Disposition ${world.runId}`;
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const noLoginName = `Paula Papier-${world.runId}`;
-    const futureFromIso = shiftIsoDate(todayIso, 44);
-    const planningDateIso = shiftIsoDate(todayIso, 42);
+    const futureFromIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 44);
+    const planningDateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 42);
     const jobNumber = `A5-TEAM-${world.runId}`;
 
     // Büro/Admin maintain teams and the qualification catalog: Büro performs
@@ -503,9 +444,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // added inline and verified against the persisted membership row.
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('tab', { name: 'Teams', exact: true }).click();
-    const teamCard = adminPage
-      .getByTestId('team-card')
-      .filter({ hasText: teamName });
+    const teamCard = adminPage.getByTestId('team-card').filter({ hasText: teamName });
     await expect(teamCard).toBeVisible({ timeout: 15_000 });
     await selectFromSearchable(
       adminPage,
@@ -520,18 +459,17 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       `${futureFromIso.slice(8, 10)}${futureFromIso.slice(5, 7)}${futureFromIso.slice(0, 4)}`
     );
     await teamCard.getByRole('button', { name: 'Hinzufügen' }).click();
-    const bueroRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.buero.id
-    );
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
     await expect
-      .poll(async () =>
-        (await getTeamStateByName(world.orgId, teamName)).memberships.some(
-          (membership) =>
-            membership.employeeRecordId === bueroRecord.id &&
-            membership.validFrom === futureFromIso
-        )
-      , { timeout: 15_000 })
+      .poll(
+        async () =>
+          (await getTeamStateByName(world.orgId, teamName)).memberships.some(
+            (membership) =>
+              membership.employeeRecordId === bueroRecord.id &&
+              membership.validFrom === futureFromIso
+          ),
+        { timeout: 15_000 }
+      )
       .toBe(true);
     // Date-effectiveness in the management view: the future member is not a
     // current member row.
@@ -551,11 +489,10 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const assignmentDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Mitarbeiter zuweisen' }),
     });
-    await assignmentDialog
-      .getByRole('button', { name: teamName, exact: true })
-      .click();
+    await assignmentDialog.getByRole('button', { name: teamName, exact: true }).click();
     await expect(
-      adminPage.getByText(
+      visibleText(
+        adminPage,
         `${noLoginName} wurde nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`
       )
     ).toBeVisible({ timeout: 15_000 });
@@ -585,9 +522,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(planningState.occurrenceCount).toBe(1);
     expect(planningState.assignmentCount).toBe(2);
     await showPlanningMonth(bueroPage, planningDateIso);
-    await expect(
-      plannedCalendarEvent(bueroPage, `A5 Teamauftrag ${world.runId}`)
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(plannedCalendarEvent(bueroPage, `A5 Teamauftrag ${world.runId}`)).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Dissolution keeps the history: the team disappears from every picker,
     // rows/events/assignments stay durable.
@@ -607,16 +544,12 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         exact: false,
       })
     ).toBeVisible();
-    await dissolveDialog
-      .getByRole('button', { name: 'Team auflösen', exact: true })
-      .click();
-    await expect(
-      adminPage.getByRole('heading', { name: 'Aufgelöste Teams' })
-    ).toBeVisible({ timeout: 15_000 });
+    await dissolveDialog.getByRole('button', { name: 'Team auflösen', exact: true }).click();
+    await expect(adminPage.getByRole('heading', { name: 'Aufgelöste Teams' })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(visibleText(adminPage, teamName)).toBeVisible();
-    await expect(
-      adminPage.getByTestId('team-card').filter({ hasText: teamName })
-    ).toHaveCount(0);
+    await expect(adminPage.getByTestId('team-card').filter({ hasText: teamName })).toHaveCount(0);
 
     const stateAfter = await getTeamStateByName(world.orgId, teamName);
     expect(stateAfter.dissolvedAt).not.toBeNull();
@@ -626,9 +559,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(await getJobAssignmentUserIds(world.orgId, jobNumber)).toEqual([
       world.users.employee.id,
     ]);
-    expect(
-      (await getPlanningState(world.orgId, { jobNumber })).assignmentCount
-    ).toBe(2);
+    expect((await getPlanningState(world.orgId, { jobNumber })).assignmentCount).toBe(2);
 
     // No picker offers the dissolved team anymore: job assignment dialog …
     await adminPage.goto(`/auftraege/${jobNumber}`);
@@ -637,23 +568,25 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       has: adminPage.getByRole('heading', { name: 'Mitarbeiter zuweisen' }),
     });
     await expect(reopenedDialog).toBeVisible({ timeout: 15_000 });
-    await expect(
-      reopenedDialog.getByRole('button', { name: teamName, exact: true })
-    ).toHaveCount(0);
+    await expect(reopenedDialog.getByRole('button', { name: teamName, exact: true })).toHaveCount(
+      0
+    );
     await adminPage.keyboard.press('Escape');
     // … and the calendar planning dialog.
     await adminPage.goto('/kalender');
     await adminPage.getByRole('button', { name: 'Kalendereintrag' }).click();
     const planningDialog = adminPage.getByRole('dialog').filter({
-      has: adminPage.getByRole('heading', { name: 'Kalendereintrag erstellen' }),
+      has: adminPage.getByRole('heading', {
+        name: 'Kalendereintrag erstellen',
+      }),
     });
     await planningDialog.getByRole('tab', { name: 'Termin planen' }).click();
     await expect(planningDialog.locator('#planning-date')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      planningDialog.getByRole('button', { name: teamName, exact: true })
-    ).toHaveCount(0);
+    await expect(planningDialog.getByRole('button', { name: teamName, exact: true })).toHaveCount(
+      0
+    );
     await adminPage.keyboard.press('Escape');
 
     // The no-login record remains reachable for later sessions' sanity.
@@ -665,17 +598,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     bueroPage,
     world,
   }) => {
-    // Longest single journey in the battery (6 catalog creations, 5 person
-    // records, attention checks, a job with 5 requirements, and the reasoned
-    // assignment). The M4 registry inputs type dates as segments instead of
-    // one fill, which pushed the honest end-to-end cost past the 180 s
-    // default; the flow itself was verified progressing to its final
-    // assertions when the budget ran out.
-    test.slow();
-    const todayIso = berlinTodayIso();
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const plannedDateIso = shiftIsoDate(todayIso, 43);
-    const dragTargetIso = shiftIsoDate(todayIso, 44);
+    const plannedDateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 43);
+    const dragTargetIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 44);
     const jobNumber = `A5-QUAL-${world.runId}`;
 
     const coveredSkill = `A5 Grundmontage ${world.runId}`;
@@ -687,9 +612,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // The apprentice warning is OFF by default and admin-controlled.
     await adminPage.goto('/mitarbeiter');
-    await adminPage
-      .getByRole('tab', { name: 'Qualifikationen', exact: true })
-      .click();
+    await adminPage.getByRole('tab', { name: 'Qualifikationen', exact: true }).click();
     const apprenticeCheckbox = adminPage.getByRole('checkbox', {
       name: 'Ausbildungs-Hinweis aktivieren',
     });
@@ -738,20 +661,20 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await assignCapabilityViaManagement(adminPage, {
       employeeName,
       capabilityName: coveredSkill,
-      validFrom: shiftIsoDate(todayIso, -30),
+      validFrom: berlinDateAtOffset(-30),
     });
     await assignCapabilityViaManagement(adminPage, {
       employeeName,
       capabilityName: unconfirmedCert,
-      validFrom: shiftIsoDate(todayIso, -30),
-      validUntil: shiftIsoDate(todayIso, 365),
+      validFrom: berlinDateAtOffset(-30),
+      validUntil: berlinDateAtOffset(365),
       evidence: 'Ausstehend',
     });
     await assignCapabilityViaManagement(adminPage, {
       employeeName,
       capabilityName: expiredCert,
-      validFrom: shiftIsoDate(todayIso, -60),
-      validUntil: shiftIsoDate(todayIso, -1),
+      validFrom: berlinDateAtOffset(-60),
+      validUntil: berlinDateAtOffset(-1),
     });
     await assignCapabilityViaManagement(adminPage, {
       employeeName,
@@ -761,8 +684,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await assignCapabilityViaManagement(adminPage, {
       employeeName,
       capabilityName: approachingCert,
-      validFrom: shiftIsoDate(todayIso, -300),
-      validUntil: shiftIsoDate(todayIso, 10),
+      validFrom: berlinDateAtOffset(-300),
+      validUntil: berlinDateAtOffset(10),
       confirmed: true,
       evidence: 'Erhalten',
     });
@@ -770,10 +693,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // Timely expiry attention: the certification is NOT expired yet, but it
     // is inside its warning window — admin AND Büro get the notice on
     // /aufgaben with a deep link into the qualification.
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const approachingHistory = await getCapabilityHistoryState(
       world.orgId,
       employeeRecord.id,
@@ -783,20 +703,16 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const approachingRecordId = approachingHistory.rows[0].id;
     for (const page of [adminPage, bueroPage]) {
       await openAufgaben(page);
-      const notice = page.locator(
-        `[data-notification-source="${approachingRecordId}"]`
-      );
+      const notice = notificationRow(page, approachingRecordId);
       await expect(notice).toHaveCount(1, { timeout: 15_000 });
       await expect(notice.getByText('läuft bald ab')).toBeVisible();
       await expect(notice.getByText(approachingCert)).toBeVisible();
-      await expect(
-        notice.getByRole('link', { name: 'Qualifikation ansehen' })
-      ).toHaveAttribute('href', `/mitarbeiter/${employeeRecord.id}`);
+      await expect(notice.getByRole('link', { name: 'Qualifikation ansehen' })).toHaveAttribute(
+        'href',
+        `/mitarbeiter/${employeeRecord.id}`
+      );
     }
-    await markAttentionNotificationReadViaButton(
-      adminPage,
-      approachingRecordId
-    );
+    await markAttentionNotificationReadViaButton(adminPage, approachingRecordId);
 
     // Job with five requirements evaluated on its planned date.
     await createJob(adminPage, {
@@ -835,22 +751,10 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const assignDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Mitarbeiter zuweisen' }),
     });
-    await assignDialog
-      .getByRole('combobox')
-      .filter({ hasText: 'Mitarbeiter zuweisen' })
-      .click();
-    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill(
-      world.users.employee.firstName
-    );
-    await adminPage
-      .getByRole('listbox')
-      .getByRole('button')
-      .filter({ hasText: employeeName })
-      .first()
-      .click();
-    await assignDialog
-      .getByRole('heading', { name: 'Mitarbeiter zuweisen' })
-      .click();
+    await assignDialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill(world.users.employee.firstName);
+    await visibleSearchResult(adminPage, employeeName).click();
+    await assignDialog.getByRole('heading', { name: 'Mitarbeiter zuweisen' }).click();
     await assignDialog.getByRole('button', { name: 'Speichern' }).click();
     const warningDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Zuweisung prüfen' }),
@@ -862,53 +766,33 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       [futureSkill, 'Noch nicht gültig'],
       [missingSkill, 'Nicht hinterlegt'],
     ] as const) {
-      const gapRow = warningDialog
-        .locator('div')
-        .filter({ has: adminPage.getByText(name, { exact: true }) })
-        .last();
+      const gapRow = qualificationWarningGapRow(warningDialog, name);
       await expect(gapRow.getByText(status)).toBeVisible();
     }
-    await expect(
-      warningDialog.getByText(`stärkster Eintrag: ${employeeName}`).first()
-    ).toBeVisible();
+    await expect(visibleStrongestQualificationEntry(warningDialog, employeeName)).toBeVisible();
     await expect(warningDialog.getByText(coveredSkill)).toHaveCount(0);
-    await expect(
-      warningDialog.getByText('Ausbildungs-Hinweis', { exact: true })
-    ).toBeVisible();
+    await expect(warningDialog.getByText('Ausbildungs-Hinweis', { exact: true })).toBeVisible();
     // Continuing without a reason is rejected.
-    await warningDialog
-      .getByRole('button', { name: 'Trotz Hinweis zuweisen' })
-      .click();
-    await expect(
-      warningDialog.getByText('Bitte gib eine kurze Begründung ein.')
-    ).toBeVisible();
+    await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
+    await expect(warningDialog.getByText('Bitte gib eine kurze Begründung ein.')).toBeVisible();
     await warningDialog
       .locator('#qualification-override-reason')
       .fill(`A5 erfahrene Begleitung ist organisiert ${world.runId}`);
-    await warningDialog
-      .getByRole('button', { name: 'Trotz Hinweis zuweisen' })
-      .click();
+    await warningDialog.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
     await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
 
     // The job detail distinguishes all five states and names the strongest
     // matching person per requirement.
-    const coverageRow = (name: string) =>
-      adminPage.locator(
-        `[data-testid="qualification-coverage-row"][data-capability-name="${name}"]`
-      );
+    const coverageRow = (name: string) => qualificationCoverageRow(adminPage, name);
     await expect(coverageRow(coveredSkill)).toBeVisible({ timeout: 15_000 });
     await expect(coverageRow(coveredSkill).getByText('Abgedeckt', { exact: true })).toBeVisible();
     await expect(
       coverageRow(coveredSkill).getByText(`Abgedeckt durch ${employeeName}`)
     ).toBeVisible();
     await expect(
-      coverageRow(unconfirmedCert).getByText(
-        'Wirksam, intern noch nicht bestätigt'
-      )
+      coverageRow(unconfirmedCert).getByText('Wirksam, intern noch nicht bestätigt')
     ).toBeVisible();
-    await expect(
-      coverageRow(expiredCert).getByText('Abgelaufen', { exact: true })
-    ).toBeVisible();
+    await expect(coverageRow(expiredCert).getByText('Abgelaufen', { exact: true })).toBeVisible();
     await expect(
       coverageRow(futureSkill).getByText('Noch nicht gültig', { exact: true })
     ).toBeVisible();
@@ -923,11 +807,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(
       jobState.assessments.some(
         (assessment) =>
-          assessment.overrideReason ===
-          `A5 erfahrene Begleitung ist organisiert ${world.runId}`
+          assessment.overrideReason === `A5 erfahrene Begleitung ist organisiert ${world.runId}`
       )
     ).toBe(true);
-
   });
 
   test('A5-07/A5-08/A5-10 (Fortsetzung): Bearbeitungsdialog und Kalender-Drag prüfen erneut, Abbrechen stellt still wieder her, begleitete Azubis bleiben unmarkiert und die Eigenansicht bleibt nur lesend [P1-09-F02/P1-09-F04/P1-09-F05]', async ({
@@ -935,12 +817,25 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     employeePage,
     world,
   }) => {
-    const todayIso = berlinTodayIso();
+    const jobNumber = `A5-QUAL-${world.runId}`;
+    const producerState = await findJobQualificationState(world.orgId, jobNumber);
+    requireSerialPrecondition(
+      producerState?.requirementCount === 5 &&
+        producerState.assessments.some(
+          (assessment) =>
+            assessment.overrideReason === `A5 erfahrene Begleitung ist organisiert ${world.runId}`
+        ),
+      {
+        test: 'A5-07/A5-08/A5-10 (Fortsetzung)',
+        needs: 'the qualification job and reasoned assignment created by A5-07/A5-08/A5-09/A5-10',
+        grep: 'A5-09|A5-07/A5-08/A5-10 \\(Fortsetzung\\)',
+        suite: 'audit',
+      }
+    );
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const plannedDateIso = shiftIsoDate(todayIso, 43);
-    const dragTargetIso = shiftIsoDate(todayIso, 44);
-    const jobNumber = `A5-QUAL-${world.runId}`;
+    const plannedDateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 43);
+    const dragTargetIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 44);
     const accompaniedJobNumber = `A5-BEGL-${world.runId}`;
     const coveredSkill = `A5 Grundmontage ${world.runId}`;
     const expiredCert = `A5 Kältemittel ${world.runId}`;
@@ -951,35 +846,17 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // The EDIT dialog is an assignment surface too: adding a second person
     // re-evaluates and reopens the reasoned confirmation.
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await adminPage
-      .getByRole('button', { name: 'Aktionen öffnen', exact: true })
-      .click();
-    await adminPage
-      .getByRole('menuitem', { name: 'Bearbeiten', exact: true })
-      .click();
+    await adminPage.getByRole('button', { name: 'Aktionen öffnen', exact: true }).click();
+    await adminPage.getByRole('menuitem', { name: 'Bearbeiten', exact: true }).click();
     const editDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Auftrag bearbeiten' }),
     });
     await expect(editDialog).toBeVisible({ timeout: 15_000 });
-    await editDialog
-      .getByRole('combobox')
-      .filter({ hasText: '1 Mitarbeiter' })
-      .click();
-    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill(
-      world.users.buero.firstName
-    );
-    await adminPage
-      .getByRole('listbox')
-      .getByRole('button')
-      .filter({ hasText: bueroName })
-      .first()
-      .click();
-    await editDialog
-      .getByRole('heading', { name: 'Auftrag bearbeiten' })
-      .click();
-    await editDialog
-      .getByRole('button', { name: 'Speichern', exact: true })
-      .click();
+    await editDialog.getByRole('combobox').filter({ hasText: '1 Mitarbeiter' }).click();
+    await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill(world.users.buero.firstName);
+    await visibleSearchResult(adminPage, bueroName).click();
+    await editDialog.getByRole('heading', { name: 'Auftrag bearbeiten' }).click();
+    await editDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     const editWarning = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Zuweisung prüfen' }),
     });
@@ -987,67 +864,51 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await editWarning
       .locator('#qualification-override-reason')
       .fill(`A5 Änderung im Bearbeitungsdialog begründet ${world.runId}`);
-    await editWarning
-      .getByRole('button', { name: 'Trotz Hinweis zuweisen' })
-      .click();
+    await editWarning.getByRole('button', { name: 'Trotz Hinweis zuweisen' }).click();
     await expect(editWarning).toHaveCount(0, { timeout: 15_000 });
-    expect(
-      (await getJobAssignmentUserIds(world.orgId, jobNumber)).sort()
-    ).toEqual([world.users.buero.id, world.users.employee.id].sort());
+    expect((await getJobAssignmentUserIds(world.orgId, jobNumber)).sort()).toEqual(
+      [world.users.buero.id, world.users.employee.id].sort()
+    );
 
     // Calendar drag: cancelling the reasoned confirmation restores the
     // calendar silently and mutates NOTHING.
     await showPlanningMonth(adminPage, plannedDateIso);
-    const jobEvent = adminPage
-      .locator('.fc-event-job')
-      .filter({ hasText: `A5 Qualifikationsmatrix ${world.runId}` });
+    const jobEvent = plannedCalendarEvent(adminPage, `A5 Qualifikationsmatrix ${world.runId}`);
     await expect(jobEvent).toBeVisible({ timeout: 20_000 });
     const stateBeforeDrag = await getPlanningState(world.orgId, { jobNumber });
     expect(stateBeforeDrag.occurrences[0].startDate).toBe(plannedDateIso);
     const dragWarning = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Planungshinweise prüfen' }),
     });
-    await jobEvent.dragTo(
-      adminPage.locator(`.fc-daygrid-day[data-date="${dragTargetIso}"]`)
-    );
+    await jobEvent.dragTo(calendarDayCell(adminPage, dragTargetIso));
     await expect(dragWarning).toBeVisible({ timeout: 20_000 });
-    await dragWarning
-      .getByRole('button', { name: 'Änderung zurücknehmen' })
-      .click();
+    await dragWarning.getByRole('button', { name: 'Änderung zurücknehmen' }).click();
     await expect(dragWarning).toHaveCount(0, { timeout: 15_000 });
     await expect(
-      adminPage
-        .locator(`.fc-daygrid-day[data-date="${plannedDateIso}"]`)
-        .filter({ hasText: `A5 Qualifikationsmatrix ${world.runId}` })
+      calendarDayCell(adminPage, plannedDateIso).filter({
+        hasText: `A5 Qualifikationsmatrix ${world.runId}`,
+      })
     ).toBeVisible({ timeout: 20_000 });
     const stateAfterCancel = await getPlanningState(world.orgId, { jobNumber });
     expect(stateAfterCancel.occurrences[0].startDate).toBe(plannedDateIso);
-    expect(stateAfterCancel.occurrenceCount).toBe(
-      stateBeforeDrag.occurrenceCount
-    );
+    expect(stateAfterCancel.occurrenceCount).toBe(stateBeforeDrag.occurrenceCount);
     expect(stateAfterCancel.eventTypes).toEqual(stateBeforeDrag.eventTypes);
-    expect(stateAfterCancel.overrideReasons.length).toBe(
-      stateBeforeDrag.overrideReasons.length
-    );
+    expect(stateAfterCancel.overrideReasons.length).toBe(stateBeforeDrag.overrideReasons.length);
 
     // The same drag with a reason persists: the drag path re-evaluates and
     // documents the deliberate exception.
-    await jobEvent.dragTo(
-      adminPage.locator(`.fc-daygrid-day[data-date="${dragTargetIso}"]`)
-    );
+    await jobEvent.dragTo(calendarDayCell(adminPage, dragTargetIso));
     await expect(dragWarning).toBeVisible({ timeout: 20_000 });
     await dragWarning
       .locator('#planning-warning-reason')
       .fill(`A5 Kalenderverschiebung bewusst bestätigt ${world.runId}`);
-    await dragWarning
-      .getByRole('button', { name: 'Mit Begründung speichern' })
-      .click();
+    await dragWarning.getByRole('button', { name: 'Mit Begründung speichern' }).click();
     await expect(dragWarning).toHaveCount(0, { timeout: 20_000 });
     await expect
-      .poll(async () =>
-        (await getPlanningState(world.orgId, { jobNumber })).occurrences[0]
-          .startDate
-      , { timeout: 20_000 })
+      .poll(
+        async () => (await getPlanningState(world.orgId, { jobNumber })).occurrences[0].startDate,
+        { timeout: 20_000 }
+      )
       .toBe(dragTargetIso);
     const stateAfterMove = await getPlanningState(world.orgId, { jobNumber });
     expect(stateAfterMove.overrideReasons).toContain(
@@ -1075,22 +936,12 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     const mixedDialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Mitarbeiter zuweisen' }),
     });
-    await mixedDialog
-      .getByRole('combobox')
-      .filter({ hasText: 'Mitarbeiter zuweisen' })
-      .click();
+    await mixedDialog.getByRole('combobox').filter({ hasText: 'Mitarbeiter zuweisen' }).click();
     for (const name of [employeeName, bueroName]) {
       await adminPage.getByPlaceholder('Mitarbeiter suchen...').fill(name);
-      await adminPage
-        .getByRole('listbox')
-        .getByRole('button')
-        .filter({ hasText: name })
-        .first()
-        .click();
+      await visibleSearchResult(adminPage, name).click();
     }
-    await mixedDialog
-      .getByRole('heading', { name: 'Mitarbeiter zuweisen' })
-      .click();
+    await mixedDialog.getByRole('heading', { name: 'Mitarbeiter zuweisen' }).click();
     await mixedDialog.getByRole('button', { name: 'Speichern' }).click();
     await expect(mixedDialog).toHaveCount(0, { timeout: 15_000 });
     await expect(
@@ -1098,9 +949,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         has: adminPage.getByRole('heading', { name: 'Zuweisung prüfen' }),
       })
     ).toHaveCount(0);
-    expect(
-      (await getJobAssignmentUserIds(world.orgId, accompaniedJobNumber)).sort()
-    ).toEqual([world.users.buero.id, world.users.employee.id].sort());
+    expect((await getJobAssignmentUserIds(world.orgId, accompaniedJobNumber)).sort()).toEqual(
+      [world.users.buero.id, world.users.employee.id].sort()
+    );
 
     // The admin turns the apprentice warning back off: it stays an optional,
     // admin-owned setting and later sessions inherit the default-off state.
@@ -1115,22 +966,11 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await expect(visibleText(employeePage, expiredCert)).toBeVisible();
     await expect(visibleText(employeePage, futureSkill)).toBeVisible();
     await expect(visibleText(employeePage, approachingCert)).toBeVisible();
-    await expect(
-      employeePage.getByText(missingSkill, { exact: true })
-    ).toHaveCount(0);
-    const ownCard = (name: string) =>
-      employeePage.locator(
-        `[data-testid="own-qualification-card"][data-capability-name="${name}"]`
-      );
+    await expect(textInDom(employeePage, missingSkill)).toHaveCount(0);
+    const ownCard = (name: string) => ownQualificationCard(employeePage, name);
     await expect(ownCard(expiredCert).getByText('Abgelaufen')).toBeVisible();
-    await expect(
-      ownCard(futureSkill).getByText('Noch nicht gültig')
-    ).toBeVisible();
-    await expect(employeePage.locator('main').getByRole('button')).toHaveCount(
-      0
-    );
-    await expect(
-      employeePage.locator('main').getByText('Erneuern')
-    ).toHaveCount(0);
+    await expect(ownCard(futureSkill).getByText('Noch nicht gültig')).toBeVisible();
+    await expect(employeePage.getByRole('main').getByRole('button')).toHaveCount(0);
+    await expect(employeePage.getByRole('main').getByText('Erneuern')).toHaveCount(0);
   });
 });

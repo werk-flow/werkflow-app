@@ -21,7 +21,7 @@ import {
 } from './personnel-state-badges';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
-import type { MemberStatus } from '@/hooks/use-member-status-polling';
+import type { MemberStatus } from '@/hooks/use-member-status';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';

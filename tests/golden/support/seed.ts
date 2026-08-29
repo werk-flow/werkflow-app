@@ -9,6 +9,19 @@ import {
 
 const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
+// Golden-marker identity mints. The leftover sweep keys on exactly these
+// markers (emails on @werkflow-golden.test, organization names prefixed
+// "Golden Test SHK"/"Fremde Firma"), so every cleanable identity a spec
+// creates must come from here — the spec-lint set bans the literals outside
+// this module (Tier 1: an unmatchable identity cannot be minted).
+export function goldenTestEmail(label: string, runId: string): string {
+  return `${label}-${runId}@werkflow-golden.test`;
+}
+
+export function goldenTestOrganizationName(label: string, runId: string): string {
+  return `Golden Test SHK ${label} ${runId}`;
+}
+
 function createAdminClient(): SupabaseClient {
   return createClient(requireEnv('NEXT_PUBLIC_SUPABASE_URL'), requireEnv('SUPABASE_SECRET_KEY'), {
     auth: { persistSession: false, autoRefreshToken: false },

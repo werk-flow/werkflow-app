@@ -19,6 +19,7 @@ import {
   expectVisibleAfterSave,
   openTimeApprovals,
   previewResponsibilityChange,
+  textInDom,
   visibleText,
 } from './support/steps';
 
@@ -270,6 +271,6 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     await expect(
       visibleText(outsiderPage, 'Verantwortlichkeiten und Freigaben')
     ).toBeVisible();
-    await expect(visibleText(outsiderPage, world.orgName)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, world.orgName)).toHaveCount(0);
   });
 });

@@ -23,7 +23,9 @@ export default defineConfig({
   testDir: './tests/canary',
   globalSetup: './tests/golden/global-setup',
   globalTeardown: './tests/golden/global-teardown',
-  timeout: 180_000,
+  // The canary is pinned to the cloud target; it keeps the measured 300 s
+  // cloud envelope directly (see playwright.config.ts for the evidence).
+  timeout: 300_000,
   expect: { timeout: 10_000 },
   // The world is shared, mutable state; canary checks run serially by design.
   workers: 1,

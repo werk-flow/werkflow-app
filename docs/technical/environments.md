@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-08-29
 
 WerkFlow runs on two fully separated cloud backend environments since 2026-08-18 (decision [0003](../decisions/0003-dev-prod-environment-split.md)), plus a local Supabase stack for the browser-test harness since 2026-08-28 (decision [0006](../decisions/0006-testing-architecture.md)). This document is the operational reference: which backend is which, who owns which env file, how tools reach each project, and how a new machine gets onboarded.
 
@@ -44,7 +44,7 @@ Operational facts for this workstation:
 
 ## Env-file ownership
 
-`.env.local` (gitignored) is the only env file Next.js loads locally, and it points at **dev**. Vercel holds production's environment variables independently — no local file change can ever affect deployed behavior (NEXT_PUBLIC_* values are baked at build time per deployment).
+`.env.local` (gitignored) is the only env file Next.js loads locally. The environment-switch scripts replace it with the selected local-stack, cloud DEV, or production backup; it does not have one permanent target. Vercel holds production's environment variables independently, so a local file change cannot affect the deployed app. `NEXT_PUBLIC_*` values are baked into each build.
 
 Gitignored backups next to it:
 
@@ -89,6 +89,8 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
 - After a schema change: regenerate `lib/supabase/database.types.ts` (`bunx supabase gen types typescript --project-id mbkkzuqjbdvzelqvuzcn --schema public`) — dev and prod schemas are identical, so dev is the generation source.
 
 **Latest parity checkpoint (P1-17, 2026-08-28):** migrations `20260827150000` through `20260827151400` were applied DEV-first and then identically to production. Fresh DEV-generated types exactly match `lib/supabase/database.types.ts`. Both Security Advisors returned zero findings; migration 1514 removed every new unindexed-foreign-key notice. Production retained 40 jobs and 14 projects and received zero rows in all five handover tables. Performance Advisor `unused_index` notices on the new empty tables are expected until real workload exists; they are not a reason to remove foreign-key or query-path indexes before usage data exists.
+
+**Latest Realtime parity checkpoint (Stage C, 2026-08-29):** `bun run realtime:check` and read-only cloud inspection agree across local, DEV, and PROD. Each backend publishes 73 tables: 70 use replica identity `USING INDEX` on exactly `(id, organization_id)`, 3 use the recorded DEFAULT identity, and 0 use FULL. The `supabase_realtime` publication has INSERT, UPDATE, and DELETE enabled on all three backends.
 
 ## Per-machine onboarding checklist
 

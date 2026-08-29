@@ -388,10 +388,16 @@ export async function getVisibleResponsibilityEmployeeRecordIdsAs(
   ].sort();
 }
 
+export class MissingTestFixtureError extends Error {
+  override readonly name = 'MissingTestFixtureError';
+}
+
+export type ManualTimeEntryState = { id: string; status: string };
+
 export async function getLatestManualTimeEntryState(
   orgId: string,
   userId: string
-): Promise<{ id: string; status: string }> {
+): Promise<ManualTimeEntryState> {
   const { data, error } = await createAdminClient()
     .from('time_entries')
     .select('id, status')
@@ -400,11 +406,26 @@ export async function getLatestManualTimeEntryState(
     .eq('is_manual', true)
     .order('created_at', { ascending: false })
     .limit(1)
-    .single();
-  if (error || !data) {
-    throw new Error(`Pending time entry missing for ${userId}: ${error?.message}`);
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Pending time entry query failed for ${userId}: ${error.message}`);
+  }
+  if (!data) {
+    throw new MissingTestFixtureError(`Pending time entry missing for ${userId}`);
   }
   return { id: data.id as string, status: data.status as string };
+}
+
+export async function findLatestManualTimeEntryState(
+  orgId: string,
+  userId: string
+): Promise<ManualTimeEntryState | null> {
+  try {
+    return await getLatestManualTimeEntryState(orgId, userId);
+  } catch (error) {
+    if (error instanceof MissingTestFixtureError) return null;
+    throw error;
+  }
 }
 
 export async function getLatestMembershipRemovalEvent(
@@ -1545,10 +1566,7 @@ export async function getCapabilityHistoryState(
   };
 }
 
-export async function getJobQualificationState(
-  orgId: string,
-  jobNumber: string
-): Promise<{
+export type JobQualificationState = {
   jobId: string;
   requirementCount: number;
   assessments: Array<{
@@ -1556,16 +1574,24 @@ export async function getJobQualificationState(
     teamSourceId: string | null;
     fingerprint: string;
   }>;
-}> {
+};
+
+export async function getJobQualificationState(
+  orgId: string,
+  jobNumber: string
+): Promise<JobQualificationState> {
   const admin = createAdminClient();
   const { data: job, error: jobError } = await admin
     .from('jobs')
     .select('id')
     .eq('organization_id', orgId)
     .eq('job_number', jobNumber)
-    .single();
-  if (jobError || !job) {
-    throw new Error(`Job ${jobNumber} missing: ${jobError?.message}`);
+    .maybeSingle();
+  if (jobError) {
+    throw new Error(`Job ${jobNumber} lookup failed: ${jobError.message}`);
+  }
+  if (!job) {
+    throw new MissingTestFixtureError(`Job ${jobNumber} missing`);
   }
   const [requirements, assessments] = await Promise.all([
     admin
@@ -1596,6 +1622,18 @@ export async function getJobQualificationState(
       fingerprint: row.coverage_fingerprint as string,
     })),
   };
+}
+
+export async function findJobQualificationState(
+  orgId: string,
+  jobNumber: string
+): Promise<JobQualificationState | null> {
+  try {
+    return await getJobQualificationState(orgId, jobNumber);
+  } catch (error) {
+    if (error instanceof MissingTestFixtureError) return null;
+    throw error;
+  }
 }
 
 export type PlanningDbState = {

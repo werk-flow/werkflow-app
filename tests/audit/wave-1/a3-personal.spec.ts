@@ -4,6 +4,7 @@ import {
   resolveHolidayRegionOnDate,
 } from '../../../lib/personnel/targets';
 import { expect, test } from '../../golden/support/fixtures';
+import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   getEmployeeRecordEventStates,
   getEmployeeRecordStateByUser,
@@ -11,6 +12,8 @@ import {
   getLatestResponsibilityConfigurationState,
   getTargetContextForRecord,
 } from '../../golden/support/db';
+import { requireChainedValue } from '../../golden/support/preconditions';
+import { goldenTestEmail } from '../../golden/support/seed';
 import {
   addClosureDayViaSettings,
   addConditionViaDialog,
@@ -34,19 +37,18 @@ import {
   typeIntoDatePicker,
   visibleText,
 } from '../../golden/support/steps';
+import {
+  firstPersonnelHistoryEvent,
+  informationalCalendarEvent,
+  waitForPersonnelSuggestionIntercept,
+} from '../support/a3-steps';
 
 test.describe.configure({ mode: 'serial' });
 
 let a3PersonnelRecordId = '';
-let a3PersonnelName = '';
 
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+function a3PersonnelName(runId: string): string {
+  return `Alina Personal-A3-${runId}`;
 }
 
 function shiftIsoDate(dateIso: string, days: number): string {
@@ -74,29 +76,11 @@ function toBerlinIsoDate(value: string): string {
   }).format(new Date(value));
 }
 
-function requireA3PersonnelRecordId(): string {
-  if (!a3PersonnelRecordId) {
-    throw new Error('The serial A3 personnel journey did not create its record.');
-  }
-  return a3PersonnelRecordId;
-}
-
-function requireA3PersonnelName(): string {
-  if (!a3PersonnelName) {
-    throw new Error('The serial A3 personnel journey did not create its name.');
-  }
-  return a3PersonnelName;
-}
-
 function personnelRow(
   page: import('@playwright/test').Page,
   name: string
 ): import('@playwright/test').Locator {
-  return page
-    .getByRole('row')
-    .filter({ hasText: name })
-    .filter({ visible: true })
-    .first();
+  return page.getByRole('row').filter({ hasText: name }).filter({ visible: true });
 }
 
 async function expectHistoryAttribution(
@@ -104,15 +88,10 @@ async function expectHistoryAttribution(
   eventLabel: string,
   actorName: string
 ): Promise<void> {
-  const event = page
-    .locator('li')
-    .filter({ has: page.getByText(eventLabel, { exact: true }) })
-    .first();
+  const event = firstPersonnelHistoryEvent(page, eventLabel);
   await expect(event).toBeVisible();
   await expect(event).toContainText(actorName);
-  await expect(event).toContainText(
-    /\d{2}\.\d{2}\.\d{4},? \d{2}:\d{2}/
-  );
+  await expect(event).toContainText(/\d{2}\.\d{2}\.\d{4},? \d{2}:\d{2}/);
 }
 
 async function navigateMonthViewTo(
@@ -121,7 +100,7 @@ async function navigateMonthViewTo(
 ): Promise<void> {
   await page.goto('/kalender');
   await page.getByRole('tab', { name: 'Monat' }).click();
-  const today = berlinTodayIso();
+  const today = berlinDateAtOffset(0);
   const monthDifference =
     Number(dateIso.slice(0, 4)) * 12 +
     Number(dateIso.slice(5, 7)) -
@@ -142,10 +121,7 @@ async function expectInformationalCalendarEvent(
   page: import('@playwright/test').Page,
   label: string
 ): Promise<void> {
-  const event = page
-    .locator('.fc-holiday-context')
-    .filter({ hasText: label })
-    .first();
+  const event = informationalCalendarEvent(page, label);
   await expect(event).toBeVisible({ timeout: 15_000 });
   await expect(event).not.toHaveClass(/fc-event-draggable/);
   await expect(event).toHaveCSS('pointer-events', 'none');
@@ -158,15 +134,8 @@ async function editPersonnelDateField(
   fieldLabel: string,
   dateIso: string
 ): Promise<void> {
-  await page
-    .getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true })
-    .click();
-  await typeIntoDatePicker(
-    page.locator('body'),
-    'Datum',
-    toDatePickerDigits(dateIso),
-    10
-  );
+  await page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true }).click();
+  await typeIntoDatePicker(page.getByRole('main'), 'Datum', toDatePickerDigits(dateIso), 10);
   await page.getByRole('button', { name: 'Speichern', exact: true }).click();
   await expect(
     page.getByRole('button', { name: `${fieldLabel} bearbeiten`, exact: true })
@@ -183,19 +152,16 @@ async function deleteWorkBlockViaCalendar(
 ): Promise<void> {
   await page.goto('/kalender');
   await page.getByRole('tab', { name: 'Tag', exact: true }).click();
-  await page.getByText('Arbeitszeiten', { exact: true }).click();
+  await visibleText(page, 'Arbeitszeiten').click();
   await page.getByRole('button', { name: 'Aktualisieren' }).click();
-  const block = page.getByTitle(title).filter({ visible: true }).first();
+  const block = page.getByTitle(title).filter({ visible: true });
   await expect(block).toBeVisible({ timeout: 20_000 });
   await block.click();
   const dialog = page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: 'Eintrag Details' }),
   });
   await dialog.getByRole('button', { name: 'Löschen', exact: true }).click();
-  await page
-    .getByRole('alertdialog')
-    .getByRole('button', { name: 'Löschen', exact: true })
-    .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen', exact: true }).click();
   await expect(page.getByTitle(title)).toHaveCount(0, { timeout: 20_000 });
 }
 
@@ -204,17 +170,14 @@ async function deleteWorkScheduleViaDetail(
   validFromIso: string,
   note: string
 ): Promise<void> {
-  const row = page.locator('li').filter({ hasText: note }).first();
+  const row = page.getByRole('listitem').filter({ hasText: note });
   await row
     .getByRole('button', {
       name: `Aktionen für Wochenplan ab ${toGermanDate(validFromIso)}`,
     })
     .click();
   await page.getByRole('menuitem', { name: 'Löschen' }).click();
-  await page
-    .getByRole('alertdialog')
-    .getByRole('button', { name: 'Löschen', exact: true })
-    .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen', exact: true }).click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0, {
     timeout: 15_000,
   });
@@ -231,13 +194,12 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     adminPage,
     world,
   }) => {
-    test.setTimeout(300_000);
-    const entryDate = shiftIsoDate(berlinTodayIso(), 30);
-    const conditionDate = shiftIsoDate(berlinTodayIso(), 31);
-    const exitDate = shiftIsoDate(berlinTodayIso(), 34);
-    const fullName = `Alina Personal-A3-${world.runId}`;
+    const entryDate = berlinDateAtOffset(30);
+    const conditionDate = ownedBerlinDateAtOffset('a3-personal', 31);
+    const exitDate = berlinDateAtOffset(34);
+    const fullName = a3PersonnelName(world.runId);
     const employeeNumber = `MA-A3-${world.runId}`;
-    const privateEmail = `a3-personal-${world.runId}@werkflow-golden.test`;
+    const privateEmail = goldenTestEmail('a3-personal', world.runId);
     const note = `A3 Personalakte ${world.runId}`;
     const conditionNote = `A3 Kondition ${world.runId}`;
     let releaseSuggestion!: () => void;
@@ -252,11 +214,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await adminPage.route('**/mitarbeiter', async (route) => {
       const request = route.request();
-      if (
-        !held &&
-        request.method() === 'POST' &&
-        Boolean(request.headers()['next-action'])
-      ) {
+      if (!held && request.method() === 'POST' && Boolean(request.headers()['next-action'])) {
         held = true;
         markIntercepted();
         await suggestionGate;
@@ -268,12 +226,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     try {
       await adminPage.getByRole('button', { name: 'Personalakte anlegen' }).click();
       try {
-        await Promise.race([
-          intercepted,
-          adminPage.waitForTimeout(15_000).then(() => {
-            throw new Error('Route handler did not observe the request.');
-          }),
-        ]);
+        await waitForPersonnelSuggestionIntercept(intercepted);
       } catch (error) {
         throw new Error(
           'The personnel-number suggestion server action was not intercepted within 15 seconds.',
@@ -297,15 +250,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await expect(dialog.locator('#personnel-number')).toHaveValue(employeeNumber, {
         timeout: 15_000,
       });
-      await typeIntoDatePicker(
-        dialog,
-        'Eintrittsdatum',
-        toDatePickerDigits(entryDate)
-      );
+      await typeIntoDatePicker(dialog, 'Eintrittsdatum', toDatePickerDigits(entryDate));
       await dialog.locator('#personnel-notes').fill(note);
-      await dialog
-        .getByRole('button', { name: 'Personalakte anlegen', exact: true })
-        .click();
+      await dialog.getByRole('button', { name: 'Personalakte anlegen', exact: true }).click();
       await adminPage.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, {
         timeout: 20_000,
       });
@@ -317,7 +264,6 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const recordMatch = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/);
     if (!recordMatch) throw new Error('Could not read the A3 personnel record id.');
     a3PersonnelRecordId = recordMatch[1];
-    a3PersonnelName = fullName;
 
     await editPersonnelTextField(adminPage, 'Telefon', '030 300030');
     await editPersonnelTextField(adminPage, 'Private E-Mail', privateEmail);
@@ -325,11 +271,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await editPersonnelTextField(adminPage, 'PLZ', '10115');
     await editPersonnelTextField(adminPage, 'Ort', 'Berlin');
     await editPersonnelTextField(adminPage, 'Notfallkontakt', 'Nina Notfall A3');
-    await editPersonnelTextField(
-      adminPage,
-      'Notfallkontakt Telefon',
-      '030 300031'
-    );
+    await editPersonnelTextField(adminPage, 'Notfallkontakt Telefon', '030 300031');
     await editPersonnelDateField(adminPage, 'Austrittsdatum', exitDate);
 
     for (const value of [
@@ -352,13 +294,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await adminPage.getByRole('button', { name: 'Kondition hinzufügen' }).click();
     const optionDialog = adminPage.getByRole('dialog');
     await optionDialog.locator('#condition-type').click();
-    for (const employmentType of [
-      'Vollzeit',
-      'Teilzeit',
-      'Ausbildung',
-      'Minijob',
-      'Sonstiges',
-    ]) {
+    for (const employmentType of ['Vollzeit', 'Teilzeit', 'Ausbildung', 'Minijob', 'Sonstiges']) {
       await expect(
         adminPage.getByRole('option', { name: employmentType, exact: true })
       ).toBeVisible();
@@ -374,30 +310,22 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       vacationDays: '28',
       note: conditionNote,
     });
-    await expect(
-      adminPage.getByText('Geplant', { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Geplant')).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(visibleText(adminPage, 'Ausbildung')).toBeVisible();
     await expect(visibleText(adminPage, '35 Std./Woche')).toBeVisible();
     await expect(visibleText(adminPage, '28 Urlaubstage/Jahr')).toBeVisible();
     await expect(visibleText(adminPage, conditionNote)).toBeVisible();
 
-    await editConditionWeeklyHours(
-      adminPage,
-      toGermanDate(conditionDate),
-      '34'
-    );
+    await editConditionWeeklyHours(adminPage, toGermanDate(conditionDate), '34');
     await adminPage.reload();
     await expect(visibleText(adminPage, 'Telefon: — → 030 300030')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      visibleText(adminPage, `Private E-Mail: — → ${privateEmail}`)
-    ).toBeVisible();
+    await expect(visibleText(adminPage, `Private E-Mail: — → ${privateEmail}`)).toBeVisible();
     await expect(visibleText(adminPage, 'Wochenstunden: 35 → 34')).toBeVisible();
-    await expect(
-      visibleText(adminPage, `Notiz: — → ${conditionNote}`)
-    ).toBeVisible();
+    await expect(visibleText(adminPage, `Notiz: — → ${conditionNote}`)).toBeVisible();
     for (const createdValue of [
       `Personalnummer: — → ${employeeNumber}`,
       'Vorname: — → Alina',
@@ -406,7 +334,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await expect(visibleText(adminPage, createdValue)).toBeVisible();
     }
 
-    const deletedConditionDate = shiftIsoDate(berlinTodayIso(), 32);
+    const deletedConditionDate = ownedBerlinDateAtOffset('a3-personal', 32);
     const deletedConditionNote = `A3 Minijob gelöscht ${world.runId}`;
     await addConditionViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(deletedConditionDate),
@@ -416,10 +344,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       note: deletedConditionNote,
     });
     const deletedConditionRow = adminPage
-      .locator('li')
+      .getByRole('listitem')
       .filter({ hasText: `Gültig ab ${toGermanDate(deletedConditionDate)}` })
-      .filter({ visible: true })
-      .first();
+      .filter({ visible: true });
     await expect(deletedConditionRow).toContainText('Minijob');
     await expect(deletedConditionRow).toContainText(deletedConditionNote);
     await deletedConditionRow
@@ -436,12 +363,8 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(visibleText(adminPage, 'Kondition gelöscht')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      visibleText(adminPage, 'Beschäftigungsart: Minijob → —')
-    ).toBeVisible();
-    await expect(
-      visibleText(adminPage, `Notiz: ${deletedConditionNote} → —`)
-    ).toBeVisible();
+    await expect(visibleText(adminPage, 'Beschäftigungsart: Minijob → —')).toBeVisible();
+    await expect(visibleText(adminPage, `Notiz: ${deletedConditionNote} → —`)).toBeVisible();
 
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     for (const eventLabel of [
@@ -453,10 +376,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     ]) {
       await expectHistoryAttribution(adminPage, eventLabel, adminName);
     }
-    const eventStates = await getEmployeeRecordEventStates(
-      world.orgId,
-      requireA3PersonnelRecordId()
-    );
+    const eventStates = await getEmployeeRecordEventStates(world.orgId, recordMatch[1]);
     for (const eventType of [
       'created',
       'master_data_updated',
@@ -474,18 +394,14 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await adminPage.goto('/mitarbeiter');
     await adminPage.getByRole('button', { name: 'Personalakte anlegen' }).click();
     const duplicateDialog = adminPage.getByRole('dialog');
-    await duplicateDialog
-      .locator('#personnel-last-name')
-      .fill(`Dora Doppel-A3-${world.runId}`);
+    await duplicateDialog.locator('#personnel-last-name').fill(`Dora Doppel-A3-${world.runId}`);
     const duplicateNumberInput = duplicateDialog.locator('#personnel-number');
-    await expect(duplicateNumberInput).toHaveValue(/^MA-\d+$/, { timeout: 15_000 });
+    await expect(duplicateNumberInput).toHaveValue(/^MA-\d+$/, {
+      timeout: 15_000,
+    });
     await duplicateNumberInput.fill(employeeNumber);
     await expect(duplicateNumberInput).toHaveValue(employeeNumber);
-    await typeIntoDatePicker(
-      duplicateDialog,
-      'Eintrittsdatum',
-      toDatePickerDigits(entryDate)
-    );
+    await typeIntoDatePicker(duplicateDialog, 'Eintrittsdatum', toDatePickerDigits(entryDate));
     await duplicateDialog
       .getByRole('button', { name: 'Personalakte anlegen', exact: true })
       .click();
@@ -494,7 +410,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     ).toBeVisible({ timeout: 15_000 });
     await adminPage.keyboard.press('Escape');
     await expect(duplicateDialog).toBeHidden({ timeout: 15_000 });
-    await adminPage.goto(`/mitarbeiter/${a3PersonnelRecordId}`);
+    await adminPage.goto(`/mitarbeiter/${recordMatch[1]}`);
     await expect(visibleText(adminPage, employeeNumber)).toBeVisible();
   });
 
@@ -502,24 +418,25 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     adminPage,
     world,
   }) => {
-    test.setTimeout(240_000);
-    const plannedName = requireA3PersonnelName();
+    const personnelRecordId = requireChainedValue(a3PersonnelRecordId, {
+      test: 'A3-R01',
+      needs: 'the personnel record created by A3-01',
+      grep: 'A3-01|A3-R01',
+      suite: 'audit',
+    });
+    const plannedName = a3PersonnelName(world.runId);
     const activeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
 
     await adminPage.goto('/mitarbeiter');
     const plannedRow = personnelRow(adminPage, plannedName);
     await expect(plannedRow.getByText('Geplant', { exact: true })).toBeVisible();
-    await expect(
-      plannedRow.getByText('Ohne Zugang', { exact: true })
-    ).toBeVisible();
+    await expect(plannedRow.getByText('Ohne Zugang', { exact: true })).toBeVisible();
 
     const activeRow = personnelRow(adminPage, activeName);
     await expect(activeRow.getByText('Aktiv', { exact: true })).toBeVisible();
-    await expect(
-      activeRow.getByText('Mit Zugang', { exact: true })
-    ).toBeVisible();
+    await expect(activeRow.getByText('Mit Zugang', { exact: true })).toBeVisible();
 
-    await adminPage.goto(`/mitarbeiter/${requireA3PersonnelRecordId()}`);
+    await adminPage.goto(`/mitarbeiter/${personnelRecordId}`);
     await sendInviteFromPersonnelRecord(
       adminPage,
       `delivered+a3-${world.runId}@resend.dev`,
@@ -527,29 +444,23 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     );
     await adminPage.goto('/mitarbeiter');
     await expect(
-      personnelRow(adminPage, plannedName).getByText('Eingeladen', { exact: true })
+      personnelRow(adminPage, plannedName).getByText('Eingeladen', {
+        exact: true,
+      })
     ).toBeVisible();
 
     const exitedName = `Eva Ehemalig-A3-${world.runId}`;
     const exitedRecordId = await createPersonnelRecordViaDialog(adminPage, {
       firstName: 'Eva',
       lastName: `Ehemalig-A3-${world.runId}`,
-      entryDateDigits: toDatePickerDigits(shiftIsoDate(berlinTodayIso(), -60)),
+      entryDateDigits: toDatePickerDigits(berlinDateAtOffset(-60)),
       employeeNumber: `MA-A3-E-${world.runId}`,
     });
-    await editPersonnelDateField(
-      adminPage,
-      'Austrittsdatum',
-      shiftIsoDate(berlinTodayIso(), -1)
-    );
+    await editPersonnelDateField(adminPage, 'Austrittsdatum', berlinDateAtOffset(-1));
     await adminPage.goto('/mitarbeiter');
     const exitedRow = personnelRow(adminPage, exitedName);
-    await expect(
-      exitedRow.getByText('Ausgeschieden', { exact: true })
-    ).toBeVisible();
-    await expect(
-      exitedRow.getByText('Ohne Zugang', { exact: true })
-    ).toBeVisible();
+    await expect(exitedRow.getByText('Ausgeschieden', { exact: true })).toBeVisible();
+    await expect(exitedRow.getByText('Ohne Zugang', { exact: true })).toBeVisible();
     await expect(exitedRow).toContainText(`MA-A3-E-${world.runId}`);
     expect(exitedRecordId).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -559,63 +470,55 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     bueroPage,
     world,
   }) => {
-    test.setTimeout(300_000);
-    const today = berlinTodayIso();
+    const personnelRecordId = requireChainedValue(a3PersonnelRecordId, {
+      test: 'A3-06',
+      needs: 'the personnel record created by A3-01',
+      grep: 'A3-01|A3-06',
+      suite: 'audit',
+    });
+    const today = berlinDateAtOffset(0);
     const pastDate = shiftIsoDate(today, -1);
-    const closureDate = shiftIsoDate(today, 32);
-    const bueroClosureDate = shiftIsoDate(today, 33);
+    const closureDate = ownedBerlinDateAtOffset('a3-personal', 32);
+    const bueroClosureDate = ownedBerlinDateAtOffset('a3-personal', 33);
     const bueroClosureLabel = `A3 Büro-Betriebsruhe ${world.runId}`;
-    const personnelRecordId = requireA3PersonnelRecordId();
 
     await addClosureDayViaSettings(adminPage, {
       dateDigits: toDatePickerDigits(closureDate),
       label: `A3 Betriebsruhe ${world.runId}`,
     });
-    let context = await getTargetContextForRecord(
-      world.orgId,
-      personnelRecordId
-    );
+    let context = await getTargetContextForRecord(world.orgId, personnelRecordId);
     expect(
       context.calendar.closureDays.some(
-        (day) =>
-          day.closureDate === closureDate &&
-          day.label === `A3 Betriebsruhe ${world.runId}`
+        (day) => day.closureDate === closureDate && day.label === `A3 Betriebsruhe ${world.runId}`
       )
     ).toBe(true);
     await removeClosureDayViaSettings(adminPage, toGermanDate(closureDate));
     context = await getTargetContextForRecord(world.orgId, personnelRecordId);
-    expect(
-      context.calendar.closureDays.some((day) => day.closureDate === closureDate)
-    ).toBe(false);
+    expect(context.calendar.closureDays.some((day) => day.closureDate === closureDate)).toBe(false);
 
     await adminPage.goto('/einstellungen/zeiterfassung');
     await typeIntoDatePicker(
-      adminPage.locator('body'),
+      adminPage.getByRole('main'),
       'Datum der Betriebsruhe',
       toDatePickerDigits(pastDate)
     );
-    await adminPage.locator('#closure-label').fill(`A3 Vergangenheit ${world.runId}`);
+    await adminPage.getByLabel('Bezeichnung (optional)').fill(`A3 Vergangenheit ${world.runId}`);
     await adminPage.getByRole('button', { name: 'Eintragen' }).click();
     await expect(
-      adminPage.getByText(
+      visibleText(
+        adminPage,
         'Vergangene Tage können nicht geändert werden – frühere Zeiträume behalten ihre damalige Bedeutung.'
       )
     ).toBeVisible({ timeout: 15_000 });
 
-    await setHolidayRegionViaSettings(
-      adminPage,
-      'Bayern (mit Mariä Himmelfahrt)'
-    );
-    await setHolidayRegionViaSettings(
-      adminPage,
-      'Bayern (ohne Mariä Himmelfahrt)'
-    );
+    await setHolidayRegionViaSettings(adminPage, 'Bayern (mit Mariä Himmelfahrt)');
+    await setHolidayRegionViaSettings(adminPage, 'Bayern (ohne Mariä Himmelfahrt)');
     await setHolidayRegionViaSettings(adminPage, 'Berlin');
     await setHolidayRegionViaSettings(adminPage, 'Thüringen');
 
     await bueroPage.goto('/einstellungen/zeiterfassung');
-    await expect(bueroPage.locator('#holiday-region')).toContainText('Thüringen');
-    await expect(bueroPage.locator('#holiday-region')).toBeDisabled();
+    await expect(bueroPage.getByLabel('Bundesland')).toContainText('Thüringen');
+    await expect(bueroPage.getByLabel('Bundesland')).toBeDisabled();
     await expect(
       bueroPage.getByRole('button', { name: 'Feiertagskalender speichern' })
     ).toBeDisabled();
@@ -627,31 +530,24 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     context = await getTargetContextForRecord(world.orgId, personnelRecordId);
     const a3History = context.calendar.holidayRegionHistory.slice(-2);
     expect(a3History.map((entry) => entry.region)).toEqual(['BE', 'TH']);
-    expect(
-      new Date(a3History[0].effectiveFrom).getTime()
-    ).toBeLessThanOrEqual(new Date(a3History[1].effectiveFrom).getTime());
-    const beforeFirstSelection = shiftIsoDate(
-      toBerlinIsoDate(a3History[0].effectiveFrom),
-      -1
+    expect(new Date(a3History[0].effectiveFrom).getTime()).toBeLessThanOrEqual(
+      new Date(a3History[1].effectiveFrom).getTime()
     );
-    expect(
-      resolveHolidayRegionOnDate(context.calendar, beforeFirstSelection)
-    ).toBeNull();
+    const beforeFirstSelection = shiftIsoDate(toBerlinIsoDate(a3History[0].effectiveFrom), -1);
+    expect(resolveHolidayRegionOnDate(context.calendar, beforeFirstSelection)).toBeNull();
     const currentYear = Number(today.slice(0, 4));
     const holidayYear = today <= `${currentYear}-09-20` ? currentYear : currentYear + 1;
     const holidayDate = `${holidayYear}-09-20`;
     expect(resolveHolidayRegionOnDate(context.calendar, holidayDate)).toBe('TH');
     expect(
       getHolidayContextDays(context.calendar, holidayYear, holidayYear).some(
-        (holiday) =>
-          holiday.date === holidayDate && holiday.name === 'Weltkindertag'
+        (holiday) => holiday.date === holidayDate && holiday.name === 'Weltkindertag'
       )
     ).toBe(true);
 
     expect(
       context.calendar.closureDays.some(
-        (day) =>
-          day.closureDate === bueroClosureDate && day.label === bueroClosureLabel
+        (day) => day.closureDate === bueroClosureDate && day.label === bueroClosureLabel
       )
     ).toBe(true);
 
@@ -662,11 +558,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await removeClosureDayViaSettings(bueroPage, toGermanDate(bueroClosureDate));
     context = await getTargetContextForRecord(world.orgId, personnelRecordId);
-    expect(
-      context.calendar.closureDays.some(
-        (day) => day.closureDate === bueroClosureDate
-      )
-    ).toBe(false);
+    expect(context.calendar.closureDays.some((day) => day.closureDate === bueroClosureDate)).toBe(
+      false
+    );
 
     await setHolidayRegionViaSettings(adminPage, 'Kein Feiertagskalender');
     context = await getTargetContextForRecord(world.orgId, personnelRecordId);
@@ -679,13 +573,10 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(300_000);
-    const today = berlinTodayIso();
+    // This same-test current-day state is transient and is not a cross-spec owned fixture.
+    const today = berlinDateAtOffset(0);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const scheduleNote = `A3 Ein-Stunden-Modell ${world.runId}`;
 
     await openMemberDetailFromList(adminPage, employeeName);
@@ -704,27 +595,20 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       clockInDigits: '0300',
       clockOutDigits: '0500',
     });
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.employee.id))
-        .status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
+      'approved'
+    );
 
     await employeePage.goto('/zeiterfassung');
-    await expect(
-      visibleText(employeePage, 'Tagesziel: 1 Std. Arbeitszeit')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(employeePage, 'Tagesziel: 1 Std. Arbeitszeit')).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(visibleText(employeePage, 'Gesamtzeit')).toBeVisible();
-    const overtime = employeePage
-      .getByText('Überstunden heute', { exact: true })
-      .locator('..');
+    const overtime = visibleText(employeePage, 'Überstunden heute').locator('..');
     await expect(overtime).not.toHaveText(/Überstunden heute\s*0 Min\.\s*$/);
-    const mondayBasedDayIndex =
-      (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
+    const mondayBasedDayIndex = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
     const mondayIso = shiftIsoDate(today, -mondayBasedDayIndex);
-    const targetContext = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const targetContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const expectedWeeklyHours =
       Array.from({ length: 7 }, (_, index) =>
         resolveDailyTarget({
@@ -733,10 +617,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
         })
       ).reduce((total, target) => total + target.targetMinutes, 0) / 60;
     await expect(
-      visibleText(
-        employeePage,
-        `Soll: ${expectedWeeklyHours.toLocaleString('de-DE')} Std.`
-      )
+      visibleText(employeePage, `Soll: ${expectedWeeklyHours.toLocaleString('de-DE')} Std.`)
     ).toBeVisible();
 
     await adminPage.goto('/mitarbeiter');
@@ -747,9 +628,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(progress).toHaveAttribute('aria-valuenow', '100');
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     await expect(
-      personnelRow(adminPage, bueroName).getByLabel(
-        'Kein Arbeitszeitmodell hinterlegt'
-      )
+      personnelRow(adminPage, bueroName).getByLabel('Kein Arbeitszeitmodell hinterlegt')
     ).toBeVisible();
 
     await addClosureDayViaSettings(adminPage, {
@@ -757,23 +636,17 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       label: `A3 Nullziel ${world.runId}`,
     });
     try {
-      const context = await getTargetContextForRecord(
-        world.orgId,
-        employeeRecord.id
-      );
-      expect(
-        context.calendar.closureDays.some((day) => day.closureDate === today)
-      ).toBe(true);
+      const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+      expect(context.calendar.closureDays.some((day) => day.closureDate === today)).toBe(true);
       await adminPage.goto('/mitarbeiter');
-      const zeroTargetProgress = personnelRow(adminPage, employeeName).getByRole(
-        'progressbar',
-        { name: 'Tagesfortschritt: Betriebsruhe' }
-      );
+      const zeroTargetProgress = personnelRow(adminPage, employeeName).getByRole('progressbar', {
+        name: 'Tagesfortschritt: Betriebsruhe',
+      });
       await expect(zeroTargetProgress).toHaveAttribute('aria-valuenow', '0');
       await employeePage.goto('/zeiterfassung');
-      await expect(
-        visibleText(employeePage, 'heute keine Sollarbeitszeit.')
-      ).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(employeePage, 'heute keine Sollarbeitszeit.')).toBeVisible({
+        timeout: 15_000,
+      });
     } finally {
       await removeClosureDayViaSettings(adminPage, toGermanDate(today));
     }
@@ -781,10 +654,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await deleteWorkBlockViaCalendar(adminPage, /03:00.*05:00/);
     await openMemberDetailFromList(adminPage, employeeName);
     await deleteWorkScheduleViaDetail(adminPage, today, scheduleNote);
-    const cleanedContext = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cleanedContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(
       cleanedContext.schedules.some(
         (schedule) => schedule.validFrom === today && schedule.note === scheduleNote
@@ -798,8 +668,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(360_000);
-    const today = berlinTodayIso();
+    const today = berlinDateAtOffset(0);
     const yesterdayDigits = toDatePickerDigits(shiftIsoDate(today, -1));
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
@@ -830,15 +699,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(visibleText(employeePage, 'Zeitfreigaben')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      employeePage.getByRole('button', { name: 'Verantwortung ändern' })
-    ).toHaveCount(0);
-    await expect(
-      employeePage.getByRole('button', { name: 'Vertretung eintragen' })
-    ).toHaveCount(0);
-    await expect(employeePage.getByTestId('responsibility-time_approval')).toHaveCount(
-      0
-    );
+    await expect(employeePage.getByRole('button', { name: 'Verantwortung ändern' })).toHaveCount(0);
+    await expect(employeePage.getByRole('button', { name: 'Vertretung eintragen' })).toHaveCount(0);
+    await expect(employeePage.getByTestId('responsibility-time_approval')).toHaveCount(0);
 
     await previewResponsibilityChange(adminPage, {
       responsibility: 'time_approval',
@@ -850,35 +713,25 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
     await confirmResponsibilityPreview(adminPage);
 
-    configuration = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'time_approval'
-    );
+    configuration = await getLatestResponsibilityConfigurationState(world.orgId, 'time_approval');
     expect(configuration.mode).toBe('role_default');
-    configuration = await getLatestResponsibilityConfigurationState(
-      world.orgId,
-      'leave_approval'
-    );
+    configuration = await getLatestResponsibilityConfigurationState(world.orgId, 'leave_approval');
     expect(configuration.mode).toBe('selected');
     expect(configuration.holderEmployeeRecordIds).toEqual([adminRecord.id]);
 
     await bueroPage.goto('/einstellungen/mitarbeiter');
-    await expect(
-      bueroPage.getByTestId('responsibility-time_approval')
-    ).toContainText('Standardrollen');
-    await expect(
-      bueroPage.getByTestId('responsibility-leave_approval')
-    ).toContainText('Bestimmte Personen');
-    await expect(
-      bueroPage.getByRole('button', { name: 'Verantwortung ändern' })
-    ).toHaveCount(0);
-    await expect(
-      bueroPage.getByRole('button', { name: 'Vertretung eintragen' })
-    ).toHaveCount(0);
+    await expect(bueroPage.getByTestId('responsibility-time_approval')).toContainText(
+      'Standardrollen'
+    );
+    await expect(bueroPage.getByTestId('responsibility-leave_approval')).toContainText(
+      'Bestimmte Personen'
+    );
+    await expect(bueroPage.getByRole('button', { name: 'Verantwortung ändern' })).toHaveCount(0);
+    await expect(bueroPage.getByRole('button', { name: 'Vertretung eintragen' })).toHaveCount(0);
     for (const responsibility of ['time_approval', 'leave_approval'] as const) {
-      await expect(
-        bueroPage.getByTestId(`responsibility-${responsibility}`)
-      ).toContainText('Du kannst die Regel einsehen. Nur der Admin kann sie ändern.');
+      await expect(bueroPage.getByTestId(`responsibility-${responsibility}`)).toContainText(
+        'Du kannst die Regel einsehen. Nur der Admin kann sie ändern.'
+      );
     }
 
     await createResponsibilityDelegationViaSettings(adminPage, {
@@ -893,9 +746,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(
       visibleText(employeePage, 'Meine Verantwortlichkeiten und Vertretungen')
     ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      visibleText(employeePage, `Vertretung für ${adminName}`)
-    ).toBeVisible();
+    await expect(visibleText(employeePage, `Vertretung für ${adminName}`)).toBeVisible();
     await expect(visibleText(employeePage, 'Vertretung bis')).toBeVisible();
 
     await createOwnManualTimeEntry(adminPage, {
@@ -904,10 +755,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       clockInDigits: '0010',
       clockOutDigits: '0020',
     });
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.admin.id))
-        .status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.admin.id)).status).toBe(
+      'approved'
+    );
 
     await createOwnManualTimeEntry(bueroPage, {
       memberName: bueroName,
@@ -915,10 +765,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       clockInDigits: '0030',
       clockOutDigits: '0040',
     });
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('pending');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
+      'pending'
+    );
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalHidden(employeePage, world.users.buero.id);
     await openTimeApprovals(bueroPage);
@@ -926,10 +775,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await openTimeApprovals(adminPage);
     await expectPendingTimeApprovalVisible(adminPage, world.users.buero.id);
     await approvePendingTimeEntry(adminPage, world.users.buero.id);
-    expect(
-      (await getLatestManualTimeEntryState(world.orgId, world.users.buero.id))
-        .status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
+      'approved'
+    );
 
     for (const managerPage of [adminPage, bueroPage]) {
       await managerPage.goto('/einstellungen/mitarbeiter');
@@ -940,28 +788,20 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     }
 
     await openMemberDetailFromList(adminPage, employeeName);
-    const summary = adminPage.locator('section').filter({
-      has: adminPage.getByRole('heading', {
-        name: 'Verantwortlichkeiten & Vertretung',
-      }),
-    });
+    const summary = adminPage
+      .getByRole('heading', { name: 'Verantwortlichkeiten & Vertretung' })
+      .locator('xpath=ancestor::section');
     await expect(summary).toBeVisible();
     await expect(summary.getByText('Urlaubsfreigaben', { exact: true })).toBeVisible();
     await expect(summary.getByText('1 Vertretung', { exact: true })).toBeVisible();
 
-    await endResponsibilityDelegationViaSettings(
-      adminPage,
-      'leave_approval',
-      employeeName
-    );
+    await endResponsibilityDelegationViaSettings(adminPage, 'leave_approval', employeeName);
     await employeePage.goto('/einstellungen/mitarbeiter');
     await expect(
       visibleText(employeePage, 'Meine Verantwortlichkeiten und Vertretungen')
     ).toBeVisible({ timeout: 15_000 });
     await expect(visibleText(employeePage, 'Nicht verantwortlich')).toBeVisible();
-    await expect(
-      visibleText(employeePage, `Vertretung für ${adminName}`)
-    ).toBeVisible();
+    await expect(visibleText(employeePage, `Vertretung für ${adminName}`)).toBeVisible();
 
     await previewResponsibilityChange(adminPage, {
       responsibility: 'leave_approval',
@@ -969,12 +809,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await confirmResponsibilityPreview(adminPage);
     for (const responsibility of ['time_approval', 'leave_approval'] as const) {
       expect(
-        (
-          await getLatestResponsibilityConfigurationState(
-            world.orgId,
-            responsibility
-          )
-        ).mode
+        (await getLatestResponsibilityConfigurationState(world.orgId, responsibility)).mode
       ).toBe('role_default');
     }
   });

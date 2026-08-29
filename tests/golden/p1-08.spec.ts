@@ -26,6 +26,7 @@ import {
   setOwnSicknessEndDateViaDialog,
   setSicknessEvidenceViaMenu,
   visibleText,
+  textInDom,
 } from './support/steps';
 
 // P1-08 — Sickness / privacy-sensitive absence (@P1-08). A report is a FACT
@@ -93,10 +94,8 @@ const YESTERDAY_ISO = shiftIsoDate(TODAY_ISO, -1);
 const yesterdayIso = () => YESTERDAY_ISO;
 
 // The employee report's range texts (aria-label identity on both surfaces).
-const openEndedRangeText = () =>
-  `${formatGermanDate(YESTERDAY_ISO)} – bis auf Weiteres`;
-const endedRangeText = () =>
-  `${formatGermanDate(YESTERDAY_ISO)} – ${formatGermanDate(TODAY_ISO)}`;
+const openEndedRangeText = () => `${formatGermanDate(YESTERDAY_ISO)} – bis auf Weiteres`;
+const endedRangeText = () => `${formatGermanDate(YESTERDAY_ISO)} – ${formatGermanDate(TODAY_ISO)}`;
 
 test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
   test('Selbstmeldung: rückwirkend und offen, Sollzeit folgt, Kalender bleibt neutral, das Büro wird informiert', async ({
@@ -106,10 +105,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     // Retroactive open-ended self-report (called in sick yesterday, end
     // unknown). Whether the overlap hint appears depends on inherited
@@ -126,10 +122,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     });
 
     // The reported fact, its audit start, and the no-diagnosis shape.
-    const reportState = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const reportState = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(reportState.status).toBe('reported');
     expect(reportState.absenceType).toBe('krankheit');
     expect(reportState.startDate).toBe(yesterdayIso());
@@ -138,18 +131,15 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
 
     // Own list: active, honestly open-ended.
     await openOwnSicknessSection(employeePage);
-    await expect(
-      visibleText(employeePage, openEndedRangeText())
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(employeePage, openEndedRangeText())).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Target truth: the dashboard's weekly Soll equals what the app's own
     // resolver computes from stored schedules, conditions, holidays, and the
     // clamped absence spans — in both modes.
     const weekDates = getBusinessWeekDates();
-    const context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const absences = await getAbsenceSpansForRecord(
       world.orgId,
       employeeRecord.id,
@@ -157,25 +147,17 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       weekDates[weekDates.length - 1]
     );
     const targets = resolveDailyTargets(weekDates, { ...context, absences });
-    const expectedSollMinutes = targets.reduce(
-      (total, target) => total + target.targetMinutes,
-      0
-    );
+    const expectedSollMinutes = targets.reduce((total, target) => total + target.targetMinutes, 0);
     await employeePage.goto('/zeiterfassung');
     await expect(
       visibleText(employeePage, `Soll: ${formatDuration(expectedSollMinutes)}`)
     ).toBeVisible({ timeout: 15_000 });
     // Today's Tagesziel explains itself — unless a holiday/closure already
     // zeroes the day with its own label (runtime-checked, never assumed).
-    const todayTarget = targets.find(
-      (target) => target.date === TODAY_ISO
-    );
+    const todayTarget = targets.find((target) => target.date === TODAY_ISO);
     if (todayTarget && !todayTarget.isHoliday && !todayTarget.isClosureDay) {
       await expect(
-        visibleText(
-          employeePage,
-          'Krankmeldung – heute keine Sollarbeitszeit.'
-        )
+        visibleText(employeePage, 'Krankmeldung – heute keine Sollarbeitszeit.')
       ).toBeVisible({ timeout: 15_000 });
     }
 
@@ -184,12 +166,9 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     await adminPage.goto('/kalender');
     await adminPage.getByRole('tab', { name: 'Monat' }).click();
     await expect(
-      visibleText(
-        adminPage,
-        `Abwesend – ${employeeName} (bis auf Weiteres)`
-      )
+      visibleText(adminPage, `Abwesend – ${employeeName} (bis auf Weiteres)`)
     ).toBeVisible({ timeout: 15_000 });
-    await expect(adminPage.getByText(`Krank – ${employeeName}`)).toHaveCount(0);
+    await expect(textInDom(adminPage, `Krank – ${employeeName}`)).toHaveCount(0);
 
     // Notifications (privacy-matrix audiences): both managers are informed —
     // minimal payload, no type; the reporter themselves gets no notice.
@@ -197,21 +176,17 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     const bueroRow = attentionNotificationRow(bueroPage, reportState.id);
     await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
     await expect(bueroRow).toHaveAttribute('data-unread', 'true');
-    await expect(
-      bueroRow.getByText(`Krankmeldung: ${employeeName}`)
-    ).toBeVisible();
+    await expect(bueroRow.getByText(`Krankmeldung: ${employeeName}`)).toBeVisible();
     await expect(bueroRow.getByText('Krankheit')).toHaveCount(0);
     await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
 
     await openAufgaben(adminPage);
-    await expect(
-      attentionNotificationRow(adminPage, reportState.id)
-    ).toHaveCount(1, { timeout: 15_000 });
+    await expect(attentionNotificationRow(adminPage, reportState.id)).toHaveCount(1, {
+      timeout: 15_000,
+    });
 
     await openAufgaben(employeePage);
-    await expect(
-      attentionNotificationRow(employeePage, reportState.id)
-    ).toHaveCount(0);
+    await expect(attentionNotificationRow(employeePage, reportState.id)).toHaveCount(0);
 
     // A second overlapping own report is impossible, race-safe, explained.
     await expectSicknessOverlapRejectedViaDialog(employeePage, {
@@ -226,10 +201,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     world,
   }) => {
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const bueroRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.buero.id
-    );
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
 
     // The admin records the phone-call-in for the Büro member: retroactive
     // single half day, neutral type label, evidence explicitly required (the
@@ -250,10 +222,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       expectVacationOverlapHint: expectOverlap,
     });
 
-    const reportState = await getLatestSicknessReportState(
-      world.orgId,
-      bueroRecord.id
-    );
+    const reportState = await getLatestSicknessReportState(world.orgId, bueroRecord.id);
     expect(reportState.status).toBe('reported');
     expect(reportState.absenceType).toBe('kind_krank');
     expect(reportState.dayPortion).toBe('half_day');
@@ -275,15 +244,11 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     const bueroRow = attentionNotificationRow(bueroPage, reportState.id);
     await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
     await expect(bueroRow).toHaveAttribute('data-unread', 'true');
-    await expect(
-      bueroRow.getByText('Für dich wurde eine Krankmeldung erfasst')
-    ).toBeVisible();
+    await expect(bueroRow.getByText('Für dich wurde eine Krankmeldung erfasst')).toBeVisible();
     await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
 
     await openAufgaben(adminPage);
-    await expect(
-      attentionNotificationRow(adminPage, reportState.id)
-    ).toHaveCount(0);
+    await expect(attentionNotificationRow(adminPage, reportState.id)).toHaveCount(0);
   });
 
   test('Korrekturen bleiben nachvollziehbar: Enddatum, wieder-ungelesene Meldung, Nachweisführung ohne Lärm', async ({
@@ -293,14 +258,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const before = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const before = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
 
     // „Ich bin wieder da": the person sets the end date themselves.
     await setOwnSicknessEndDateViaDialog(employeePage, {
@@ -308,10 +267,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       endDigits: toDatePickerDigits(TODAY_ISO),
       expectedRangeText: endedRangeText(),
     });
-    const afterEnd = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const afterEnd = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(afterEnd.id).toBe(before.id);
     expect(afterEnd.endDate).toBe(TODAY_ISO);
     expect(afterEnd.eventTypes).toEqual(['reported', 'ended']);
@@ -333,21 +289,18 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       required: true,
       received: false,
     });
-    await expect(
-      visibleText(adminPage, 'Krankheit · Nachweis ausstehend')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Krankheit · Nachweis ausstehend')).toBeVisible({
+      timeout: 15_000,
+    });
     await setSicknessEvidenceViaMenu(adminPage, endedRangeText(), {
       required: true,
       received: true,
     });
-    await expect(
-      visibleText(adminPage, 'Krankheit · Nachweis erhalten')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Krankheit · Nachweis erhalten')).toBeVisible({
+      timeout: 15_000,
+    });
 
-    const afterEvidence = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const afterEvidence = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(afterEvidence.evidenceRequired).toBe(true);
     expect(afterEvidence.evidenceStatus).toBe('received');
     expect(afterEvidence.eventTypes).toEqual([
@@ -364,10 +317,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     });
 
     // Pattern audit: Büro's marker moved through both report versions.
-    const bueroPattern = await getAttentionPatternStateForUser(
-      world.orgId,
-      world.users.buero.id
-    );
+    const bueroPattern = await getAttentionPatternStateForUser(world.orgId, world.users.buero.id);
     expect(
       bueroPattern.events.filter(
         (event) =>
@@ -395,47 +345,28 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
   }) => {
     const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const bueroRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.buero.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
 
     // Row-level truth with real credentials: the person exactly their own
     // report, managers every report of the organization, outsiders none.
-    const employeeView = await getVisibleSicknessRecordIdsAs(
-      world.users.employee,
-      world.orgId
-    );
+    const employeeView = await getVisibleSicknessRecordIdsAs(world.users.employee, world.orgId);
     expect(employeeView).toEqual([employeeRecord.id]);
 
-    const adminView = await getVisibleSicknessRecordIdsAs(
-      world.users.admin,
-      world.orgId
-    );
-    expect(adminView).toEqual(
-      [employeeRecord.id, bueroRecord.id].sort()
-    );
+    const adminView = await getVisibleSicknessRecordIdsAs(world.users.admin, world.orgId);
+    expect(adminView).toEqual([employeeRecord.id, bueroRecord.id].sort());
 
-    const outsiderView = await getVisibleSicknessRecordIdsAs(
-      world.outsider.admin,
-      world.orgId
-    );
+    const outsiderView = await getVisibleSicknessRecordIdsAs(world.outsider.admin, world.orgId);
     expect(outsiderView).toEqual([]);
 
     // Surface proof of the colleague boundary: the employee's calendar never
     // shows another person's absence, not even neutrally.
     await employeePage.goto('/kalender');
     await employeePage.getByRole('tab', { name: 'Monat' }).click();
-    await expect(
-      employeePage.getByText(`Abwesend – ${bueroName}`)
-    ).toHaveCount(0, { timeout: 15_000 });
-    await expect(
-      employeePage.getByText(`Abwesend – ${adminName}`)
-    ).toHaveCount(0);
+    await expect(textInDom(employeePage, `Abwesend – ${bueroName}`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
+    await expect(textInDom(employeePage, `Abwesend – ${adminName}`)).toHaveCount(0);
   });
 
   test('Stornierung: die Meldung zählt nicht mehr, beide Betroffenen sehen dieselbe Meldung erneut ungelesen', async ({
@@ -445,14 +376,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const before = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const before = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
 
     // The admin (manager, neither reporter nor affected) cancels the
     // employee's report with a required reason — recorded in error / worked
@@ -464,15 +389,10 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       'Doch gearbeitet – Meldung war ein Versehen'
     );
 
-    const afterCancel = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const afterCancel = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(afterCancel.id).toBe(before.id);
     expect(afterCancel.status).toBe('cancelled');
-    expect(afterCancel.cancellationReason).toBe(
-      'Doch gearbeitet – Meldung war ein Versehen'
-    );
+    expect(afterCancel.cancellationReason).toBe('Doch gearbeitet – Meldung war ein Versehen');
     expect(afterCancel.eventTypes).toEqual([
       'reported',
       'ended',
@@ -488,9 +408,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     await expect(bueroRow).toHaveAttribute('data-unread', 'true', {
       timeout: 15_000,
     });
-    await expect(
-      bueroRow.getByText('Krankmeldung storniert:')
-    ).toBeVisible();
+    await expect(bueroRow.getByText('Krankmeldung storniert:')).toBeVisible();
 
     // …and the affected person now learns of the office action on their own
     // report (transparency: an availability change is always explainable).
@@ -498,12 +416,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     const employeeRow = attentionNotificationRow(employeePage, before.id);
     await expect(employeeRow).toHaveCount(1, { timeout: 15_000 });
     await expect(employeeRow).toHaveAttribute('data-unread', 'true');
-    await expect(
-      employeeRow.getByText('Deine Krankmeldung', { exact: false })
-    ).toBeVisible();
-    await expect(
-      employeeRow.getByText('wurde storniert', { exact: false })
-    ).toBeVisible();
+    await expect(employeeRow.getByText('Deine Krankmeldung', { exact: false })).toBeVisible();
+    await expect(employeeRow.getByText('wurde storniert', { exact: false })).toBeVisible();
     await markAttentionNotificationReadViaButton(employeePage, before.id);
     const employeePattern = await getAttentionPatternStateForUser(
       world.orgId,
@@ -521,8 +435,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
     // The availability signal is gone from planning.
     await adminPage.goto('/kalender');
     await adminPage.getByRole('tab', { name: 'Monat' }).click();
-    await expect(
-      adminPage.getByText(`Abwesend – ${employeeName}`)
-    ).toHaveCount(0, { timeout: 15_000 });
+    await expect(textInDom(adminPage, `Abwesend – ${employeeName}`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
   });
 });

@@ -1,5 +1,4 @@
 import { expect, test } from './support/fixtures';
-import type { Page } from '@playwright/test';
 import {
   countVacationDaysByYear,
   doesDateConsumeVacation,
@@ -28,8 +27,10 @@ import {
   previewResponsibilityChange,
   rejectVacationRequestFor,
   visibleText,
+  textInDom,
   withdrawOwnPendingVacationRequest,
 } from './support/steps';
+import { expectCalendarVacationEventOnDate } from './support/p1-06-calendar';
 
 // P1-06 — Vacation requests, decisions, balances, availability, and target
 // effects (@P1-06). Bounded outcome: employees request/withdraw vacation,
@@ -82,31 +83,6 @@ function nextMondayIso(): string {
   return shiftIsoDate(todayIso, 7 - weekdayIndex(todayIso));
 }
 
-async function expectCalendarEventOnDate(
-  page: Page,
-  dateIso: string,
-  title: string,
-  status: 'pending' | 'approved'
-): Promise<void> {
-  const dayCell = page.locator(`.fc-daygrid-day[data-date="${dateIso}"]`);
-  const eventClass = `.fc-vacation-${status}`;
-  await expect(dayCell.locator(eventClass)).toHaveCount(1, { timeout: 15_000 });
-
-  const moreLink = dayCell.locator('.fc-daygrid-more-link');
-  if (await moreLink.isVisible()) {
-    await moreLink.click();
-    const popover = page.locator('.fc-popover');
-    await expect(popover).toBeVisible({ timeout: 15_000 });
-    await expect(popover.locator(eventClass)).toHaveCount(1);
-  }
-
-  // FullCalendar exposes the complete, non-truncated event name as `title`;
-  // the painted text itself can be ellipsized before the person's full name.
-  // The event wrapper has a zero-size box in month layout, so DOM identity is
-  // the stable assertion while the screenshot-visible child carries the title.
-  expect(await page.getByTitle(title).count()).toBeGreaterThan(0);
-}
-
 test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
   test('Ohne hinterlegten Anspruch ist der Saldo eine sichtbare Ausnahme, danach echte Arithmetik', async ({
     adminPage,
@@ -118,10 +94,8 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // The old static „9 von 30" fiction must be gone; the honest labeled
     // exception takes its place because no condition carries vacation days.
     await openOwnVacationSection(employeePage);
-    await expect(employeePage.getByText('9 von 30')).toHaveCount(0);
-    await expect(
-      visibleText(employeePage, 'Kein Urlaubsanspruch hinterlegt')
-    ).toBeVisible();
+    await expect(textInDom(employeePage, '9 von 30')).toHaveCount(0);
+    await expect(visibleText(employeePage, 'Kein Urlaubsanspruch hinterlegt')).toBeVisible();
 
     // The entitlement lives in the Beschäftigung conditions (P1-03 storage,
     // first consumed here). Valid from tomorrow so the version never collides
@@ -143,10 +117,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     employeePage,
     world,
   }) => {
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     // Thursday of next week through the Monday after: spans a weekend.
     const startIso = shiftIsoDate(nextMondayIso(), 3);
@@ -159,28 +130,17 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
 
     // Expected consumption from the same stored schedules/holidays the app
     // uses: weekend days cost nothing, holidays cost nothing.
-    const context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const expectedDays = Object.values(
-      countVacationDaysByYear(
-        { startDate: startIso, endDate: endIso, dayPortion: 'full' },
-        context
-      )
+      countVacationDaysByYear({ startDate: startIso, endDate: endIso, dayPortion: 'full' }, context)
     ).reduce((total, days) => total + days, 0);
     expect(expectedDays).toBeGreaterThan(0);
     expect(expectedDays).toBeLessThan(5);
     await expect(
-      visibleText(
-        employeePage,
-        `${formatVacationDays(expectedDays)} (vorläufig)`
-      )
+      visibleText(employeePage, `${formatVacationDays(expectedDays)} (vorläufig)`)
     ).toBeVisible();
     // Pending requests are provisional: the taken counter must not move.
-    await expect(
-      visibleText(employeePage, '0 von 30 Tagen genommen')
-    ).toBeVisible();
+    await expect(visibleText(employeePage, '0 von 30 Tagen genommen')).toBeVisible();
 
     // An overlapping own request in a non-terminal state is impossible.
     await expectVacationOverlapRejectedViaDialog(employeePage, {
@@ -190,10 +150,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
 
     // Withdrawal keeps the request and its history instead of deleting it.
     await withdrawOwnPendingVacationRequest(employeePage);
-    const state = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const state = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(state.status).toBe('withdrawn');
     expect(state.eventTypes).toEqual(['requested', 'withdrawn']);
   });
@@ -205,10 +162,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const todayIso = berlinTodayIso();
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     await createOwnVacationRequestViaDialog(employeePage, {
       startDigits: toDatePickerDigits(todayIso),
@@ -219,7 +173,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // overflow when a holiday plus a closure puts the third event behind "+ mehr".
     await employeePage.goto('/kalender');
     await employeePage.getByRole('tab', { name: 'Monat' }).click();
-    await expectCalendarEventOnDate(
+    await expectCalendarVacationEventOnDate(
       employeePage,
       todayIso,
       `Urlaub – ${employeeName} (angefragt)`,
@@ -229,36 +183,24 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // Büro is a role-default leave_approval holder and decides the request.
     await approveVacationRequestFor(bueroPage, employeeName);
 
-    const context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const expectedByYear = countVacationDaysByYear(
       { startDate: todayIso, endDate: todayIso, dayPortion: 'full' },
       context
     );
-    const approvedState = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const approvedState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(approvedState.status).toBe('approved');
     expect(approvedState.approvedDaysByYear).toEqual(expectedByYear);
     expect(approvedState.eventTypes).toEqual(['requested', 'approved']);
 
-    const expectedTaken = Object.values(expectedByYear).reduce(
-      (total, days) => total + days,
-      0
-    );
+    const expectedTaken = Object.values(expectedByYear).reduce((total, days) => total + days, 0);
 
     // Target effect on the employee's own dashboard (only asserted when today
     // is a working day — on weekends/holidays the day never had a target).
     const [todayTargetWithoutAbsence] = resolveDailyTargets([todayIso], context);
     await openOwnVacationSection(employeePage);
     if (todayTargetWithoutAbsence.targetMinutes > 0) {
-      await expectVisibleAfterSave(
-        employeePage,
-        'Urlaub genehmigt – heute keine Sollarbeitszeit.'
-      );
+      await expectVisibleAfterSave(employeePage, 'Urlaub genehmigt – heute keine Sollarbeitszeit.');
 
       // Weekly Soll reflects the zeroed day (runtime- and holiday-aware, from
       // the same in-code resolver the app uses).
@@ -282,22 +224,19 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     }
     // expectedTaken is 0 or 1 here, so German and default integer formatting
     // are identical.
-    await expectVisibleAfterSave(
-      employeePage,
-      `${expectedTaken} von 30 Tagen genommen`
-    );
+    await expectVisibleAfterSave(employeePage, `${expectedTaken} von 30 Tagen genommen`);
 
     // Approved vacation is a labeled calendar entry without the provisional
     // suffix, visible to planners, including through month overflow.
     await bueroPage.goto('/kalender');
     await bueroPage.getByRole('tab', { name: 'Monat' }).click();
-    await expectCalendarEventOnDate(
+    await expectCalendarVacationEventOnDate(
       bueroPage,
       todayIso,
       `Urlaub – ${employeeName}`,
       'approved'
     );
-    await expect(bueroPage.getByText('(angefragt)')).toHaveCount(0);
+    await expect(textInDom(bueroPage, '(angefragt)')).toHaveCount(0);
 
     // Contradiction rule: an approved full-day vacation day denies clock-in at
     // the server action with an understandable banner.
@@ -306,46 +245,34 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // Retroactive correction: cancellation restores the balance traceably and
     // keeps the decision snapshot on the cancelled request.
     await cancelApprovedVacationFor(bueroPage, employeeName, 'Kundentermin verschoben');
-    const cancelledState = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cancelledState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(cancelledState.status).toBe('cancelled');
     expect(cancelledState.approvedDaysByYear).toEqual(expectedByYear);
-    expect(cancelledState.eventTypes).toEqual([
-      'requested',
-      'approved',
-      'cancelled',
-    ]);
+    expect(cancelledState.eventTypes).toEqual(['requested', 'approved', 'cancelled']);
 
     await openOwnVacationSection(employeePage);
     await expectVisibleAfterSave(employeePage, '0 von 30 Tagen genommen');
     await expect(visibleText(employeePage, 'Storniert')).toBeVisible();
-    await expect(
-      visibleText(employeePage, 'Kundentermin verschoben')
-    ).toBeVisible();
+    await expect(visibleText(employeePage, 'Kundentermin verschoben')).toBeVisible();
   });
 
-  test('Ein halber Urlaubstag kostet 0,5 Tage', async ({
-    bueroPage,
-    employeePage,
-    world,
-  }) => {
+  test('Ein halber Urlaubstag kostet 0,5 Tage', async ({ bueroPage, employeePage, world }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
 
     // First Monday at least two weeks out that actually consumes entitlement
     // (skips holidays deterministically via the same in-code dataset).
-    let halfDayIso = shiftIsoDate(nextMondayIso(), 7);
-    while (!doesDateConsumeVacation(halfDayIso, context)) {
-      halfDayIso = shiftIsoDate(halfDayIso, 7);
+    let halfDayIso: string | null = null;
+    for (let weekOffset = 1; weekOffset <= 54; weekOffset++) {
+      const candidateIso = shiftIsoDate(nextMondayIso(), weekOffset * 7);
+      if (doesDateConsumeVacation(candidateIso, context)) {
+        halfDayIso = candidateIso;
+        break;
+      }
+    }
+    if (halfDayIso === null) {
+      throw new Error('No vacation-consuming Monday found within 54 weeks.');
     }
 
     await createOwnVacationRequestViaDialog(employeePage, {
@@ -355,10 +282,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     });
     await approveVacationRequestFor(bueroPage, employeeName);
 
-    const state = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const state = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(state.status).toBe('approved');
     expect(state.dayPortion).toBe('half_day');
     expect(state.approvedDaysByYear).toEqual({
@@ -399,17 +323,14 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // with the actionable hint instead of an invented number, and may still
     // decide deliberately.
     await openVacationApprovals(adminPage);
-    await expect(
-      visibleText(adminPage, 'Kein Urlaubsanspruch hinterlegt')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Kein Urlaubsanspruch hinterlegt')).toBeVisible({
+      timeout: 15_000,
+    });
     await approveVacationRequestFor(adminPage, bueroName);
-    const bueroRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.buero.id
+    const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
+    expect((await getLatestVacationRequestState(world.orgId, bueroRecord.id)).status).toBe(
+      'approved'
     );
-    expect(
-      (await getLatestVacationRequestState(world.orgId, bueroRecord.id)).status
-    ).toBe('approved');
 
     // The employee submits another request; Büro can currently see it.
     const requestIso = shiftIsoDate(nextMondayIso(), 16);
@@ -458,26 +379,15 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
         'Du bist für diese Urlaubsfreigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.'
       )
     ).toBeVisible({ timeout: 15_000 });
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    expect((await getLatestVacationRequestState(world.orgId, employeeRecord.id)).status).toBe(
+      'pending'
     );
-    expect(
-      (await getLatestVacationRequestState(world.orgId, employeeRecord.id))
-        .status
-    ).toBe('pending');
     await bueroPage.unrouteAll();
 
     // The remaining holder rejects with an auditable reason the employee sees.
-    await rejectVacationRequestFor(
-      adminPage,
-      employeeName,
-      'Betriebsurlaub bereits geplant'
-    );
-    const rejectedState = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    await rejectVacationRequestFor(adminPage, employeeName, 'Betriebsurlaub bereits geplant');
+    const rejectedState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(rejectedState.status).toBe('rejected');
     expect(rejectedState.eventTypes).toEqual(['requested', 'rejected']);
 
@@ -485,9 +395,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     await expect(visibleText(employeePage, 'Abgelehnt')).toBeVisible({
       timeout: 15_000,
     });
-    await expect(
-      visibleText(employeePage, 'Betriebsurlaub bereits geplant')
-    ).toBeVisible();
+    await expect(visibleText(employeePage, 'Betriebsurlaub bereits geplant')).toBeVisible();
   });
 
   test('Beschäftigte sehen nur eigene Anträge; Fremdorganisationen sehen nichts', async ({
@@ -495,10 +403,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     // Real-credential RLS: the employee sees exactly their own request rows
     // (never Büro's approved vacation), the org outsider none at all.
@@ -517,13 +422,9 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // The outsider's own organization shows its own honest empty state and no
     // cross-organization vacation entries.
     await openOwnVacationSection(outsiderPage);
-    await expect(
-      visibleText(outsiderPage, 'Kein Urlaubsanspruch hinterlegt')
-    ).toBeVisible();
+    await expect(visibleText(outsiderPage, 'Kein Urlaubsanspruch hinterlegt')).toBeVisible();
     await outsiderPage.goto('/kalender');
     await outsiderPage.getByRole('tab', { name: 'Monat' }).click();
-    await expect(
-      outsiderPage.getByText(`Urlaub – ${employeeName}`)
-    ).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `Urlaub – ${employeeName}`)).toHaveCount(0);
   });
 });

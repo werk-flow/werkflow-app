@@ -170,6 +170,10 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
       if (generation !== generationRef.current) return;
       console.error('[LiveView] read failed:', readError);
       setIsStale(hasDataRef.current);
+      // A thrown read carries no structured reason; clear any previous one so
+      // surfaces fall back to their own generic message instead of rendering
+      // an outdated error (owner audit 2026-08-29).
+      setError(null);
     } finally {
       if (generation === generationRef.current) {
         setIsRefreshing(false);

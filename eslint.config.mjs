@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import { playwrightSpecRules } from "./eslint-rules/playwright-spec-rules.mjs";
 
 // ENFORCEMENT LADDER TIER 2 (docs/decisions/0005-enforcement-ladder.md).
 // ESLint flat config does NOT merge `no-restricted-syntax` across blocks: the
@@ -194,6 +195,69 @@ const stylingSelectors = [
   },
 ];
 
+// Spec-lint set (Stage C of the platform hardening, 2026-08-29; testing.md
+// conventions). Spec files compose named steps and semantically scoped
+// locators; the banned patterns below are the recurring flake classes from
+// the incident log. The full Playwright API stays available to the shared
+// support modules (tests/golden/support/**), which own the bounded,
+// documented exceptions.
+const specSelectors = [
+  {
+    selector:
+      'CallExpression[callee.object.name="test"][callee.property.name="setTimeout"]',
+    message:
+      "Per-test timeout overrides hide regressions and make target budgets meaningless. Use the measured target-keyed default in the Playwright config and fix or classify tests that exceed it.",
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="test"][callee.property.name="slow"]',
+    message:
+      "test.slow() silently triples the configured timeout and bypasses the measured scenario budget. Keep the shared target-keyed budget honest and fix or classify tests that exceed it.",
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="test"][callee.property.name=/^(fixme|only|skip)$/]',
+    message:
+      "Committed test.only/test.skip/test.fixme silently removes evidence from certification. Keep the test runnable and use the runner's focused or diagnostic mode when narrowing locally.",
+  },
+  {
+    selector:
+      'CallExpression[callee.object.object.name="test"][callee.object.property.name="describe"][callee.property.name=/^(only|skip)$/]',
+    message:
+      "Committed test.describe.only/test.describe.skip silently removes evidence from certification. Keep the suite runnable and use the runner's focused or diagnostic mode when narrowing locally.",
+  },
+  {
+    selector: 'CallExpression[callee.property.name="first"][arguments.length=0]',
+    message:
+      "Positional locators (.first/.last/.nth) break when the full serial run adds rows a focused run never sees (testing.md: scope locators semantically). Tighten the locator (exact name, owning row/section) or assert order explicitly with toHaveText([...]); a genuinely positional need belongs in a documented support helper.",
+  },
+  {
+    selector: 'CallExpression[callee.property.name="last"][arguments.length=0]',
+    message:
+      "Positional locators (.first/.last/.nth) break when the full serial run adds rows a focused run never sees (testing.md: scope locators semantically). Tighten the locator (exact name, owning row/section) or assert order explicitly with toHaveText([...]); a genuinely positional need belongs in a documented support helper.",
+  },
+  {
+    selector: 'CallExpression[callee.property.name="nth"]',
+    message:
+      "Positional locators (.first/.last/.nth) break when the full serial run adds rows a focused run never sees (testing.md: scope locators semantically). Tighten the locator (exact name, owning row/section) or assert order explicitly with toHaveText([...]); a genuinely positional need belongs in a documented support helper.",
+  },
+  {
+    selector: 'CallExpression[callee.property.name="waitForTimeout"]',
+    message:
+      "Fixed sleeps hide races and stretch runs — wait on a real app signal instead (visible persisted state, a response, a dialog close). A bounded debounce-drain belongs in a documented support helper.",
+  },
+  {
+    selector: 'Literal[value=/werkflow-golden\\.test|Golden Test SHK|Fremde Firma/]',
+    message:
+      "Golden cleanup markers are minted only by tests/golden/support/seed.ts (goldenTestEmail / goldenTestOrganizationName) so every cleanable identity matches the leftover sweep by construction.",
+  },
+  {
+    selector: 'TemplateElement[value.raw=/werkflow-golden\\.test|Golden Test SHK|Fremde Firma/]',
+    message:
+      "Golden cleanup markers are minted only by tests/golden/support/seed.ts (goldenTestEmail / goldenTestOrganizationName) so every cleanable identity matches the leftover sweep by construction.",
+  },
+];
+
 const productFiles = [
   "app/**/*.{ts,tsx}",
   "components/**/*.{ts,tsx}",
@@ -233,6 +297,22 @@ const eslintConfig = defineConfig([
     files: ["tests/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["error", ...authSelectors, ...prodRefSelectors],
+    },
+  },
+  // Spec files additionally carry the spec-lint set; the shared support
+  // modules keep the full Playwright API for bounded, documented exceptions.
+  {
+    files: ["tests/**/*.spec.ts"],
+    plugins: { "playwright-spec": playwrightSpecRules },
+    rules: {
+      "playwright-spec/no-unscoped-page-selectors": "error",
+      "playwright-spec/no-visible-text-zero-count": "error",
+      "no-restricted-syntax": [
+        "error",
+        ...authSelectors,
+        ...prodRefSelectors,
+        ...specSelectors,
+      ],
     },
   },
   // Product code: auth + prod-ref + Realtime ownership + styling canon; no
@@ -358,6 +438,17 @@ const eslintConfig = defineConfig([
             },
             {
               name: "@/components/realtime/realtime-provider",
+              importNames: ["useRealtimeEvent", "useRealtimeSubscribe"],
+              message:
+                "Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).",
+            },
+          ],
+          // The paths entry matches only the alias specifier; a relative
+          // import (./realtime-provider) must carry the same ban (owner-audit
+          // depth item, 2026-08-29).
+          patterns: [
+            {
+              group: ["**/realtime-provider"],
               importNames: ["useRealtimeEvent", "useRealtimeSubscribe"],
               message:
                 "Consume Realtime through useLiveView (hooks/use-live-view.ts) or useRealtimeRouterRefresh — they own debounce, generation guards, keep-last-known, dialog suspension, and catch-up (client freshness contract).",

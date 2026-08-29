@@ -8,6 +8,7 @@ import {
   getWorkArtifactState,
   getWorkLifecycleState,
 } from './support/db';
+import { closeWorkArtifactDialog } from './support/spec-helpers/work-artifact-dialog';
 import {
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -36,9 +37,7 @@ function berlinDateAfter(days: number): string {
     day: '2-digit',
   }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function dateDigits(value: string): string {
@@ -70,7 +69,6 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(300_000);
     const fixture = names(world);
     await createCustomer(adminPage, fixture.customerName);
     await openCustomerDetail(adminPage, fixture.customerName);
@@ -119,11 +117,18 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     await expect(pack).toContainText(fixture.siteName);
     await expect(pack).toContainText('Werkstraße 16, 10115 Berlin');
     await expect(pack).toContainText('Am Pförtnerhaus melden.');
-    await expect(pack).toContainText('Störung eingrenzen, Anlage prüfen und Ergebnis dokumentieren.');
+    await expect(pack).toContainText(
+      'Störung eingrenzen, Anlage prüfen und Ergebnis dokumentieren.'
+    );
     await expect(pack).not.toContainText('Diese interne');
     await expect(pack).not.toContainText('@example.test');
-    await expect(pack.getByRole('link', { name: `${fixture.contactName} anrufen` })).toHaveAttribute('href', /tel:/);
-    await expect(pack.getByRole('link', { name: /Navigation zu Werkstraße 16/ })).toHaveAttribute('href', /^geo:/);
+    await expect(
+      pack.getByRole('link', { name: `${fixture.contactName} anrufen` })
+    ).toHaveAttribute('href', /tel:/);
+    await expect(pack.getByRole('link', { name: /Navigation zu Werkstraße 16/ })).toHaveAttribute(
+      'href',
+      /^geo:/
+    );
     await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(1);
     await expect(pack.getByTestId('field-primary-next-action')).toHaveText('In Ausführung');
     await expect(pack.getByRole('button', { name: 'Zuweisen', exact: true })).toHaveCount(0);
@@ -134,7 +139,6 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(360_000);
     const fixture = names(world);
     await expectSetupJob(world, fixture.jobNumber);
     await employeePage.setViewportSize({ width: 390, height: 844 });
@@ -157,17 +161,28 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
       'upload-fixture'
     );
 
-    await employeePage.getByTestId('work-artifacts-section').getByRole('button', { name: 'Neu' }).click();
+    await employeePage
+      .getByTestId('work-artifacts-section')
+      .getByRole('button', { name: 'Neu' })
+      .click();
     const artifactDialog = employeePage.getByRole('dialog');
     await artifactDialog.getByLabel('Titel').fill(`P116 Arbeitsbericht ${world.runId}`);
-    await artifactDialog.getByLabel('Zusammenfassung').fill('Anlage geprüft; Ergebnis ist im Auftrag dokumentiert.');
-    await artifactDialog.getByLabel('Ausgeführte Arbeiten').fill('Anlage geprüft und Ergebnis dokumentiert.');
+    await artifactDialog
+      .getByLabel('Zusammenfassung')
+      .fill('Anlage geprüft; Ergebnis ist im Auftrag dokumentiert.');
+    await artifactDialog
+      .getByLabel('Ausgeführte Arbeiten')
+      .fill('Anlage geprüft und Ergebnis dokumentiert.');
     await artifactDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(artifactDialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
-    await artifactDialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await expect(artifactDialog.getByText(/Version 1/)).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(artifactDialog);
 
     const [applied, artifacts, inventory] = await Promise.all([
-      getAppliedWorkTemplateState(world.orgId, { jobNumber: fixture.jobNumber }),
+      getAppliedWorkTemplateState(world.orgId, {
+        jobNumber: fixture.jobNumber,
+      }),
       getWorkArtifactState(world.orgId, { jobNumber: fixture.jobNumber }),
       getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
     ]);
@@ -194,7 +209,6 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     outsiderPage,
     world,
   }) => {
-    test.setTimeout(240_000);
     const fixture = names(world);
     await expectSetupJob(world, fixture.jobNumber);
     await employeePage.setViewportSize({ width: 390, height: 844 });
@@ -202,23 +216,37 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     const lifecycleBefore = await getWorkLifecycleState(world.orgId, {
       jobNumber: fixture.jobNumber,
     });
-    const executionState = lifecycleBefore.entity && 'execution_state' in lifecycleBefore.entity
-      ? lifecycleBefore.entity.execution_state
-      : null;
+    const executionState =
+      lifecycleBefore.entity && 'execution_state' in lifecycleBefore.entity
+        ? lifecycleBefore.entity.execution_state
+        : null;
     if (executionState !== 'execution_complete') {
       await transitionWorkOnJobPage(employeePage, 'Ausführung abgeschlossen');
     }
-    await expect(pack.getByText('Ausführung abgeschlossen', { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(
+      pack
+        .getByTestId('work-lifecycle-card')
+        .locator('[data-slot="badge"]')
+        .getByText('Ausführung abgeschlossen', { exact: true })
+    ).toBeVisible({ timeout: 20_000 });
     await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(0);
     const readOnlyArtifacts = pack.getByTestId('work-artifacts-section');
     await expect(readOnlyArtifacts).toBeVisible();
-    await expect(readOnlyArtifacts.getByRole('button', { name: 'Neu', exact: true })).toHaveCount(0);
+    await expect(readOnlyArtifacts.getByRole('button', { name: 'Neu', exact: true })).toHaveCount(
+      0
+    );
     await expect(pack.getByRole('button', { name: 'Hochladen' })).toHaveCount(0);
-    await expect(pack.getByRole('button', { name: /Arbeitszeit (starten|beenden)/ })).toHaveCount(0);
+    await expect(pack.getByRole('button', { name: /Arbeitszeit (starten|beenden)/ })).toHaveCount(
+      0
+    );
     await expect(pack.getByRole('button', { name: 'Aus Lager entnehmen' })).toHaveCount(0);
 
-    const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber: fixture.jobNumber });
-    expect(lifecycle.entity).toMatchObject({ execution_state: 'execution_complete' });
+    const lifecycle = await getWorkLifecycleState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
+    expect(lifecycle.entity).toMatchObject({
+      execution_state: 'execution_complete',
+    });
 
     await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
     await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);

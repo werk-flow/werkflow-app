@@ -17,9 +17,11 @@ import {
   loginViaUi,
   uploadDocumentOnJobPage,
   visibleText,
+  textInDom,
 } from '../golden/support/steps';
 import { createSignedDownloadUrl } from '../../lib/storage/r2';
 import { requireEnv } from '../golden/support/env';
+import { goldenTestEmail } from '../golden/support/seed';
 import { ARTIFACTS_DIR } from '../golden/support/world';
 import { expectLiveWithin } from '../golden/support/live';
 
@@ -39,10 +41,7 @@ const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Cloud-Canary @CANARY', () => {
-  test('C1: Login und Session-Refresh über geschützte Navigationen', async ({
-    browser,
-    world,
-  }) => {
+  test('C1: Login und Session-Refresh über geschützte Navigationen', async ({ browser, world }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
       const page = await context.newPage();
@@ -57,8 +56,9 @@ test.describe('Cloud-Canary @CANARY', () => {
         expect(new URL(page.url()).pathname).toBe(route);
       }
       await expect
-        .poll(async () =>
-          (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value
+        .poll(
+          async () =>
+            (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value
         )
         .toBe(world.orgId);
     } finally {
@@ -82,7 +82,9 @@ test.describe('Cloud-Canary @CANARY', () => {
     // fetching them back over a signed download URL.
     const storagePath = await getDocumentStoragePathByName(world.orgId, 'upload-fixture');
     const downloadUrl = await createSignedDownloadUrl({ path: storagePath });
-    const response = await fetch(downloadUrl, { signal: AbortSignal.timeout(60_000) });
+    const response = await fetch(downloadUrl, {
+      signal: AbortSignal.timeout(60_000),
+    });
     expect(response.status).toBe(200);
     const bytes = await response.arrayBuffer();
     expect(bytes.byteLength).toBe(6 * 1024 * 1024);
@@ -94,14 +96,13 @@ test.describe('Cloud-Canary @CANARY', () => {
     world,
   }) => {
     await bueroPage.goto('/kunden');
-    await expect(bueroPage.getByText(`Canary Realtime ${world.runId}`)).toHaveCount(0);
+    await expect(textInDom(bueroPage, `Canary Realtime ${world.runId}`)).toHaveCount(0);
     await createCustomer(adminPage, `Canary Realtime ${world.runId}`);
     // No reload: the row must arrive through the Realtime subscription within
     // the cloud latency budget (D4); the measured time lands in the archive.
-    await expectLiveWithin(
-      visibleText(bueroPage, `Canary Realtime ${world.runId}`),
-      { label: 'canary C3 realtime cross-session' }
-    );
+    await expectLiveWithin(visibleText(bueroPage, `Canary Realtime ${world.runId}`), {
+      label: 'canary C3 realtime cross-session',
+    });
   });
 
   test('C4: Einladung mit echter Resend-E-Mail und Beitritt', async ({
@@ -127,20 +128,14 @@ test.describe('Cloud-Canary @CANARY', () => {
     }
   });
 
-  test('C5: Organisationsgrenze hält gegen fremde Sitzung', async ({
-    outsiderPage,
-    world,
-  }) => {
+  test('C5: Organisationsgrenze hält gegen fremde Sitzung', async ({ outsiderPage, world }) => {
     await outsiderPage.goto('/kunden');
-    await expect(outsiderPage.getByText(`Canary Realtime ${world.runId}`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `Canary Realtime ${world.runId}`)).toHaveCount(0);
     await outsiderPage.goto('/auftraege');
-    await expect(outsiderPage.getByText(`CAN-${world.runId}-1`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `CAN-${world.runId}-1`)).toHaveCount(0);
   });
 
-  test('C6: Ein- und Ausstempeln mit persistiertem Eintrag', async ({
-    employeePage,
-    world,
-  }) => {
+  test('C6: Ein- und Ausstempeln mit persistiertem Eintrag', async ({ employeePage, world }) => {
     const before = (await getOrganizationTimeEntrySnapshot(world.orgId)).length;
     await clockInOnJob(employeePage, `Canary Auftrag ${world.runId}`);
     await clockOut(employeePage);
@@ -172,15 +167,14 @@ test.describe('Cloud-Canary @CANARY', () => {
       await page.waitForLoadState('networkidle');
       await page.getByLabel('Vorname').fill('Canary');
       await page.getByLabel('Nachname').fill(`Hibp-${world.runId}`);
-      await page.getByLabel('E-Mail').fill(`gg-hibp-${world.runId}@werkflow-golden.test`);
+      await page.getByLabel('E-Mail').fill(goldenTestEmail('gg-hibp', world.runId));
       // Meets every client-side rule (length, cases, digit) but is one of the
       // most common breached passwords — only HaveIBeenPwned rejects it.
-      await page
-        .getByRole('textbox', { name: 'Passwort', exact: true })
-        .fill('Password123');
+      await page.getByRole('textbox', { name: 'Passwort', exact: true }).fill('Password123');
       await page.getByRole('button', { name: 'Registrieren' }).click();
       await expect(
-        page.getByText(
+        visibleText(
+          page,
           'Dieses Passwort ist aus Datenlecks bekannt und daher unsicher. Bitte wähle ein anderes Passwort.'
         )
       ).toBeVisible({ timeout: 30_000 });
@@ -203,8 +197,7 @@ test.describe('Cloud-Canary @CANARY', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query:
-            'select version from supabase_migrations.schema_migrations order by version',
+          query: 'select version from supabase_migrations.schema_migrations order by version',
         }),
         signal: AbortSignal.timeout(30_000),
       }

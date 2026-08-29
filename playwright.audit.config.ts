@@ -25,7 +25,12 @@ export default defineConfig({
   testDir: './tests/audit',
   globalSetup: './tests/golden/global-setup',
   globalTeardown: './tests/golden/global-teardown',
-  timeout: 180_000,
+  // Measured per-scenario budgets (Stage C, 2026-08-29): slowest audit test
+  // in the frozen Stage B local certification measured 55 s, so the 180 s
+  // local default carries >3x headroom; cloud-target runs get the measured
+  // 300 s envelope (see playwright.config.ts for the evidence trail). Do not
+  // add per-test setTimeout overrides without new measured evidence.
+  timeout: process.env.WERKFLOW_TEST_TARGET === 'cloud' ? 300_000 : 180_000,
   expect: { timeout: 10_000 },
   // Audit specs share one world per run; sessions run serially by design.
   workers: 1,

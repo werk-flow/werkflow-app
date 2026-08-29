@@ -1,6 +1,6 @@
 # Platform Hardening — Local Test Stack, Realtime Consolidation, Legacy Sweep
 
-Status: living — the owner-confirmed plan and work ledger for the three-stage platform-hardening phase between P1-17 and P1-18; each stage session reads this file fully and updates it at closure
+Status: closed (2026-08-29) — historical plan, decisions, and acceptance evidence for the completed three-stage platform-hardening phase between P1-17 and P1-18
 
 ## Why this phase exists
 
@@ -48,7 +48,7 @@ Stage B resolved these within the frontier the owner set (D5/D12); recorded for 
 5. **The D4 hard budget is 15 s (local and cloud), recalibrated under D4's own provisional clause.** The provisional 5 s local budget failed a certification on load-inflated route-refresh delivery that historically completed inside the old 15 s timeouts; the 2 s target stands, every measurement is archived with an `overTarget` flag, and the certification measurements (local 883–1428 ms, cloud 4459 ms) keep the target honest.
 6. **Broadcast-from-database is recorded as the transport end-state, deferred** (research finding 2). The consolidation makes that migration a provider+migration change touching zero surfaces; raise it before broad multi-tenant launch.
 
-Owner-audit follow-ups (2026-08-29, recorded at the Stage B review; no app code changed, so the frozen-build battery evidence stays valid): `useLiveView`'s thrown-read catch path marks `isStale` but leaves `error` unset, so a surface rendering `error` text could show an outdated reason (the structured `ok: false` path handles it correctly); `hooks/use-member-status-polling.ts` keeps its pre-consolidation filename although it no longer polls. Both are cheap Stage C or next-slice cleanups. Two parity-check depth items went to the [enforcement-ladder backlog](../technical/enforcement-ladder-backlog.md).
+Stage C resolved every owner-audit follow-up from the Stage B review. `useLiveView` now clears a stale structured error when a thrown read fails. `hooks/use-member-status-polling.ts` became `hooks/use-member-status.ts`, and all consumers use the new non-polling name. The Realtime parity check now verifies the exact replica-identity index columns and required publication operation flags. The final parity proof covered all 73 published tables on local, DEV, and PROD: 70 exact `(id, organization_id)` indexes, three recorded DEFAULT identities, zero FULL identities, and INSERT, UPDATE, and DELETE enabled.
 
 ### Stage B research findings recorded before code (D12, 2026-08-28)
 
@@ -74,6 +74,10 @@ Product intent behind this stage: saving users time is a core product virtue, an
 ### Stage C — legacy audit sweep
 
 Retrofit `tests/audit/wave-1/**` (and older golden specs where applicable): precondition guards (fast, self-explaining failures naming the grep chain instead of minutes-long timeouts), sanctioned reload recovery, waits on real app signals instead of fixed sleeps, measured per-scenario budgets, and the spec-lint set from the backlog (no raw page locators in specs, no `.nth()`/`.first()`, golden markers only in the seeder). Acceptance: full local Golden + full local audit batteries green with latency budgets active.
+
+### Phase closure (2026-08-29)
+
+Stages A, B, and C are complete. The frozen browser-candidate fingerprint was `15be80e3739f44ee89e4269e70959a97d71b9e3d15eb59d89631f1f88e2d0312`; only the required closure documentation changed afterward. The local audit battery passed 98/98, the local Golden battery passed 110/110, and the cloud canary passed 9/9. The phase has no remaining hardening-phase decision, follow-up, or execution blocker. Work returns to the Phase 1 roadmap at `P1-18`; there is no Stage D handoff prompt.
 
 ## Ledger
 
@@ -109,6 +113,21 @@ Filled in by stage sessions. One row per deliverable/surface/file with date, ses
 | B | Cloud canary (9) | done 2026-08-28 | **9/9** against cloud DEV + real R2 (run `2026-08-28T221424261Z-e76cbd`), C9 confirming the two Stage B migrations in DEV history and C3 measuring cloud cross-session delivery at **4459 ms** (over the 2 s target — archived `overTarget: true` — well inside the 15 s budget) |
 | B | Migrations on all three backends | done 2026-08-28 | Local via `db reset` (full-history replay), DEV via `bunx supabase db push` (canary C9 green), PROD via MCP `apply_migration` (verified: 70 tables `USING INDEX`, 3 DEFAULT — identical on all three) |
 | B | CodeRabbit review | done 2026-08-28 | Three passes, 42 findings. Pass 1 (8 fixed): stuck `isRefreshing` on `invalidate()`, schema-qualified parity query, `usePendingTask` extraction, picker load-failure state, migration lock note, preflight remedy context, skill exception wording, one-home identity exceptions. Pass 2 (5 fixed): `React.startTransition` lint gap, `organization_settings` in member-status tables, alias/doc cleanups, empty-aggregation coalesce. Pass 3 delta (3 fixed): dispatch `onStateChange` latest-callback ref, null-tolerant blocker filter, skill hook naming. Skips recorded per pass: D4 target-vs-hard misread, pre-existing behavior parity (org-switch cookie ordering, silent keep-last surfaces, spinner styles), deliberate eventFilter side effects, `.claude/settings.local.json` (same disposition as Stage A) |
+| C | Stage B owner-audit follow-ups | done 2026-08-29 | `useLiveView` clears obsolete structured errors on thrown reads; the member-status hook and every import use the non-polling name; the parity check proves exact replica-identity index columns and publication operation flags |
+| C | Complete audit and Golden retrofit | done 2026-08-29 | Every Wave 1 audit spec, all five existing Wave 2 audit specs, the canary, and applicable Golden specs now use the hardened helpers and current locator, date, precondition, recovery, and assertion conventions without changing their catalog flow ownership |
+| C | Serial precondition and read-recovery helpers | done 2026-08-29 | `tests/golden/support/preconditions.ts` provides bounded UI, chained-value, and boolean guards whose failures name the exact focused grep chain; read-only navigation retries one Realtime-aborted `goto`, while write retries stay inside named idempotent transaction helpers |
+| C | Dialog and app-signal helpers | done 2026-08-29 | `retryDialogTransaction` and the audit support modules bound dialog reopen/retry behavior; fixed sleeps are gone from browser specs, and waits use persisted state, visible app signals, or the existing measured Realtime assertion |
+| C | Fixture identity and date ownership | done 2026-08-29 | Seed identities are exported from one source, Golden markers remain in the seeder, and `tests/golden/support/date-ownership.ts` rejects overlapping or out-of-window uniqueness-constrained dates at import or call time |
+| C | Spec ESLint set | done 2026-08-29 | ESLint rejects fixed sleeps, positional selectors, raw selectors from a tracked Playwright `Page` or alias, Golden markers outside the seeder, per-test timeout overrides, `test.slow`, committed skip/only/fixme calls, and hidden-filtered zero-count assertions; focused rule tests cover aliases and sanctioned scoped forms |
+| C | Convention meta-tests | done 2026-08-29 | Unit tests check serial mode, audit grep tags, stage-split Golden specs from P1-16 onward, the presence of a structural negative assertion, exact precondition recovery copy, date-window ownership, and the custom ESLint rules |
+| C | Measured scenario budgets | done 2026-08-29 | Playwright defaults now use the measured target budgets without per-test overrides: 180 s for local Golden and audit scenarios, 300 s for cloud Golden and audit scenarios, and 300 s for canary scenarios |
+| C | Realtime parity depth | done 2026-08-29 | `bun run realtime:check` proved all 73 published tables on local, DEV, and PROD: 70 exact `(id, organization_id)` replica-identity indexes, three recorded DEFAULT identities, zero FULL identities, and INSERT/UPDATE/DELETE publication flags enabled |
+| C | Static and unit proof | done 2026-08-29 | TypeScript and ESLint passed; unit tests passed 343/343 across 33 files with 642 expectations; browser discovery remained Golden 110, audit 98, and canary 9 |
+| C | Full audit battery local (98) | done 2026-08-29 | **98/98** on local build `rW3X1wxHKqRuwR-w23cUl`, run `2026-08-29T095136897Z-170df2`, source fingerprint `15be80e3739f44ee89e4269e70959a97d71b9e3d15eb59d89631f1f88e2d0312` |
+| C | Full Golden battery local (110) | done 2026-08-29 | **110/110** on the same local build and source fingerprint, run `2026-08-29T102600524Z-359bb2`; the D4 latency assertions stayed active |
+| C | Cloud canary (9) | done 2026-08-29 | **9/9** against cloud DEV and real R2 on cloud build `NKCslmRYOj14Urx66-sdB`, run `2026-08-29T104550444Z-089312`, with the same source fingerprint |
+| C | CodeRabbit and independent review | done 2026-08-29 | Nine CodeRabbit findings across the implementation and closure passes were dispositioned; the final three reconciled replica-identity, incident-classification, and audit-precondition documentation. An independent audit found and closed locator anchoring, DOM-absence, alias-tracking, fixture-date, and member-settings gaps before the final batteries |
+| C | Docs sweep + ladder review (D6) | done 2026-08-29 | The testing, Realtime, environment, incident, enforcement-ladder, platform-plan, Phase 1 checkpoint, progress-log, and docs-index records now agree with the closed implementation; `bun run docs:check` passed across 67 docs. No Stage D exists; `P1-18` may start |
 
 ## Stage B handoff prompt
 

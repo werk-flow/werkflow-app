@@ -3,18 +3,17 @@ import type { Locator, Page } from '@playwright/test';
 import { getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 import { resolveDailyTargets } from '../../../lib/personnel/targets';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
-import {
-  doesDateConsumeVacation,
-  formatVacationDays,
-} from '../../../lib/vacation/balance';
+import { doesDateConsumeVacation, formatVacationDays } from '../../../lib/vacation/balance';
 import { formatSicknessRange } from '../../../lib/sickness/types';
 import { expect, test } from '../../golden/support/fixtures';
+import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
   getEmployeeRecordStateByUser,
   getLatestSicknessReportState,
   getLatestVacationRequestState,
   getTargetContextForRecord,
 } from '../../golden/support/db';
+import { requireSerialPrecondition } from '../../golden/support/preconditions';
 import {
   addConditionViaDialog,
   addClosureDayViaSettings,
@@ -33,18 +32,16 @@ import {
   setHolidayRegionViaSettings,
   typeIntoDatePicker,
   visibleText,
+  textInDom,
 } from '../../golden/support/steps';
+import {
+  absenceCalendarEvent,
+  deleteWorkScheduleViaDetail,
+  vacationCalendarEvent,
+  vacationRequestCard,
+} from '../support/a4-steps';
 
 test.describe.configure({ mode: 'serial' });
-
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
 
 function shiftIsoDate(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split('-').map(Number);
@@ -96,17 +93,12 @@ async function expectVacationPreview(
     `Berechnete Urlaubstage: ${formatVacationDays(expectedDays)}`,
     { timeout: 15_000 }
   );
-  await expect(
-    dialog.getByRole('button', { name: 'Antrag einreichen' })
-  ).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Antrag einreichen' })).toBeEnabled();
   await dialog.getByRole('button', { name: 'Abbrechen' }).click();
   await expect(dialog).toHaveCount(0);
 }
 
-async function cancelOwnSicknessReport(
-  page: Page,
-  rangeText: string
-): Promise<void> {
+async function cancelOwnSicknessReport(page: Page, rangeText: string): Promise<void> {
   await openOwnSicknessSection(page);
   await page
     .getByRole('button', {
@@ -114,78 +106,24 @@ async function cancelOwnSicknessReport(
     })
     .click();
   const dialog = page.getByRole('dialog');
-  await expect(
-    dialog.getByRole('heading', { name: 'Krankmeldung stornieren' })
-  ).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Krankmeldung stornieren' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Stornieren', exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
-async function deleteWorkScheduleViaDetail(
-  page: Page,
-  validFromIso: string,
-  note: string
-): Promise<void> {
-  const row = page.locator('li').filter({ hasText: note }).first();
-  const confirmDialog = page.getByRole('alertdialog');
-  // A Realtime refresh can remount the list between the menu open and the
-  // confirm dialog (testing.md re-render class; surfaced by the fast local
-  // stack 2026-08-28). Nothing is deleted until the confirm button is
-  // pressed, so re-opening the menu is safe while no dialog appeared.
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      await row
-        .getByRole('button', {
-          name: `Aktionen für Wochenplan ab ${formatGermanDate(validFromIso)}`,
-        })
-        .click({ timeout: 15_000 });
-      await page.getByRole('menuitem', { name: 'Löschen' }).click({ timeout: 10_000 });
-      await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 });
-      break;
-    } catch (error) {
-      if (attempt >= 3) throw error;
-      await page.keyboard.press('Escape');
-    }
-  }
-  await confirmDialog.getByRole('button', { name: 'Löschen', exact: true }).click();
-  await expect(page.getByRole('alertdialog')).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await page.reload();
-  await expect(
-    page.getByRole('button', {
-      name: `Aktionen für Wochenplan ab ${formatGermanDate(validFromIso)}`,
-    })
-  ).toHaveCount(0);
-}
-
-async function openMonthCalendar(page: Page, dateIso = berlinTodayIso()): Promise<void> {
+async function openMonthCalendar(page: Page, dateIso = berlinDateAtOffset(0)): Promise<void> {
   await page.goto('/kalender');
   await page.getByRole('tab', { name: 'Monat', exact: true }).click();
   const [targetYear, targetMonth] = dateIso.split('-').map(Number);
-  const [currentYear, currentMonth] = berlinTodayIso().split('-').map(Number);
-  const monthDelta =
-    (targetYear - currentYear) * 12 + targetMonth - currentMonth;
+  const [currentYear, currentMonth] = berlinDateAtOffset(0).split('-').map(Number);
+  const monthDelta = (targetYear - currentYear) * 12 + targetMonth - currentMonth;
   const stepTitle = monthDelta < 0 ? 'Zurück' : 'Weiter';
   for (let step = 0; step < Math.abs(monthDelta); step += 1) {
     await page.getByTitle(stepTitle).click();
   }
 }
 
-function vacationEvent(
-  page: Page,
-  status: 'pending' | 'approved',
-  personName: string
-): Locator {
-  return page
-    .locator(`.fc-vacation-${status}`)
-    .filter({ hasText: personName })
-    .first();
-}
-
-async function expectNoDiagnosisControl(
-  dialog: Locator
-): Promise<void> {
+async function expectNoDiagnosisControl(dialog: Locator): Promise<void> {
   await expect(dialog.getByLabel(/Diagnose/i)).toHaveCount(0);
   await expect(dialog.getByRole('textbox', { name: /Diagnose/i })).toHaveCount(0);
   await expect(dialog.getByRole('combobox', { name: /Diagnose/i })).toHaveCount(0);
@@ -193,21 +131,15 @@ async function expectNoDiagnosisControl(
 }
 
 test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
-  let halfDayScheduleNote = '';
-
   test('A4-04: Neueste Kondition des Jahres bestimmt den Urlaubssaldo', async ({
     adminPage,
     employeePage,
     world,
   }) => {
-    const todayIso = berlinTodayIso();
-    const firstConditionDate = shiftIsoDate(todayIso, 35);
-    const secondConditionDate = shiftIsoDate(todayIso, 36);
+    const firstConditionDate = ownedBerlinDateAtOffset('a4-abwesenheit', 35);
+    const secondConditionDate = ownedBerlinDateAtOffset('a4-abwesenheit', 36);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     await openMemberDetailFromList(adminPage, employeeName);
     await addConditionViaDialog(adminPage, {
@@ -221,8 +153,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     expect(
       context.conditions.some(
         (condition) =>
-          condition.validFrom === firstConditionDate &&
-          condition.vacationDaysPerYear === 27
+          condition.validFrom === firstConditionDate && condition.vacationDaysPerYear === 27
       )
     ).toBe(true);
 
@@ -244,8 +175,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     expect(
       context.conditions.some(
         (condition) =>
-          condition.validFrom === secondConditionDate &&
-          condition.vacationDaysPerYear === 31
+          condition.validFrom === secondConditionDate && condition.vacationDaysPerYear === 31
       )
     ).toBe(true);
 
@@ -261,17 +191,18 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(300_000);
-    const todayIso = berlinTodayIso();
-    const scheduleValidFrom = shiftIsoDate(todayIso, 1);
-    const scheduleDate = firstWeekdayOnOrAfter(shiftIsoDate(todayIso, 68));
+    const todayIso = berlinDateAtOffset(0);
+    const scheduleValidFrom = ownedBerlinDateAtOffset('a4-abwesenheit', 37);
+    const scheduleDate = [37, 38, 39]
+      .map((offset) => ownedBerlinDateAtOffset('a4-abwesenheit', offset))
+      .find((dateIso) => weekdayIndex(dateIso) < 5);
+    if (!scheduleDate) {
+      throw new Error('A4 has no weekday inside its +37 ... +39 partition.');
+    }
     const scheduleFreeDate = firstWeekdayOnOrAfter(shiftIsoDate(scheduleDate, 1));
     const weekendDate = firstWeekendOnOrAfter(scheduleValidFrom);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     const dayHours = ['8', '8', '8', '8', '8', '0', '0'];
     dayHours[weekdayIndex(scheduleFreeDate)] = '0';
@@ -283,10 +214,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       note: scheduleNote,
     });
 
-    let context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    let context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     expect(doesDateConsumeVacation(scheduleDate, context)).toBe(true);
     expect(doesDateConsumeVacation(scheduleFreeDate, context)).toBe(false);
     expect(doesDateConsumeVacation(weekendDate, context)).toBe(false);
@@ -322,17 +250,13 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
       expect(
         context.calendar.closureDays.some(
-          (day) =>
-            day.closureDate === scheduleDate && day.label === closureLabel
+          (day) => day.closureDate === scheduleDate && day.label === closureLabel
         )
       ).toBe(true);
       expect(doesDateConsumeVacation(scheduleDate, context)).toBe(false);
       await expectVacationPreview(employeePage, scheduleDate, 0);
     } finally {
-      await removeClosureDayViaSettings(
-        adminPage,
-        formatGermanDate(scheduleDate)
-      );
+      await removeClosureDayViaSettings(adminPage, formatGermanDate(scheduleDate));
     }
   });
 
@@ -342,17 +266,24 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     world,
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    requireSerialPrecondition(
+      context.conditions.some(
+        (condition) =>
+          condition.note === `A4 Anspruch 31 ${world.runId}` && condition.vacationDaysPerYear === 31
+      ),
+      {
+        test: 'A4-06/A4-09/A4-10',
+        needs: 'the 31-day employment condition created by A4-04',
+        grep: 'A4-04|A4-06',
+        suite: 'audit',
+      }
+    );
     const ownedDates = [37, 38, 39].map((offset) =>
-      shiftIsoDate(berlinTodayIso(), offset)
+      ownedBerlinDateAtOffset('a4-abwesenheit', offset)
     );
-    const overlapDate = ownedDates.find((date) =>
-      doesDateConsumeVacation(date, context)
-    );
+    const overlapDate = ownedDates.find((date) => doesDateConsumeVacation(date, context));
     if (!overlapDate) {
       throw new Error('A4 has no positive-target date in its +37 ... +39 partition.');
     }
@@ -365,10 +296,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       comment: `A4 Urlaub ${world.runId}`,
     });
     await approveVacationRequestFor(adminPage, employeeName);
-    const approvedVacation = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const approvedVacation = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(approvedVacation).toMatchObject({
       status: 'approved',
       startDate: overlapDate,
@@ -387,9 +315,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await openOwnSicknessSection(employeePage);
     await employeePage.getByRole('button', { name: 'Krank melden' }).click();
     let dialog = employeePage.getByRole('dialog');
-    await expect(
-      dialog.getByText('bitte gib keine Diagnose an.', { exact: false })
-    ).toBeVisible();
+    await expect(dialog.getByText('bitte gib keine Diagnose an.', { exact: false })).toBeVisible();
     await expectNoDiagnosisControl(dialog);
     await dialog.getByRole('button', { name: 'Abbrechen' }).click();
     await expect(dialog).toHaveCount(0);
@@ -412,10 +338,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       typeLabel: 'Sonstige Abwesenheit',
       expectVacationOverlapHint: true,
     });
-    const reportedSickness = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const reportedSickness = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(reportedSickness).toMatchObject({
       status: 'reported',
       absenceType: 'sonstige',
@@ -424,9 +347,9 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       dayPortion: 'full',
       eventTypes: ['reported'],
     });
-    expect(
-      await getLatestVacationRequestState(world.orgId, employeeRecord.id)
-    ).toEqual(approvedVacation);
+    expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(
+      approvedVacation
+    );
     await openOwnVacationSection(employeePage);
     await expect(visibleText(employeePage, '1 von 31 Tagen genommen')).toBeVisible({
       timeout: 15_000,
@@ -457,10 +380,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await saveCorrection.click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
-    const correctedSickness = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const correctedSickness = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(correctedSickness).toMatchObject({
       id: reportedSickness.id,
       status: 'reported',
@@ -470,9 +390,9 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       dayPortion: 'half_day',
       eventTypes: ['reported', 'corrected'],
     });
-    expect(
-      await getLatestVacationRequestState(world.orgId, employeeRecord.id)
-    ).toEqual(approvedVacation);
+    expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(
+      approvedVacation
+    );
     await openOwnVacationSection(employeePage);
     await expect(visibleText(employeePage, '1 von 31 Tagen genommen')).toBeVisible({
       timeout: 15_000,
@@ -485,16 +405,9 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       sicknessRange,
       `A4 Prüfung abgeschlossen ${world.runId}`
     );
-    const cancelledSickness = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cancelledSickness = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(cancelledSickness.status).toBe('cancelled');
-    expect(cancelledSickness.eventTypes).toEqual([
-      'reported',
-      'corrected',
-      'cancelled',
-    ]);
+    expect(cancelledSickness.eventTypes).toEqual(['reported', 'corrected', 'cancelled']);
 
     await cancelApprovedVacationForRangeText(
       adminPage,
@@ -502,10 +415,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       rangeText,
       `A4 Prüfung abgeschlossen ${world.runId}`
     );
-    const cancelledVacation = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cancelledVacation = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(cancelledVacation).toMatchObject({
       id: approvedVacation.id,
       status: 'cancelled',
@@ -525,14 +435,11 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     employeePage,
     world,
   }) => {
-    const requestDate = shiftIsoDate(berlinTodayIso(), 68);
-    const outsideDate = shiftIsoDate(berlinTodayIso(), 69);
+    const requestDate = ownedBerlinDateAtOffset('a4-abwesenheit', 68);
+    const outsideDate = ownedBerlinDateAtOffset('a4-abwesenheit', 69);
     const dateDigits = toDatePickerDigits(requestDate);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const inRangeJobTitle = `A4 Auftrag im Zeitraum ${world.runId}`;
     const outsideJobTitle = `A4 Auftrag außerhalb ${world.runId}`;
 
@@ -560,9 +467,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await adminPage.goto('/zeiterfassung?tab=approvals');
-    const requestCard = adminPage
-      .locator('[data-vacation-request]')
-      .filter({ hasText: employeeName });
+    const requestCard = vacationRequestCard(adminPage, employeeName);
     await expect(requestCard).toHaveCount(1, { timeout: 15_000 });
     await expect(requestCard).toContainText(
       'Hinweis: Für diese Person liegt im beantragten Zeitraum eine weitere Abwesenheit vor.'
@@ -578,10 +483,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       employeeName,
       `A4 Hinweisprüfung abgeschlossen ${world.runId}`
     );
-    const rejectedVacation = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const rejectedVacation = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(rejectedVacation).toMatchObject({
       status: 'rejected',
       startDate: requestDate,
@@ -590,10 +492,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await cancelOwnSicknessReport(employeePage, formatGermanDate(requestDate));
-    const cancelledSickness = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cancelledSickness = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(cancelledSickness).toMatchObject({
       status: 'cancelled',
       startDate: requestDate,
@@ -608,18 +507,14 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     employeePage,
     world,
   }) => {
-    test.setTimeout(300_000);
-    const requestDate = berlinTodayIso();
+    // This scenario proves the dashboard's current-day target projection. A
+    // future owned date would persist correctly but could never produce the
+    // current-day label under test. Its vacation is cancelled before R04.
+    const requestDate = berlinDateAtOffset(0);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    let context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    let context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     let [baseTarget] = resolveDailyTargets([requestDate], context);
     // The run day must actually CONSUME vacation, not just carry a target:
     // on weekends the labeled default source yields a positive target that
@@ -627,7 +522,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     // target-only guard is weekday-blind — the first Saturday A4 run proved
     // it with an honest empty approved-days snapshot.
     if (!doesDateConsumeVacation(requestDate, context)) {
-      halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
+      const halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
       await openMemberDetailFromList(adminPage, employeeName);
       await addWorkScheduleViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(requestDate),
@@ -641,9 +536,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     const dateDigits = toDatePickerDigits(requestDate);
     const rangeText = formatGermanDate(requestDate);
     expect(baseTarget.targetMinutes).toBeGreaterThan(0);
-    const halfTargetLabel = formatDuration(
-      Math.round(baseTarget.baseTargetMinutes / 2)
-    );
+    const halfTargetLabel = formatDuration(Math.round(baseTarget.baseTargetMinutes / 2));
 
     await createOwnVacationRequestViaDialog(employeePage, {
       startDigits: dateDigits,
@@ -658,32 +551,23 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await openMonthCalendar(adminPage, requestDate);
-    const employeePending = vacationEvent(
-      adminPage,
-      'pending',
-      employeeName
-    );
-    const bueroPending = vacationEvent(adminPage, 'pending', bueroName);
+    const employeePending = vacationCalendarEvent(adminPage, 'pending', employeeName);
+    const bueroPending = vacationCalendarEvent(adminPage, 'pending', bueroName);
     await expect(employeePending).toBeVisible({ timeout: 15_000 });
     await expect(bueroPending).toBeVisible();
     expect(
-      await employeePending.evaluate(
-        (element) => getComputedStyle(element).borderStyle
-      )
+      await employeePending.evaluate((element) => getComputedStyle(element).borderStyle)
     ).toContain('dashed');
 
     await openMonthCalendar(employeePage, requestDate);
-    await expect(vacationEvent(employeePage, 'pending', employeeName)).toBeVisible({
+    await expect(vacationCalendarEvent(employeePage, 'pending', employeeName)).toBeVisible({
       timeout: 15_000,
     });
-    await expect(vacationEvent(employeePage, 'pending', bueroName)).toHaveCount(0);
+    await expect(vacationCalendarEvent(employeePage, 'pending', bueroName)).toHaveCount(0);
 
     await approveVacationRequestFor(adminPage, employeeName);
     await approveVacationRequestFor(adminPage, bueroName);
-    const approvedVacation = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const approvedVacation = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(approvedVacation).toMatchObject({
       status: 'approved',
       startDate: requestDate,
@@ -695,31 +579,22 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
 
     await openOwnVacationSection(employeePage);
     await expect(
-      visibleText(
-        employeePage,
-        `Halber Urlaubstag – Tagesziel: ${halfTargetLabel} Arbeitszeit`
-      )
+      visibleText(employeePage, `Halber Urlaubstag – Tagesziel: ${halfTargetLabel} Arbeitszeit`)
     ).toBeVisible({ timeout: 15_000 });
 
     await openMonthCalendar(adminPage, requestDate);
-    const employeeApproved = vacationEvent(
-      adminPage,
-      'approved',
-      employeeName
-    );
+    const employeeApproved = vacationCalendarEvent(adminPage, 'approved', employeeName);
     await expect(employeeApproved).toBeVisible({ timeout: 15_000 });
-    await expect(vacationEvent(adminPage, 'approved', bueroName)).toBeVisible();
+    await expect(vacationCalendarEvent(adminPage, 'approved', bueroName)).toBeVisible();
     expect(
-      await employeeApproved.evaluate(
-        (element) => getComputedStyle(element).backgroundColor
-      )
+      await employeeApproved.evaluate((element) => getComputedStyle(element).backgroundColor)
     ).not.toBe('rgba(0, 0, 0, 0)');
 
     await openMonthCalendar(employeePage, requestDate);
-    await expect(
-      vacationEvent(employeePage, 'approved', employeeName)
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(vacationEvent(employeePage, 'approved', bueroName)).toHaveCount(0);
+    await expect(vacationCalendarEvent(employeePage, 'approved', employeeName)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(vacationCalendarEvent(employeePage, 'approved', bueroName)).toHaveCount(0);
 
     await cancelApprovedVacationForRangeText(
       adminPage,
@@ -740,19 +615,16 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     employeePage,
     world,
   }) => {
-    const requestDate = berlinTodayIso();
+    // The dashboard target banner is intentionally a current-day contract.
+    // R03 has already cancelled its vacation before this sickness fixture.
+    const requestDate = berlinDateAtOffset(0);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    let context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    let context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    const previewScheduleNote = `A4 Vorschau-Wochenplan ${world.runId}`;
     let [baseTarget] = resolveDailyTargets([requestDate], context);
+    const halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
     if (baseTarget.targetMinutes <= 0) {
-      halfDayScheduleNote = `A4 Halbtag-Wochenplan ${world.runId}`;
       await openMemberDetailFromList(adminPage, employeeName);
       await addWorkScheduleViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(requestDate),
@@ -765,9 +637,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     const dateDigits = toDatePickerDigits(requestDate);
     const rangeText = formatGermanDate(requestDate);
     expect(baseTarget.targetMinutes).toBeGreaterThan(0);
-    const halfTargetLabel = formatDuration(
-      Math.round(baseTarget.baseTargetMinutes / 2)
-    );
+    const halfTargetLabel = formatDuration(Math.round(baseTarget.baseTargetMinutes / 2));
 
     await reportOwnSicknessViaDialog(employeePage, {
       startDigits: dateDigits,
@@ -775,10 +645,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       halfDay: true,
       typeLabel: 'Krankheit',
     });
-    const reported = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const reported = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(reported).toMatchObject({
       status: 'reported',
       startDate: requestDate,
@@ -796,16 +663,11 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
 
     await openMonthCalendar(adminPage, requestDate);
     await expect(
-      adminPage
-        .locator('.fc-vacation-approved')
-        .filter({ hasText: `Abwesend – ${employeeName} (halber Tag)` })
+      absenceCalendarEvent(adminPage, `Abwesend – ${employeeName} (halber Tag)`)
     ).toBeVisible({ timeout: 15_000 });
 
     await cancelOwnSicknessReport(employeePage, rangeText);
-    const cancelled = await getLatestSicknessReportState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const cancelled = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(cancelled).toMatchObject({
       id: reported.id,
       status: 'cancelled',
@@ -819,22 +681,26 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       )
     ).toBeVisible({ timeout: 15_000 });
     await openMonthCalendar(adminPage, requestDate);
-    await expect(
-      adminPage.getByText(`Abwesend – ${employeeName} (halber Tag)`)
-    ).toHaveCount(0, { timeout: 15_000 });
+    await expect(textInDom(adminPage, `Abwesend – ${employeeName} (halber Tag)`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
 
     await openMemberDetailFromList(adminPage, employeeName);
-    if (halfDayScheduleNote) {
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    if (context.schedules.some((schedule) => schedule.note === halfDayScheduleNote)) {
       await deleteWorkScheduleViaDetail(
         adminPage,
-        requestDate,
+        formatGermanDate(requestDate),
         halfDayScheduleNote
       );
     }
-    await deleteWorkScheduleViaDetail(
-      adminPage,
-      shiftIsoDate(requestDate, 1),
-      `A4 Vorschau-Wochenplan ${world.runId}`
-    );
+    context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
+    if (context.schedules.some((schedule) => schedule.note === previewScheduleNote)) {
+      await deleteWorkScheduleViaDetail(
+        adminPage,
+        formatGermanDate(ownedBerlinDateAtOffset('a4-abwesenheit', 37)),
+        previewScheduleNote
+      );
+    }
   });
 });

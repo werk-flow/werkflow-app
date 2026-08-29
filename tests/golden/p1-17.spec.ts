@@ -12,6 +12,10 @@ import {
   getWorkLifecycleState,
 } from './support/db';
 import {
+  closeWorkArtifactDialog,
+  readPopupBodyText,
+} from './support/spec-helpers/work-artifact-dialog';
+import {
   acknowledgeDispatchOnJobPage,
   addContactOnCustomerDetail,
   addSiteOnCustomerDetail,
@@ -40,11 +44,13 @@ test.describe.configure({ mode: 'serial' });
 
 function berlinDateAfter(days: number): string {
   const today = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000)
-    .toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 const DATES = Array.from({ length: 5 }, (_, index) => berlinDateAfter(90 + index));
@@ -80,11 +86,17 @@ async function beginArtifact(
 ): Promise<Locator> {
   await page.getByTestId('work-artifacts-section').getByRole('button', { name: 'Neu' }).click();
   const dialog = page.getByRole('dialog');
-  await selectOption(page, dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises' }), kind);
+  await selectOption(
+    page,
+    dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises' }),
+    kind
+  );
   if (customerFacing) {
     await selectOption(
       page,
-      dialog.getByRole('combobox', { name: 'Sichtbarkeit des Arbeitsnachweises' }),
+      dialog.getByRole('combobox', {
+        name: 'Sichtbarkeit des Arbeitsnachweises',
+      }),
       'Für Kundendokumentation'
     );
   }
@@ -96,7 +108,7 @@ async function beginArtifact(
 async function submitAndClose(dialog: Locator): Promise<void> {
   await dialog.getByRole('button', { name: 'Zur Prüfung einreichen', exact: true }).click();
   await expect(dialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
-  await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();
+  await closeWorkArtifactDialog(dialog);
 }
 
 async function approveArtifact(page: Page, title: string): Promise<void> {
@@ -106,7 +118,11 @@ async function approveArtifact(page: Page, title: string): Promise<void> {
   // class; first surfaced by the faster local stack). Re-click only while no
   // dialog opened at all.
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    await page.getByText(title, { exact: true }).click();
+    await page
+      .getByTestId('work-artifacts-section')
+      .getByRole('button')
+      .filter({ hasText: title })
+      .click({ timeout: 10_000 });
     const opened = await dialog
       .waitFor({ state: 'visible', timeout: 10_000 })
       .then(() => true)
@@ -117,20 +133,27 @@ async function approveArtifact(page: Page, title: string): Promise<void> {
     }
   }
   await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
-  await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({ timeout: 20_000 });
-  await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();
+  await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({
+    timeout: 20_000,
+  });
+  await closeWorkArtifactDialog(dialog);
 }
 
 async function completeWithManagerOverride(page: Page, jobNumber: string): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
-  await page.getByTestId('work-lifecycle-card')
-    .getByRole('button', { name: 'Ausführung abgeschlossen', exact: true }).click();
+  await page
+    .getByTestId('work-lifecycle-card')
+    .getByRole('button', { name: 'Ausführung abgeschlossen', exact: true })
+    .click();
   const dialog = page.getByRole('dialog');
-  const overrideCheckbox = dialog.getByRole('checkbox').first();
+  const overrideCheckbox = dialog.getByRole('checkbox', {
+    name: /Manager-Ausnahme verwenden/,
+  });
   if (await overrideCheckbox.isVisible().catch(() => false)) {
     await overrideCheckbox.check();
   }
-  await dialog.locator('#work-transition-reason')
+  await dialog
+    .locator('#work-transition-reason')
     .fill('Offene Nachweise werden transparent an die Übergabeprüfung weitergegeben.');
   await dialog.getByRole('button', { name: 'Änderung speichern' }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
@@ -140,7 +163,9 @@ async function releaseCurrentDraft(page: Page): Promise<string> {
   const section = page.getByTestId('work-handover-section');
   await selectAllHandoverSources(section);
   await section.getByRole('button', { name: 'Entwurf speichern' }).click();
-  await expect(section.getByText('Entwurf gespeichert.')).toBeVisible({ timeout: 20_000 });
+  await expect(section.getByText('Entwurf gespeichert.')).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(section).toContainText('Offene Prüfpunkte');
   await expect(section).toContainText('Nicht automatisch bewertet');
   const override = section.getByLabel('Begründung der Ausnahme');
@@ -151,19 +176,24 @@ async function releaseCurrentDraft(page: Page): Promise<string> {
   await section.getByRole('button', { name: 'Vorschau öffnen' }).click();
   const preview = await popupPromise;
   await preview.waitForLoadState('domcontentloaded');
-  await expect(section.getByText('Vorschau erstellt.', { exact: false })).toBeVisible({ timeout: 20_000 });
-  const html = await preview.locator('body').innerText();
+  await expect(section.getByText('Vorschau erstellt.', { exact: false })).toBeVisible({
+    timeout: 20_000,
+  });
+  const html = await readPopupBodyText(preview);
   await section.getByRole('button', { name: 'Freigeben und übergeben' }).click();
-  await expect(section.getByText('Übergabepaket freigegeben', { exact: false })).toBeVisible({ timeout: 30_000 });
+  await expect(section.getByText('Übergabepaket freigegeben', { exact: false })).toBeVisible({
+    timeout: 30_000,
+  });
   await preview.close();
   return html;
 }
 
 test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
   test('creates the persisted template, dispatch, and target context @P1-17-stage-setup', async ({
-    adminPage, employeePage, world,
+    adminPage,
+    employeePage,
+    world,
   }) => {
-    test.setTimeout(420_000);
     // P1-17-F01…F22: target, role, contact, template, schedule, dispatch,
     // assignment and side-effect-free initial handover state.
     const fixture = names(world);
@@ -201,7 +231,11 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       workTemplateName: fixture.templateName,
     });
     await planMaterialOnJobPage(
-      adminPage, fixture.jobNumber, world.inventory.itemName, world.inventory.locationName, 2
+      adminPage,
+      fixture.jobNumber,
+      world.inventory.itemName,
+      world.inventory.locationName,
+      2
     );
     await parkJobOnJobPage(
       adminPage,
@@ -216,16 +250,22 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       recipientName: fixture.employeeName,
     });
     await createPlannedCalendarEntry(adminPage, {
-      kind: 'job_visit', jobSearch: fixture.jobNumber, date: DATES[0], time: '06:00',
+      kind: 'job_visit',
+      jobSearch: fixture.jobNumber,
+      date: DATES[0],
+      time: '06:00',
       employeeNames: [fixture.employeeName],
       overrideReason: 'P1-17 deterministischer Einsatztermin.',
     });
     await acknowledgeDispatchOnJobPage(employeePage, fixture.jobNumber);
     await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
-    await adminPage.getByTestId('work-lifecycle-card')
-      .getByRole('button', { name: 'Weiterplanen' }).click();
+    await adminPage
+      .getByTestId('work-lifecycle-card')
+      .getByRole('button', { name: 'Weiterplanen' })
+      .click();
     const unparkDialog = adminPage.getByRole('dialog');
-    await unparkDialog.locator('#work-reason')
+    await unparkDialog
+      .locator('#work-reason')
       .fill('Einsatz ist disponiert und kann ausgeführt werden.');
     await unparkDialog.getByRole('button', { name: 'Weiterführen' }).click();
     await expect(unparkDialog).toHaveCount(0, { timeout: 20_000 });
@@ -239,15 +279,20 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
   });
 
   test('executes work and captures the GG-04 evidence set @P1-17-stage-execution', async ({
-    adminPage, employeePage, world,
+    adminPage,
+    employeePage,
+    world,
   }) => {
-    test.setTimeout(720_000);
     // P1-17-F23…F57: assigned execution, checklist, time/material, photo,
     // measurement, defect/change, customer refusal, approval and privacy.
     const fixture = names(world);
-    expect((await getAppliedWorkTemplateState(world.orgId, {
-      jobNumber: fixture.jobNumber,
-    })).instructions).toHaveLength(1);
+    expect(
+      (
+        await getAppliedWorkTemplateState(world.orgId, {
+          jobNumber: fixture.jobNumber,
+        })
+      ).instructions
+    ).toHaveLength(1);
     const pack = await openFieldWorkPack(employeePage, fixture.jobNumber);
     await transitionWorkOnJobPage(employeePage, 'In Ausführung');
     await setInstructionCompletionOnJobPage(employeePage, fixture.instruction, true);
@@ -264,7 +309,9 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     let dialog = await beginArtifact(employeePage, 'Arbeitsbericht', fixture.reportTitle);
     await typeIntoDateTimeField(dialog, 'artifact-visit-start', `${DATES[0]}T06:00`);
     await typeIntoDateTimeField(dialog, 'artifact-visit-end', `${DATES[0]}T08:00`);
-    await dialog.getByLabel('Ausgeführte Arbeiten').fill('Anlage geprüft und übergabefähig dokumentiert.');
+    await dialog
+      .getByLabel('Ausgeführte Arbeiten')
+      .fill('Anlage geprüft und übergabefähig dokumentiert.');
     await dialog.getByText('Kundenentscheidung erforderlich').click();
     await dialog.getByText('Unterschrift erforderlich').click();
     await submitAndClose(dialog);
@@ -281,56 +328,76 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     dialog = await beginArtifact(employeePage, 'Mangel', fixture.defectTitle);
     await dialog.getByLabel('Mangelbeschreibung').fill('Dämmung muss nachgearbeitet werden.');
     await dialog.getByLabel('Ort', { exact: true }).fill('Heizzentrale');
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Schweregrad' }), 'Mittel');
+    await selectOption(
+      employeePage,
+      dialog.getByRole('combobox', { name: 'Schweregrad' }),
+      'Mittel'
+    );
     await submitAndClose(dialog);
 
     dialog = await beginArtifact(employeePage, 'Regie-/Änderungsnachweis', fixture.changeTitle);
     await dialog.getByLabel('Änderungs-/Regiearbeit').fill('Zusätzliche Absperrung dokumentiert.');
-    await dialog.getByLabel('Grund', { exact: true }).fill('Leitungsführung wurde vor Ort präzisiert.');
+    await dialog
+      .getByLabel('Grund', { exact: true })
+      .fill('Leitungsführung wurde vor Ort präzisiert.');
     await dialog.getByLabel('Angefordert durch').fill('Objektleitung vor Ort');
     await submitAndClose(dialog);
 
     dialog = await beginArtifact(employeePage, 'Arbeitsbericht', fixture.internalTitle, false);
     await dialog.getByLabel('Ausgeführte Arbeiten').fill('INTERNES-GEHEIMNIS-P117');
     await dialog.getByRole('button', { name: 'Als Entwurf speichern', exact: true }).click();
-    await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();
+    await closeWorkArtifactDialog(dialog);
 
     await adminPage.goto(`/auftraege/${fixture.jobNumber}`);
     for (const title of [
-      fixture.reportTitle, fixture.measurementTitle, fixture.defectTitle, fixture.changeTitle,
+      fixture.reportTitle,
+      fixture.measurementTitle,
+      fixture.defectTitle,
+      fixture.changeTitle,
     ]) {
       await approveArtifact(adminPage, title);
     }
     await employeePage.reload();
-    await employeePage.getByText(fixture.reportTitle, { exact: true }).click();
+    await employeePage
+      .getByTestId('work-artifacts-section')
+      .getByRole('button')
+      .filter({ hasText: fixture.reportTitle })
+      .click();
     dialog = employeePage.getByRole('dialog');
     await dialog.getByText('Kundenentscheidung und Unterschrift').click();
     await dialog.locator('#artifact-customer-name').fill('Erika Beispiel');
-    await dialog.locator('#artifact-action-reason')
+    await dialog
+      .locator('#artifact-action-reason')
       .fill('Kundin bestätigt die Arbeiten, lehnt eine digitale Unterschrift jedoch ab.');
     await dialog.getByRole('button', { name: 'Ablehnung erfassen' }).click();
-    await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();
+    await closeWorkArtifactDialog(dialog);
 
-    const artifacts = await getWorkArtifactState(world.orgId, { jobNumber: fixture.jobNumber });
+    const artifacts = await getWorkArtifactState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
     expect(artifacts.measurements).toHaveLength(1);
     expect(artifacts.defects).toHaveLength(1);
     expect(artifacts.changes).toHaveLength(1);
-    expect(artifacts.actions.some((action) => action.action_type === 'customer_refused')).toBe(true);
+    expect(artifacts.actions.some((action) => action.action_type === 'customer_refused')).toBe(
+      true
+    );
     await expect(pack).toBeVisible({ timeout: 20_000 });
     await expect(pack).not.toContainText('INTERNES-GEHEIMNIS-P117');
   });
 
   test('reviews, previews, and atomically releases the exact package @P1-17-stage-handover', async ({
-    adminPage, employeePage, world,
+    adminPage,
+    employeePage,
+    world,
   }) => {
-    test.setTimeout(420_000);
     // P1-17-F58…F88: completion versus handover, classified gates, exact
     // sources, preview privacy, reasoned override, immutable release and field projection.
     const fixture = names(world);
-    const before = await getWorkLifecycleState(world.orgId, { jobNumber: fixture.jobNumber });
-    const executionState = before.entity && 'execution_state' in before.entity
-      ? before.entity.execution_state
-      : null;
+    const before = await getWorkLifecycleState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
+    const executionState =
+      before.entity && 'execution_state' in before.entity ? before.entity.execution_state : null;
     expect(['in_progress', 'execution_complete', 'handed_over']).toContain(executionState);
     if (executionState === 'handed_over') {
       const retainedRelease = await getWorkHandoverState(world.orgId, {
@@ -339,9 +406,11 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       expect(retainedRelease.releases).toHaveLength(1);
       const retainedFieldPack = await openFieldWorkPack(employeePage, fixture.jobNumber);
       await expect(retainedFieldPack).toContainText('An das Büro übergeben');
-      await expect(retainedFieldPack.getByRole('button', {
-        name: 'Übergabedokument',
-      })).toBeVisible();
+      await expect(
+        retainedFieldPack.getByRole('button', {
+          name: 'Übergabedokument',
+        })
+      ).toBeVisible();
       return;
     }
     if (executionState === 'in_progress') {
@@ -359,9 +428,14 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     expect(previewText).not.toContain('INTERNES-GEHEIMNIS-P117');
     expect(previewText).not.toContain('Interne Kontaktnotiz');
 
-    const handover = await getWorkHandoverState(world.orgId, { jobNumber: fixture.jobNumber });
+    const handover = await getWorkHandoverState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
     expect(handover.target).toMatchObject({ execution_state: 'handed_over' });
-    expect(handover.package).toMatchObject({ state: 'released', current_release_id: handover.releases[0].id });
+    expect(handover.package).toMatchObject({
+      state: 'released',
+      current_release_id: handover.releases[0].id,
+    });
     expect(handover.releases).toHaveLength(1);
     expect(handover.releaseItems.length).toBeGreaterThanOrEqual(5);
     expect(handover.documents).toHaveLength(1);
@@ -370,8 +444,12 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       customerName: fixture.customerName,
       contactName: fixture.contactName,
     });
-    expect(handover.releases[0].time_summary).toMatchObject({ Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/) });
-    expect(handover.releases[0].material_summary).toMatchObject({ Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(handover.releases[0].time_summary).toMatchObject({
+      Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(handover.releases[0].material_summary).toMatchObject({
+      Quellenfingerabdruck: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
 
     const fieldPack = await openFieldWorkPack(employeePage, fixture.jobNumber);
     await expect(fieldPack).toContainText('An das Büro übergeben');
@@ -379,56 +457,80 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
   });
 
   test('withdraws, corrects, and re-releases without rewriting history @P1-17-stage-reopen', async ({
-    adminPage, world,
+    adminPage,
+    world,
   }) => {
-    test.setTimeout(420_000);
     // P1-17-F89…F101: reasoned withdrawal, correction reopening, successor
     // draft/release, predecessor linkage and preserved lifecycle/package events.
     const fixture = names(world);
     await adminPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
     const section = adminPage.getByTestId('work-handover-section');
-    await section.getByLabel('Grund für die Rücknahme')
+    await section
+      .getByLabel('Grund für die Rücknahme')
       .fill('Seriennummer muss nach dem Termin ergänzt werden.');
     await section.getByRole('button', { name: 'Übergabe zurücknehmen' }).click();
-    await expect(section.getByText('Übergabe zurückgenommen.', { exact: false })).toBeVisible({ timeout: 20_000 });
+    await expect(section.getByText('Übergabe zurückgenommen.', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
     await adminPage.reload();
     const reopenSection = adminPage.getByTestId('work-handover-section');
-    await reopenSection.getByLabel('Ausführung erneut öffnen')
+    await reopenSection
+      .getByLabel('Ausführung erneut öffnen')
       .fill('Techniker ergänzt die Seriennummer vor Ort.');
     await reopenSection.getByRole('button', { name: 'Zur Korrektur in Ausführung geben' }).click();
-    await expect(reopenSection.getByText('Ausführung zur Korrektur geöffnet.'))
-      .toBeVisible({ timeout: 20_000 });
+    await expect(reopenSection.getByText('Ausführung zur Korrektur geöffnet.')).toBeVisible({
+      timeout: 20_000,
+    });
 
     await completeWithManagerOverride(adminPage, fixture.jobNumber);
     await adminPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
     await releaseCurrentDraft(adminPage);
-    const state = await getWorkHandoverState(world.orgId, { jobNumber: fixture.jobNumber });
+    const state = await getWorkHandoverState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
     expect(state.releases).toHaveLength(2);
     expect(state.releases[1].previous_release_id).toBe(state.releases[0].id);
-    expect(state.events.map((event) => event.event_type)).toEqual(expect.arrayContaining([
-      'released', 'handover_withdrawn', 'review_returned', 'execution_reopened',
-    ]));
+    expect(state.events.map((event) => event.event_type)).toEqual(
+      expect.arrayContaining([
+        'released',
+        'handover_withdrawn',
+        'review_returned',
+        'execution_reopened',
+      ])
+    );
     expect(state.target).toMatchObject({ execution_state: 'handed_over' });
   });
 
   test('enforces responsibility and organization boundaries @P1-17-stage-boundaries', async ({
-    employeePage, outsiderPage, bueroPage, world,
+    employeePage,
+    outsiderPage,
+    bueroPage,
+    world,
   }) => {
-    test.setTimeout(180_000);
     // P1-17-F102…F109: office continuity, assigned-field minimalism,
     // non-reviewer route denial, outsider RLS, history visibility and zero widening.
     const fixture = names(world);
     await bueroPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
-    await expect(bueroPage.getByTestId('work-handover-section')).toContainText('Freigabeverlauf (2)');
+    await expect(bueroPage.getByTestId('work-handover-section')).toContainText(
+      'Freigabeverlauf (2)'
+    );
     await employeePage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
     await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
     await outsiderPage.goto(`/auftraege/${fixture.jobNumber}/uebergabe`);
     await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
     const outsiderCounts = await getVisibleWorkHandoverCountsAs(world.outsider.admin, world.orgId);
     expect(Object.values(outsiderCounts).every((count) => count === 0)).toBe(true);
-    const state = await getWorkHandoverState(world.orgId, { jobNumber: fixture.jobNumber });
+    const state = await getWorkHandoverState(world.orgId, {
+      jobNumber: fixture.jobNumber,
+    });
     expect(state.releases).toHaveLength(2);
-    expect(state.releaseItems.every((item) => item.customer_label !== fixture.internalTitle)).toBe(true);
-    expect(state.documents.every((document) => document.storage_path.includes('/work-handover-packages/'))).toBe(true);
+    expect(state.releaseItems.every((item) => item.customer_label !== fixture.internalTitle)).toBe(
+      true
+    );
+    expect(
+      state.documents.every((document) =>
+        document.storage_path.includes('/work-handover-packages/')
+      )
+    ).toBe(true);
   });
 });

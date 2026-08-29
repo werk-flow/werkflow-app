@@ -33,7 +33,7 @@ type MemberStatusMap = Record<string, MemberStatus>;
 
 const EMPTY_STATUS_MAP: MemberStatusMap = {};
 
-interface UseMemberStatusPollingOptions {
+interface UseMemberStatusOptions {
   organizationId: string;
   memberIds: string[];
   breakMode?: OrgBreakMode;
@@ -43,14 +43,14 @@ interface UseMemberStatusPollingOptions {
   enabled?: boolean;
 }
 
-export function useMemberStatusPolling({
+export function useMemberStatus({
   organizationId,
   memberIds,
   breakMode = 'manual',
   autoBreakThresholdMinutes = 360,
   autoBreakDurationMinutes = 30,
   enabled = true
-}: UseMemberStatusPollingOptions): {
+}: UseMemberStatusOptions): {
   statusMap: MemberStatusMap;
   isLoading: boolean;
   error: string | null;
@@ -148,9 +148,9 @@ export function useMemberStatusPolling({
       }
     },
     enabled,
-    // Membership changes must discard the old map and read fresh; the read
-    // itself always sees the current memberIds through its closure.
-    resetKey: `${organizationId}:${[...memberIds].sort().join(',')}`,
+    // Membership or break-policy changes must discard the old map and read
+    // fresh. The read then uses the current inputs through its closure.
+    resetKey: `${organizationId}:${[...memberIds].sort().join(',')}:${breakMode}:${autoBreakThresholdMinutes}:${autoBreakDurationMinutes}`,
   });
 
   return {

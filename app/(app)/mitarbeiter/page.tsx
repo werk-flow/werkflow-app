@@ -4,7 +4,11 @@ import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import {
+  getCachedUser,
+  getCachedMemberships,
+  getCachedOrganizationSettings,
+} from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
@@ -40,6 +44,7 @@ async function MitarbeiterData({
     targetsResult,
     responsibilitySettingsResult,
     qualificationWorkspaceResult,
+    organizationSettings,
   ] =
     await Promise.all([
       getOrgMembersForUser(activeOrgId, userId),
@@ -54,6 +59,7 @@ async function MitarbeiterData({
       getTodayTargetsForMembers(),
       getResponsibilitySettingsData(),
       getQualificationWorkspace(),
+      getCachedOrganizationSettings(activeOrgId),
     ]);
 
   if (!qualificationWorkspaceResult.success) {
@@ -119,6 +125,9 @@ async function MitarbeiterData({
       currentUserId={userId}
       currentUserRole={currentUserRole}
       organizationId={activeOrgId}
+      breakMode={organizationSettings.breakMode}
+      autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
+      autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
       qualificationWorkspace={
         qualificationWorkspaceResult.success
           ? qualificationWorkspaceResult.data

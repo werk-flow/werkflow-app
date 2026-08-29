@@ -43,6 +43,7 @@ import {
   rejectVacationRequestFor,
   cancelSicknessReportViaMenuWithReason,
   visibleText,
+  textInDom,
   withdrawOwnPendingVacationRequest,
 } from './support/steps';
 
@@ -120,7 +121,7 @@ async function openCalendarMonthOf(page: Page, dateIso: string): Promise<void> {
   await page.goto('/kalender');
   await page.getByRole('tab', { name: 'Monat' }).click();
   for (let step = 0; step < monthsAhead(dateIso); step++) {
-    await page.locator('button[title="Weiter"]').click();
+    await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   }
 }
 
@@ -131,10 +132,7 @@ const secondRequestDayIso = () => shiftIsoDate(nextMondayIso(), 2);
 
 // Reads a person's decided (notifiable) vacation requests from the database —
 // the mode-independent expectation for inherited notification counts.
-async function getDecidedRequestCount(
-  orgId: string,
-  userId: string
-): Promise<number> {
+async function getDecidedRequestCount(orgId: string, userId: string): Promise<number> {
   const record = await getEmployeeRecordStateByUser(orgId, userId);
   const byStartDate = await getVacationRequestIdsByStartDate(orgId, record.id);
   return [...byStartDate.values()].filter((request) =>
@@ -177,31 +175,19 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // The assignee sees "Mir zugewiesen", others see the responsible person.
     await openAufgaben(bueroPage);
-    const bueroRequestTask = attentionTaskLink(
-      bueroPage,
-      `Anfrage ANF-${world.runId}-GG02 öffnen`
-    );
+    const bueroRequestTask = attentionTaskLink(bueroPage, `Anfrage ANF-${world.runId}-GG02 öffnen`);
     await expect(bueroRequestTask).toHaveCount(1);
     await expect(bueroRequestTask.getByText('Mir zugewiesen')).toBeVisible();
 
     await openAufgaben(adminPage);
-    const adminRequestTask = attentionTaskLink(
-      adminPage,
-      `Anfrage ANF-${world.runId}-GG02 öffnen`
-    );
+    const adminRequestTask = attentionTaskLink(adminPage, `Anfrage ANF-${world.runId}-GG02 öffnen`);
     await expect(adminRequestTask).toHaveCount(1);
-    await expect(
-      adminRequestTask.getByText(`Zuständig: ${bueroName}`)
-    ).toBeVisible();
+    await expect(adminRequestTask.getByText(`Zuständig: ${bueroName}`)).toBeVisible();
     // No pending approvals exist yet: those groups are absent, not empty
     // shells, and the admin has no decision notifications.
     await expect(adminPage.getByTestId('attention-time-tasks')).toHaveCount(0);
-    await expect(
-      adminPage.getByTestId('attention-vacation-tasks')
-    ).toHaveCount(0);
-    await expect(
-      visibleText(adminPage, 'Keine Benachrichtigungen.')
-    ).toBeVisible();
+    await expect(adminPage.getByTestId('attention-vacation-tasks')).toHaveCount(0);
+    await expect(visibleText(adminPage, 'Keine Benachrichtigungen.')).toBeVisible();
 
     // Deep link into the owning context, resolve it there, and the item
     // disappears — explainable from the request's own history (geschlossen).
@@ -209,9 +195,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await adminPage.waitForURL(`**/anfragen/${requestId}`, {
       timeout: 20_000,
     });
-    await expect(
-      visibleText(adminPage, 'Heizung klopft im Mehrfamilienhaus')
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, 'Heizung klopft im Mehrfamilienhaus')).toBeVisible({
+      timeout: 15_000,
+    });
     await closeRequestViaDialog(adminPage, 'Anderweitig gelöst');
     await openAufgaben(adminPage);
     await expect(
@@ -222,23 +208,17 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     // exactly one notification per decided request — none for withdrawn ones.
     // The expected count is derived from the database, so this holds in the
     // inherited full suite (three decided requests) and focused (none) alike.
-    const decidedEmployee = await getDecidedRequestCount(
-      world.orgId,
-      world.users.employee.id
-    );
+    const decidedEmployee = await getDecidedRequestCount(world.orgId, world.users.employee.id);
     await openAufgaben(employeePage);
-    await expect(
-      employeePage.getByTestId('attention-request-tasks')
-    ).toHaveCount(0);
-    await expect(
-      employeePage.locator('[data-notification-source]')
-    ).toHaveCount(decidedEmployee);
+    await expect(employeePage.getByTestId('attention-request-tasks')).toHaveCount(0);
+    const employeeNotifications = employeePage
+      .getByRole('region', { name: 'Benachrichtigungen' })
+      .locator('[data-notification-source]');
+    await expect(employeeNotifications).toHaveCount(decidedEmployee);
     if (decidedEmployee > 1) {
       await markAllAttentionNotificationsReadViaButton(employeePage);
     } else if (decidedEmployee === 1) {
-      const sourceId = await employeePage
-        .locator('[data-notification-source]')
-        .getAttribute('data-notification-source');
+      const sourceId = await employeeNotifications.getAttribute('data-notification-source');
       await markAttentionNotificationReadViaButton(employeePage, sourceId!);
     }
     const employeePatternState = await getAttentionPatternStateForUser(
@@ -247,9 +227,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     );
     expect(employeePatternState.readStates.length).toBe(decidedEmployee);
     expect(
-      employeePatternState.events.filter(
-        (event) => event.eventType === 'marked_read'
-      ).length
+      employeePatternState.events.filter((event) => event.eventType === 'marked_read').length
     ).toBe(decidedEmployee);
     // Nothing actionable, nothing unread: no badge at all for the employee.
     await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, {
@@ -258,28 +236,23 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // Büro reads their inherited notification (if any) through the per-item
     // action; afterwards their badge counts exactly the open requests.
-    const decidedBuero = await getDecidedRequestCount(
-      world.orgId,
-      world.users.buero.id
-    );
+    const decidedBuero = await getDecidedRequestCount(world.orgId, world.users.buero.id);
     await openAufgaben(bueroPage);
-    await expect(
-      bueroPage.locator('[data-notification-source]')
-    ).toHaveCount(decidedBuero);
+    const bueroNotifications = bueroPage
+      .getByRole('region', { name: 'Benachrichtigungen' })
+      .locator('[data-notification-source]');
+    await expect(bueroNotifications).toHaveCount(decidedBuero);
     if (decidedBuero > 1) {
       await markAllAttentionNotificationsReadViaButton(bueroPage);
     } else if (decidedBuero === 1) {
-      const sourceId = await bueroPage
-        .locator('[data-notification-source]')
-        .getAttribute('data-notification-source');
+      const sourceId = await bueroNotifications.getAttribute('data-notification-source');
       await markAttentionNotificationReadViaButton(bueroPage, sourceId!);
     }
     const openRequests = await countOpenClientRequests(world.orgId);
     if (openRequests > 0) {
-      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(
-        String(openRequests),
-        { timeout: 15_000 }
-      );
+      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests), {
+        timeout: 15_000,
+      });
     } else {
       await expect(aufgabenSidebarBadge(bueroPage)).toHaveCount(0, {
         timeout: 15_000,
@@ -295,9 +268,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const tomorrowDigits = toDatePickerDigits(
-      shiftIsoDate(berlinTodayIso(), 1)
-    );
+    const tomorrowDigits = toDatePickerDigits(shiftIsoDate(berlinTodayIso(), 1));
 
     // Part-time plan for the employee, full-time plan for Büro — both
     // date-effective from tomorrow so history keeps its old targets.
@@ -330,10 +301,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
       );
       if (expectedSollMinutes % 60 === 0) {
         await page.goto('/zeiterfassung');
-        await expectVisibleAfterSave(
-          page,
-          `Soll: ${expectedSollMinutes / 60} Std.`
-        );
+        await expectVisibleAfterSave(page, `Soll: ${expectedSollMinutes / 60} Std.`);
       }
     }
   });
@@ -361,10 +329,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await expect(adminPage.getByTestId('attention-time-tasks')).toHaveCount(0);
 
     await openAufgaben(employeePage);
-    const timeTask = attentionTaskLink(
-      employeePage,
-      `Zeitfreigabe von ${bueroName} öffnen`
-    );
+    const timeTask = attentionTaskLink(employeePage, `Zeitfreigabe von ${bueroName} öffnen`);
     await expect(timeTask).toHaveCount(1);
     await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', {
       timeout: 15_000,
@@ -376,22 +341,20 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await employeePage.waitForURL('**/zeiterfassung?tab=approvals', {
       timeout: 20_000,
     });
-    await expect(
-      employeePage.getByTestId('pending-approvals-panel')
-    ).toHaveAttribute('data-loaded', 'true', { timeout: 15_000 });
+    await expect(employeePage.getByTestId('pending-approvals-panel')).toHaveAttribute(
+      'data-loaded',
+      'true',
+      { timeout: 15_000 }
+    );
     await approvePendingTimeEntry(employeePage, world.users.buero.id);
 
-    expect(
-      (
-        await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)
-      ).status
-    ).toBe('approved');
+    expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
+      'approved'
+    );
 
     // Resolved means gone from the surface — and the badge follows.
     await openAufgaben(employeePage);
-    await expect(
-      employeePage.getByTestId('attention-time-tasks')
-    ).toHaveCount(0);
+    await expect(employeePage.getByTestId('attention-time-tasks')).toHaveCount(0);
     await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, {
       timeout: 15_000,
     });
@@ -413,9 +376,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     // Provisional availability: the pending request is visible to planning as
     // a clearly provisional entry.
     await openCalendarMonthOf(employeePage, dayIso);
-    await expect(
-      visibleText(employeePage, `Urlaub – ${employeeName} (angefragt)`)
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(employeePage, `Urlaub – ${employeeName} (angefragt)`)).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Overlapping own leave is impossible (database exclusion constraint).
     await expectVacationOverlapRejectedViaDialog(employeePage, {
@@ -425,21 +388,15 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // Withdrawal stays traceable and removes the provisional entry.
     await withdrawOwnPendingVacationRequest(employeePage);
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const state = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const state = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(state.status).toBe('withdrawn');
     expect(state.eventTypes).toEqual(['requested', 'withdrawn']);
 
     await openCalendarMonthOf(employeePage, dayIso);
-    await expect(
-      employeePage.getByText(`Urlaub – ${employeeName} (angefragt)`)
-    ).toHaveCount(0, { timeout: 15_000 });
+    await expect(textInDom(employeePage, `Urlaub – ${employeeName} (angefragt)`)).toHaveCount(0, {
+      timeout: 15_000,
+    });
   });
 
   test('Vertretung: die Aufmerksamkeit folgt der Delegation ohne Duplikate und endet mit ihr', async ({
@@ -467,9 +424,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
       attentionTaskLink(adminPage, `Urlaubsantrag von ${employeeName} öffnen`)
     ).toHaveCount(1);
     await openAufgaben(bueroPage);
-    await expect(
-      bueroPage.getByTestId('attention-vacation-tasks')
-    ).toHaveCount(0);
+    await expect(bueroPage.getByTestId('attention-vacation-tasks')).toHaveCount(0);
 
     // The admin delegates leave approval to Büro for a bounded window; the
     // attention item follows the delegation — exactly once, never twice.
@@ -489,10 +444,9 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     await expect(bueroVacationTask).toHaveCount(1);
     // Unified badge: the open requests plus exactly one delegated approval.
     const openRequests = await countOpenClientRequests(world.orgId);
-    await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(
-      String(openRequests + 1),
-      { timeout: 15_000 }
-    );
+    await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests + 1), {
+      timeout: 15_000,
+    });
 
     // The substitute decides over the deep link — through the very same
     // decideVacationRequest action and surface as always.
@@ -508,10 +462,10 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // Approved availability: the calendar entry loses its provisional suffix.
     await openCalendarMonthOf(bueroPage, firstDayIso);
-    await expect(
-      visibleText(bueroPage, `Urlaub – ${employeeName}`)
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(bueroPage.getByText('(angefragt)')).toHaveCount(0);
+    await expect(visibleText(bueroPage, `Urlaub – ${employeeName}`)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(textInDom(bueroPage, '(angefragt)')).toHaveCount(0);
 
     // A second request while the delegation is active: both the delegator and
     // the substitute see it exactly once each (two authorization paths exist
@@ -531,15 +485,11 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // Ending the delegation removes the substitute's attention immediately;
     // the remaining holder keeps it.
-    await endResponsibilityDelegationViaSettings(
-      adminPage,
-      'leave_approval',
-      bueroName
-    );
+    await endResponsibilityDelegationViaSettings(adminPage, 'leave_approval', bueroName);
     await openAufgaben(bueroPage);
-    await expect(
-      bueroPage.getByTestId('attention-vacation-tasks')
-    ).toHaveCount(0, { timeout: 15_000 });
+    await expect(bueroPage.getByTestId('attention-vacation-tasks')).toHaveCount(0, {
+      timeout: 15_000,
+    });
     await openAufgaben(adminPage);
     await expect(
       attentionTaskLink(adminPage, `Urlaubsantrag von ${employeeName} öffnen`)
@@ -554,22 +504,12 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const firstDayIso = requestDayIso();
     const secondDayIso = secondRequestDayIso();
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
     // The remaining holder rejects the second request with a reason.
-    await rejectVacationRequestFor(
-      adminPage,
-      employeeName,
-      'Personalengpass im Zeitraum'
-    );
+    await rejectVacationRequestFor(adminPage, employeeName, 'Personalengpass im Zeitraum');
 
-    const requestsByDay = await getVacationRequestIdsByStartDate(
-      world.orgId,
-      employeeRecord.id
-    );
+    const requestsByDay = await getVacationRequestIdsByStartDate(world.orgId, employeeRecord.id);
     const approvedRequest = requestsByDay.get(firstDayIso);
     const rejectedRequest = requestsByDay.get(secondDayIso);
     expect(approvedRequest?.status).toBe('approved');
@@ -577,30 +517,16 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
 
     // The employee gets exactly one notification per decided request.
     await openAufgaben(employeePage);
-    const approvedRow = attentionNotificationRow(
-      employeePage,
-      approvedRequest!.id
-    );
-    const rejectedRow = attentionNotificationRow(
-      employeePage,
-      rejectedRequest!.id
-    );
+    const approvedRow = attentionNotificationRow(employeePage, approvedRequest!.id);
+    const rejectedRow = attentionNotificationRow(employeePage, rejectedRequest!.id);
     await expect(approvedRow).toHaveCount(1);
     await expect(approvedRow).toHaveAttribute('data-unread', 'true');
     await expect(rejectedRow).toHaveCount(1);
     await expect(rejectedRow.getByText('wurde abgelehnt.')).toBeVisible();
-    await expect(
-      rejectedRow.getByText('Personalengpass im Zeitraum')
-    ).toBeVisible();
+    await expect(rejectedRow.getByText('Personalengpass im Zeitraum')).toBeVisible();
 
-    await markAttentionNotificationReadViaButton(
-      employeePage,
-      approvedRequest!.id
-    );
-    await markAttentionNotificationReadViaButton(
-      employeePage,
-      rejectedRequest!.id
-    );
+    await markAttentionNotificationReadViaButton(employeePage, approvedRequest!.id);
+    await markAttentionNotificationReadViaButton(employeePage, rejectedRequest!.id);
     await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, {
       timeout: 15_000,
     });
@@ -621,24 +547,16 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
       timeout: 15_000,
     });
     await expect(approvedRow.getByText('wurde storniert.')).toBeVisible();
-    await expect(
-      approvedRow.getByText('Projekttermin verschoben')
-    ).toBeVisible();
+    await expect(approvedRow.getByText('Projekttermin verschoben')).toBeVisible();
     await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', {
       timeout: 15_000,
     });
-    await markAttentionNotificationReadViaButton(
-      employeePage,
-      approvedRequest!.id
-    );
+    await markAttentionNotificationReadViaButton(employeePage, approvedRequest!.id);
 
     // Domain audit: the owning tables explain every disappearance. The
     // latest-created request is the rejected one; the cancelled one keeps its
     // terminal status in the request lookup.
-    const latestState = await getLatestVacationRequestState(
-      world.orgId,
-      employeeRecord.id
-    );
+    const latestState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(latestState.eventTypes).toEqual(['requested', 'rejected']);
     const requestsAfterCancel = await getVacationRequestIdsByStartDate(
       world.orgId,
@@ -658,9 +576,7 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     expect(approvedReadState?.stateVersion.startsWith('cancelled:')).toBe(true);
     expect(
       patternState.events.filter(
-        (event) =>
-          event.sourceId === approvedRequest!.id &&
-          event.eventType === 'marked_read'
+        (event) => event.sourceId === approvedRequest!.id && event.eventType === 'marked_read'
       ).length
     ).toBe(2);
   });
@@ -714,36 +630,23 @@ test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () =
     // Real-credential RLS: the employee sees exactly their own read markers
     // and events; the admin sees NO foreign read markers (strictly personal)
     // but does see pattern events as a manager; outsiders see nothing.
-    const employeeView = await getVisibleAttentionOwnersAs(
-      world.users.employee,
-      world.orgId
-    );
+    const employeeView = await getVisibleAttentionOwnersAs(world.users.employee, world.orgId);
     expect(employeeView.readStateUserIds).toEqual([world.users.employee.id]);
     expect(employeeView.eventUserIds).toEqual([world.users.employee.id]);
 
-    const adminView = await getVisibleAttentionOwnersAs(
-      world.users.admin,
-      world.orgId
-    );
+    const adminView = await getVisibleAttentionOwnersAs(world.users.admin, world.orgId);
     expect(adminView.readStateUserIds).toEqual([]);
     expect(adminView.eventUserIds).toContain(world.users.employee.id);
 
-    const outsiderView = await getVisibleAttentionOwnersAs(
-      world.outsider.admin,
-      world.orgId
-    );
+    const outsiderView = await getVisibleAttentionOwnersAs(world.outsider.admin, world.orgId);
     expect(outsiderView.readStateUserIds).toEqual([]);
     expect(outsiderView.eventUserIds).toEqual([]);
 
     // The outsider organization's surface is honestly empty — the calm
     // deploy-day state every real organization starts in.
     await openAufgaben(outsiderPage);
-    await expect(
-      visibleText(outsiderPage, 'Keine offenen Aufgaben.')
-    ).toBeVisible();
-    await expect(
-      visibleText(outsiderPage, 'Keine Benachrichtigungen.')
-    ).toBeVisible();
+    await expect(visibleText(outsiderPage, 'Keine offenen Aufgaben.')).toBeVisible();
+    await expect(visibleText(outsiderPage, 'Keine Benachrichtigungen.')).toBeVisible();
     await expect(aufgabenSidebarBadge(outsiderPage)).toHaveCount(0);
   });
 });

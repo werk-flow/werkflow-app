@@ -14,6 +14,7 @@ import {
   openCustomerDetail,
   uploadDocumentOnRequestDetail,
   visibleText,
+  textInDom,
 } from './support/steps';
 import { ARTIFACTS_DIR } from './support/world';
 
@@ -63,10 +64,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     });
   });
 
-  test('Büro erfasst eine Anfrage während des Anrufs mit Anhang', async ({
-    bueroPage,
-    world,
-  }) => {
+  test('Büro erfasst eine Anfrage während des Anrufs mit Anhang', async ({ bueroPage, world }) => {
     firstRequestId = await createRequestViaDialog(bueroPage, {
       summary: 'Durchlauferhitzer in der Backstube ausgefallen',
       requestNumber: `ANF-${world.runId}-1`,
@@ -78,9 +76,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     });
 
     // The request detail shows the linked customer identity, not copies.
-    await expect(
-      visibleText(bueroPage, `Bäckerei Brotmann ${world.runId}`)
-    ).toBeVisible();
+    await expect(visibleText(bueroPage, `Bäckerei Brotmann ${world.runId}`)).toBeVisible();
     await expect(visibleText(bueroPage, 'Backstube Nord')).toBeVisible();
     await expect(visibleText(bueroPage, 'Milan Petrovic')).toBeVisible();
 
@@ -106,10 +102,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     // Once-only conversion: the action is gone and the DB records exactly one
     // attributable conversion target.
     await expect(bueroPage.getByRole('button', { name: 'Umwandeln' })).toHaveCount(0);
-    const conversion = await getRequestConversionState(
-      world.orgId,
-      `ANF-${world.runId}-1`
-    );
+    const conversion = await getRequestConversionState(world.orgId, `ANF-${world.runId}-1`);
     expect(conversion.status).toBe('umgewandelt');
     expect(conversion.convertedJobId).not.toBeNull();
     expect(conversion.convertedProjectId).toBeNull();
@@ -121,16 +114,10 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await expect(
       visibleText(bueroPage, 'Durchlauferhitzer in der Backstube ausgefallen')
     ).toBeVisible({ timeout: 15_000 });
-    await expect(
-      visibleText(bueroPage, `Bäckerei Brotmann ${world.runId}`)
-    ).toBeVisible();
+    await expect(visibleText(bueroPage, `Bäckerei Brotmann ${world.runId}`)).toBeVisible();
     await expect(visibleText(bueroPage, 'Backstube Nord')).toBeVisible();
-    await expect(
-      visibleText(bueroPage, 'Milan Petrovic (Hausmeister/in)')
-    ).toBeVisible();
-    await expect(
-      visibleText(bueroPage, 'Industriestraße 12, 80807 München')
-    ).toBeVisible();
+    await expect(visibleText(bueroPage, 'Milan Petrovic (Hausmeister/in)')).toBeVisible();
+    await expect(visibleText(bueroPage, 'Industriestraße 12, 80807 München')).toBeVisible();
     await expect(visibleText(bueroPage, 'upload-fixture')).toBeVisible({
       timeout: 15_000,
     });
@@ -151,9 +138,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     });
 
     // Promote the caller into a customer straight from the captured data.
-    await bueroPage
-      .getByRole('button', { name: 'Als neuen Kunden anlegen' })
-      .click();
+    await bueroPage.getByRole('button', { name: 'Als neuen Kunden anlegen' }).click();
     await expect(
       visibleText(bueroPage, 'Kunde wurde angelegt und der Anfrage zugeordnet.')
     ).toBeVisible({ timeout: 15_000 });
@@ -165,6 +150,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     await bueroPage.goto('/kunden');
     await expect(
       bueroPage
+        .getByRole('main')
         .getByText(`Renate Neuling ${world.runId}`)
         .filter({ visible: true })
     ).toHaveCount(1);
@@ -206,7 +192,7 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     // No synthetic request appeared for the direct job.
     await adminPage.goto('/anfragen');
     await adminPage.getByRole('tab', { name: 'Alle' }).click();
-    await expect(adminPage.getByText('Filterwechsel Filiale Zentrum')).toHaveCount(0);
+    await expect(textInDom(adminPage, 'Filterwechsel Filiale Zentrum')).toHaveCount(0);
   });
 
   test('Mitarbeiter hat keinen Zugriff auf Anfragen', async ({ employeePage }) => {
@@ -214,30 +200,25 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
     // The direct detail URL is equally protected.
     await expectRedirectedAway(employeePage, `/anfragen/${firstRequestId}`);
     await expect(
-      employeePage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
+      textInDom(employeePage, 'Durchlauferhitzer in der Backstube ausgefallen')
     ).toHaveCount(0);
     await employeePage.goto('/dashboard');
-    await expect(
-      employeePage.getByRole('link', { name: 'Anfragen' })
-    ).toHaveCount(0);
+    await expect(employeePage.getByRole('link', { name: 'Anfragen' })).toHaveCount(0);
   });
 
-  test('Fremde Organisation sieht keine Anfragen', async ({
-    outsiderPage,
-    world,
-  }) => {
+  test('Fremde Organisation sieht keine Anfragen', async ({ outsiderPage, world }) => {
     await outsiderPage.goto('/anfragen');
     await outsiderPage.getByRole('tab', { name: 'Alle' }).click();
-    await expect(outsiderPage.getByText(`ANF-${world.runId}-1`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `ANF-${world.runId}-1`)).toHaveCount(0);
     await expect(
-      outsiderPage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
+      textInDom(outsiderPage, 'Durchlauferhitzer in der Backstube ausgefallen')
     ).toHaveCount(0);
 
     // The direct detail URL of the other organization's request is not found.
     await outsiderPage.goto(`/anfragen/${firstRequestId}`);
     await expect(
-      outsiderPage.getByText('Durchlauferhitzer in der Backstube ausgefallen')
+      textInDom(outsiderPage, 'Durchlauferhitzer in der Backstube ausgefallen')
     ).toHaveCount(0);
-    await expect(outsiderPage.getByText(`ANF-${world.runId}-1`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `ANF-${world.runId}-1`)).toHaveCount(0);
   });
 });

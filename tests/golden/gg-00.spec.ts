@@ -16,6 +16,7 @@ import {
   takeMaterialOnJobPage,
   uploadDocumentOnJobPage,
   visibleText,
+  textInDom,
 } from './support/steps';
 import { ARTIFACTS_DIR, storageStatePath } from './support/world';
 import { expectLiveWithin } from './support/live';
@@ -33,10 +34,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await expect(visibleText(adminPage, `Testkunde ${world.runId}`)).toBeVisible();
   });
 
-  test('Admin erstellt Aufträge und weist einen Mitarbeiter zu', async ({
-    adminPage,
-    world,
-  }) => {
+  test('Admin erstellt Aufträge und weist einen Mitarbeiter zu', async ({ adminPage, world }) => {
     await createJob(adminPage, {
       jobNumber: `GG-${world.runId}-1`,
       title: 'Heizung warten (Golden Gate)',
@@ -55,7 +53,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
   test('Mitarbeiter sieht nur zugewiesene Aufträge', async ({ employeePage, world }) => {
     await employeePage.goto('/auftraege');
     await expect(visibleText(employeePage, `GG-${world.runId}-1`)).toBeVisible();
-    await expect(employeePage.getByText(`GG-${world.runId}-2`)).toHaveCount(0);
+    await expect(textInDom(employeePage, `GG-${world.runId}-2`)).toHaveCount(0);
   });
 
   test('Mitarbeiter lädt ein Dokument über 4,5 MB auf den Auftrag hoch', async ({
@@ -92,8 +90,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     // Two users are signed in simultaneously in separate browser contexts.
     await Promise.all([
       bueroPage.waitForEvent('console', {
-        predicate: (message) =>
-          message.text() === `[Realtime] subscribed to org-${world.orgId}`,
+        predicate: (message) => message.text() === `[Realtime] subscribed to org-${world.orgId}`,
         timeout: 30_000,
       }),
       bueroPage.goto('/kunden'),
@@ -142,7 +139,9 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     // organization's previously uploaded document.
     await page.goto('/dokumente');
     await expect(page).toHaveURL(/\/dokumente$/);
-    await expect(visibleText(page, 'upload-fixture')).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(page, 'upload-fixture')).toBeVisible({
+      timeout: 15_000,
+    });
     await context.close();
 
     // The admin's member list now contains the new member.
@@ -182,18 +181,16 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
     await expect(visibleText(adminPage, itemName)).toBeVisible();
   });
 
-  test('Mitarbeiter hat keinen Zugriff auf Bibliothek und Inventar', async ({
-    employeePage,
-  }) => {
+  test('Mitarbeiter hat keinen Zugriff auf Bibliothek und Inventar', async ({ employeePage }) => {
     await expectRedirectedAway(employeePage, '/dokumente');
     await expectRedirectedAway(employeePage, '/inventar');
   });
 
   test('Fremde Organisation sieht keine Daten', async ({ outsiderPage, world }) => {
     await outsiderPage.goto('/kunden');
-    await expect(outsiderPage.getByText(`Testkunde ${world.runId}`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `Testkunde ${world.runId}`)).toHaveCount(0);
     await outsiderPage.goto('/auftraege');
-    await expect(outsiderPage.getByText(`GG-${world.runId}-1`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `GG-${world.runId}-1`)).toHaveCount(0);
   });
 
   // Sign-out revokes the user's sessions server-side, so this check uses the

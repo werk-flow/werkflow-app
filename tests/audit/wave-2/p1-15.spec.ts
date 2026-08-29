@@ -1,4 +1,3 @@
-
 import type { Locator, Page } from '@playwright/test';
 
 import { expect, test } from '../../golden/support/fixtures';
@@ -20,20 +19,14 @@ import {
   selectFromSearchable,
   typeIntoDatePickerById,
   typeIntoDateTimeField,
+  visibleText,
+  textInDom,
 } from '../../golden/support/steps';
+import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
+import { requireVisiblePrecondition } from '../../golden/support/preconditions';
+import { closeWorkArtifactDialog } from '../../golden/support/spec-helpers/work-artifact-dialog';
 
 test.describe.configure({ mode: 'serial' });
-
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
-}
-
-function shiftIsoDate(dateIso: string, days: number): string {
-  const [year, month, day] = dateIso.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().slice(0, 10);
-}
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -44,7 +37,8 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const DATES = Array.from({ length: 5 }, (_, index) => shiftIsoDate(berlinTodayIso(), 80 + index));
+const PLANNED_DATE = ownedBerlinDateAtOffset('p1-15', 80);
+const DATES = Array.from({ length: 3 }, (_, index) => berlinDateAtOffset(80 + index));
 
 const KIND_LABELS = {
   site_diary: 'Bautagebuch',
@@ -68,30 +62,48 @@ async function beginArtifact(page: Page, kind: ArtifactKind, title: string): Pro
   await section.getByRole('button', { name: 'Neu', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Arbeitsnachweis erstellen' })).toBeVisible();
-  await selectOption(page, dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises' }), KIND_LABELS[kind]);
+  await selectOption(
+    page,
+    dialog.getByRole('combobox', { name: 'Art des Arbeitsnachweises' }),
+    KIND_LABELS[kind]
+  );
   await dialog.getByLabel('Titel').fill(title);
   await dialog.getByLabel('Zusammenfassung').fill(`Strukturierter Nachweis ${title}`);
   return dialog;
 }
 
 async function finishArtifact(dialog: Locator, submit = true): Promise<void> {
-  await dialog.getByRole('button', { name: submit ? 'Zur Prüfung einreichen' : 'Als Entwurf speichern', exact: true }).click();
+  await dialog
+    .getByRole('button', {
+      name: submit ? 'Zur Prüfung einreichen' : 'Als Entwurf speichern',
+      exact: true,
+    })
+    .click();
   await expect(dialog.getByText(/Version 1/)).toBeVisible({ timeout: 20_000 });
 }
 
 async function closeArtifact(dialog: Locator): Promise<void> {
-  await dialog.getByRole('button', { name: 'Schließen', exact: true }).first().click();
+  await closeWorkArtifactDialog(dialog);
   await expect(dialog).toHaveCount(0);
 }
 
-async function openArtifactAfterReload(page: Page, title: string): Promise<Locator> {
-  const row = page.getByTestId('work-artifacts-section').getByRole('button', {
+function artifactRow(page: Page, title: string): Locator {
+  return page.getByTestId('work-artifacts-section').getByRole('button', {
     name: new RegExp(`^${escapeRegExp(title)}`),
   });
+}
+
+async function openArtifactAfterReload(page: Page, title: string): Promise<Locator> {
+  const row = artifactRow(page, title);
   const dialog = page.getByRole('dialog');
   for (let attempt = 0; attempt < 2; attempt++) {
     await row.click();
-    if (await dialog.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false)) {
+    if (
+      await dialog
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
       return dialog;
     }
   }
@@ -100,9 +112,11 @@ async function openArtifactAfterReload(page: Page, title: string): Promise<Locat
 
 test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @AUDIT-W2', () => {
   test('targets, roles, five structured kinds, validation, and organization isolation', async ({
-    adminPage, employeePage, outsiderPage, world,
+    adminPage,
+    employeePage,
+    outsiderPage,
+    world,
   }) => {
-    test.setTimeout(600_000);
     // P1-15-F01…F16 and F18…F27: placement, exact target, site/task context,
     // visibility, empty/list/detail states, role bounds, and all five schemas.
     const customerName = `P115 Kunde ${world.runId}`;
@@ -114,22 +128,54 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     await createCustomer(adminPage, customerName);
     await openCustomerDetail(adminPage, customerName);
-    await addSiteOnCustomerDetail(adminPage, { name: siteName, street: 'Werkstraße 15', postalCode: '10115', city: 'Berlin', isPrimary: true });
-    await createJob(adminPage, { jobNumber, title: `P115 Einsatz ${world.runId}`, clientName: customerName, siteName, assignEmployeeName: employeeName, plannedDateDigits: digits(DATES[0]) });
-    await createProject(adminPage, { projectNumber, title: `P115 Projekt ${world.runId}`, clientName: customerName, siteName });
-    await createJob(adminPage, { jobNumber: childJobNumber, title: `P115 Projektauftrag ${world.runId}`, projectNumber, clientName: customerName, assignEmployeeName: employeeName });
+    await addSiteOnCustomerDetail(adminPage, {
+      name: siteName,
+      street: 'Werkstraße 15',
+      postalCode: '10115',
+      city: 'Berlin',
+      isPrimary: true,
+    });
+    await createJob(adminPage, {
+      jobNumber,
+      title: `P115 Einsatz ${world.runId}`,
+      clientName: customerName,
+      siteName,
+      assignEmployeeName: employeeName,
+      plannedDateDigits: digits(PLANNED_DATE),
+    });
+    await createProject(adminPage, {
+      projectNumber,
+      title: `P115 Projekt ${world.runId}`,
+      clientName: customerName,
+      siteName,
+    });
+    await createJob(adminPage, {
+      jobNumber: childJobNumber,
+      title: `P115 Projektauftrag ${world.runId}`,
+      projectNumber,
+      clientName: customerName,
+      assignEmployeeName: employeeName,
+    });
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
     const section = employeePage.getByTestId('work-artifacts-section');
     await expect(section.getByText('Noch keine Arbeitsnachweise erfasst.')).toBeVisible();
     await expect(employeePage.getByRole('link', { name: 'Arbeitsnachweise' })).toHaveCount(0);
 
-    let dialog = await beginArtifact(employeePage, 'work_report', `Entwurf zum Verwerfen ${world.runId}`);
+    let dialog = await beginArtifact(
+      employeePage,
+      'work_report',
+      `Entwurf zum Verwerfen ${world.runId}`
+    );
     await dialog.getByLabel('Ausgeführte Arbeiten').fill('Noch nicht eingereichter Testentwurf.');
     await finishArtifact(dialog, false);
-    await dialog.locator('#artifact-action-reason').fill('Eigener ungesendeter Testentwurf wird verworfen.');
+    await dialog
+      .locator('#artifact-action-reason')
+      .fill('Eigener ungesendeter Testentwurf wird verworfen.');
     await dialog.getByRole('button', { name: 'Ungültig setzen' }).click();
-    await expect(dialog.getByText(/Ungültig · Version 1/)).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByText(/Ungültig · Version 1/)).toBeVisible({
+      timeout: 20_000,
+    });
     await closeArtifact(dialog);
 
     dialog = await beginArtifact(employeePage, 'site_diary', `Bautagebuch ${world.runId}`);
@@ -145,15 +191,21 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await dialog.getByLabel('Lieferungen').fill('Rohrmaterial vollständig eingetroffen.');
     await dialog.getByLabel('Behinderungen').fill('Keine.');
     await dialog.getByLabel('Entscheidungen').fill('Steigstrang wird links geführt.');
-    await dialog.getByLabel('Besondere Ereignisse').fill('Abnahme der Leitungsführung durch Bauleitung.');
+    await dialog
+      .getByLabel('Besondere Ereignisse')
+      .fill('Abnahme der Leitungsführung durch Bauleitung.');
     await dialog.getByRole('button', { name: 'Zur Prüfung einreichen', exact: true }).click();
-    await expect(dialog.getByText(/Version 2/)).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByText(/Version 2/)).toBeVisible({
+      timeout: 20_000,
+    });
     await closeArtifact(dialog);
 
     dialog = await beginArtifact(employeePage, 'work_report', `Arbeitsbericht ${world.runId}`);
     await typeIntoDateTimeField(dialog, 'artifact-visit-start', `${DATES[0]}T08:00`);
     await typeIntoDateTimeField(dialog, 'artifact-visit-end', `${DATES[0]}T10:30`);
-    await dialog.getByLabel('Ausgeführte Arbeiten').fill('Wärmepumpe geprüft und Filter gereinigt.');
+    await dialog
+      .getByLabel('Ausgeführte Arbeiten')
+      .fill('Wärmepumpe geprüft und Filter gereinigt.');
     await dialog.getByLabel('Offene Arbeiten').fill('Ersatzfilter beim nächsten Termin einsetzen.');
     await dialog.getByLabel('Materialhinweise').fill('Ein Filtereinsatz vorgemerkt.');
     await typeIntoDateTimeField(dialog, 'artifact-next-visit', `${DATES[1]}T09:00`);
@@ -175,10 +227,12 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await closeArtifact(dialog);
 
     dialog = await beginArtifact(employeePage, 'defect', `Mangel ${world.runId}`);
-    await dialog.getByLabel('Mangelbeschreibung').fill('Dämmung an der Vorlaufleitung ist beschädigt.');
+    await dialog
+      .getByLabel('Mangelbeschreibung')
+      .fill('Dämmung an der Vorlaufleitung ist beschädigt.');
     await dialog.getByLabel('Ort', { exact: true }).fill('Heizraum');
     await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Schweregrad' }), 'Hoch');
-    await typeIntoDatePickerById(dialog, 'artifact-due-date', berlinTodayIso());
+    await typeIntoDatePickerById(dialog, 'artifact-due-date', berlinDateAtOffset(0));
     await dialog.getByLabel('Zuständigkeit').fill('Bauleitung vor Ort');
     await dialog.getByLabel('Vorgeschlagene Lösung').fill('Dämmung fachgerecht erneuern.');
     await finishArtifact(dialog);
@@ -187,31 +241,65 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await employeePage.goto(`/auftraege/projekt/${projectNumber}`);
     dialog = await beginArtifact(employeePage, 'change_work', `Regiearbeit ${world.runId}`);
     await dialog.getByLabel('Änderungs-/Regiearbeit').fill('Zusätzliche Absperrarmatur montieren.');
-    await dialog.getByLabel('Grund', { exact: true }).fill('Leitungsführung wurde vor Ort geändert.');
+    await dialog
+      .getByLabel('Grund', { exact: true })
+      .fill('Leitungsführung wurde vor Ort geändert.');
     await dialog.getByLabel('Angefordert durch').fill('Bauleitung, mündlich vor Ort');
     await dialog.getByLabel('Erwartete Arbeitsminuten').fill('90');
     await dialog.getByLabel('Tatsächliche Arbeitsminuten').fill('105');
     await dialog.getByLabel('Erwartetes Material').fill('Eine Absperrarmatur');
     await dialog.getByLabel('Tatsächliches Material').fill('Eine Absperrarmatur und zwei Fittings');
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Autorisierungsstand' }), 'Autorisiert');
+    await selectOption(
+      employeePage,
+      dialog.getByRole('combobox', { name: 'Autorisierungsstand' }),
+      'Autorisiert'
+    );
     await dialog.getByLabel('Terminauswirkung').fill('Keine Auswirkung auf den Endtermin.');
     await finishArtifact(dialog);
     await closeArtifact(dialog);
 
     const jobState = await getWorkArtifactState(world.orgId, { jobNumber });
     const activeArtifacts = jobState.artifacts.filter((row) => row.status !== 'voided');
-    expect(activeArtifacts.map((row) => row.kind).sort()).toEqual(['defect', 'measurement', 'site_diary', 'work_report']);
+    expect(activeArtifacts.map((row) => row.kind).sort()).toEqual([
+      'defect',
+      'measurement',
+      'site_diary',
+      'work_report',
+    ]);
     const activeSiteDiary = activeArtifacts.find((row) => row.kind === 'site_diary');
-    expect(jobState.revisions.filter((row) => row.artifact_id === activeSiteDiary?.id)).toHaveLength(2);
-    expect(jobState.artifacts.find((row) => row.status === 'voided')).toMatchObject({ created_by: world.users.employee.id });
-    expect(jobState.measurements[0]).toMatchObject({ description: 'Kupferrohr', unit: 'meter' });
+    expect(
+      jobState.revisions.filter((row) => row.artifact_id === activeSiteDiary?.id)
+    ).toHaveLength(2);
+    expect(jobState.artifacts.find((row) => row.status === 'voided')).toMatchObject({
+      created_by: world.users.employee.id,
+    });
+    expect(jobState.measurements[0]).toMatchObject({
+      description: 'Kupferrohr',
+      unit: 'meter',
+    });
     expect(Number(jobState.measurements[0].quantity)).toBe(12.5);
-    expect(jobState.defects[0]).toMatchObject({ severity: 'high', state: 'open', location: 'Heizraum' });
-    expect(jobState.revisions.every((row) => row.artifact_id && row.created_by && row.created_at)).toBe(true);
-    const siteDiaryRevision = jobState.revisions.find((row) => row.artifact_id === activeSiteDiary?.id);
-    expect(siteDiaryRevision?.site_id).toBe((await getJobSiteContactState(world.orgId, jobNumber)).siteId);
-    const projectState = await getWorkArtifactState(world.orgId, { projectNumber });
-    expect(projectState.changes[0]).toMatchObject({ authorization_state: 'authorized', expected_labor_minutes: 90, actual_labor_minutes: 105 });
+    expect(jobState.defects[0]).toMatchObject({
+      severity: 'high',
+      state: 'open',
+      location: 'Heizraum',
+    });
+    expect(
+      jobState.revisions.every((row) => row.artifact_id && row.created_by && row.created_at)
+    ).toBe(true);
+    const siteDiaryRevision = jobState.revisions.find(
+      (row) => row.artifact_id === activeSiteDiary?.id
+    );
+    expect(siteDiaryRevision?.site_id).toBe(
+      (await getJobSiteContactState(world.orgId, jobNumber)).siteId
+    );
+    const projectState = await getWorkArtifactState(world.orgId, {
+      projectNumber,
+    });
+    expect(projectState.changes[0]).toMatchObject({
+      authorization_state: 'authorized',
+      expected_labor_minutes: 90,
+      actual_labor_minutes: 105,
+    });
 
     const outsiderCounts = await getVisibleWorkArtifactCountsAs(world.outsider.admin, world.orgId);
     expect(Object.values(outsiderCounts).every((count) => count === 0)).toBe(true);
@@ -220,9 +308,11 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
   });
 
   test('immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up', async ({
-    adminPage, employeePage, bueroPage, world,
+    adminPage,
+    employeePage,
+    bueroPage,
+    world,
   }) => {
-    test.setTimeout(300_000);
     // P1-15-F28…F40: explicit save/submit, atomic validation, immutable history,
     // correction reasons, no evidence inheritance, stale conflicts, idempotency,
     // and a resting list versus an open edited dialog.
@@ -233,23 +323,41 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       bueroPage.goto(`/auftraege/${jobNumber}`),
       employeePage.goto(`/auftraege/${jobNumber}`),
     ]);
-    await adminPage.getByText(title, { exact: true }).click();
-    await bueroPage.getByText(title, { exact: true }).click();
+    await requireVisiblePrecondition(artifactRow(adminPage, title), {
+      test: 'immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up',
+      needs: 'the work report created by the first P1-15 test',
+      grep: 'targets, roles, five structured kinds, validation, and organization isolation|immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up',
+      suite: 'audit',
+    });
+    await artifactRow(adminPage, title).click();
+    await artifactRow(bueroPage, title).click();
     const adminDialog = adminPage.getByRole('dialog');
     const bueroDialog = bueroPage.getByRole('dialog');
     await adminDialog.getByRole('button', { name: 'Neue Version' }).click();
     await bueroDialog.getByRole('button', { name: 'Neue Version' }).click();
     await adminDialog.getByLabel('Titel').fill(`${title} v2`);
-    await adminDialog.getByLabel('Grund der neuen Version').fill('Leistungsumfang wurde vor Ort präzisiert.');
+    await adminDialog
+      .getByLabel('Grund der neuen Version')
+      .fill('Leistungsumfang wurde vor Ort präzisiert.');
     await bueroDialog.getByLabel('Titel').fill(`${title} lokaler Entwurf`);
-    await bueroDialog.getByLabel('Grund der neuen Version').fill('Lokale, noch nicht gespeicherte Korrektur.');
+    await bueroDialog
+      .getByLabel('Grund der neuen Version')
+      .fill('Lokale, noch nicht gespeicherte Korrektur.');
     await adminDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(adminDialog.getByText(/Version 2/)).toBeVisible({ timeout: 20_000 });
+    await expect(adminDialog.getByText(/Version 2/)).toBeVisible({
+      timeout: 20_000,
+    });
     await bueroDialog.getByRole('button', { name: 'Als Entwurf speichern' }).click();
-    await expect(bueroDialog.getByText('Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.')).toBeVisible();
+    await expect(
+      bueroDialog.getByText(
+        'Der Arbeitsnachweis wurde zwischenzeitlich geändert. Deine Eingaben bleiben erhalten.'
+      )
+    ).toBeVisible();
     await expect(bueroDialog.getByLabel('Titel')).toHaveValue(`${title} lokaler Entwurf`);
-    await bueroDialog.getByRole('button', { name: 'Schließen' }).first().click();
-    await expect(bueroPage.getByText(`${title} v2`, { exact: true })).toBeVisible({ timeout: 20_000 });
+    await closeWorkArtifactDialog(bueroDialog);
+    await expect(artifactRow(bueroPage, `${title} v2`)).toBeVisible({
+      timeout: 20_000,
+    });
 
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
     const initialReportRevision = state.revisions.find((row) => row.title === title);
@@ -257,76 +365,117 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const revisions = state.revisions.filter((row) => row.artifact_id === report?.id);
     expect(revisions).toHaveLength(2);
     expect(revisions.map((row) => row.title)).toEqual([title, `${title} v2`]);
-    expect(revisions[1]).toMatchObject({ corrects_revision_id: revisions[0].id, correction_reason: 'Leistungsumfang wurde vor Ort präzisiert.' });
-    expect(report).toMatchObject({ version: 2, status: 'draft', current_revision_id: revisions[1].id });
+    expect(revisions[1]).toMatchObject({
+      corrects_revision_id: revisions[0].id,
+      correction_reason: 'Leistungsumfang wurde vor Ort präzisiert.',
+    });
+    expect(report).toMatchObject({
+      version: 2,
+      status: 'draft',
+      current_revision_id: revisions[1].id,
+    });
   });
 
   test('four-eyes responsibility, review outcomes, attention identity, and void history', async ({
-    adminPage, employeePage, world,
+    adminPage,
+    employeePage,
+    world,
   }) => {
-    test.setTimeout(360_000);
     // P1-15-F41…F49 plus F36: shared responsibility, no self-approval,
     // approve/reject/correct/withdraw, stable attention links, and reasoned void.
     const jobNumber = `AUF-${world.runId}-P115`;
     const siteDiaryTitle = `Bautagebuch ${world.runId}`;
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    await employeePage.getByText(siteDiaryTitle, { exact: true }).click();
+    await requireVisiblePrecondition(artifactRow(employeePage, siteDiaryTitle), {
+      test: 'four-eyes responsibility, review outcomes, attention identity, and void history',
+      needs: 'the submitted site diary and structured artifacts created by the first P1-15 test',
+      grep: 'targets, roles, five structured kinds, validation, and organization isolation|four-eyes responsibility, review outcomes, attention identity, and void history',
+      suite: 'audit',
+    });
+    await artifactRow(employeePage, siteDiaryTitle).click();
     await expect(employeePage.getByRole('button', { name: 'Intern freigeben' })).toHaveCount(0);
-    await employeePage.getByRole('dialog').getByRole('button', { name: 'Schließen' }).first().click();
+    await closeWorkArtifactDialog(employeePage.getByRole('dialog'));
 
     await adminPage.goto('/aufgaben');
-    await expect(adminPage.getByRole('link', { name: `Prüfung für ${siteDiaryTitle} öffnen` })).toBeVisible({ timeout: 20_000 });
+    await expect(
+      adminPage.getByRole('link', {
+        name: `Prüfung für ${siteDiaryTitle} öffnen`,
+      })
+    ).toBeVisible({ timeout: 20_000 });
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await adminPage.getByText(siteDiaryTitle, { exact: true }).click();
+    await artifactRow(adminPage, siteDiaryTitle).click();
     const dialog = adminPage.getByRole('dialog');
     await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
-    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({ timeout: 20_000 });
-    await dialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(dialog);
 
-    const approvedState = await getWorkArtifactState(world.orgId, { jobNumber });
+    const approvedState = await getWorkArtifactState(world.orgId, {
+      jobNumber,
+    });
     const siteDiary = approvedState.artifacts.find((row) => row.kind === 'site_diary');
-    const approval = approvedState.actions.find((row) => row.artifact_id === siteDiary?.id && row.action_type === 'internal_approved');
-    expect(approval?.responsibility_snapshot).toMatchObject({ responsibility: 'work_artifact_approval' });
+    const approval = approvedState.actions.find(
+      (row) => row.artifact_id === siteDiary?.id && row.action_type === 'internal_approved'
+    );
+    expect(approval?.responsibility_snapshot).toMatchObject({
+      responsibility: 'work_artifact_approval',
+    });
     expect(approval?.created_by).toBe(world.users.admin.id);
     expect(siteDiary?.status).toBe('approved');
 
-    await adminPage.getByText(`Aufmaß ${world.runId}`, { exact: true }).click();
-    await dialog.locator('#artifact-action-reason').fill('Aufmaßort muss genauer bezeichnet werden.');
+    await artifactRow(adminPage, `Aufmaß ${world.runId}`).click();
+    await dialog
+      .locator('#artifact-action-reason')
+      .fill('Aufmaßort muss genauer bezeichnet werden.');
     await dialog.getByRole('button', { name: 'Korrektur anfordern' }).click();
-    await expect(dialog.getByText('Korrektur angefordert', { exact: false })).toBeVisible({ timeout: 20_000 });
-    await dialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await expect(dialog.getByText('Korrektur angefordert', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(dialog);
     await employeePage.goto('/aufgaben');
-    await expect(employeePage.getByRole('link', { name: `Korrektur für Aufmaß ${world.runId} öffnen` })).toBeVisible({ timeout: 20_000 });
+    await expect(
+      employeePage.getByRole('link', {
+        name: `Korrektur für Aufmaß ${world.runId} öffnen`,
+      })
+    ).toBeVisible({ timeout: 20_000 });
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await adminPage.getByText(`Mangel ${world.runId}`, { exact: true }).click();
+    await artifactRow(adminPage, `Mangel ${world.runId}`).click();
     await dialog.locator('#artifact-action-reason').fill('Zuständigkeit ist noch nicht eindeutig.');
     await dialog.getByRole('button', { name: 'Ablehnen' }).click();
-    await expect(dialog.getByText('Abgelehnt', { exact: false })).toBeVisible({ timeout: 20_000 });
-    await dialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await expect(dialog.getByText('Abgelehnt', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(dialog);
 
     await employeePage.goto(`/auftraege/projekt/PRJ-${world.runId}-P115`);
-    await employeePage.getByText(`Regiearbeit ${world.runId}`, { exact: true }).click();
+    await artifactRow(employeePage, `Regiearbeit ${world.runId}`).click();
     const employeeDialog = employeePage.getByRole('dialog');
     await employeeDialog.getByRole('button', { name: 'Prüfung zurückziehen' }).click();
-    await expect(employeeDialog.getByText('Entwurf', { exact: false })).toBeVisible({ timeout: 20_000 });
-    await employeeDialog.getByRole('button', { name: 'Schließen' }).first().click();
+    await expect(employeeDialog.getByText('Entwurf', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(employeeDialog);
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await adminPage.getByText(`Mangel ${world.runId}`, { exact: true }).click();
-    await dialog.locator('#artifact-action-reason').fill('Durch einen gültigen Folgevorgang ersetzt.');
+    await artifactRow(adminPage, `Mangel ${world.runId}`).click();
+    await dialog
+      .locator('#artifact-action-reason')
+      .fill('Durch einen gültigen Folgevorgang ersetzt.');
     await dialog.getByRole('button', { name: 'Ungültig setzen' }).click();
-    await expect(dialog.getByText(/Mangel · Ungültig · Version 1/)).toBeVisible({ timeout: 20_000 });
-    await dialog.getByRole('button', { name: 'Schließen' }).first().click();
-    await expect(adminPage.getByTestId('work-artifacts-section').getByRole('button', {
-      name: new RegExp(`Mangel ${escapeRegExp(world.runId)}.*Ungültig`),
-    })).toBeVisible();
+    await expect(dialog.getByText(/Mangel · Ungültig · Version 1/)).toBeVisible({
+      timeout: 20_000,
+    });
+    await closeWorkArtifactDialog(dialog);
+    await expect(artifactRow(adminPage, `Mangel ${world.runId}`)).toContainText('Ungültig');
   });
 
   test('customer outcomes, signature, document/source/evidence links, and deterministic export', async ({
-    adminPage, employeePage, world,
+    adminPage,
+    employeePage,
+    world,
   }) => {
-    test.setTimeout(600_000);
     // P1-15-F17, F50…F70: independent customer/internal outcomes, named
     // offline signer context, on-device signature, explicit document/source
     // and checklist evidence links, reasoned removal, and idempotent HTML export.
@@ -334,42 +483,76 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const jobNumber = `AUF-${world.runId}-P115-EVIDENCE`;
     const jobTitle = `P115 Nachweisauftrag ${world.runId}`;
     const artifactTitle = `Kundenbericht ${world.runId}`;
-    await createAndPublishWorkTemplate(adminPage, { name: templateName, targetType: 'job', firstItem: 'Inbetriebnahme dokumentieren', evidenceDescription: 'Abschlussbericht der Inbetriebnahme' });
-    await createJob(adminPage, { jobNumber, title: jobTitle, assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`, workTemplateName: templateName });
+    await createAndPublishWorkTemplate(adminPage, {
+      name: templateName,
+      targetType: 'job',
+      firstItem: 'Inbetriebnahme dokumentieren',
+      evidenceDescription: 'Abschlussbericht der Inbetriebnahme',
+    });
+    await createJob(adminPage, {
+      jobNumber,
+      title: jobTitle,
+      assignEmployeeName: `${world.users.employee.firstName} ${world.users.employee.lastName}`,
+      workTemplateName: templateName,
+    });
     // Run-scoped name: the shared fixture name collides with A2's uploads in
     // the full-battery world and gets dedup-renamed, which would break the
     // exact-name document selection below.
     const evidenceFileName = `p115-nachweis-${world.runId}.pdf`;
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    await expect(employeePage.getByText('Dokumente & Bilder')).toBeVisible({ timeout: 30_000 });
-    await employeePage
-      .locator('section, div')
-      .filter({ has: employeePage.getByText('Dokumente & Bilder') })
+    const documentsHeading = employeePage.getByRole('heading', {
+      name: 'Dokumente & Bilder',
+    });
+    await expect(documentsHeading).toBeVisible({ timeout: 30_000 });
+    await documentsHeading
+      .locator('..')
+      .locator('..')
       .locator('input[type="file"]')
-      .first()
       .setInputFiles({
         name: evidenceFileName,
         mimeType: 'application/pdf',
         buffer: Buffer.from('%PDF-1.4\nP1-15 Nachweisdokument'),
       });
-    await expect(employeePage.getByText('1 von 1 abgeschlossen')).toBeVisible({ timeout: 60_000 });
-    await expect(employeePage.getByText('Upload fehlgeschlagen.')).toHaveCount(0);
-    const evidenceUploadClose = employeePage.getByRole('button', { name: 'Schließen' });
+    await expect(visibleText(employeePage, '1 von 1 abgeschlossen')).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(textInDom(employeePage, 'Upload fehlgeschlagen.')).toHaveCount(0);
+    const evidenceUploadClose = employeePage.getByRole('button', {
+      name: 'Schließen',
+    });
     if (await evidenceUploadClose.isVisible().catch(() => false)) {
       await evidenceUploadClose.click();
     }
-    await expect(employeePage.getByRole('dialog')).toHaveCount(0, { timeout: 10_000 });
+    await expect(employeePage.getByRole('dialog')).toHaveCount(0, {
+      timeout: 10_000,
+    });
     await clockInOnJob(employeePage, jobTitle);
     await clockOut(employeePage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await expect(adminPage.getByTestId('work-artifacts-section')).toContainText('Noch keine Arbeitsnachweise erfasst.');
+    await expect(adminPage.getByTestId('work-artifacts-section')).toContainText(
+      'Noch keine Arbeitsnachweise erfasst.'
+    );
     await employeePage.goto(`/auftraege/${jobNumber}`);
     let dialog = await beginArtifact(employeePage, 'work_report', artifactTitle);
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Sichtbarkeit des Arbeitsnachweises' }), 'Für Kundendokumentation');
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Zugehörige Aufgabe oder Checkliste' }), 'Inbetriebnahme dokumentieren');
+    await selectOption(
+      employeePage,
+      dialog.getByRole('combobox', {
+        name: 'Sichtbarkeit des Arbeitsnachweises',
+      }),
+      'Für Kundendokumentation'
+    );
+    await selectOption(
+      employeePage,
+      dialog.getByRole('combobox', {
+        name: 'Zugehörige Aufgabe oder Checkliste',
+      }),
+      'Inbetriebnahme dokumentieren'
+    );
     await typeIntoDateTimeField(dialog, 'artifact-visit-start', `${DATES[2]}T07:30`);
     await typeIntoDateTimeField(dialog, 'artifact-visit-end', `${DATES[2]}T09:15`);
-    await dialog.getByLabel('Ausgeführte Arbeiten').fill('Anlage in Betrieb genommen und Werte protokolliert.');
+    await dialog
+      .getByLabel('Ausgeführte Arbeiten')
+      .fill('Anlage in Betrieb genommen und Werte protokolliert.');
     await dialog.getByLabel('Kundenaussage').fill('Einweisung wurde vor Ort durchgeführt.');
     await dialog.getByText('Kundenentscheidung erforderlich').click();
     await dialog.getByText('Unterschrift erforderlich').click();
@@ -378,31 +561,61 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     await adminPage.reload();
     await adminPage.waitForLoadState('networkidle');
-    await expect(adminPage.getByText(artifactTitle, { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(artifactRow(adminPage, artifactTitle)).toBeVisible({
+      timeout: 20_000,
+    });
     dialog = await openArtifactAfterReload(adminPage, artifactTitle);
     await dialog.getByRole('button', { name: 'Intern freigeben' }).click();
-    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByText('Intern freigegeben', { exact: false })).toBeVisible({
+      timeout: 20_000,
+    });
     await closeArtifact(dialog);
     await employeePage.reload();
     dialog = await openArtifactAfterReload(employeePage, artifactTitle);
     await dialog.getByText('Kundenentscheidung und Unterschrift').click();
-    await expect(dialog.getByText('keine besondere Rechtswirksamkeit', { exact: false })).toBeVisible();
+    await expect(
+      dialog.getByText('keine besondere Rechtswirksamkeit', { exact: false })
+    ).toBeVisible();
     await dialog.locator('#artifact-customer-name').fill('Erika Beispiel');
     await dialog.locator('#artifact-customer-role').fill('Objektleitung');
-    await dialog.locator('#artifact-customer-relationship').fill('Bevollmächtigte Ansprechperson vor Ort');
+    await dialog
+      .locator('#artifact-customer-relationship')
+      .fill('Bevollmächtigte Ansprechperson vor Ort');
     await dialog.getByRole('button', { name: 'Bestätigung erfassen' }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'customer_acknowledged').length).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'customer_acknowledged'
+          ).length
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
-    await dialog.locator('#artifact-action-reason').fill('Kundin bittet um Ergänzung der Seriennummer.');
+    await dialog
+      .locator('#artifact-action-reason')
+      .fill('Kundin bittet um Ergänzung der Seriennummer.');
     await dialog.getByRole('button', { name: 'Vorbehalt erfassen' }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'customer_reserved').length).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'customer_reserved'
+          ).length
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
-    await dialog.locator('#artifact-action-reason').fill('Kunde möchte erst nach eigener Prüfung bestätigen.');
+    await dialog
+      .locator('#artifact-action-reason')
+      .fill('Kunde möchte erst nach eigener Prüfung bestätigen.');
     await dialog.getByRole('button', { name: 'Ablehnung erfassen' }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'customer_refused').length).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'customer_refused'
+          ).length
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Bestätigung erfassen' })).toBeEnabled();
 
     const canvas = dialog.getByLabel('Unterschrift zeichnen');
@@ -415,52 +628,126 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await employeePage.mouse.up();
     await expect(dialog.getByRole('button', { name: 'Zurücksetzen' })).toBeEnabled();
     await dialog.getByRole('button', { name: 'Unterschrift speichern' }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'signature_captured').length, { timeout: 60_000 }).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'signature_captured'
+          ).length,
+        { timeout: 60_000 }
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
 
-    await dialog.getByText('Dokument verknüpfen').click();
-    await selectOption(employeePage, dialog.getByRole('combobox', { name: 'Dokument auswählen' }), evidenceFileName);
-    await dialog.getByRole('button', { name: 'Verknüpfen', exact: true }).first().click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).documents
-      .filter((document) => document.relation === 'supporting_evidence').length).toBe(1);
+    const documentDisclosure = dialog
+      .getByRole('button', { name: 'Dokument verknüpfen' })
+      .locator('..');
+    await documentDisclosure.getByRole('button', { name: 'Dokument verknüpfen' }).click();
+    await selectOption(
+      employeePage,
+      dialog.getByRole('combobox', { name: 'Dokument auswählen' }),
+      evidenceFileName
+    );
+    await documentDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).documents.filter(
+            (document) => document.relation === 'supporting_evidence'
+          ).length
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
-    await dialog.getByText('Zeiteintrag verknüpfen').click();
+    const timeEntryDisclosure = dialog
+      .getByRole('button', { name: 'Zeiteintrag verknüpfen' })
+      .locator('..');
+    await timeEntryDisclosure.getByRole('button', { name: 'Zeiteintrag verknüpfen' }).click();
     await dialog.getByRole('combobox', { name: 'Zeiteintrag auswählen' }).click();
-    await employeePage.getByRole('option').first().click();
-    await dialog.getByRole('button', { name: 'Verknüpfen', exact: true }).last().click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).sources.length).toBe(1);
+    const timeEntryOptions = employeePage.getByRole('option');
+    await expect(timeEntryOptions).toHaveCount(1);
+    await timeEntryOptions.click();
+    await timeEntryDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
+    await expect
+      .poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).sources.length)
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
     await dialog.getByText('Nachweiserwartung erfüllen').click();
     await dialog.getByRole('button', { name: /Mit Version 1 erfüllen/ }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).fulfillments.length).toBe(1);
+    await expect
+      .poll(
+        async () => (await getWorkArtifactState(world.orgId, { jobNumber })).fulfillments.length
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
     await dialog.getByRole('button', { name: 'Export', exact: true }).click();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'exported').length, { timeout: 60_000 }).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'exported'
+          ).length,
+        { timeout: 60_000 }
+      )
+      .toBe(1);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
     await Promise.all([
-      employeePage.waitForResponse((response) => response.request().method() === 'POST'
-        && response.url().includes(encodeURIComponent(jobNumber))),
+      employeePage.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url().includes(encodeURIComponent(jobNumber))
+      ),
       dialog.getByRole('button', { name: 'Export', exact: true }).click(),
     ]);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
-    await expect.poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).actions
-      .filter((action) => action.action_type === 'exported').length).toBe(1);
+    await expect
+      .poll(
+        async () =>
+          (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
+            (action) => action.action_type === 'exported'
+          ).length
+      )
+      .toBe(1);
     await closeArtifact(dialog);
 
     await employeePage.reload();
-    await expect(employeePage.getByText(/^Nachweis erfüllt:/)).toBeVisible({ timeout: 20_000 });
+    await expect(
+      employeePage
+        .getByTestId('job-instruction-item')
+        .filter({ hasText: 'Inbetriebnahme dokumentieren' })
+        .getByText(/^Nachweis erfüllt:/)
+    ).toBeVisible({ timeout: 20_000 });
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
     const currentRevisionId = state.artifacts[0].current_revision_id;
     expect(state.actions.filter((row) => row.action_type === 'exported')).toHaveLength(1);
-    expect(state.actions.filter((row) => ['customer_acknowledged', 'customer_reserved', 'customer_refused', 'signature_captured'].includes(row.action_type))).toHaveLength(4);
-    expect(state.actions.filter((row) => row.signer_name).every((row) => row.signer_name === 'Erika Beispiel' && row.revision_id === currentRevisionId)).toBe(true);
+    expect(
+      state.actions.filter((row) =>
+        [
+          'customer_acknowledged',
+          'customer_reserved',
+          'customer_refused',
+          'signature_captured',
+        ].includes(row.action_type)
+      )
+    ).toHaveLength(4);
+    expect(
+      state.actions
+        .filter((row) => row.signer_name)
+        .every(
+          (row) => row.signer_name === 'Erika Beispiel' && row.revision_id === currentRevisionId
+        )
+    ).toBe(true);
     expect(state.documents.filter((row) => row.relation === 'rendered_export')).toHaveLength(1);
-    expect(state.documents.find((row) => row.relation === 'rendered_export')).toMatchObject({ renderer_version: 'p1-15-html-v3' });
-    expect(state.documents.find((row) => row.relation === 'rendered_export')?.content_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(state.documents.find((row) => row.relation === 'rendered_export')).toMatchObject({
+      renderer_version: 'p1-15-html-v3',
+    });
+    expect(state.documents.find((row) => row.relation === 'rendered_export')?.content_hash).toMatch(
+      /^[0-9a-f]{64}$/
+    );
     expect(state.sources).toHaveLength(1);
-    expect(state.fulfillments[0]).toMatchObject({ artifact_revision_id: currentRevisionId, removed_at: null });
+    expect(state.fulfillments[0]).toMatchObject({
+      artifact_revision_id: currentRevisionId,
+      removed_at: null,
+    });
 
     // P1-15-F71…F78: measurements, defects, formal decisions, customer gates,
     // approval dependency, shared cache/realtime projections, explicit non-effects,
@@ -479,25 +766,38 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     dialog = adminPage.getByRole('dialog');
     await selectOption(adminPage, dialog.locator('#dependency-type'), 'Deklarierte Voraussetzung');
     await selectFromSearchable(adminPage, dialog.locator('#dependency-target'), 'Freigabe');
-    await dialog.locator('#dependency-description').fill('Interne Freigabe des Inbetriebnahmeberichts');
+    await dialog
+      .locator('#dependency-description')
+      .fill('Interne Freigabe des Inbetriebnahmeberichts');
     await dialog.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    const dependencyRow = card.getByTestId('work-dependency-row').filter({ hasText: 'Interne Freigabe des Inbetriebnahmeberichts' });
+    const dependencyRow = card
+      .getByTestId('work-dependency-row')
+      .filter({ hasText: 'Interne Freigabe des Inbetriebnahmeberichts' });
     await expect(dependencyRow).toContainText('offen');
     await dependencyRow.getByRole('button', { name: 'Freigabe verknüpfen' }).click();
     dialog = adminPage.getByRole('dialog');
-    await selectFromSearchable(adminPage, dialog.locator('#dependency-artifact-approval'), `Kundenbericht ${world.runId}`);
-    await dialog.locator('#dependency-artifact-reason').fill('Aktuelle interne Freigabe erfüllt die dokumentierte Voraussetzung.');
+    await selectFromSearchable(
+      adminPage,
+      dialog.locator('#dependency-artifact-approval'),
+      `Kundenbericht ${world.runId}`
+    );
+    await dialog
+      .locator('#dependency-artifact-reason')
+      .fill('Aktuelle interne Freigabe erfüllt die dokumentierte Voraussetzung.');
     await dialog.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
     await expect(dependencyRow).toContainText('erfüllt');
 
     const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
-    expect(lifecycle.dependencies.at(-1)).toMatchObject({ declared_kind: 'approval', isSatisfied: true });
+    expect(lifecycle.dependencies.at(-1)).toMatchObject({
+      declared_kind: 'approval',
+      isSatisfied: true,
+    });
     expect(lifecycle.dependencies.at(-1)?.artifact_approval_action_id).toBeTruthy();
     await expect(adminPage.getByTestId('work-artifacts-section')).toBeVisible();
-    await expect(adminPage.getByText('Arbeitspack')).toHaveCount(0);
-    await expect(adminPage.getByText('Geräteakte')).toHaveCount(0);
-    await expect(adminPage.getByText('Rechnung erstellen')).toHaveCount(0);
+    await expect(textInDom(adminPage, 'Arbeitspack')).toHaveCount(0);
+    await expect(textInDom(adminPage, 'Geräteakte')).toHaveCount(0);
+    await expect(textInDom(adminPage, 'Rechnung erstellen')).toHaveCount(0);
   });
 });

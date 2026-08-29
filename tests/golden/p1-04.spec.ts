@@ -14,6 +14,7 @@ import {
   removeClosureDayViaSettings,
   setHolidayRegionViaSettings,
   visibleText,
+  textInDom,
 } from './support/steps';
 
 // P1-04 — Date-effective work schedules and regional holiday/closure context
@@ -71,10 +72,7 @@ function previousMondayIso(): string {
 // Bavarian calendar effective from today, so a Bavarian holiday on today or a
 // later weekday zeroes that day's target — the expectation must mirror the
 // same in-code dataset the app uses or the suite would fail in holiday weeks.
-function expectedWeeklyHours(
-  hoursBeforeToday: number,
-  hoursFromToday: number
-): number {
+function expectedWeeklyHours(hoursBeforeToday: number, hoursFromToday: number): number {
   const todayIso = berlinTodayIso();
   const weekStartIso = shiftIsoDate(todayIso, -weekdayIndex(todayIso));
   let total = 0;
@@ -95,10 +93,11 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
 
     // Büro sees the selection but cannot change it (admin-only policy).
     await bueroPage.goto('/einstellungen/zeiterfassung');
-    await expect(
-      bueroPage.locator('#holiday-region')
-    ).toContainText('Bayern (mit Mariä Himmelfahrt)', { timeout: 15_000 });
-    await expect(bueroPage.locator('#holiday-region')).toBeDisabled();
+    await expect(bueroPage.getByLabel('Bundesland')).toContainText(
+      'Bayern (mit Mariä Himmelfahrt)',
+      { timeout: 15_000 }
+    );
+    await expect(bueroPage.getByLabel('Bundesland')).toBeDisabled();
     await expect(
       bueroPage.getByRole('button', { name: 'Feiertagskalender speichern' })
     ).toBeDisabled();
@@ -117,15 +116,14 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     });
 
     await expectVisibleAfterSave(adminPage, '40 Std. pro Woche');
-    await expect(
-      adminPage.getByText('Aktuell', { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible();
+    const currentSchedule = adminPage
+      .getByRole('listitem')
+      .filter({ hasText: '40 Std. pro Woche' });
+    await expect(currentSchedule.getByText('Aktuell', { exact: true })).toBeVisible();
 
     // P1-03 stored 25 contractual weekly hours for this employee; the
     // schedule wins for targets and the mismatch stays a visible hint.
-    await expect(
-      visibleText(adminPage, 'Für Zeitziele gilt der Wochenplan.')
-    ).toBeVisible();
+    await expect(visibleText(adminPage, 'Für Zeitziele gilt der Wochenplan.')).toBeVisible();
 
     // The change is auditable like every other personnel change.
     await expect(visibleText(adminPage, 'Wochenplan hinzugefügt')).toBeVisible({
@@ -137,14 +135,9 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     employeePage,
   }) => {
     await employeePage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(
-      employeePage,
-      `Soll: ${expectedWeeklyHours(8, 8)} Std.`
-    );
+    await expectVisibleAfterSave(employeePage, `Soll: ${expectedWeeklyHours(8, 8)} Std.`);
     // With a real schedule there is no unconfigured warning.
-    await expect(
-      employeePage.getByText('Kein Arbeitszeitmodell hinterlegt')
-    ).toHaveCount(0);
+    await expect(textInDom(employeePage, 'Kein Arbeitszeitmodell hinterlegt')).toHaveCount(0);
   });
 
   test('Teilzeit-Wochenplan erzeugt ein anderes Wochenziel', async ({
@@ -163,10 +156,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
 
     // The part-time member sees their own different weekly target.
     await bueroPage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(
-      bueroPage,
-      `Soll: ${expectedWeeklyHours(4, 4)} Std.`
-    );
+    await expectVisibleAfterSave(bueroPage, `Soll: ${expectedWeeklyHours(4, 4)} Std.`);
   });
 
   test('Änderung ab heute: frühere Tage behalten das alte Ziel', async ({
@@ -184,26 +174,23 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     });
     await expectVisibleAfterSave(adminPage, '30 Std. pro Woche');
     // Both versions stay visible and distinguishable.
-    await expect(
-      adminPage.getByText('Aktuell', { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible();
-    await expect(
-      adminPage.getByText('Früher', { exact: true }).filter({ visible: true }).first()
-    ).toBeVisible();
+    const currentSchedule = adminPage
+      .getByRole('listitem')
+      .filter({ hasText: '30 Std. pro Woche' });
+    await expect(currentSchedule.getByText('Aktuell', { exact: true })).toBeVisible();
+    const historicalSchedule = adminPage
+      .getByRole('listitem')
+      .filter({ hasText: '40 Std. pro Woche' });
+    await expect(historicalSchedule.getByText('Früher', { exact: true })).toBeVisible();
 
     // The week's target mixes both versions: weekdays before today keep the
     // old 8h target, today and later use 6h (holiday-aware). On a weekend run
     // the whole Mo–Fr week already lies in the past and stays at 40.
     await employeePage.goto('/zeiterfassung');
-    await expectVisibleAfterSave(
-      employeePage,
-      `Soll: ${expectedWeeklyHours(8, 6)} Std.`
-    );
+    await expectVisibleAfterSave(employeePage, `Soll: ${expectedWeeklyHours(8, 6)} Std.`);
   });
 
-  test('Feiertag des gewählten Kalenders erscheint im Kalender-Monat', async ({
-    adminPage,
-  }) => {
+  test('Feiertag des gewählten Kalenders erscheint im Kalender-Monat', async ({ adminPage }) => {
     await adminPage.goto('/kalender');
     await adminPage.getByRole('tab', { name: 'Monat' }).click();
 
@@ -226,14 +213,8 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     world,
   }) => {
     const todayIso = berlinTodayIso();
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
-    const contextBeforeClosure = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
+    const contextBeforeClosure = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const targetBeforeClosure = resolveDailyTarget({
       dateIso: todayIso,
       ...contextBeforeClosure,
@@ -247,19 +228,14 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     if (targetBeforeClosure.targetMinutes > 0) {
       await expectVisibleAfterSave(employeePage, 'Betriebsruhe');
     }
-    await expect(
-      visibleText(employeePage, 'heute keine Sollarbeitszeit.')
-    ).toBeVisible();
+    await expect(visibleText(employeePage, 'heute keine Sollarbeitszeit.')).toBeVisible();
 
     // Removing a today/future closure day is allowed; the day returns to its
     // schedule truth. That truth is weekday-dependent (a weekend run has no
     // target to return to), so the expected text is computed from the same
     // stored state and resolver the app uses — never assumed.
     await removeClosureDayViaSettings(adminPage, toGermanDate(todayIso));
-    const context = await getTargetContextForRecord(
-      world.orgId,
-      employeeRecord.id
-    );
+    const context = await getTargetContextForRecord(world.orgId, employeeRecord.id);
     const todayTarget = resolveDailyTarget({ dateIso: todayIso, ...context });
     await employeePage.goto('/zeiterfassung');
     await expectVisibleAfterSave(
@@ -267,10 +243,10 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
       todayTarget.isHoliday
         ? `Feiertag: ${todayTarget.holidayName}`
         : todayTarget.targetMinutes > 0
-        ? 'Tagesziel:'
-        : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'
+          ? 'Tagesziel:'
+          : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'
     );
-    await expect(employeePage.getByText('Betriebsruhe')).toHaveCount(0);
+    await expect(textInDom(employeePage, 'Betriebsruhe')).toHaveCount(0);
   });
 
   test('Ohne Wochenplan ist das 8-Stunden-Ziel eine sichtbare Ausnahme', async ({
@@ -282,10 +258,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     await openMemberDetailFromList(adminPage, noraName);
 
     await expect(
-      visibleText(
-        adminPage,
-        'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.'
-      )
+      visibleText(adminPage, 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.')
     ).toBeVisible({ timeout: 15_000 });
     await expect(
       visibleText(adminPage, 'Kein Arbeitszeitmodell hinterlegt. Ohne Wochenplan gilt')
@@ -299,20 +272,15 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     // The settings surface is read-only for employees: no region editing, no
     // closure-day form.
     await employeePage.goto('/einstellungen/zeiterfassung');
-    await expect(employeePage.locator('#holiday-region')).toBeDisabled();
+    await expect(employeePage.getByLabel('Bundesland')).toBeDisabled();
     await expect(
       employeePage.getByRole('button', { name: 'Feiertagskalender speichern' })
     ).toBeDisabled();
-    await expect(
-      employeePage.getByRole('button', { name: 'Eintragen' })
-    ).toHaveCount(0);
+    await expect(employeePage.getByRole('button', { name: 'Eintragen' })).toHaveCount(0);
 
     // RLS: the employee sees exactly their own schedule rows — never the
     // Büro member's — while the org outsider sees none at all.
-    const employeeRecord = await getEmployeeRecordStateByUser(
-      world.orgId,
-      world.users.employee.id
-    );
+    const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     const visibleToEmployee = await getVisibleWorkScheduleRecordIdsAs(
       world.users.employee,
       world.orgId

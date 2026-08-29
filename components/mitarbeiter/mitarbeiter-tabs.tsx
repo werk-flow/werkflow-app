@@ -18,11 +18,12 @@ import { InvitationsTable, type Invite } from './invitations-table';
 import { getRoleLabel } from '@/lib/roles';
 import { QuickStats } from './quick-stats';
 import { PersonnelRecordsSection } from './personnel-records-section';
-import { useMemberStatusPolling } from '@/hooks/use-member-status-polling';
+import { useMemberStatus } from '@/hooks/use-member-status';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { OrgRole } from '@/lib/members/actions';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
+import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import type { QualificationWorkspace } from '@/lib/qualifications/types';
 import { TeamManagementSection } from './team-management-section';
 import { QualificationManagementSection } from './qualification-management-section';
@@ -37,6 +38,9 @@ interface MitarbeiterTabsProps {
   currentUserId: string;
   currentUserRole: OrgRole;
   organizationId: string;
+  breakMode: OrgBreakMode;
+  autoBreakThresholdMinutes: number;
+  autoBreakDurationMinutes: number;
   qualificationWorkspace: QualificationWorkspace | null;
 }
 
@@ -50,6 +54,9 @@ export function MitarbeiterTabs({
   currentUserId,
   currentUserRole,
   organizationId,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
   qualificationWorkspace,
 }: MitarbeiterTabsProps) {
   const router = useRouter();
@@ -89,9 +96,12 @@ export function MitarbeiterTabs({
     statusMap,
     isLoading: isStatusLoading,
     refetch: refetchStatus
-  } = useMemberStatusPolling({
+  } = useMemberStatus({
     organizationId,
     memberIds,
+    breakMode,
+    autoBreakThresholdMinutes,
+    autoBreakDurationMinutes,
     enabled: memberIds.length > 0
   });
 
@@ -124,12 +134,12 @@ export function MitarbeiterTabs({
     });
   }, [router, members.length, invites.length, refetchStatus]);
 
-  // Realtime: reload the server-rendered data when invitations or personnel
-  // records change. Member status needs only time_entries, which
-  // useMemberStatusPolling already refetches itself.
+  // Reload server-rendered records and break-policy props. Member status
+  // refetches time entries itself, then recomputes when these props change.
   useRealtimeRouterRefresh({
     tables: [
       'organization_invites',
+      'organization_settings',
       'employee_records',
       'employment_conditions',
       'work_schedules',

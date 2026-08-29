@@ -28,7 +28,17 @@ import {
   showPlanningMonth,
   typeIntoDatePicker,
   typeIntoTimeInput,
+  visibleText,
 } from '../../golden/support/steps';
+import { requireChainedValue, requireSerialPrecondition } from '../../golden/support/preconditions';
+import { berlinDateAtOffset } from '../../golden/support/date-ownership';
+import {
+  dispatchPanel,
+  draggablePlanningBlock,
+  firstDispatchPanelText,
+  planningOccurrenceInDateCell,
+  unscheduledDispatchRow,
+} from '../support/a7-steps';
 import { formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
 
 // A7 — Einsätze (P1-12). Serial journeys over the shared audit world; every
@@ -39,21 +49,6 @@ import { formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
 // only the next 14 days. The owned +55…+64 reserve therefore stays unused.
 
 test.describe.configure({ mode: 'serial' });
-
-function berlinTodayIso(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-function shiftIsoDate(dateIso: string, days: number): string {
-  const [year, month, day] = dateIso.split('-').map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day) + days * 86_400_000);
-  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}-${String(shifted.getUTCDate()).padStart(2, '0')}`;
-}
 
 function toDatePickerDigits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -74,16 +69,16 @@ function shortGermanDayMonth(dateIso: string): string {
 
 // The Berlin base date is frozen at module load so every serial test shares
 // identical dates even when a battery run crosses midnight (A6 lesson).
-const A7_TODAY_ISO = berlinTodayIso();
-const MAIN_DATE = shiftIsoDate(A7_TODAY_ISO, 5);
-const MAIN_MOVED_DATE = shiftIsoDate(A7_TODAY_ISO, 6);
-const COMMIT_DATE = shiftIsoDate(A7_TODAY_ISO, 8);
-const COMMIT_MOVED_DATE = shiftIsoDate(A7_TODAY_ISO, 9);
-const SERIES_DATE = shiftIsoDate(A7_TODAY_ISO, 10);
-const SERIES_SECOND_SOURCE_DATE = shiftIsoDate(A7_TODAY_ISO, 11);
-const SERIES_SHIFTED_FIRST = shiftIsoDate(A7_TODAY_ISO, 11);
-const SERIES_SHIFTED_SECOND = shiftIsoDate(A7_TODAY_ISO, 12);
-const ALLDAY_DATE = shiftIsoDate(A7_TODAY_ISO, 13);
+const A7_TODAY_ISO = berlinDateAtOffset(0);
+const MAIN_DATE = berlinDateAtOffset(5);
+const MAIN_MOVED_DATE = berlinDateAtOffset(6);
+const COMMIT_DATE = berlinDateAtOffset(8);
+const COMMIT_MOVED_DATE = berlinDateAtOffset(9);
+const SERIES_DATE = berlinDateAtOffset(10);
+const SERIES_SECOND_SOURCE_DATE = berlinDateAtOffset(11);
+const SERIES_SHIFTED_FIRST = berlinDateAtOffset(11);
+const SERIES_SHIFTED_SECOND = berlinDateAtOffset(12);
+const ALLDAY_DATE = berlinDateAtOffset(13);
 
 const OVERRIDE_REASON = 'Betrieblich abgestimmter A7 Einsatz.';
 const MAIN_NOTE = 'Schlüssel beim Hausmeister abholen, Code 4711.';
@@ -161,17 +156,11 @@ async function getJobOccurrences(
 
 // Shared lookup: every dispatch belonging to a job, whether it targets the
 // job directly or one of the job's occurrences.
-async function getDispatchIdsForJob(
-  orgId: string,
-  jobNumber: string
-): Promise<string[]> {
+async function getDispatchIdsForJob(orgId: string, jobNumber: string): Promise<string[]> {
   const admin = createReadOnlyAdminClient();
   const jobId = await getJobIdByNumber(orgId, jobNumber);
   const occurrences = await getJobOccurrences(orgId, jobNumber);
-  let dispatchQuery = admin
-    .from('planning_dispatches')
-    .select('id')
-    .eq('organization_id', orgId);
+  let dispatchQuery = admin.from('planning_dispatches').select('id').eq('organization_id', orgId);
   dispatchQuery = occurrences.length
     ? dispatchQuery.or(
         `job_id.eq.${jobId},occurrence_id.in.(${occurrences
@@ -205,10 +194,7 @@ async function getDispatchRevisionNotes(
   }));
 }
 
-async function getDispatchCancellationCauses(
-  orgId: string,
-  jobNumber: string
-): Promise<string[]> {
+async function getDispatchCancellationCauses(orgId: string, jobNumber: string): Promise<string[]> {
   const admin = createReadOnlyAdminClient();
   const dispatchIds = await getDispatchIdsForJob(orgId, jobNumber);
   if (!dispatchIds.length) return [];
@@ -247,7 +233,10 @@ async function getCommitmentFacts(
       'status, source, committed_date, window_start_time, window_end_time, withdrawal_reason, recorded_at'
     )
     .eq('organization_id', orgId)
-    .in('occurrence_id', occurrences.map((o) => o.id))
+    .in(
+      'occurrence_id',
+      occurrences.map((o) => o.id)
+    )
     .order('recorded_at', { ascending: true });
   if (error) throw new Error(`A7 commitment lookup failed: ${error.message}`);
   return (data ?? []).map((row) => ({
@@ -260,10 +249,7 @@ async function getCommitmentFacts(
   }));
 }
 
-async function getEmployeeRecordIdByLastName(
-  orgId: string,
-  lastName: string
-): Promise<string> {
+async function getEmployeeRecordIdByLastName(orgId: string, lastName: string): Promise<string> {
   const admin = createReadOnlyAdminClient();
   const { data, error } = await admin
     .from('employee_records')
@@ -324,11 +310,8 @@ function issueDialog(page: Page): Locator {
     .filter({ has: page.getByRole('heading', { name: 'Einsatz senden' }) });
 }
 
-async function openIssueDialogForPanelRow(
-  page: Page,
-  title: string
-): Promise<Locator> {
-  const row = dispatchOccurrenceRow(page, title).first();
+async function openIssueDialogForPanelRow(page: Page, title: string): Promise<Locator> {
+  const row = dispatchOccurrenceRow(page, title);
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.getByRole('button', { name: 'Einsatz senden' }).click();
   const dialog = issueDialog(page);
@@ -342,16 +325,8 @@ function readinessDimension(dialog: Locator, key: string): Locator {
   return dialog.locator(`[data-readiness-key="${key}"]`);
 }
 
-function occurrenceEventInCell(
-  page: Page,
-  dateIso: string,
-  title: string
-): Locator {
-  return page
-    .locator(`.fc-daygrid-day[data-date="${dateIso}"]`)
-    .locator('.fc-event-job')
-    .filter({ hasText: title })
-    .first();
+function occurrenceEventInCell(page: Page, dateIso: string, title: string): Locator {
+  return planningOccurrenceInDateCell(page, dateIso, title);
 }
 
 async function openOccurrenceEditDialogByDate(
@@ -364,9 +339,9 @@ async function openOccurrenceEditDialogByDate(
   await expect(event).toBeVisible({ timeout: 20_000 });
   await event.click();
   await page.getByRole('button', { name: 'Termin bearbeiten' }).click();
-  const dialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }) });
+  const dialog = page.getByRole('dialog').filter({
+    has: page.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }),
+  });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
   return dialog;
 }
@@ -376,15 +351,13 @@ async function addAssigneeInEditDialog(
   dialog: Locator,
   searchText: string
 ): Promise<void> {
-  await dialog.getByRole('combobox').filter({ hasText: /Mitarbeiter/ }).click();
-  await page.getByPlaceholder(/Mitarbeiter suchen/).fill(searchText);
-  await page
-      .getByRole('listbox')
-    .getByRole('button')
-    .filter({ hasText: searchText })
-    .first()
+  await dialog
+    .getByRole('combobox')
+    .filter({ hasText: /Mitarbeiter/ })
     .click();
-  await dialog.getByRole('heading').first().click();
+  await page.getByPlaceholder(/Mitarbeiter suchen/).fill(searchText);
+  await page.getByRole('listbox').getByRole('button').filter({ hasText: searchText }).click();
+  await dialog.getByRole('heading', { name: 'Geplanten Termin bearbeiten' }).click();
 }
 
 // Mirrors the shared planning-save contract for the occurrence edit dialog:
@@ -413,9 +386,7 @@ async function saveOccurrenceEditWithOverride(
     .not.toBe('pending');
   if (!(await dialog.isVisible().catch(() => false))) return;
   await dialog.locator('#planning-edit-reason').fill(overrideReason);
-  await dialog
-    .getByRole('button', { name: /Mit Begründung planen|Änderung speichern/ })
-    .click();
+  await dialog.getByRole('button', { name: /Mit Begründung planen|Änderung speichern/ }).click();
   await expect(dialog).toHaveCount(0, { timeout: 30_000 });
 }
 
@@ -431,23 +402,36 @@ async function openJobViaDispatchTask(page: Page, title: string): Promise<void> 
   await expect(taskGroup).toBeVisible({ timeout: 20_000 });
   await taskGroup
     .getByRole('link', { name: `Einsatz für ${title} bestätigen`, exact: true })
-    .first()
     .click();
   await page.waitForURL(/\/auftraege\//, { timeout: 20_000 });
   await expect(jobDispatchSection(page)).toBeVisible({ timeout: 20_000 });
 }
 
 function reasonDialog(page: Page, heading: string): Locator {
-  return page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: heading }) });
+  return page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: heading }) });
+}
+
+async function inheritedDispatchState(
+  orgId: string,
+  jobNumber: string
+): Promise<Awaited<ReturnType<typeof getDispatchState>> | null> {
+  const admin = createReadOnlyAdminClient();
+  const { data, error } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('job_number', jobNumber)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`A7 inherited job lookup failed: ${error.message}`);
+  }
+  return data ? getDispatchState(orgId, jobNumber) : null;
 }
 
 // Shared across the serial A7 tests: the organization-wide actual-time count
 // captured before any A7 dispatch exists (acknowledging must never create
-// time), plus fixture identities produced by earlier tests.
+// time).
 let organizationTimeBaseline: number | null = null;
-let noLoginRecordId: string | null = null;
 
 test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
   test('A7-T1: Das Bereitschaftsbild ist ehrlich — sechs Dimensionen, Material nie reserviert, Unbekanntes nie grün [P1-12-F02]', async ({
@@ -493,10 +477,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       has: adminPage.getByRole('heading', { name: 'Material planen' }),
     });
     await materialDialog.getByLabel('Artikel suchen').fill(world.inventory.itemName);
-    await materialDialog
-      .getByRole('button')
-      .filter({ hasText: world.inventory.itemName })
-      .click();
+    await materialDialog.getByRole('button').filter({ hasText: world.inventory.itemName }).click();
     await materialDialog.locator('input[id$="-quantity"]').fill('2');
     await selectFromSearchable(
       adminPage,
@@ -529,19 +510,13 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       dialog.locator('[data-readiness-key="capacity"][data-readiness-state="warning"]')
     ).toBeVisible();
     // Site/access facts are visible.
-    await expect(readinessDimension(dialog, 'site')).toContainText(
-      `A7 Werk Nord ${world.runId}`
-    );
-    await expect(readinessDimension(dialog, 'site')).toContainText(
-      'Zugang über Tor 2, Code 4711'
-    );
+    await expect(readinessDimension(dialog, 'site')).toContainText(`A7 Werk Nord ${world.runId}`);
+    await expect(readinessDimension(dialog, 'site')).toContainText('Zugang über Tor 2, Code 4711');
     // Travel has no provable fact yet — honestly "nicht bewertet".
     await expect(
       dialog.locator('[data-readiness-key="travel"][data-readiness-state="unknown"]')
     ).toBeVisible();
-    await expect(readinessDimension(dialog, 'travel')).toContainText(
-      'Fahrzeit nicht bewertet.'
-    );
+    await expect(readinessDimension(dialog, 'travel')).toContainText('Fahrzeit nicht bewertet.');
     // Material demand is ALWAYS labeled unreserved, per line and per label.
     await expect(readinessDimension(dialog, 'material')).toContainText(
       'Material (nicht reserviert)'
@@ -549,27 +524,19 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(readinessDimension(dialog, 'material')).toContainText(
       `${world.inventory.itemName}`
     );
-    await expect(readinessDimension(dialog, 'material')).toContainText(
-      '– nicht reserviert.'
-    );
+    await expect(readinessDimension(dialog, 'material')).toContainText('– nicht reserviert.');
     // Tools are never assessed in this slice.
-    await expect(readinessDimension(dialog, 'tools')).toContainText(
-      '(nicht bewertet)'
-    );
+    await expect(readinessDimension(dialog, 'tools')).toContainText('(nicht bewertet)');
     await expect(readinessDimension(dialog, 'tools')).toContainText(
       'Werkzeugverfügbarkeit nicht bewertet.'
     );
     // The negative: no unknown dimension may borrow the success icon.
     const unknownDimensions = dialog.locator('[data-readiness-state="unknown"]');
-    const unknownCount = await unknownDimensions.count();
-    expect(unknownCount).toBeGreaterThan(0);
-    for (let index = 0; index < unknownCount; index += 1) {
-      await expect(
-        unknownDimensions.nth(index).locator('[data-readiness-icon="unknown"]')
-      ).toBeVisible();
-      await expect(
-        unknownDimensions.nth(index).locator('[data-readiness-icon="ok"]')
-      ).toHaveCount(0);
+    const renderedUnknownDimensions = await unknownDimensions.all();
+    expect(renderedUnknownDimensions.length).toBeGreaterThan(0);
+    for (const unknownDimension of renderedUnknownDimensions) {
+      await expect(unknownDimension.locator('[data-readiness-icon="unknown"]')).toBeVisible();
+      await expect(unknownDimension.locator('[data-readiness-icon="ok"]')).toHaveCount(0);
     }
 
     // The optional Hinweistext travels with the dispatch.
@@ -590,6 +557,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     employeePage,
     world,
   }) => {
+    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+      test: 'A7-T2',
+      needs: 'the organization time-entry baseline captured before A7 dispatches',
+      grep: 'A7-T1|A7-T2',
+      suite: 'audit',
+    });
+    const inheritedMainDispatch = await inheritedDispatchState(
+      world.orgId,
+      `A7-MAIN-${world.runId}`
+    );
+    requireSerialPrecondition(inheritedMainDispatch?.dispatches.length === 1, {
+      test: 'A7-T2',
+      needs: 'the main dispatch issued by A7-T1',
+      grep: 'A7-T1|A7-T2',
+      suite: 'audit',
+    });
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const customerName = `A7 Kundin ${world.runId}`;
     const mainTitle = `A7 Einsatzbesuch ${world.runId}`;
@@ -615,29 +598,20 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openDispatchPanel(adminPage);
     const travelDialog = await openIssueDialogForPanelRow(adminPage, travelTitle);
     await expect(
-      travelDialog.locator(
-        '[data-readiness-key="travel"][data-readiness-state="warning"]'
-      )
+      travelDialog.locator('[data-readiness-key="travel"][data-readiness-state="warning"]')
     ).toBeVisible();
-    await expect(readinessDimension(travelDialog, 'travel')).toContainText(
-      'keine Zeit zwischen'
-    );
+    await expect(readinessDimension(travelDialog, 'travel')).toContainText('keine Zeit zwischen');
     await travelDialog.getByRole('button', { name: 'Abbrechen' }).click();
     await expect(travelDialog).toHaveCount(0, { timeout: 15_000 });
     // The panel surfaces the same provable fact as a Fahrzeit-Hinweis.
-    await expect(
-      adminPage
-        .locator('[data-dispatch-panel]')
-        .getByText(/keine Zeit zwischen/)
-        .first()
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(firstDispatchPanelText(adminPage, /keine Zeit zwischen/)).toBeVisible({
+      timeout: 20_000,
+    });
 
     // The worker's card: Termin, Ort, Hinweis — then confirmation VIA the
     // /aufgaben task (deep link, not a direct navigation).
     await openJobViaDispatchTask(employeePage, mainTitle);
-    const card = jobDispatchSection(employeePage).locator(
-      '[data-dispatch-state="ausstehend"]'
-    );
+    const card = jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]');
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card).toContainText(`${formatGermanDate(MAIN_DATE)}, 06:00`);
     await expect(card).toContainText('Nordstraße 7');
@@ -656,10 +630,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       )
     ).toHaveLength(1);
     // A confirmation is only "seen and accepted": no time, no commitment.
-    expect(organizationTimeBaseline).not.toBeNull();
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(
-      organizationTimeBaseline!
-    );
+    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(organizationTimeStart);
     expect(await getCommitmentState(world.orgId, `A7-MAIN-${world.runId}`)).toHaveLength(0);
   });
 
@@ -667,6 +638,21 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     adminPage,
     world,
   }) => {
+    const inheritedMainDispatch = await inheritedDispatchState(
+      world.orgId,
+      `A7-MAIN-${world.runId}`
+    );
+    requireSerialPrecondition(
+      inheritedMainDispatch?.dispatches[0]?.acknowledgements.some(
+        (acknowledgement) => acknowledgement.state === 'acknowledged'
+      ) === true,
+      {
+        test: 'A7-T3',
+        needs: 'the main dispatch acknowledged in A7-T2',
+        grep: 'A7-T1|A7-T2|A7-T3',
+        suite: 'audit',
+      }
+    );
     const mainTitle = `A7 Einsatzbesuch ${world.runId}`;
     const emilName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const brunoFirstName = world.users.buero.firstName;
@@ -676,27 +662,17 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       firstName: 'Nils',
       lastName: noLoginLastName,
     });
-    noLoginRecordId = await getEmployeeRecordIdByLastName(
-      world.orgId,
-      noLoginLastName
-    );
+    const noLoginRecordId = await getEmployeeRecordIdByLastName(world.orgId, noLoginLastName);
 
     // A PURE recipient-set change: the visit itself stays untouched.
-    const editDialog = await openOccurrenceEditDialogByDate(
-      adminPage,
-      mainTitle,
-      MAIN_DATE
-    );
+    const editDialog = await openOccurrenceEditDialogByDate(adminPage, mainTitle, MAIN_DATE);
     await addAssigneeInEditDialog(adminPage, editDialog, brunoFirstName);
     await addAssigneeInEditDialog(adminPage, editDialog, `Nils ${noLoginLastName}`);
     await saveOccurrenceEditWithOverride(editDialog, OVERRIDE_REASON);
 
     const state = await getDispatchState(world.orgId, `A7-MAIN-${world.runId}`);
     expect(state.dispatches).toHaveLength(1);
-    expect(state.dispatches[0].revisionChangeKinds).toEqual([
-      'issued',
-      'reassigned',
-    ]);
+    expect(state.dispatches[0].revisionChangeKinds).toEqual(['issued', 'reassigned']);
     expect(state.dispatches[0].currentRevisionNumber).toBe(2);
     expect(state.dispatches[0].currentRecipientRecordIds).toHaveLength(3);
     // The unchanged recipient's confirmation lives on traceably.
@@ -708,24 +684,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // A record without login is NEVER auto-confirmed — zero acknowledgement
     // rows exist for it on any revision.
     expect(
-      state.dispatches[0].acknowledgements.filter(
-        (ack) => ack.employeeRecordId === noLoginRecordId
-      )
+      state.dispatches[0].acknowledgements.filter((ack) => ack.employeeRecordId === noLoginRecordId)
     ).toHaveLength(0);
 
     // The panel shows the full visible state vocabulary.
     await openDispatchPanel(adminPage);
-    const row = dispatchOccurrenceRow(adminPage, mainTitle).first();
+    const row = dispatchOccurrenceRow(adminPage, mainTitle);
     await expect(row).toBeVisible({ timeout: 20_000 });
-    await expect(
-      row.locator('[data-recipient-state="uebernommen"]')
-    ).toContainText(`${emilName} · Übernommen`);
-    await expect(
-      row.locator('[data-recipient-state="ausstehend"]')
-    ).toContainText('Bestätigung ausstehend');
-    await expect(
-      row.locator('[data-recipient-state="nicht_moeglich"]')
-    ).toContainText(`Nils ${noLoginLastName} · Ohne Zugang – Bestätigung nicht möglich`);
+    await expect(row.locator('[data-recipient-state="uebernommen"]')).toContainText(
+      `${emilName} · Übernommen`
+    );
+    await expect(row.locator('[data-recipient-state="ausstehend"]')).toContainText(
+      'Bestätigung ausstehend'
+    );
+    await expect(row.locator('[data-recipient-state="nicht_moeglich"]')).toContainText(
+      `Nils ${noLoginLastName} · Ohne Zugang – Bestätigung nicht möglich`
+    );
   });
 
   test('A7-T4: Rückfrage über /aufgaben wird Manager-Aufgabe; die Plananpassung erzeugt automatisch den neuen Stand; ein geänderter Ort macht Bestätigungen ungültig [P1-12-F03/P1-12-F04/P1-12-F05]', async ({
@@ -733,6 +707,16 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     bueroPage,
     world,
   }) => {
+    const inheritedMainDispatch = await inheritedDispatchState(
+      world.orgId,
+      `A7-MAIN-${world.runId}`
+    );
+    requireSerialPrecondition(inheritedMainDispatch?.dispatches[0]?.currentRevisionNumber === 2, {
+      test: 'A7-T4',
+      needs: 'the reassigned main dispatch produced by A7-T3',
+      grep: 'A7-T1|A7-T2|A7-T3|A7-T4',
+      suite: 'audit',
+    });
     const mainTitle = `A7 Einsatzbesuch ${world.runId}`;
     const brunoName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     const challengeReason = 'A7 Terminüberschneidung mit anderem Einsatz.';
@@ -742,12 +726,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openJobViaDispatchTask(bueroPage, mainTitle);
     await bueroPage.getByRole('button', { name: 'Rückfrage stellen' }).click();
     const challengeDialog = reasonDialog(bueroPage, 'Rückfrage zum Einsatz');
-    await challengeDialog
-      .locator('#dispatch-challenge-reason')
-      .fill(challengeReason);
-    await challengeDialog
-      .getByRole('button', { name: 'Rückfrage senden' })
-      .click();
+    await challengeDialog.locator('#dispatch-challenge-reason').fill(challengeReason);
+    await challengeDialog.getByRole('button', { name: 'Rückfrage senden' }).click();
     await expect(challengeDialog).toHaveCount(0, { timeout: 20_000 });
     await expect(
       jobDispatchSection(bueroPage).locator('[data-dispatch-state="rueckfrage"]')
@@ -755,9 +735,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // The open challenge is a manager task AND visible in the panel.
     await openAufgaben(adminPage);
-    const challengeGroup = adminPage.getByTestId(
-      'attention-dispatch-challenge-tasks'
-    );
+    const challengeGroup = adminPage.getByTestId('attention-dispatch-challenge-tasks');
     await expect(challengeGroup).toBeVisible({ timeout: 20_000 });
     const challengeTask = challengeGroup.getByRole('link', {
       name: `Rückfrage von ${brunoName} zu ${mainTitle} öffnen`,
@@ -766,12 +744,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(challengeTask).toBeVisible();
     await expect(challengeGroup.getByText(challengeReason)).toBeVisible();
     await openDispatchPanel(adminPage);
-    await expect(
-      adminPage
-        .locator('[data-dispatch-panel]')
-        .getByText(challengeReason, { exact: false })
-        .first()
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(firstDispatchPanelText(adminPage, challengeReason)).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Resolution by ADAPTING the plan: moving the visit supersedes the
     // revision, closes the challenge, and the recipient sees the new state.
@@ -795,26 +770,21 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(resolvedChallenge?.challengeResolution).toBe('superseded');
     await openAufgaben(adminPage);
     await expect(
-      adminPage
-        .getByRole('link', {
-          name: `Rückfrage von ${brunoName} zu ${mainTitle} öffnen`,
-          exact: true,
-        })
+      adminPage.getByRole('link', {
+        name: `Rückfrage von ${brunoName} zu ${mainTitle} öffnen`,
+        exact: true,
+      })
     ).toHaveCount(0);
 
     // The recipient sees "ausstehend" WITH the new state (the moved date).
     await bueroPage.goto(`/auftraege/A7-MAIN-${world.runId}`);
-    const pendingCard = jobDispatchSection(bueroPage).locator(
-      '[data-dispatch-state="ausstehend"]'
-    );
+    const pendingCard = jobDispatchSection(bueroPage).locator('[data-dispatch-state="ausstehend"]');
     await expect(pendingCard).toBeVisible({ timeout: 20_000 });
     await expect(pendingCard).toContainText(formatGermanDate(MAIN_MOVED_DATE));
 
     // A changed Ort is a material instruction change: the confirmed dispatch
     // is superseded again and the card shows the new location.
-    await jobDispatchSection(bueroPage)
-      .getByRole('button', { name: 'Einsatz bestätigen' })
-      .click();
+    await jobDispatchSection(bueroPage).getByRole('button', { name: 'Einsatz bestätigen' }).click();
     await expect(
       jobDispatchSection(bueroPage).locator('[data-dispatch-state="bestaetigt"]')
     ).toBeVisible({ timeout: 20_000 });
@@ -840,9 +810,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       )
       .toEqual(['issued', 'reassigned', 'schedule_changed', 'instruction_changed']);
     expect(
-      state.dispatches[0].acknowledgements.filter(
-        (ack) => ack.revisionNumber === 4
-      )
+      state.dispatches[0].acknowledgements.filter((ack) => ack.revisionNumber === 4)
     ).toHaveLength(0);
     const invalidatedCard = jobDispatchSection(bueroPage).locator(
       '[data-dispatch-state="ausstehend"]'
@@ -881,7 +849,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await typeIntoDatePicker(
       parkingDialog,
       'Wiedervorlage',
-      toDatePickerDigits(shiftIsoDate(A7_TODAY_ISO, 2))
+      toDatePickerDigits(berlinDateAtOffset(2))
     );
     await parkingDialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
@@ -889,9 +857,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openParkplatzPanel(adminPage);
     const card = parkplatzCard(adminPage, parkTitle);
     await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.locator('[data-parking-context="set"]')).toContainText(
-      'Kapazität'
-    );
+    await expect(card.locator('[data-parking-context="set"]')).toContainText('Kapazität');
 
     // Dispatch to the ASSIGNED employees: the dialog preselects them.
     await card.getByRole('button', { name: /^Einsatz für .* senden$/ }).click();
@@ -912,27 +878,18 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(
       jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]')
     ).toBeVisible({ timeout: 20_000 });
-    await expect(jobDispatchSection(employeePage)).toContainText(
-      `Hinweis: ${MAIN_NOTE}`
-    );
+    await expect(jobDispatchSection(employeePage)).toContainText(`Hinweis: ${MAIN_NOTE}`);
 
     // Manual cancel with reason: history stays, the worker's card disappears.
     await openDispatchPanel(adminPage);
-    const unscheduledRow = adminPage
-      .locator('[data-dispatch-job]')
-      .filter({ hasText: parkTitle })
-      .first();
+    const unscheduledRow = unscheduledDispatchRow(adminPage, parkTitle);
     await expect(unscheduledRow).toBeVisible({ timeout: 20_000 });
-    await unscheduledRow
-      .getByRole('button', { name: 'Einsatz zurückziehen …' })
-      .click();
+    await unscheduledRow.getByRole('button', { name: 'Einsatz zurückziehen …' }).click();
     const cancelDialog = reasonDialog(adminPage, 'Einsatz zurückziehen');
     await cancelDialog
       .locator('#dispatch-reason-dialog')
       .fill('A7 Material fehlt, Einsatz wird neu geplant.');
-    await cancelDialog
-      .getByRole('button', { name: 'Einsatz zurückziehen', exact: true })
-      .click();
+    await cancelDialog.getByRole('button', { name: 'Einsatz zurückziehen', exact: true }).click();
     await expect(cancelDialog).toHaveCount(0, { timeout: 20_000 });
 
     let state = await getDispatchState(world.orgId, `A7-PARK-${world.runId}`);
@@ -947,14 +904,10 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openParkplatzPanel(adminPage);
     const cardAgain = parkplatzCard(adminPage, parkTitle);
     await expect(cardAgain).toBeVisible({ timeout: 20_000 });
-    await cardAgain
-      .getByRole('button', { name: /^Einsatz für .* senden$/ })
-      .click();
+    await cardAgain.getByRole('button', { name: /^Einsatz für .* senden$/ }).click();
     const resendDialog = issueDialog(adminPage);
     await expect(
-      resendDialog.locator(
-        '[data-readiness-key="tools"][data-readiness-state="unknown"]'
-      )
+      resendDialog.locator('[data-readiness-key="tools"][data-readiness-state="unknown"]')
     ).toBeVisible({ timeout: 20_000 });
     await expect(
       resendDialog.getByRole('checkbox', {
@@ -976,9 +929,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(
       jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]')
     ).toBeVisible({ timeout: 20_000 });
-    await expect(jobDispatchSection(employeePage)).toContainText(
-      `Hinweis: ${RESEND_NOTE}`
-    );
+    await expect(jobDispatchSection(employeePage)).toContainText(`Hinweis: ${RESEND_NOTE}`);
   });
 
   test('A7-T6: Parken storniert aktive Einsätze sichtbar; der atomare Kontext nutzt das gemeinsame Grundvokabular; die fällige Wiedervorlage wird Aufgabe [P1-12-F06/P1-12-F08/P1-12-F10/P1-14-F19/P1-14-F21]', async ({
@@ -1002,9 +953,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       jobSearch: schedNumber,
       date: A7_TODAY_ISO,
       time: '06:00',
-      employeeNames: [
-        `${world.users.employee.firstName} ${world.users.employee.lastName}`,
-      ],
+      employeeNames: [`${world.users.employee.firstName} ${world.users.employee.lastName}`],
       overrideReason: OVERRIDE_REASON,
     });
 
@@ -1015,18 +964,17 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // Park via the calendar drag gesture — the path that triggers the offer.
     await adminPage.goto('/kalender');
     await adminPage.getByRole('tab', { name: 'Tag', exact: true }).click();
-    const block = adminPage.locator(`div.absolute[title="${schedTitle}"]`).first();
+    const block = draggablePlanningBlock(adminPage, schedTitle);
     await expect(block).toBeVisible({ timeout: 20_000 });
     const blockBox = await block.boundingBox();
-    const parkplatzButton = adminPage.getByRole('button', { name: /^Parkplatz/ });
+    const parkplatzButton = adminPage.getByRole('button', {
+      name: /^Parkplatz/,
+    });
     const parkplatzBox = await parkplatzButton.boundingBox();
     if (!blockBox || !parkplatzBox) {
       throw new Error('A7-T6: park drag targets are unavailable');
     }
-    await adminPage.mouse.move(
-      blockBox.x + blockBox.width / 2,
-      blockBox.y + blockBox.height / 2
-    );
+    await adminPage.mouse.move(blockBox.x + blockBox.width / 2, blockBox.y + blockBox.height / 2);
     await adminPage.mouse.down();
     await adminPage.mouse.move(
       parkplatzBox.x + parkplatzBox.width / 2,
@@ -1056,32 +1004,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       'Interne Klärung',
       'Sonstiges',
     ]) {
-      await expect(
-        adminPage.getByRole('option', { name: label, exact: true })
-      ).toBeVisible();
+      await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
     }
-    await adminPage
-      .getByRole('option', { name: 'Freigabe', exact: true })
-      .click();
-    await contextDialog
-      .locator('#parking-note')
-      .fill('A7 Freigabe des Eigentümers steht aus.');
+    await adminPage.getByRole('option', { name: 'Freigabe', exact: true }).click();
+    await contextDialog.locator('#parking-note').fill('A7 Freigabe des Eigentümers steht aus.');
     await selectFromSearchable(
       adminPage,
       contextDialog.locator('#parking-responsible'),
       world.users.buero.firstName
     );
     // A review date of TODAY is already overdue (≤ business today).
-    await typeIntoDatePicker(
-      contextDialog,
-      'Wiedervorlagedatum',
-      toDatePickerDigits(A7_TODAY_ISO)
-    );
+    await typeIntoDatePicker(contextDialog, 'Wiedervorlagedatum', toDatePickerDigits(A7_TODAY_ISO));
     await contextDialog.getByRole('button', { name: 'Kontext speichern' }).click();
     await expect(contextDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(
-      adminPage.getByText('Auftrag wurde geparkt.').first()
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(visibleText(adminPage, 'Auftrag wurde geparkt.')).toBeVisible({
+      timeout: 20_000,
+    });
 
     const parking = await getParkingState(world.orgId, schedNumber);
     expect(parking.context).not.toBeNull();
@@ -1110,9 +1048,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       exact: true,
     });
     await expect(reviewTask).toBeVisible();
-    await expect(reviewTask).toContainText(
-      `Zuständig: ${world.users.buero.firstName}`
-    );
+    await expect(reviewTask).toContainText(`Zuständig: ${world.users.buero.firstName}`);
   });
 
   test('A7-T7: Kundenzusage — Ankunftsfenster, vier Kanäle, kein Versand; nach dem Verschieben sichtbare Abweichung und Rückzug mit Grund [P1-12-F13/P1-12-F14]', async ({
@@ -1141,7 +1077,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openDispatchPanel(adminPage);
     await issueDispatchForOccurrence(adminPage, commitTitle);
 
-    const row = dispatchOccurrenceRow(adminPage, commitTitle).first();
+    const row = dispatchOccurrenceRow(adminPage, commitTitle);
     await row.getByRole('button', { name: 'Zusage erfassen', exact: true }).click();
     const dialog = adminPage.getByRole('dialog').filter({
       has: adminPage.getByRole('heading', { name: 'Kundenzusage erfassen' }),
@@ -1159,13 +1095,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       'Schriftlich vereinbart (manuell erfasst)',
       'Sonstige Vereinbarung',
     ]) {
-      await expect(
-        adminPage.getByRole('option', { name: label, exact: true })
-      ).toBeVisible();
+      await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
     }
-    await adminPage
-      .getByRole('option', { name: 'Vor Ort vereinbart', exact: true })
-      .click();
+    await adminPage.getByRole('option', { name: 'Vor Ort vereinbart', exact: true }).click();
     // The optional arrival window covers the visit's 06:00 start.
     await typeIntoTimeInput(dialog, 'commitment-window-start', '0600');
     await typeIntoTimeInput(dialog, 'commitment-window-end', '0800');
@@ -1175,9 +1107,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(row.locator('[data-commitment-mismatch="false"]')).toBeVisible({
       timeout: 20_000,
     });
-    await expect(row).toContainText(
-      `Zusage: ${formatGermanDate(COMMIT_DATE)}, 06:00–08:00 Uhr`
-    );
+    await expect(row).toContainText(`Zusage: ${formatGermanDate(COMMIT_DATE)}, 06:00–08:00 Uhr`);
     let commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
     expect(commitments[0].status).toBe('active');
@@ -1187,12 +1117,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(commitments[0].windowEndTime?.slice(0, 5)).toBe('08:00');
     // The worker sees the internal promise on their card.
     await employeePage.goto(`/auftraege/${commitNumber}`);
-    await expect(jobDispatchSection(employeePage)).toContainText(
-      'Dem Kunden zugesagt'
-    );
-    await expect(jobDispatchSection(employeePage)).toContainText(
-      '06:00–08:00 Uhr'
-    );
+    await expect(jobDispatchSection(employeePage)).toContainText('Dem Kunden zugesagt');
+    await expect(jobDispatchSection(employeePage)).toContainText('06:00–08:00 Uhr');
 
     // Moving the visit leaves the commitment untouched and shows the
     // mismatch visibly.
@@ -1204,37 +1130,29 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       overrideReason: OVERRIDE_REASON,
     });
     await openDispatchPanel(adminPage);
-    const movedRow = dispatchOccurrenceRow(adminPage, commitTitle).first();
-    await expect(
-      movedRow.locator('[data-commitment-mismatch="true"]')
-    ).toBeVisible({ timeout: 20_000 });
+    const movedRow = dispatchOccurrenceRow(adminPage, commitTitle);
+    await expect(movedRow.locator('[data-commitment-mismatch="true"]')).toBeVisible({
+      timeout: 20_000,
+    });
     await expect(movedRow).toContainText('weicht vom Plan ab');
     commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
     expect(commitments[0].committedDate).toBe(COMMIT_DATE);
 
     // Explicit resolution: withdraw WITH reason; no customer notification.
-    await movedRow
-      .getByRole('button', { name: 'Zusage zurückziehen …' })
-      .click();
+    await movedRow.getByRole('button', { name: 'Zusage zurückziehen …' }).click();
     const withdrawDialog = reasonDialog(adminPage, 'Kundenzusage zurückziehen');
-    await expect(withdrawDialog).toContainText(
-      'Der Kunde wird dadurch nicht benachrichtigt.'
-    );
+    await expect(withdrawDialog).toContainText('Der Kunde wird dadurch nicht benachrichtigt.');
     await withdrawDialog
       .locator('#dispatch-reason-dialog')
       .fill('A7 Kundin hat den Termin telefonisch abgesagt.');
-    await withdrawDialog
-      .getByRole('button', { name: 'Zusage zurückziehen', exact: true })
-      .click();
+    await withdrawDialog.getByRole('button', { name: 'Zusage zurückziehen', exact: true }).click();
     await expect(withdrawDialog).toHaveCount(0, { timeout: 20_000 });
 
     commitments = await getCommitmentFacts(world.orgId, commitNumber);
     expect(commitments).toHaveLength(1);
     expect(commitments[0].status).toBe('withdrawn');
-    expect(commitments[0].withdrawalReason).toBe(
-      'A7 Kundin hat den Termin telefonisch abgesagt.'
-    );
+    expect(commitments[0].withdrawalReason).toBe('A7 Kundin hat den Termin telefonisch abgesagt.');
     await expect(
       movedRow.getByRole('button', { name: 'Zusage erfassen', exact: true })
     ).toBeVisible({ timeout: 20_000 });
@@ -1275,43 +1193,34 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     });
 
     await openDispatchPanel(adminPage);
-    const panel = adminPage.locator('[data-dispatch-panel]');
+    const panel = dispatchPanel(adminPage);
     await panel.getByRole('button', { name: 'Verschieben', exact: true }).click();
 
     // Only FUTURE visits are selectable: today's all-day visit is offered as
     // a row but its checkbox stays disabled.
-    const todayRow = dispatchOccurrenceRow(adminPage, todayTitle).first();
+    const todayRow = dispatchOccurrenceRow(adminPage, todayTitle);
     await expect(todayRow).toBeVisible({ timeout: 20_000 });
     await expect(todayRow.getByRole('checkbox')).toBeDisabled();
 
-    const alldayRow = dispatchOccurrenceRow(adminPage, alldayTitle).first();
+    const alldayRow = dispatchOccurrenceRow(adminPage, alldayTitle);
     await alldayRow.getByRole('checkbox').check();
-    await expect(
-      panel.getByText('1 Besuch ausgewählt', { exact: true })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(panel.getByText('1 Besuch ausgewählt', { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
     await panel.locator('#batch-day-shift').fill('0');
-    await panel
-      .locator('#batch-reason')
-      .fill('A7 Uhrzeitverschiebung ohne Tageswechsel.');
+    await panel.locator('#batch-reason').fill('A7 Uhrzeitverschiebung ohne Tageswechsel.');
     // A zero shift without a new time is no move at all: the preview stays
     // unreachable even with a visit selected and a reason given.
-    await expect(
-      panel.getByRole('button', { name: 'Auswirkungen prüfen' })
-    ).toBeDisabled();
+    await expect(panel.getByRole('button', { name: 'Auswirkungen prüfen' })).toBeDisabled();
 
     // All-or-nothing rejection: an all-day visit with a pure time shift is
     // refused with the exact German message and NOTHING moves.
     await typeIntoTimeInput(panel, 'batch-new-time', '0700');
     await panel.getByRole('button', { name: 'Auswirkungen prüfen' }).click();
     await expect(
-      panel.getByText(
-        'Ganztägige Besuche benötigen eine Verschiebung um mindestens einen Tag.'
-      )
+      panel.getByText('Ganztägige Besuche benötigen eine Verschiebung um mindestens einen Tag.')
     ).toBeVisible({ timeout: 20_000 });
-    const alldayOccurrences = await getJobOccurrences(
-      world.orgId,
-      `A7-GT-${world.runId}`
-    );
+    const alldayOccurrences = await getJobOccurrences(world.orgId, `A7-GT-${world.runId}`);
     expect(alldayOccurrences).toHaveLength(1);
     expect(alldayOccurrences[0].startDate).toBe(ALLDAY_DATE);
   });
@@ -1320,6 +1229,12 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     adminPage,
     world,
   }) => {
+    const organizationTimeStart = requireChainedValue(organizationTimeBaseline, {
+      test: 'A7-T9',
+      needs: 'the organization time-entry baseline captured before A7 dispatches',
+      grep: 'A7-T1|A7-T9',
+      suite: 'audit',
+    });
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const seriesTitle = `A7 Serienbesuch ${world.runId}`;
     const seriesNumber = `A7-SERIE-${world.runId}`;
@@ -1344,21 +1259,19 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     const seriesId = before[0].seriesId;
 
     await openDispatchPanel(adminPage);
-    const panel = adminPage.locator('[data-dispatch-panel]');
+    const panel = dispatchPanel(adminPage);
     await panel.getByRole('button', { name: 'Verschieben', exact: true }).click();
-    const rows = panel
-      .locator('[data-dispatch-occurrence]')
-      .filter({ hasText: seriesTitle });
+    const rows = panel.locator('[data-dispatch-occurrence]').filter({ hasText: seriesTitle });
     // The overview loads asynchronously after the panel opens — wait for the
     // series rows before touching any checkbox.
-    await expect(rows.first()).toBeVisible({ timeout: 20_000 });
+    await expect(rows).not.toHaveCount(0, { timeout: 20_000 });
     await expect(rows).toHaveCount(2, { timeout: 20_000 });
-    for (let index = 0; index < 2; index += 1) {
-      await rows.nth(index).getByRole('checkbox').check();
+    for (const row of await rows.all()) {
+      await row.getByRole('checkbox').check();
     }
-    await expect(
-      panel.getByText('2 Besuche ausgewählt', { exact: true })
-    ).toBeVisible({ timeout: 10_000 });
+    await expect(panel.getByText('2 Besuche ausgewählt', { exact: true })).toBeVisible({
+      timeout: 10_000,
+    });
     // Whole days AND a new time together.
     await panel.locator('#batch-day-shift').fill('1');
     await typeIntoTimeInput(panel, 'batch-new-time', '0800');
@@ -1379,8 +1292,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       { oldDate: SERIES_DATE, newDate: SERIES_SHIFTED_FIRST },
       { oldDate: SERIES_SECOND_SOURCE_DATE, newDate: SERIES_SHIFTED_SECOND },
     ];
-    for (let index = 0; index < 2; index += 1) {
-      const item = previewItems.nth(index);
+    const renderedPreviewItems = await previewItems.all();
+    for (let index = 0; index < renderedPreviewItems.length; index += 1) {
+      const item = renderedPreviewItems[index];
       await expect(item).toContainText(seriesTitle);
       await expect(item).toContainText(
         `${shortGermanDayMonth(expectedRows[index].oldDate)}, 06:00 Uhr`
@@ -1401,15 +1315,11 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(warning).toBeVisible({ timeout: 30_000 });
     // Conflicts override ONLY with a sufficient reason.
     await warning.locator('#planning-warning-reason').fill('kurz');
-    await expect(
-      warning.getByRole('button', { name: 'Mit Begründung speichern' })
-    ).toBeDisabled();
+    await expect(warning.getByRole('button', { name: 'Mit Begründung speichern' })).toBeDisabled();
     await warning
       .locator('#planning-warning-reason')
       .fill('A7 Umplanung betrieblich abgestimmt und bestätigt.');
-    await warning
-      .getByRole('button', { name: 'Mit Begründung speichern' })
-      .click();
+    await warning.getByRole('button', { name: 'Mit Begründung speichern' }).click();
     await expect(warning).toHaveCount(0, { timeout: 30_000 });
     await expect(preview).toHaveCount(0, { timeout: 30_000 });
 
@@ -1419,9 +1329,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     expect(after).toHaveLength(2);
     const localStarts = after
       .map((occurrence) =>
-        occurrence.startAt
-          ? formatBerlinLocalDateTime(occurrence.startAt).slice(0, 16)
-          : ''
+        occurrence.startAt ? formatBerlinLocalDateTime(occurrence.startAt).slice(0, 16) : ''
       )
       .sort();
     expect(localStarts).toEqual([
@@ -1429,9 +1337,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       `${SERIES_SHIFTED_SECOND}T08:00`,
     ]);
     expect(after.every((occurrence) => occurrence.isException)).toBe(true);
-    expect(after.every((occurrence) => occurrence.seriesId === seriesId)).toBe(
-      true
-    );
+    expect(after.every((occurrence) => occurrence.seriesId === seriesId)).toBe(true);
     const history = await getBatchPlanningHistory(
       world.orgId,
       after.map((occurrence) => occurrence.id)
@@ -1447,9 +1353,6 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // Closing bracket for the whole session: dispatching, confirming,
     // challenging, parking, committing, and batch moving never created time.
-    expect(organizationTimeBaseline).not.toBeNull();
-    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(
-      organizationTimeBaseline!
-    );
+    expect(await getOrganizationTimeEntryCount(world.orgId)).toBe(organizationTimeStart);
   });
 });

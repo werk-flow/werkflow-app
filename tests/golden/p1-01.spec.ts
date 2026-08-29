@@ -8,6 +8,7 @@ import {
   openCustomerDetail,
   searchCustomers,
   visibleText,
+  textInDom,
 } from './support/steps';
 
 // P1-01 — Customer contacts and work sites (@P1-01)
@@ -18,10 +19,7 @@ import {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
-  test('Admin pflegt Ansprechpartner und Einsatzorte am Kunden', async ({
-    adminPage,
-    world,
-  }) => {
+  test('Admin pflegt Ansprechpartner und Einsatzorte am Kunden', async ({ adminPage, world }) => {
     await createCustomer(adminPage, `Hausverwaltung Weber ${world.runId}`);
     await openCustomerDetail(adminPage, `Hausverwaltung Weber ${world.runId}`);
 
@@ -84,6 +82,7 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     await adminPage.goto('/kunden');
     await expect(
       adminPage
+        .getByRole('main')
         .getByText(`Hausverwaltung Weber ${world.runId}`)
         .filter({ visible: true })
     ).toHaveCount(1);
@@ -113,31 +112,23 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     await expect(contact.getByText('Sabine Krause', { exact: true })).toBeVisible();
     await expect(contact.getByText('Hausverwaltung', { exact: true })).toBeVisible();
     // The contact's phone number is a click-to-call link (normalized href).
-    await expect(
-      employeePage.locator('a[href="tel:0301234567"]').first()
-    ).toBeVisible();
+    await expect(employeePage.getByRole('link', { name: 'Sabine Krause anrufen' })).toHaveAttribute(
+      'href',
+      'tel:0301234567'
+    );
   });
 
-  test('Suche findet Kunden über Ansprechpartner und Einsatzort', async ({
-    bueroPage,
-    world,
-  }) => {
+  test('Suche findet Kunden über Ansprechpartner und Einsatzort', async ({ bueroPage, world }) => {
     await searchCustomers(bueroPage, 'Sabine Krause');
-    await expect(
-      visibleText(bueroPage, `Hausverwaltung Weber ${world.runId}`)
-    ).toBeVisible();
+    await expect(visibleText(bueroPage, `Hausverwaltung Weber ${world.runId}`)).toBeVisible();
 
     await searchCustomers(bueroPage, 'Beispielweg');
-    await expect(
-      visibleText(bueroPage, `Hausverwaltung Weber ${world.runId}`)
-    ).toBeVisible();
+    await expect(visibleText(bueroPage, `Hausverwaltung Weber ${world.runId}`)).toBeVisible();
 
     await searchCustomers(bueroPage, 'gibtsnicht-xyz');
     // Wait for the filtered result count before asserting absence.
     await expect(visibleText(bueroPage, '0 Kunden')).toBeVisible();
-    await expect(
-      bueroPage.getByText(`Hausverwaltung Weber ${world.runId}`)
-    ).toHaveCount(0);
+    await expect(textInDom(bueroPage, `Hausverwaltung Weber ${world.runId}`)).toHaveCount(0);
   });
 
   test('Fremde Organisation sieht keine Kunden, Kontakte oder Einsatzorte', async ({
@@ -145,9 +136,7 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
     world,
   }) => {
     await outsiderPage.goto('/kunden');
-    await expect(
-      outsiderPage.getByText(`Hausverwaltung Weber ${world.runId}`)
-    ).toHaveCount(0);
-    await expect(outsiderPage.getByText('Sabine Krause')).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `Hausverwaltung Weber ${world.runId}`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, 'Sabine Krause')).toHaveCount(0);
   });
 });

@@ -29,7 +29,14 @@ select coalesce(json_agg(row_to_json(state)), '[]'::json) from (
       select i.indexrelid::regclass::text
       from pg_index i
       where i.indrelid = c.oid and i.indisreplident
-    ), '') as replident_index
+    ), '') as replident_index,
+    coalesce((
+      select string_agg(a.attname, ',' order by k.ordinality)
+      from pg_index i
+      cross join lateral unnest(i.indkey) with ordinality as k(attnum, ordinality)
+      join pg_attribute a on a.attrelid = i.indrelid and a.attnum = k.attnum
+      where i.indrelid = c.oid and i.indisreplident
+    ), '') as replident_index_columns
   from pg_publication_tables pt
   join pg_namespace n on n.nspname = pt.schemaname
   join pg_class c on c.relname = pt.tablename and c.relnamespace = n.oid
@@ -37,13 +44,29 @@ select coalesce(json_agg(row_to_json(state)), '[]'::json) from (
     and pt.schemaname = 'public'
 ) state`;
 
+// The publication must deliver all three operation kinds: a dropped pubdelete
+// would silently kill every org-filtered DELETE refresh (owner-audit depth
+// item, 2026-08-29).
+const PUBLICATION_QUERY = `
+select coalesce(json_agg(row_to_json(p)), '[]'::json) from (
+  select pubinsert, pubupdate, pubdelete
+  from pg_publication where pubname = 'supabase_realtime'
+) p`;
+
 type PublishedTableState = {
   tablename: string;
   replident: string;
   replident_index: string;
+  replident_index_columns: string;
 };
 
-function readPublishedState(): PublishedTableState[] {
+type PublicationFlags = {
+  pubinsert: boolean;
+  pubupdate: boolean;
+  pubdelete: boolean;
+};
+
+function runLocalQuery<T>(query: string): T {
   const raw = execFileSync(
     'wsl',
     [
@@ -57,12 +80,16 @@ function readPublishedState(): PublishedTableState[] {
       'postgres',
       '-tA',
       '-c',
-      QUERY,
+      query,
     ],
     { encoding: 'utf8', timeout: 30_000 }
   ).trim();
   if (!raw) throw new Error('No response from the local stack.');
-  return JSON.parse(raw) as PublishedTableState[];
+  return JSON.parse(raw) as T;
+}
+
+function readPublishedState(): PublishedTableState[] {
+  return runLocalQuery<PublishedTableState[]>(QUERY);
 }
 
 export function checkRealtimeParity(): string[] {
@@ -104,6 +131,26 @@ export function checkRealtimeParity(): string[] {
     if (!row.replident_index.endsWith('_replident_idx')) {
       problems.push(
         `${row.tablename}: replica identity index is '${row.replident_index}', expected the committed *_replident_idx (id, organization_id) index.`
+      );
+      continue;
+    }
+    if (row.replident_index_columns !== 'id,organization_id') {
+      problems.push(
+        `${row.tablename}: replica identity index covers (${row.replident_index_columns}), expected exactly (id, organization_id) — a renamed index with other columns would leak or drop the org filter.`
+      );
+    }
+  }
+
+  const publications = runLocalQuery<PublicationFlags[]>(PUBLICATION_QUERY);
+  if (publications.length !== 1) {
+    problems.push(
+      `expected exactly one supabase_realtime publication, found ${publications.length}.`
+    );
+  }
+  for (const flags of publications) {
+    if (!flags.pubinsert || !flags.pubupdate || !flags.pubdelete) {
+      problems.push(
+        `supabase_realtime publication operations are insert=${flags.pubinsert}, update=${flags.pubupdate}, delete=${flags.pubdelete} — all three must be enabled or live refreshes silently stop for the missing kind.`
       );
     }
   }
