@@ -79,6 +79,7 @@ export default async function AnfrageDetailPage({
     clientsResult,
     assignees,
     documentsResult,
+    convertedServiceCaseResult,
   ] = await Promise.all([
     request.clientId
       ? admin
@@ -140,6 +141,12 @@ export default async function AnfrageDetailPage({
       .order('name', { ascending: true }),
     getManagerAssigneeOptions(admin, activeOrgId),
     getRequestDocuments(requestId),
+    admin
+      .from('service_cases')
+      .select('id, case_number, summary')
+      .eq('organization_id', activeOrgId)
+      .eq('source_request_id', requestId)
+      .maybeSingle(),
   ]);
 
   const events = (eventsResult.data ?? []).map(toClientRequestEvent);
@@ -170,6 +177,7 @@ export default async function AnfrageDetailPage({
   const contact = contactResult.data;
   const convertedJob = convertedJobResult.data;
   const convertedProject = convertedProjectResult.data;
+  const convertedServiceCase = convertedServiceCaseResult.data;
 
   const data: RequestDetailData = {
     request,
@@ -211,7 +219,12 @@ export default async function AnfrageDetailPage({
               ? `/auftraege/projekt/${encodeURIComponent(convertedProject.project_number)}`
               : null,
           }
-        : null,
+        : convertedServiceCase
+          ? {
+              label: `Servicefall ${convertedServiceCase.case_number}`,
+              href: `/service/faelle/${encodeURIComponent(convertedServiceCase.case_number)}`,
+            }
+          : null,
     documents: documentsResult.success ? documentsResult.documents : [],
     events: eventEntries,
     clients: (clientsResult.data ?? []).map(toClient),

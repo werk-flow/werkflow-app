@@ -76,6 +76,7 @@ export type DocumentLink = {
   employeeId: string | null;
   requestId: string | null;
   equipmentId: string | null;
+  serviceCaseId: string | null;
   jobTitle: string | null;
   jobNumber: string | null;
   projectName: string | null;
@@ -87,6 +88,8 @@ export type DocumentLink = {
   requestSummary: string | null;
   equipmentNumber: string | null;
   equipmentName: string | null;
+  serviceCaseNumber: string | null;
+  serviceCaseSummary: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -163,6 +166,7 @@ export type UpdateDocumentLinksInput = {
   addClientIds?: string[];
   addEmployeeIds?: string[];
   addEquipmentIds?: string[];
+  addServiceCaseIds?: string[];
   removeLinkIds?: string[];
 };
 
@@ -187,6 +191,7 @@ export type LinkDocumentsToTargetInput = {
   clientId?: string;
   employeeId?: string;
   equipmentId?: string;
+  serviceCaseId?: string;
 };
 
 export type LinkDocumentsToTargetResult =
@@ -328,6 +333,8 @@ export function toDocumentLink(
     requestSummary?: string | null;
     equipmentNumber?: string | null;
     equipmentName?: string | null;
+    serviceCaseNumber?: string | null;
+    serviceCaseSummary?: string | null;
   },
 ): DocumentLink {
   return {
@@ -340,6 +347,7 @@ export function toDocumentLink(
     employeeId: row.employee_id,
     requestId: row.request_id,
     equipmentId: row.equipment_id,
+    serviceCaseId: row.service_case_id,
     jobTitle: context?.jobTitle ?? null,
     jobNumber: context?.jobNumber ?? null,
     projectName: context?.projectName ?? null,
@@ -351,6 +359,8 @@ export function toDocumentLink(
     requestSummary: context?.requestSummary ?? null,
     equipmentNumber: context?.equipmentNumber ?? null,
     equipmentName: context?.equipmentName ?? null,
+    serviceCaseNumber: context?.serviceCaseNumber ?? null,
+    serviceCaseSummary: context?.serviceCaseSummary ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

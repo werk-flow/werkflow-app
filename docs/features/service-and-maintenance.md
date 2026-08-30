@@ -1,6 +1,6 @@
 # Service And Maintenance
 
-Status: living — last reviewed 2026-08-29
+Status: living — last reviewed 2026-08-30
 
 Service and maintenance covers recurring maintenance, reactive customer service, faults, inspections, emergency work, and the long-term history of installed customer equipment.
 
@@ -22,9 +22,11 @@ The feature should reduce forgotten maintenance, paper service folders, repeated
 
 ## Current Product Baseline
 
-WerkFlow now has the first dedicated service-owned foundation: P1-18 installed-equipment records. Büro/Admin manage site-bound roots and one bounded component level under `/service/anlagen`, including stable equipment numbers, typed identifiers, honest unknown technical facts, warranty and commissioning data, exact installation origins, existing-document links, work links, lifecycle state and immutable searchable history. Customer pages show only a compact site projection, while an assigned field worker receives only equipment explicitly linked to that assigned job.
+WerkFlow now has two dedicated service-owned foundations. P1-18 provides installed-equipment records. Büro/Admin manage site-bound roots and one bounded component level under `/service/anlagen`, including stable equipment numbers, typed identifiers, honest unknown technical facts, warranty and commissioning data, exact installation origins, existing-document links, work links, lifecycle state and immutable searchable history. Customer pages show only a compact site projection, while an assigned field worker receives only equipment explicitly linked to that assigned job.
 
-P1-18 does not yet provide service intake, dispatch, maintenance plans, contracts, recurrence, due work, commercial warranty decisions, inventory consumption, offline/mobile behavior, telemetry or manufacturer rule sets. Those remain with their named later slices.
+P1-19 adds reactive-service intake and triage under `/service/faelle`. Büro/Admin create a direct case or atomically qualify an existing request, preserve the original customer statement, select one customer site and exact installed equipment, record urgency, access guidance and a suspected charge context, relate duplicate or continuing cases, and connect one existing operational job. The job continues through the existing calendar, dispatch, field-work, artifact, document, follow-up and material owners. An assigned employee sees only the compact issue, urgency, access and equipment context for that exact assigned job; internal triage and suspected commercial context stay office-only.
+
+P1-19 does not provide maintenance plans, contracts, recurrence, due work, final commercial warranty decisions, inventory consumption, time segmentation, outbound messages, offline/mobile behavior, telemetry or manufacturer rule sets. Those remain with their named later slices.
 
 Relevant foundations already exist:
 
@@ -39,6 +41,7 @@ Relevant foundations already exist:
 - recurring, multi-day, and multi-visit calendar occurrences with explainable employee capacity and series exceptions (`P1-11`).
 - exact-version Bautagebuch, Arbeitsbericht, Aufmaß, Mangel and Regie-/Änderungsnachweise with review, customer-response, signature and evidence links (`P1-15`).
 - site-bound installed-equipment identity, components, identifiers, exact origins, document/work links and retained lifecycle history (`P1-18`).
+- request-based and direct reactive-service identity, exact owner links, immutable triage history and compact assigned-field projection (`P1-19`).
 
 These foundations should be reused. A future service feature should not create parallel customer, job, time, document, or inventory systems.
 

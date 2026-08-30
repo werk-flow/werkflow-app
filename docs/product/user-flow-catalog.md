@@ -673,3 +673,104 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-18-F48` — P1-18 führt weder Herstellerregelwerk, Rechts- oder Compliance-Behauptung, IoT/Telemetrie, Ferndiagnose, Kundenportal, externen Anbieter noch generische EAV-/CMDB-/Workflow-Plattform ein.
 
 **Acceptance invariant:** `48/48 mapped; 48/48 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-29).
+
+### `P1-19` — Reaktiver Service und vermutete Gewährleistung (2026-08-30)
+
+- `P1-19-F01` — Büro/Admin öffnen unter `/service/faelle` eine organisationsweite Liste reaktiver Servicefälle.
+- `P1-19-F02` — Die Liste lässt sich nach Fallnummer, Kurzbeschreibung, Kunde, Einsatzort, Auftragsnummer und exakt verknüpfter Anlage durchsuchen.
+- `P1-19-F03` — Büro/Admin erfassen einen direkten Servicefall ohne eine künstliche Anfrage anzulegen.
+- `P1-19-F04` — Ein direkter Servicefall bewahrt die ursprüngliche Kundenaussage unveränderlich.
+- `P1-19-F05` — Eine vorhandene Kundenanfrage kann genau einmal atomar in einen Servicefall übernommen werden.
+- `P1-19-F06` — Die Anfrage bleibt mit ihrer eigenen Identität und ihrem Verlauf erhalten und wird nicht in den Servicefall kopiert oder gelöscht.
+- `P1-19-F07` — Die Übernahme bewahrt ursprüngliche Zusammenfassung, Details, Dringlichkeit, Kunde, Ansprechpartner und Einsatzort.
+- `P1-19-F08` — Eine bereits übernommene Anfrage kann keinen zweiten Servicefall erzeugen.
+- `P1-19-F09` — Eine Anfrage ohne eindeutigen Kunden und Einsatzort wird nicht still qualifiziert.
+- `P1-19-F10` — Jeder Servicefall erhält eine organisationsweit eindeutige, stabile Nummer im Format `SRV-YYYY-NNN`.
+- `P1-19-F11` — Der Servicefall besitzt genau die Aufnahmeart „Anfrage“ oder „Direkt“; beide Wege behalten ihre unterschiedliche Herkunft.
+- `P1-19-F12` — Das bloße Öffnen, Suchen, Filtern oder Nachladen erzeugt keinen Servicefall und verändert keine Anfrage.
+- `P1-19-F13` — Ein Servicefall gehört genau zu einem vorhandenen Kunden und einem vorhandenen Einsatzort dieses Kunden.
+- `P1-19-F14` — Ein optionaler Ansprechpartner muss zu demselben Kunden gehören.
+- `P1-19-F15` — Mehrere vorhandene Anlagen dürfen nur verknüpft werden, wenn sie zu genau diesem Kunden und Einsatzort gehören.
+- `P1-19-F16` — Fehlende Anlagen bleiben sichtbar fehlend; WerkFlow errät kein Gerät aus Text, Auftrag, Dokument, Material oder Kundenhistorie.
+- `P1-19-F17` — Ein vorhandener Auftrag ist der einzige operative Arbeitsbezug eines Servicefalls.
+- `P1-19-F18` — Der verknüpfbare Auftrag muss zu demselben Kunden und Einsatzort gehören.
+- `P1-19-F19` — Kunde, Einsatzort, Ansprechpartner, Anlage und Auftrag behalten ihre bestehenden Identitäten; der Servicefall legt keine Kopien an.
+- `P1-19-F20` — Eine Anlagenverknüpfung verändert weder Anlagenstatus noch Anlagenidentität, Kennungen oder Lebenszyklus.
+- `P1-19-F21` — Eine Auftragsverknüpfung verändert weder Auftragstitel noch Lebenszyklus, Zuweisung, Planung oder Disposition.
+- `P1-19-F22` — Anfrage-, Kunden-, Anlagen-, Auftrags- und Dokumenthistorien bleiben bei ihren jeweiligen Eigentümern.
+- `P1-19-F23` — Jede Verknüpfung wird bei der Schreibaktion erneut auf Organisation und fachliche Konsistenz geprüft.
+- `P1-19-F24` — Schwache Nähe über Kunde, Projekt, Einsatzort oder Anlagenwurzel reicht niemals für eine zusätzliche Verknüpfung oder Berechtigung.
+- `P1-19-F25` — Büro/Admin unterscheiden „Neu“, „Rückfrage nötig“, „Einsatz erforderlich“, „Nacharbeit erforderlich“, „Erledigt“, „Ohne Einsatz geschlossen“ und „Duplikat“.
+- `P1-19-F26` — Die Dringlichkeit bleibt genau „Niedrig“, „Normal“, „Hoch“ oder „Notfall“ und wird bewusst festgelegt.
+- `P1-19-F27` — Ein Notfallwert löst keine automatische Nachricht, Eskalation, Rufbereitschaft oder Disposition aus.
+- `P1-19-F28` — Zugangshinweise werden als eigener operativer Feldkontext erfasst.
+- `P1-19-F29` — Interne Triagehinweise bleiben von den für den Einsatz nötigen Zugangshinweisen getrennt.
+- `P1-19-F30` — Der Abrechnungskontext bleibt „Unbekannt“, vermutete Gewährleistung, Vertrag, Kulanz, Nacharbeit oder voraussichtlich berechenbar.
+- `P1-19-F31` — Ein vermuteter Gewährleistungs-, Vertrags-, Kulanz- oder Nacharbeitsfall ist nur eine operative Einordnung.
+- `P1-19-F32` — P1-19 trifft keine rechtliche Gewährleistungs-, Vertragsdeckungs- oder endgültige Abrechnungsentscheidung.
+- `P1-19-F33` — „Erledigt“, „Ohne Einsatz geschlossen“ und „Duplikat“ verlangen einen sichtbaren Abschlussgrund.
+- `P1-19-F34` — „Einsatz beendet“ und „technisches Problem gelöst“ bleiben unterschiedliche Bedeutungen; Nacharbeit kann offen bleiben.
+- `P1-19-F35` — Eine Rückkehr zum Kunden wird über fortbestehenden Servicefall, Nachfassaktion und vorhandene Planung dargestellt statt durch eine still kopierte Arbeit.
+- `P1-19-F36` — Jede fachliche Änderung verlangt einen Grund und erzeugt eine unveränderliche Verlaufstatsache.
+- `P1-19-F37` — Büro/Admin verknüpfen zwei bestehende Fälle als „Duplikat von“, „Zugehörig“ oder „Fortsetzung von“.
+- `P1-19-F38` — Beide Fallidentitäten bleiben bei einer Beziehung erhalten; kein Fall wird still zusammengeführt oder gelöscht.
+- `P1-19-F39` — Ein Fall kann nicht mit sich selbst verknüpft werden.
+- `P1-19-F40` — Eine Duplikatbeziehung verlangt einen fachlichen Grund und einen vorhandenen anderen Fall.
+- `P1-19-F41` — Wiederkehrende Störungen können als Fortsetzung verknüpft werden, ohne frühere Aussagen oder Ergebnisse umzuschreiben.
+- `P1-19-F42` — Ein Servicefall kann mit einem vorhandenen, passenden Auftrag verbunden und wieder bewusst davon gelöst werden.
+- `P1-19-F43` — P1-19 erzeugt keinen zweiten Serviceauftrag, wenn ein passender Auftrag bereits existiert.
+- `P1-19-F44` — Ein Besuch wird als vorhandener Kalendertermin für den verknüpften Auftrag geplant.
+- `P1-19-F45` — Der Kalender bleibt Eigentümer von Zeitpunkt, Dauer, Zuordnung, Kapazität und Terminserien.
+- `P1-19-F46` — Die vorhandene P1-12-Disposition bleibt Eigentümer von Revision, Empfängern, Bereitschaft und Versandstatus.
+- `P1-19-F47` — Ein zugewiesener Mitarbeiter bestätigt oder hinterfragt den Einsatz über den vorhandenen Dispositionsablauf.
+- `P1-19-F48` — Servicefall, Auftrag, Kalendertermin und Disposition bleiben getrennte, exakt verknüpfte Identitäten.
+- `P1-19-F49` — Ein exakt dem Auftrag zugewiesener Mitarbeiter sieht im vorhandenen Einsatzpaket eine kompakte Servicezusammenfassung.
+- `P1-19-F50` — Das Einsatzpaket zeigt Fallnummer, gemeldetes Problem und Dringlichkeit.
+- `P1-19-F51` — Das Einsatzpaket zeigt die für den konkreten Besuch nötigen Zugangshinweise.
+- `P1-19-F52` — Das Einsatzpaket zeigt nur die exakt mit dem Fall verknüpften Anlagen dieses Kunden und Einsatzorts.
+- `P1-19-F53` — Anlagen werden mit ihrer bestehenden Nummer und Bezeichnung gezeigt, nicht als kopierter Servicetext.
+- `P1-19-F54` — Interne Triagehinweise bleiben aus dem Mitarbeiter-Einsatzpaket ausgeschlossen.
+- `P1-19-F55` — Vermutete Gewährleistung, Vertrag, Kulanz, Nacharbeit und Berechenbarkeit bleiben aus dem Mitarbeiter-Einsatzpaket ausgeschlossen.
+- `P1-19-F56` — Der Mitarbeiter erhält keine serviceweite Fallliste, Kundenakte oder kaufmännische Serviceansicht.
+- `P1-19-F57` — Kunden-, Einsatzort-, Projekt-, Anlagen- oder Komponentenbezug allein erweitert den Mitarbeiterzugriff nicht.
+- `P1-19-F58` — Wird die Auftragszuweisung entzogen, endet auch der daraus abgeleitete Feldzugriff.
+- `P1-19-F59` — Das Feldpaket verwendet weiterhin P1-14-Lebenszyklus, P1-15-Arbeitsnachweise, Dokumente, eigene Zeit und vorhandenes Material.
+- `P1-19-F60` — P1-19 führt keine zweite mobile Anwendung, keinen zweiten Auftragslebenszyklus und keine zweite Mitarbeiter-Disposition ein.
+- `P1-19-F61` — Ein Besuch wird mit einem vorhandenen P1-15-Arbeitsnachweis dokumentiert.
+- `P1-19-F62` — Der Servicefall verknüpft die genaue unveränderliche Arbeitsnachweis-Revision statt Titel, Text oder Ergebnis zu kopieren.
+- `P1-19-F63` — Nur Revisionen des exakt verknüpften Auftrags können als Servicebeleg gewählt werden.
+- `P1-19-F64` — Eine spätere Arbeitsnachweis-Revision biegt einen bestehenden Servicebeleg nicht still um.
+- `P1-19-F65` — Ein vorhandenes oder neu hochgeladenes Dokument wird über den Dokumenteigentümer exakt mit dem Servicefall verknüpft.
+- `P1-19-F66` — Dateibytes bleiben im privaten R2-Pfad und werden weder kopiert noch durch eine Server Action geleitet.
+- `P1-19-F67` — Dokumentmetadaten und Versionen bleiben beim Dokumenteigentümer; der Servicefall speichert nur den genauen Bezug.
+- `P1-19-F68` — Eine Dokumentverknüpfung erweitert den Mitarbeiterzugriff nicht über dessen vorhandenen Auftragskontext.
+- `P1-19-F69` — Büro/Admin legen eine P1-10-Nachfassaktion mit vorhandenem Manager-Eigentümer direkt aus dem Servicefall an.
+- `P1-19-F70` — Die Nachfassaktion behält den Servicefall als genaue Quelle und erscheint über die vorhandene Kundenbeziehungs- und Aufmerksamkeitslogik.
+- `P1-19-F71` — Serviceabschluss schließt eine offene Nachfassaktion nicht automatisch und erzeugt keine zweite Aufgabenlogik.
+- `P1-19-F72` — Arbeitsnachweise, Dokumente und Nachfassaktionen bleiben eigenständige Datensätze mit eigener Berechtigung und Historie.
+- `P1-19-F73` — Jede Servicefall-Mutation prüft die erwartete Version; ein veralteter Stand überschreibt keinen neueren Stand.
+- `P1-19-F74` — Zwei Büropersonen können denselben Fall öffnen; der erste gültige Schreibstand gewinnt und der zweite erhält eine konkrete Veraltet-Meldung.
+- `P1-19-F75` — Eine identische Anfrage-ID mit identischem Inhalt ist idempotent und erzeugt keine zweite Fall- oder Verlaufszeile.
+- `P1-19-F76` — Dieselbe Anfrage-ID mit abweichendem Inhalt wird ohne Teilmutation abgewiesen.
+- `P1-19-F77` — Erstellung, Anfrageübernahme, Aktualisierung, Beziehung und Belegverknüpfung schreiben Wurzel und unveränderlichen Verlauf atomar.
+- `P1-19-F78` — Der Verlauf bewahrt Akteur, Zeitpunkt, Grund, Anfrage-ID sowie Vorher- und Nachherstand.
+- `P1-19-F79` — Anfrageübernahme, Auftrags- und Anlagenbezug, Beziehung, Beleg und Dokument erscheinen als strukturierte verknüpfte Historie.
+- `P1-19-F80` — Die Historie ist weder ein zweiter Dokumentordner noch ein einziges unstrukturiertes Notizfeld.
+- `P1-19-F81` — Änderungen an der veränderlichen Servicefallwurzel aktualisieren eine zweite Managersitzung über den zentralen Realtime-Abgleich.
+- `P1-19-F82` — Ereignisse, Beziehungen und Belegzeilen bleiben unveröffentlicht; die Wurzel signalisiert das autoritative Nachladen.
+- `P1-19-F83` — Fokus- und Sichtbarkeitsrückkehr gleichen den letzten autoritativen Serverstand ab.
+- `P1-19-F84` — Ein später Aktualisierungsfehler darf keinen neuen Leerstand als Wahrheit darstellen; der letzte bekannte Stand bleibt als veraltet erkennbar.
+- `P1-19-F85` — Admin und Büro dürfen Servicefälle lesen, anlegen, triagieren und verknüpfen.
+- `P1-19-F86` — Mitarbeiter dürfen Servicefallwurzeln, Ereignisse, Beziehungen und Belege nicht direkt lesen oder verändern.
+- `P1-19-F87` — Mitglieder einer fremden Organisation sehen weder Falltext noch Fallnummer, Verlauf, Beziehung, Beleg oder Dokumentbezug.
+- `P1-19-F88` — Organisationsgrenzen werden in Tabellenrichtlinien und bei jeder serverseitigen Mutation erneut erzwungen.
+- `P1-19-F89` — Listen-, Detail-, Formular-, Beleg-, Beziehungs- und Nachfassaktionen sind auf Deutsch beschriftet und per Tastatur erreichbar.
+- `P1-19-F90` — Dialoge besitzen sichtbaren Fokus, verständliche Screenreader-Namen, klare Fehlertexte und ausreichend große primäre Bedienziele.
+- `P1-19-F91` — Das erste Laden und das Nachladen zeigen ehrliche Lade- oder Fehlerzustände statt einen erfundenen leeren Servicebestand.
+- `P1-19-F92` — P1-19 erzeugt weder Wartungsplan, Vertragsschutz, Wiederholung, Fälligkeit, nächste Wartung noch Verlängerungsrisiko.
+- `P1-19-F93` — P1-19 erzeugt weder Arbeits-, Reise-, Pausen-, Bereitschafts- oder Rufbereitschaftssegment und verändert keine Zeitbuchung.
+- `P1-19-F94` — Planung, Triage, Disposition, Abschluss und Dokumentation erzeugen weder Reservierung, Bestandsbewegung, Verbrauch, Lieferantenretoure noch Garantie-Rücksendung.
+- `P1-19-F95` — P1-19 erzeugt weder Preis, Angebot, Vertrag, Rechnung, Buchung, endgültige Abrechenbarkeit noch ausgehende Kundennachricht.
+- `P1-19-F96` — P1-19 führt weder Offline-Warteschlange, native mobile Hülle, externen Connector, Herstellerregelwerk, Telemetrie, Ferndiagnose, automatische Diagnose noch rechtliche Gewährleistungsklassifikation ein.
+
+**Acceptance invariant:** `96/96 mapped; 96/96 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-30).

@@ -80,6 +80,7 @@ type ContextualDocumentsSectionProps = {
   employeeId?: string;
   requestId?: string;
   equipmentId?: string;
+  serviceCaseId?: string;
   contextLabel?: string;
   canUpload: boolean;
   canManage: boolean;
@@ -110,6 +111,7 @@ function getContextLink(
     employeeId?: string;
     requestId?: string;
     equipmentId?: string;
+    serviceCaseId?: string;
   },
 ) {
   return document.links.find((link) => {
@@ -119,6 +121,8 @@ function getContextLink(
     if (context.employeeId) return link.employeeId === context.employeeId;
     if (context.requestId) return link.requestId === context.requestId;
     if (context.equipmentId) return link.equipmentId === context.equipmentId;
+    if (context.serviceCaseId)
+      return link.serviceCaseId === context.serviceCaseId;
     return false;
   });
 }
@@ -140,6 +144,7 @@ function getUnlinkLabel(context: {
   employeeId?: string;
   requestId?: string;
   equipmentId?: string;
+  serviceCaseId?: string;
 }): string {
   if (context.jobId) return "Verknüpfung zu diesem Auftrag entfernen";
   if (context.projectId) return "Verknüpfung zu diesem Projekt entfernen";
@@ -147,6 +152,8 @@ function getUnlinkLabel(context: {
   if (context.employeeId) return "Verknüpfung zu diesem Mitarbeiter entfernen";
   if (context.requestId) return "Verknüpfung zu dieser Anfrage entfernen";
   if (context.equipmentId) return "Verknüpfung zu dieser Anlage entfernen";
+  if (context.serviceCaseId)
+    return "Verknüpfung zu diesem Servicefall entfernen";
   return "Verknüpfung entfernen";
 }
 
@@ -161,6 +168,7 @@ type DocumentRowProps = {
     employeeId?: string;
     requestId?: string;
     equipmentId?: string;
+    serviceCaseId?: string;
   };
   indented?: boolean;
   onOpen: (document: OrganizationDocument) => void;
@@ -274,6 +282,7 @@ export function ContextualDocumentsSection({
   employeeId,
   requestId,
   equipmentId,
+  serviceCaseId,
   contextLabel,
   canUpload,
   canManage,
@@ -321,6 +330,7 @@ export function ContextualDocumentsSection({
     employeeId,
     requestId,
     equipmentId,
+    serviceCaseId,
   };
   const displayedDocuments = keepUploadedDocumentsVisible
     ? [
@@ -543,7 +553,7 @@ export function ContextualDocumentsSection({
         {canUpload && (
           <div className="flex shrink-0 flex-wrap gap-2">
             {canManage &&
-              (jobId || projectId || clientId || employeeId || equipmentId) && (
+              (jobId || projectId || clientId || employeeId || equipmentId || serviceCaseId) && (
                 <Button
                   type="button"
                   size="sm"
@@ -611,6 +621,7 @@ export function ContextualDocumentsSection({
           employeeId,
           requestId,
           equipmentId,
+          serviceCaseId,
         }}
         onComplete={(failedCount, uploadedDocuments) => {
           if (failedCount > 0) {
@@ -747,7 +758,7 @@ export function ContextualDocumentsSection({
       </AlertDialog>
 
       {canManage &&
-        (jobId || projectId || clientId || employeeId || equipmentId) && (
+        (jobId || projectId || clientId || employeeId || equipmentId || serviceCaseId) && (
           <AttachDocumentDialog
             open={attachDialogOpen}
             onOpenChange={setAttachDialogOpen}
@@ -760,10 +771,12 @@ export function ContextualDocumentsSection({
                     ? "client"
                     : employeeId
                       ? "employee"
-                      : "equipment"
+                      : equipmentId
+                        ? "equipment"
+                        : "service_case"
             }
             targetId={
-              jobId ?? projectId ?? clientId ?? employeeId ?? equipmentId!
+              jobId ?? projectId ?? clientId ?? employeeId ?? equipmentId ?? serviceCaseId!
             }
             targetLabel={contextLabel}
             onAttached={(variant, message) => {

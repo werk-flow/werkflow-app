@@ -35,6 +35,7 @@ export const REALTIME_TABLES = [
   "client_communication_settings",
   "client_communication_preferences",
   "installed_equipment",
+  "service_cases",
   "jobs",
   "projects",
   "job_assignments",

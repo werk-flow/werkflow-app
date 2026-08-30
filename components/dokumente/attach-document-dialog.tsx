@@ -24,10 +24,19 @@ import { useServerAction } from "@/hooks/use-server-action";
 type AttachDocumentDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  targetType: "job" | "project" | "client" | "employee" | "equipment";
+  targetType: "job" | "project" | "client" | "employee" | "equipment" | "service_case";
   targetId: string;
   targetLabel?: string;
   onAttached: (variant: "success" | "error", message: string) => void;
+};
+
+const TARGET_TYPE_LABELS: Record<AttachDocumentDialogProps["targetType"], string> = {
+  job: "Auftrag",
+  project: "Projekt",
+  client: "Kunde",
+  employee: "Mitarbeiter",
+  equipment: "Anlage",
+  service_case: "Servicefall",
 };
 
 function formatFileSize(sizeBytes: number): string {
@@ -110,6 +119,7 @@ export function AttachDocumentDialog({
         clientId: targetType === "client" ? targetId : undefined,
         employeeId: targetType === "employee" ? targetId : undefined,
         equipmentId: targetType === "equipment" ? targetId : undefined,
+        serviceCaseId: targetType === "service_case" ? targetId : undefined,
       });
 
       if (result.success) {
@@ -136,14 +146,7 @@ export function AttachDocumentDialog({
     })();
   }
 
-  const targetTypeLabel =
-    targetType === "job"
-      ? "Auftrag"
-      : targetType === "project"
-        ? "Projekt"
-        : targetType === "client"
-          ? "Kunde"
-          : "Mitarbeiter";
+  const targetTypeLabel = TARGET_TYPE_LABELS[targetType];
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>

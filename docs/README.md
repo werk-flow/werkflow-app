@@ -44,7 +44,7 @@ Read the primary spec of the feature you are changing, plus only the connected s
 | [time-tracking.md](features/time-tracking.md)                                   | Zeiterfassung, clock events, breaks, targets, approvals, corrections.                                      |
 | [document-management.md](features/document-management.md)                       | Dokumente, folders, R2 storage, versioning, trash, audit.                                                  |
 | [inventory.md](features/inventory.md)                                           | Lager/Inventar, catalog, locations, stock movements, job material.                                         |
-| [service-and-maintenance.md](features/service-and-maintenance.md)               | Future service module: installed equipment, reactive service, maintenance plans (nothing implemented yet). |
+| [service-and-maintenance.md](features/service-and-maintenance.md)               | Current installed-equipment and reactive-service foundations, plus planned maintenance and contract scope. |
 | [commercial-and-finance.md](features/commercial-and-finance.md)                 | Future commercial loop: offers, invoices, payments, accounting handoffs (nothing implemented yet).         |
 | [ai-automations.md](features/ai-automations.md)                                 | Phase 2 AI direction and the Phase 1 enabling foundations.                                                 |
 
@@ -87,6 +87,7 @@ Phase 1 execution lives in `phase-1/`, split by change rate:
 | [p1-17-office-handover.md](plans/phase-1/slices/p1-17-office-handover.md)                                            | Closed — accepted P1-17 exact-version package, review, handover, readiness, reopening and GG-04 record.                                                            |
 | [p1-18-installed-equipment.md](plans/phase-1/slices/p1-18-installed-equipment.md)                                    | Closed — accepted P1-18 installed-equipment identity, lifecycle, authorization and acceptance record.                                                              |
 | [p1-18-installed-equipment-implementation-plan.md](plans/p1-18-installed-equipment-implementation-plan.md)           | Complete — P1-18 execution order for schema, app, rollout, review and acceptance.                                                                                  |
+| [p1-19-reactive-service.md](plans/phase-1/slices/p1-19-reactive-service.md)                                          | Closed — accepted P1-19 reactive-service identity, triage, owner reuse, authorization, rollout and acceptance record.                                               |
 
 ### Decision records (`docs/decisions/`)
 

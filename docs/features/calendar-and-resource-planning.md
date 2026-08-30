@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-08-25
+Status: living — last reviewed 2026-08-30
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations, and materials needed to deliver it.
 
@@ -49,6 +49,7 @@ The current `/kalender` implementation already includes:
 - since `P1-13`, manager work-creation dialogs and request conversion offer an optional matching published work template. Template application never creates or changes `planning_series`, `planning_occurrences`, assignments, dispatches, customer commitments or actual time. Template material is demand labeled „nicht reserviert“; since P1-14 structural task prerequisites participate in start/completion checks through the existing instruction primitive.
 - since `P1-14`, job detail reuses the exact P1-12 readiness composer and exposes planned, readiness and execution as separate facts. The first successful job-linked clock-in or break-end atomically starts/resumes execution; schedule and dispatch mutations never do. Calendar projections carry the execution version needed for safe parking without storing another schedule.
 - since `P1-16`, the assigned-worker work pack projects the current planned window, dispatch acknowledgement/challenge and the same readiness dimensions around one next action. Opening or executing the pack never moves an occurrence, rewrites actual time, acknowledges dispatch automatically or changes a customer commitment; calendar and dispatch remain the authoritative planning sources.
+- since `P1-19`, reactive service reuses the normal job visit and dispatch path after a manager links the case to one existing job. The service case does not own a second appointment, assignment or dispatch state, and service-case updates never move the plan.
 
 This is an operational scheduling foundation with recurring people-capacity planning and first-class dispatch, acknowledgement, parked-work context, and customer-commitment distinction. It is not yet the complete route/provider, tool/vehicle/material-reservation, external-calendar, or maintenance-contract product described below.
 

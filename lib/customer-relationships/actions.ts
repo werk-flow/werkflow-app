@@ -930,6 +930,25 @@ async function loadSingleFollowUpSource(
         : null,
     };
   }
+  if (sourceType === 'service_case') {
+    const result = await context.admin
+      .from('service_cases')
+      .select('case_number,summary')
+      .eq('id', sourceId)
+      .eq('client_id', clientId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle();
+    if (result.error) return { success: false, error: 'source_load_failed' };
+    return {
+      success: true,
+      source: result.data
+        ? {
+            label: `${result.data.case_number} · ${result.data.summary}`,
+            href: `/service/faelle/${encodeURIComponent(result.data.case_number)}`,
+          }
+        : null,
+    };
+  }
   const result = await context.admin
     .from('projects')
     .select('project_number,name')

@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-08-30
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
@@ -56,6 +56,7 @@ The implemented V1 is a useful native WerkFlow foundation, not the complete oper
 - Since P1-13, organization work templates can prepare material demand with quantity, preferred location, billability and notes. Application creates ordinary `job_material_lines` on the Auftrag or Projekt with template provenance; every quantity begins planned with taken/returned at zero. It never creates a stock movement or reservation. Managers edit the resulting line through the existing `Material & Inventar` surface; P1-26 still owns reservation.
 - P1-14 reads planned demand and shortfall through the shared readiness projection, labels planned material „nicht reserviert“ and records only that assessment in transition snapshots. Execution, blocker, dependency, parking, completion and handover mutations never create, reserve, consume, return or repair stock.
 - P1-17 can freeze a bounded customer-safe material summary and its source fingerprint in an office-handover release. The summary does not reinterpret planned/taken/returned quantities as reservation, consumption, installation, billability or valuation; releasing, withdrawing or reopening a package creates no inventory movement or procurement fact.
+- P1-19 shows the linked job's existing planned, taken and returned material facts in the reactive-service context. It creates no service-owned material ledger and does not reinterpret those quantities as consumption, warranty return, billability or cost.
 - A billable default and billable-quantity infrastructure exist, but no structured offer or invoice module consumes them yet.
 
 ### Tools, Assets, And Missing Operational Depth

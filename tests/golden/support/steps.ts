@@ -435,13 +435,14 @@ export async function uploadIntoDocumentsSection(
   filePath: string,
   expectedFileName: string,
 ): Promise<void> {
-  await expect(page.getByText("Dokumente & Bilder")).toBeVisible({
+  const documentsHeading = visibleText(page, "Dokumente & Bilder");
+  await expect(documentsHeading).toBeVisible({
     timeout: 30_000,
   });
 
   const section = page
     .locator("section, div")
-    .filter({ has: page.getByText("Dokumente & Bilder") });
+    .filter({ has: documentsHeading });
   await section.locator('input[type="file"]').first().setInputFiles(filePath);
 
   // Direct-to-R2 upload dialog: the dialog closes itself 650 ms after a fully
@@ -1020,9 +1021,19 @@ export async function openCustomerDetail(
     .filter({ hasText: customerName })
     .first();
   await expect(customerRow).toBeVisible({ timeout: 15_000 });
-  await customerRow
-    .getByRole("link", { name: customerName, exact: true })
-    .click();
+  const customerLink = customerRow.getByRole("link", {
+    name: customerName,
+    exact: true,
+  });
+  const customerHref = await customerLink.getAttribute("href");
+  if (!customerHref?.match(/^\/kunden\/[0-9a-f-]{36}$/)) {
+    throw new Error(
+      `openCustomerDetail: invalid customer detail link for ${customerName}`,
+    );
+  }
+  // The customer list can refresh between pointer-down and navigation. Use
+  // the verified semantic link target for one deterministic read-only goto.
+  await page.goto(customerHref);
   await page.waitForURL(/\/kunden\/[0-9a-f-]{36}$/, { timeout: 15_000 });
   await expect(visibleText(page, "Kundendetails")).toBeVisible({
     timeout: 15_000,
@@ -1416,7 +1427,12 @@ export async function createRequestViaDialog(
 
   await page.locator("#request-summary").fill(options.summary);
   if (options.requestNumber !== undefined) {
-    await page.locator("#request-number").fill(options.requestNumber);
+    const requestNumberInput = page.locator("#request-number");
+    // The generated suggestion arrives asynchronously. Let it settle before
+    // replacing it so Playwright cannot interleave both controlled updates.
+    await expect(requestNumberInput).toHaveValue(/.+/, { timeout: 15_000 });
+    await requestNumberInput.fill(options.requestNumber);
+    await expect(requestNumberInput).toHaveValue(options.requestNumber);
   }
 
   if (options.categoryLabel) {
@@ -4333,4 +4349,147 @@ export async function correctInstalledEquipmentTerminalAction(
   await dialog.getByRole("button", { name: "Korrektur festhalten" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
   await expect(visibleText(page, "Abschlussaktion korrigiert")).toBeVisible();
+}
+
+// P1-19: reactive service cases and exact links to existing work owners.
+
+async function selectRadixOption(
+  page: Page,
+  trigger: Locator,
+  optionName: string | RegExp,
+): Promise<void> {
+  await trigger.click();
+  const option = page.getByRole("option", {
+    name: optionName,
+    exact: typeof optionName === "string",
+  });
+  await expect(option).toBeVisible({ timeout: 15_000 });
+  await option.click();
+}
+
+export async function createDirectServiceCase(
+  page: Page,
+  options: {
+    customerName: string;
+    siteName: string;
+    statement: string;
+    summary: string;
+    urgencyLabel?: string;
+    chargeContextLabel?: string;
+    accessInstructions?: string;
+    triageNote?: string;
+    equipmentName?: string;
+  },
+): Promise<string> {
+  await page.goto("/service/faelle");
+  await page.getByRole("button", { name: "Servicefall erfassen" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Servicefall erfassen" }),
+  ).toBeVisible();
+  await selectRadixOption(page, dialog.locator("#service-client"), options.customerName);
+  await selectRadixOption(page, dialog.locator("#service-site"), options.siteName);
+  await dialog.locator("#service-statement").fill(options.statement);
+  await dialog.locator("#service-summary").fill(options.summary);
+  if (options.urgencyLabel) {
+    await selectRadixOption(page, dialog.locator("#service-urgency"), options.urgencyLabel);
+  }
+  if (options.chargeContextLabel) {
+    await selectRadixOption(page, dialog.locator("#service-charge"), options.chargeContextLabel);
+  }
+  if (options.accessInstructions) {
+    await dialog.locator("#service-access").fill(options.accessInstructions);
+  }
+  if (options.triageNote) {
+    await dialog.locator("#service-triage").fill(options.triageNote);
+  }
+  if (options.equipmentName) {
+    const equipmentCheckbox = dialog
+      .getByRole("checkbox", {
+        name: new RegExp(escapeRegExp(options.equipmentName)),
+      })
+      .first();
+    await expect(equipmentCheckbox).toBeVisible({ timeout: 15_000 });
+    if (!(await equipmentCheckbox.isChecked())) await equipmentCheckbox.click();
+    await expect(equipmentCheckbox).toBeChecked();
+  }
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
+    timeout: 20_000,
+  });
+  const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
+  if (!match) throw new Error("createDirectServiceCase: service case number missing");
+  await expect(visibleText(page, options.statement)).toBeVisible({ timeout: 15_000 });
+  return match[1];
+}
+
+export async function convertRequestToServiceCase(page: Page): Promise<string> {
+  await page.getByRole("button", { name: "Als Servicefall übernehmen" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Anfrage als Servicefall übernehmen?" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Übernehmen", exact: true }).click();
+  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
+    timeout: 20_000,
+  });
+  const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
+  if (!match) throw new Error("convertRequestToServiceCase: service case number missing");
+  return match[1];
+}
+
+export async function updateServiceCaseViaDialog(
+  page: Page,
+  options: {
+    summary?: string;
+    statusLabel?: string;
+    urgencyLabel?: string;
+    chargeContextLabel?: string;
+    jobNumber?: string;
+    accessInstructions?: string;
+    triageNote?: string;
+    resolutionNote?: string;
+    equipmentName?: string;
+    reason: string;
+  },
+): Promise<void> {
+  await page.getByRole("button", { name: "Bearbeiten" }).click();
+  const dialog = page.getByRole("dialog");
+  if (options.summary !== undefined) {
+    await dialog.locator("#service-summary").fill(options.summary);
+  }
+  if (options.statusLabel) {
+    await selectRadixOption(page, dialog.locator("#service-status"), options.statusLabel);
+  }
+  if (options.urgencyLabel) {
+    await selectRadixOption(page, dialog.locator("#service-urgency"), options.urgencyLabel);
+  }
+  if (options.chargeContextLabel) {
+    await selectRadixOption(page, dialog.locator("#service-charge"), options.chargeContextLabel);
+  }
+  if (options.jobNumber) {
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-job"),
+      new RegExp(`^${escapeRegExp(options.jobNumber)} · `),
+    );
+  }
+  if (options.accessInstructions !== undefined) {
+    await dialog.locator("#service-access").fill(options.accessInstructions);
+  }
+  if (options.triageNote !== undefined) {
+    await dialog.locator("#service-triage").fill(options.triageNote);
+  }
+  if (options.resolutionNote !== undefined) {
+    await dialog.locator("#service-resolution").fill(options.resolutionNote);
+  }
+  if (options.equipmentName) {
+    const checkbox = dialog.getByRole("checkbox", {
+      name: new RegExp(options.equipmentName),
+    });
+    if (!(await checkbox.isChecked())) await checkbox.click();
+  }
+  await dialog.locator("#service-reason").fill(options.reason);
+  await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 }

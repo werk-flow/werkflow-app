@@ -42,6 +42,7 @@ import { QualifikationenPageSkeleton } from "@/components/loading-states/qualifi
 import { EinstellungenPageSkeleton } from "@/components/loading-states/einstellungen-page-skeleton";
 import { WorkTemplatesPageSkeleton } from "@/components/loading-states/work-templates-page-skeleton";
 import { EquipmentPageSkeleton } from "@/components/loading-states/equipment-page-skeleton";
+import { ServiceCasesPageSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
 import { SidebarProfileCard } from "@/components/sidebar/sidebar-profile-card";
 import {
   AttentionCountProvider,
@@ -120,7 +121,7 @@ const navItems: NavItem[] = [
     managerOrAbove: true,
   },
   {
-    href: "/service/anlagen",
+    href: "/service/faelle",
     label: "Service",
     icon: Wrench,
     managerOrAbove: true,
@@ -480,6 +481,9 @@ function OrgSwitchOverlay() {
     if (pathname.startsWith("/kunden")) return <KundenPageSkeleton />;
     if (pathname.startsWith("/auftraege")) return <AuftraegePageSkeleton />;
     if (pathname.startsWith("/dokumente")) return <DokumentePageSkeleton />;
+    if (pathname.startsWith("/service/faelle")) {
+      return <ServiceCasesPageSkeleton />;
+    }
     if (pathname.startsWith("/service")) return <EquipmentPageSkeleton />;
     if (pathname.startsWith("/anfragen")) return <AnfragenPageSkeleton />;
     if (pathname.startsWith("/qualifikationen")) {

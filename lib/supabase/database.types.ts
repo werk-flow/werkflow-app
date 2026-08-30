@@ -585,7 +585,8 @@ export type Database = {
           closed_by: string | null;
           closed_note: string | null;
           closed_reason:
-            Database["public"]["Enums"]["request_close_reason"] | null;
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
           contact_id: string | null;
           converted_at: string | null;
           converted_by: string | null;
@@ -617,7 +618,8 @@ export type Database = {
           closed_by?: string | null;
           closed_note?: string | null;
           closed_reason?:
-            Database["public"]["Enums"]["request_close_reason"] | null;
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
           contact_id?: string | null;
           converted_at?: string | null;
           converted_by?: string | null;
@@ -649,7 +651,8 @@ export type Database = {
           closed_by?: string | null;
           closed_note?: string | null;
           closed_reason?:
-            Database["public"]["Enums"]["request_close_reason"] | null;
+            | Database["public"]["Enums"]["request_close_reason"]
+            | null;
           contact_id?: string | null;
           converted_at?: string | null;
           converted_by?: string | null;
@@ -1005,6 +1008,7 @@ export type Database = {
           organization_id: string;
           project_id: string | null;
           request_id: string | null;
+          service_case_id: string | null;
         };
         Insert: {
           client_id?: string | null;
@@ -1018,6 +1022,7 @@ export type Database = {
           organization_id: string;
           project_id?: string | null;
           request_id?: string | null;
+          service_case_id?: string | null;
         };
         Update: {
           client_id?: string | null;
@@ -1031,6 +1036,7 @@ export type Database = {
           organization_id?: string;
           project_id?: string | null;
           request_id?: string | null;
+          service_case_id?: string | null;
         };
         Relationships: [
           {
@@ -1094,6 +1100,13 @@ export type Database = {
             columns: ["request_id"];
             isOneToOne: false;
             referencedRelation: "client_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_links_service_case_id_fkey";
+            columns: ["service_case_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
             referencedColumns: ["id"];
           },
         ];
@@ -1701,7 +1714,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -1736,7 +1750,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes?: string | null;
           updated_at?: string;
           updated_by: string;
@@ -1771,7 +1786,8 @@ export type Database = {
           site_id?: string;
           state?: Database["public"]["Enums"]["installed_equipment_state"];
           subtype?:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes?: string | null;
           updated_at?: string;
           updated_by?: string;
@@ -1944,7 +1960,8 @@ export type Database = {
           equipment_id: string;
           event_type: Database["public"]["Enums"]["installed_equipment_event_type"];
           from_state:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
           id: string;
           idempotency_key: string;
           organization_id: string;
@@ -1953,7 +1970,8 @@ export type Database = {
           request_operation: string;
           site_snapshot: Json;
           to_state:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
         };
         Insert: {
           actor_id: string;
@@ -1964,7 +1982,8 @@ export type Database = {
           equipment_id: string;
           event_type: Database["public"]["Enums"]["installed_equipment_event_type"];
           from_state?:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
           id?: string;
           idempotency_key: string;
           organization_id: string;
@@ -1973,7 +1992,8 @@ export type Database = {
           request_operation: string;
           site_snapshot: Json;
           to_state?:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
         };
         Update: {
           actor_id?: string;
@@ -1984,7 +2004,8 @@ export type Database = {
           equipment_id?: string;
           event_type?: Database["public"]["Enums"]["installed_equipment_event_type"];
           from_state?:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
           id?: string;
           idempotency_key?: string;
           organization_id?: string;
@@ -1993,7 +2014,8 @@ export type Database = {
           request_operation?: string;
           site_snapshot?: Json;
           to_state?:
-            Database["public"]["Enums"]["installed_equipment_state"] | null;
+            | Database["public"]["Enums"]["installed_equipment_state"]
+            | null;
         };
         Relationships: [
           {
@@ -3569,7 +3591,8 @@ export type Database = {
           description: string | null;
           estimated_duration_minutes: number | null;
           execution_state:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version: number;
           id: string;
           job_number: string | null;
@@ -3594,7 +3617,8 @@ export type Database = {
           description?: string | null;
           estimated_duration_minutes?: number | null;
           execution_state?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version?: number;
           id?: string;
           job_number?: string | null;
@@ -3619,7 +3643,8 @@ export type Database = {
           description?: string | null;
           estimated_duration_minutes?: number | null;
           execution_state?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version?: number;
           id?: string;
           job_number?: string | null;
@@ -4911,7 +4936,8 @@ export type Database = {
           entry_kind: Database["public"]["Enums"]["planning_entry_kind"];
           id: string;
           internal_type:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           is_exception: boolean;
           job_id: string | null;
           legacy_source_job_id: string | null;
@@ -4941,7 +4967,8 @@ export type Database = {
           entry_kind: Database["public"]["Enums"]["planning_entry_kind"];
           id?: string;
           internal_type?:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           is_exception?: boolean;
           job_id?: string | null;
           legacy_source_job_id?: string | null;
@@ -4971,7 +4998,8 @@ export type Database = {
           entry_kind?: Database["public"]["Enums"]["planning_entry_kind"];
           id?: string;
           internal_type?:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           is_exception?: boolean;
           job_id?: string | null;
           legacy_source_job_id?: string | null;
@@ -5033,7 +5061,8 @@ export type Database = {
           generated_through_local: string | null;
           id: string;
           internal_type:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           job_id: string | null;
           lineage_id: string;
           location: string | null;
@@ -5065,7 +5094,8 @@ export type Database = {
           generated_through_local?: string | null;
           id?: string;
           internal_type?:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           job_id?: string | null;
           lineage_id?: string;
           location?: string | null;
@@ -5097,7 +5127,8 @@ export type Database = {
           generated_through_local?: string | null;
           id?: string;
           internal_type?:
-            Database["public"]["Enums"]["planning_internal_type"] | null;
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
           job_id?: string | null;
           lineage_id?: string;
           location?: string | null;
@@ -5181,7 +5212,8 @@ export type Database = {
           description: string | null;
           execution_override_reason: string | null;
           execution_state_override:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version: number;
           id: string;
           name: string;
@@ -5201,7 +5233,8 @@ export type Database = {
           description?: string | null;
           execution_override_reason?: string | null;
           execution_state_override?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version?: number;
           id?: string;
           name: string;
@@ -5211,7 +5244,8 @@ export type Database = {
           project_number?: string | null;
           site_id?: string | null;
           status_override?:
-            Database["public"]["Enums"]["project_status"] | null;
+            | Database["public"]["Enums"]["project_status"]
+            | null;
           updated_at?: string;
         };
         Update: {
@@ -5222,7 +5256,8 @@ export type Database = {
           description?: string | null;
           execution_override_reason?: string | null;
           execution_state_override?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           execution_version?: number;
           id?: string;
           name?: string;
@@ -5232,7 +5267,8 @@ export type Database = {
           project_number?: string | null;
           site_id?: string | null;
           status_override?:
-            Database["public"]["Enums"]["project_status"] | null;
+            | Database["public"]["Enums"]["project_status"]
+            | null;
           updated_at?: string;
         };
         Relationships: [
@@ -5314,6 +5350,347 @@ export type Database = {
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      service_case_equipment_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          equipment_id: string;
+          id: string;
+          organization_id: string;
+          service_case_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          equipment_id: string;
+          id?: string;
+          organization_id: string;
+          service_case_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          equipment_id?: string;
+          id?: string;
+          organization_id?: string;
+          service_case_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_case_equipment_links_equipment_id_organization_id_fkey";
+            columns: ["equipment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "installed_equipment";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "service_case_equipment_links_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_case_equipment_links_service_case_id_organization__fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      service_case_events: {
+        Row: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          event_type: Database["public"]["Enums"]["service_case_event_type"];
+          id: string;
+          idempotency_key: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          request_payload: Json;
+          service_case_id: string;
+        };
+        Insert: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot?: Json | null;
+          event_type: Database["public"]["Enums"]["service_case_event_type"];
+          id?: string;
+          idempotency_key: string;
+          organization_id: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation: string;
+          request_payload: Json;
+          service_case_id: string;
+        };
+        Update: {
+          actor_id?: string;
+          after_snapshot?: Json;
+          before_snapshot?: Json | null;
+          event_type?: Database["public"]["Enums"]["service_case_event_type"];
+          id?: string;
+          idempotency_key?: string;
+          organization_id?: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation?: string;
+          request_payload?: Json;
+          service_case_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_case_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_case_events_service_case_id_organization_id_fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      service_case_evidence_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          organization_id: string;
+          service_case_id: string;
+          work_artifact_revision_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          organization_id: string;
+          service_case_id: string;
+          work_artifact_revision_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          organization_id?: string;
+          service_case_id?: string;
+          work_artifact_revision_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_case_evidence_links_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_case_evidence_links_service_case_id_organization_i_fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "service_case_evidence_links_work_artifact_revision_id_orga_fkey";
+            columns: ["work_artifact_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifact_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      service_case_relations: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          organization_id: string;
+          reason: string;
+          related_service_case_id: string;
+          relation_type: Database["public"]["Enums"]["service_case_relation_type"];
+          service_case_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          organization_id: string;
+          reason: string;
+          related_service_case_id: string;
+          relation_type: Database["public"]["Enums"]["service_case_relation_type"];
+          service_case_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          organization_id?: string;
+          reason?: string;
+          related_service_case_id?: string;
+          relation_type?: Database["public"]["Enums"]["service_case_relation_type"];
+          service_case_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_case_relations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_case_relations_related_service_case_id_organizatio_fkey";
+            columns: ["related_service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "service_case_relations_service_case_id_organization_id_fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      service_cases: {
+        Row: {
+          access_instructions: string | null;
+          case_number: string;
+          charge_context: Database["public"]["Enums"]["service_case_charge_context"];
+          client_id: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          id: string;
+          intake_type: Database["public"]["Enums"]["service_case_intake_type"];
+          job_id: string | null;
+          organization_id: string;
+          original_details: string | null;
+          original_statement: string;
+          resolution_note: string | null;
+          site_id: string;
+          source_request_id: string | null;
+          status: Database["public"]["Enums"]["service_case_status"];
+          summary: string;
+          triage_note: string | null;
+          updated_at: string;
+          updated_by: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+          version: number;
+        };
+        Insert: {
+          access_instructions?: string | null;
+          case_number: string;
+          charge_context?: Database["public"]["Enums"]["service_case_charge_context"];
+          client_id: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          id: string;
+          intake_type: Database["public"]["Enums"]["service_case_intake_type"];
+          job_id?: string | null;
+          organization_id: string;
+          original_details?: string | null;
+          original_statement: string;
+          resolution_note?: string | null;
+          site_id: string;
+          source_request_id?: string | null;
+          status?: Database["public"]["Enums"]["service_case_status"];
+          summary: string;
+          triage_note?: string | null;
+          updated_at?: string;
+          updated_by: string;
+          urgency?: Database["public"]["Enums"]["request_urgency"];
+          version?: number;
+        };
+        Update: {
+          access_instructions?: string | null;
+          case_number?: string;
+          charge_context?: Database["public"]["Enums"]["service_case_charge_context"];
+          client_id?: string;
+          contact_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          intake_type?: Database["public"]["Enums"]["service_case_intake_type"];
+          job_id?: string | null;
+          organization_id?: string;
+          original_details?: string | null;
+          original_statement?: string;
+          resolution_note?: string | null;
+          site_id?: string;
+          source_request_id?: string | null;
+          status?: Database["public"]["Enums"]["service_case_status"];
+          summary?: string;
+          triage_note?: string | null;
+          updated_at?: string;
+          updated_by?: string;
+          urgency?: Database["public"]["Enums"]["request_urgency"];
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "service_cases_client_id_fkey";
+            columns: ["client_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_cases_contact_id_fkey";
+            columns: ["contact_id"];
+            isOneToOne: false;
+            referencedRelation: "client_contacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_cases_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_cases_job_id_organization_id_fkey";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "service_cases_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_cases_site_id_fkey";
+            columns: ["site_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "service_cases_source_request_id_fkey";
+            columns: ["source_request_id"];
+            isOneToOne: false;
+            referencedRelation: "client_requests";
             referencedColumns: ["id"];
           },
         ];
@@ -6607,14 +6984,16 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           declared_kind:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id: string | null;
           dependent_project_id: string | null;
           description: string | null;
           effect: Database["public"]["Enums"]["work_dependency_effect"];
           id: string;
           manual_state:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id: string;
           predecessor_instruction_item_id: string | null;
           predecessor_job_id: string | null;
@@ -6630,14 +7009,16 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           declared_kind?:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id?: string | null;
           dependent_project_id?: string | null;
           description?: string | null;
           effect: Database["public"]["Enums"]["work_dependency_effect"];
           id?: string;
           manual_state?:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id: string;
           predecessor_instruction_item_id?: string | null;
           predecessor_job_id?: string | null;
@@ -6653,14 +7034,16 @@ export type Database = {
           created_at?: string;
           created_by?: string | null;
           declared_kind?:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id?: string | null;
           dependent_project_id?: string | null;
           description?: string | null;
           effect?: Database["public"]["Enums"]["work_dependency_effect"];
           id?: string;
           manual_state?:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id?: string;
           predecessor_instruction_item_id?: string | null;
           predecessor_job_id?: string | null;
@@ -6781,7 +7164,8 @@ export type Database = {
           event_payload: Json;
           event_type: string;
           from_state:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           gate_fingerprint: string;
           gate_snapshot: Json;
           id: string;
@@ -6799,7 +7183,8 @@ export type Database = {
           event_payload?: Json;
           event_type: string;
           from_state?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           gate_fingerprint: string;
           gate_snapshot?: Json;
           id?: string;
@@ -6817,7 +7202,8 @@ export type Database = {
           event_payload?: Json;
           event_type?: string;
           from_state?:
-            Database["public"]["Enums"]["work_execution_state"] | null;
+            | Database["public"]["Enums"]["work_execution_state"]
+            | null;
           gate_fingerprint?: string;
           gate_snapshot?: Json;
           id?: string;
@@ -6944,7 +7330,8 @@ export type Database = {
           event_payload: Json;
           event_type: Database["public"]["Enums"]["work_handover_event_type"];
           from_state:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
           id: string;
           organization_id: string;
           package_id: string;
@@ -6954,7 +7341,8 @@ export type Database = {
           request_fingerprint: string | null;
           request_id: string | null;
           to_state:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
         };
         Insert: {
           created_at?: string;
@@ -6962,7 +7350,8 @@ export type Database = {
           event_payload?: Json;
           event_type: Database["public"]["Enums"]["work_handover_event_type"];
           from_state?:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
           id: string;
           organization_id: string;
           package_id: string;
@@ -6972,7 +7361,8 @@ export type Database = {
           request_fingerprint?: string | null;
           request_id?: string | null;
           to_state?:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
         };
         Update: {
           created_at?: string;
@@ -6980,7 +7370,8 @@ export type Database = {
           event_payload?: Json;
           event_type?: Database["public"]["Enums"]["work_handover_event_type"];
           from_state?:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
           id?: string;
           organization_id?: string;
           package_id?: string;
@@ -6990,7 +7381,8 @@ export type Database = {
           request_fingerprint?: string | null;
           request_id?: string | null;
           to_state?:
-            Database["public"]["Enums"]["work_handover_package_state"] | null;
+            | Database["public"]["Enums"]["work_handover_package_state"]
+            | null;
         };
         Relationships: [
           {
@@ -8080,7 +8472,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -8170,7 +8563,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -8218,6 +8612,46 @@ export type Database = {
           p_valid_until: string;
         };
         Returns: string;
+      };
+      create_service_case: {
+        Args: {
+          p_actor_id: string;
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_service_case_id: string;
+        };
+        Returns: {
+          access_instructions: string | null;
+          case_number: string;
+          charge_context: Database["public"]["Enums"]["service_case_charge_context"];
+          client_id: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          id: string;
+          intake_type: Database["public"]["Enums"]["service_case_intake_type"];
+          job_id: string | null;
+          organization_id: string;
+          original_details: string | null;
+          original_statement: string;
+          resolution_note: string | null;
+          site_id: string;
+          source_request_id: string | null;
+          status: Database["public"]["Enums"]["service_case_status"];
+          summary: string;
+          triage_note: string | null;
+          updated_at: string;
+          updated_by: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "service_cases";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       create_work_artifact_revision: {
         Args: {
@@ -8472,7 +8906,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -8488,6 +8923,58 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "installed_equipment";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      link_service_case_evidence: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_service_case_id: string;
+          p_work_artifact_revision_id: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          organization_id: string;
+          service_case_id: string;
+          work_artifact_revision_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "service_case_evidence_links";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      link_service_case_relation: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_related_service_case_id: string;
+          p_relation_type: Database["public"]["Enums"]["service_case_relation_type"];
+          p_service_case_id: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          organization_id: string;
+          reason: string;
+          related_service_case_id: string;
+          relation_type: Database["public"]["Enums"]["service_case_relation_type"];
+          service_case_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "service_case_relations";
           isOneToOne: true;
           isSetofReturn: false;
         };
@@ -8536,14 +9023,16 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           declared_kind:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id: string | null;
           dependent_project_id: string | null;
           description: string | null;
           effect: Database["public"]["Enums"]["work_dependency_effect"];
           id: string;
           manual_state:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id: string;
           predecessor_instruction_item_id: string | null;
           predecessor_job_id: string | null;
@@ -8827,7 +9316,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -9070,14 +9560,16 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           declared_kind:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id: string | null;
           dependent_project_id: string | null;
           description: string | null;
           effect: Database["public"]["Enums"]["work_dependency_effect"];
           id: string;
           manual_state:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id: string;
           predecessor_instruction_item_id: string | null;
           predecessor_job_id: string | null;
@@ -9127,7 +9619,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -9181,7 +9674,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -9316,7 +9810,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -9380,6 +9875,17 @@ export type Database = {
           p_idempotency_key: string;
           p_link_id: string;
           p_organization_id: string;
+        };
+        Returns: boolean;
+      };
+      unlink_service_case_document: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_link_id: string;
+          p_organization_id: string;
+          p_reason: string;
         };
         Returns: boolean;
       };
@@ -9466,7 +9972,8 @@ export type Database = {
           site_id: string;
           state: Database["public"]["Enums"]["installed_equipment_state"];
           subtype:
-            Database["public"]["Enums"]["installed_equipment_subtype"] | null;
+            | Database["public"]["Enums"]["installed_equipment_subtype"]
+            | null;
           technical_notes: string | null;
           updated_at: string;
           updated_by: string;
@@ -9527,6 +10034,48 @@ export type Database = {
         };
         Returns: number;
       };
+      update_service_case: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_reason: string;
+          p_service_case_id: string;
+        };
+        Returns: {
+          access_instructions: string | null;
+          case_number: string;
+          charge_context: Database["public"]["Enums"]["service_case_charge_context"];
+          client_id: string;
+          contact_id: string | null;
+          created_at: string;
+          created_by: string;
+          id: string;
+          intake_type: Database["public"]["Enums"]["service_case_intake_type"];
+          job_id: string | null;
+          organization_id: string;
+          original_details: string | null;
+          original_statement: string;
+          resolution_note: string | null;
+          site_id: string;
+          source_request_id: string | null;
+          status: Database["public"]["Enums"]["service_case_status"];
+          summary: string;
+          triage_note: string | null;
+          updated_at: string;
+          updated_by: string;
+          urgency: Database["public"]["Enums"]["request_urgency"];
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "service_cases";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       upsert_work_blocker: {
         Args: {
           p_actor_id: string;
@@ -9567,14 +10116,16 @@ export type Database = {
           created_at: string;
           created_by: string | null;
           declared_kind:
-            Database["public"]["Enums"]["work_declared_dependency_kind"] | null;
+            | Database["public"]["Enums"]["work_declared_dependency_kind"]
+            | null;
           dependent_job_id: string | null;
           dependent_project_id: string | null;
           description: string | null;
           effect: Database["public"]["Enums"]["work_dependency_effect"];
           id: string;
           manual_state:
-            Database["public"]["Enums"]["work_dependency_manual_state"] | null;
+            | Database["public"]["Enums"]["work_dependency_manual_state"]
+            | null;
           organization_id: string;
           predecessor_instruction_item_id: string | null;
           predecessor_job_id: string | null;
@@ -9641,10 +10192,15 @@ export type Database = {
       change_request_status: "pending" | "approved" | "rejected";
       client_type: "privat" | "gewerblich";
       customer_commitment_source:
-        "telefonisch" | "vor_ort" | "schriftlich_manuell" | "sonstige";
+        | "telefonisch"
+        | "vor_ort"
+        | "schriftlich_manuell"
+        | "sonstige";
       customer_commitment_status: "active" | "superseded" | "withdrawn";
       dispatch_acknowledgement_state:
-        "acknowledged" | "challenged" | "carried_forward";
+        | "acknowledged"
+        | "challenged"
+        | "carried_forward";
       dispatch_change_kind:
         | "issued"
         | "schedule_changed"
@@ -9735,11 +10291,17 @@ export type Database = {
         | "work_handover_review";
       planning_entry_kind: "job_visit" | "internal";
       planning_internal_type:
-        "internal_work" | "meeting" | "training" | "other";
+        | "internal_work"
+        | "meeting"
+        | "training"
+        | "other";
       planning_occurrence_status: "scheduled" | "skipped" | "cancelled";
       planning_time_kind: "timed" | "all_day";
       project_status:
-        "nicht_begonnen" | "in_bearbeitung" | "abgeschlossen" | "geparkt";
+        | "nicht_begonnen"
+        | "in_bearbeitung"
+        | "abgeschlossen"
+        | "geparkt";
       request_category:
         | "notfall"
         | "stoerung_reparatur"
@@ -9760,6 +10322,37 @@ export type Database = {
       request_urgency: "niedrig" | "normal" | "hoch" | "notfall";
       responsibility_assignment_source: "role_default" | "direct";
       responsibility_configuration_mode: "role_default" | "selected";
+      service_case_charge_context:
+        | "unknown"
+        | "suspected_warranty"
+        | "suspected_contract"
+        | "suspected_goodwill"
+        | "suspected_rework"
+        | "expected_chargeable";
+      service_case_event_type:
+        | "created"
+        | "triage_updated"
+        | "status_changed"
+        | "job_linked"
+        | "job_unlinked"
+        | "equipment_links_updated"
+        | "relation_linked"
+        | "evidence_linked"
+        | "document_linked"
+        | "document_unlinked";
+      service_case_intake_type: "request" | "direct";
+      service_case_relation_type:
+        | "duplicate_of"
+        | "related"
+        | "continuation_of";
+      service_case_status:
+        | "new"
+        | "clarification_needed"
+        | "visit_required"
+        | "follow_up_required"
+        | "resolved"
+        | "closed_without_visit"
+        | "duplicate";
       subscription_status: "active" | "inactive" | "canceled" | "trialing";
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete";
       time_tracking_break_mode: "manual" | "automatic";
@@ -9776,7 +10369,10 @@ export type Database = {
         | "exported"
         | "voided";
       work_artifact_change_authorization_state:
-        "not_requested" | "requested" | "authorized" | "rejected";
+        | "not_requested"
+        | "requested"
+        | "authorized"
+        | "rejected";
       work_artifact_defect_severity: "low" | "medium" | "high" | "critical";
       work_artifact_defect_state: "open" | "in_progress" | "resolved";
       work_artifact_document_relation:
@@ -9785,7 +10381,11 @@ export type Database = {
         | "signature_mark"
         | "rendered_export";
       work_artifact_kind:
-        "site_diary" | "work_report" | "measurement" | "defect" | "change_work";
+        | "site_diary"
+        | "work_report"
+        | "measurement"
+        | "defect"
+        | "change_work";
       work_artifact_measurement_unit:
         | "piece"
         | "meter"
@@ -9817,7 +10417,10 @@ export type Database = {
         | "other";
       work_blocker_state: "open" | "resolved";
       work_declared_dependency_kind:
-        "approval" | "delivery" | "site_condition" | "external_trade";
+        | "approval"
+        | "delivery"
+        | "site_condition"
+        | "external_trade";
       work_dependency_effect: "blocks_start" | "blocks_completion" | "warning";
       work_dependency_manual_state: "open" | "satisfied" | "waived";
       work_execution_state:
@@ -9828,7 +10431,9 @@ export type Database = {
         | "handed_over"
         | "cancelled";
       work_handover_commercial_readiness_state:
-        "not_ready" | "ready_for_commercial_review" | "ready_with_exceptions";
+        | "not_ready"
+        | "ready_for_commercial_review"
+        | "ready_with_exceptions";
       work_handover_event_type:
         | "draft_saved"
         | "review_returned"
@@ -9861,12 +10466,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9888,12 +10493,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9912,12 +10518,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9936,12 +10543,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -9954,11 +10562,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -10114,6 +10722,41 @@ export const Constants = {
       request_urgency: ["niedrig", "normal", "hoch", "notfall"],
       responsibility_assignment_source: ["role_default", "direct"],
       responsibility_configuration_mode: ["role_default", "selected"],
+      service_case_charge_context: [
+        "unknown",
+        "suspected_warranty",
+        "suspected_contract",
+        "suspected_goodwill",
+        "suspected_rework",
+        "expected_chargeable",
+      ],
+      service_case_event_type: [
+        "created",
+        "triage_updated",
+        "status_changed",
+        "job_linked",
+        "job_unlinked",
+        "equipment_links_updated",
+        "relation_linked",
+        "evidence_linked",
+        "document_linked",
+        "document_unlinked",
+      ],
+      service_case_intake_type: ["request", "direct"],
+      service_case_relation_type: [
+        "duplicate_of",
+        "related",
+        "continuation_of",
+      ],
+      service_case_status: [
+        "new",
+        "clarification_needed",
+        "visit_required",
+        "follow_up_required",
+        "resolved",
+        "closed_without_visit",
+        "duplicate",
+      ],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_tracking_break_mode: ["manual", "automatic"],

@@ -5,6 +5,7 @@ import {
   EquipmentListContent,
 } from "@/components/service/equipment-list-content";
 import { getInstalledEquipmentList } from "@/lib/installed-equipment/actions";
+import { ServiceNavigation } from "@/components/service/service-navigation";
 
 export default async function InstalledEquipmentPage() {
   const result = await getInstalledEquipmentList();
@@ -25,6 +26,7 @@ export default async function InstalledEquipmentPage() {
   }
   return (
     <div className="space-y-6">
+      <ServiceNavigation />
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Anlagen & Geräte</h1>

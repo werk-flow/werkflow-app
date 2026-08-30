@@ -3167,3 +3167,127 @@ export async function getInstalledEquipmentCountsAs(
     return counts;
   });
 }
+
+export async function getServiceCaseStateByNumber(
+  orgId: string,
+  caseNumber: string,
+) {
+  const admin = createAdminClient();
+  const { data: serviceCase, error } = await admin
+    .from("service_cases")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("case_number", caseNumber)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Service case ${caseNumber} lookup failed: ${error.message}`);
+  }
+  if (!serviceCase) {
+    throw new Error(`Service case ${caseNumber} not found in org ${orgId}`);
+  }
+  const [events, equipmentLinks, relations, evidenceLinks, documents, followUps] =
+    await Promise.all([
+      admin
+        .from("service_case_events")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("service_case_id", serviceCase.id)
+        .order("recorded_at"),
+      admin
+        .from("service_case_equipment_links")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("service_case_id", serviceCase.id),
+      admin
+        .from("service_case_relations")
+        .select("*")
+        .eq("organization_id", orgId)
+        .or(`service_case_id.eq.${serviceCase.id},related_service_case_id.eq.${serviceCase.id}`),
+      admin
+        .from("service_case_evidence_links")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("service_case_id", serviceCase.id),
+      admin
+        .from("document_links")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("service_case_id", serviceCase.id),
+      admin
+        .from("client_follow_ups")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("source_type", "service_case")
+        .eq("source_id", serviceCase.id),
+    ]);
+  for (const result of [events, equipmentLinks, relations, evidenceLinks, documents, followUps]) {
+    if (result.error) throw new Error(`Service case state lookup failed: ${result.error.message}`);
+  }
+  return {
+    serviceCase,
+    events: events.data ?? [],
+    equipmentLinks: equipmentLinks.data ?? [],
+    relations: relations.data ?? [],
+    evidenceLinks: evidenceLinks.data ?? [],
+    documentLinks: documents.data ?? [],
+    followUps: followUps.data ?? [],
+  };
+}
+
+export async function getServiceCaseNumberBySummary(
+  orgId: string,
+  summary: string,
+): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("service_cases")
+    .select("case_number")
+    .eq("organization_id", orgId)
+    .eq("summary", summary)
+    .maybeSingle();
+  if (error) throw new Error(`Service case lookup failed: ${error.message}`);
+  return data?.case_number ?? null;
+}
+
+export async function getServiceCaseCountsAs(
+  user: { email: string; password: string },
+  orgId: string,
+  serviceCaseId: string,
+) {
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      "service_cases",
+      "service_case_events",
+      "service_case_equipment_links",
+      "service_case_relations",
+      "service_case_evidence_links",
+    ] as const;
+    const counts = {} as Record<
+      (typeof tables)[number] | "client_follow_ups",
+      number
+    >;
+    for (const table of tables) {
+      const { count, error } = await client
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+      if (error) {
+        throw new Error(`Service case RLS lookup failed for ${table}: ${error.message}`);
+      }
+      counts[table] = count ?? 0;
+    }
+    const { count: followUpCount, error: followUpError } = await client
+      .from("client_follow_ups")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .eq("source_type", "service_case")
+      .eq("source_id", serviceCaseId);
+    if (followUpError) {
+      throw new Error(
+        `Service case RLS lookup failed for client_follow_ups: ${followUpError.message}`,
+      );
+    }
+    counts.client_follow_ups = followUpCount ?? 0;
+    return counts;
+  });
+}

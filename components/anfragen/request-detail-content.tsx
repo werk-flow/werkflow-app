@@ -50,6 +50,7 @@ import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
 import { CloseRequestDialog } from './close-request-dialog';
 import { ConvertRequestDialog } from './convert-request-dialog';
 import { EditRequestDialog } from './edit-request-dialog';
+import { ConvertRequestToServiceDialog } from './convert-request-to-service-dialog';
 
 export type RequestEventEntry = {
   id: string;
@@ -78,6 +79,7 @@ const EVENT_LABELS: Record<string, string> = {
   status_changed: 'Status geändert',
   matched: 'Kunde zugeordnet',
   promoted: 'Als neuer Kunde angelegt',
+  converted_to_service_case: 'Als Servicefall übernommen',
   converted: 'Umgewandelt',
   closed: 'Geschlossen',
   reopened: 'Wieder geöffnet',
@@ -218,6 +220,10 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                   <ArrowRightLeft className="size-4" />
                   Umwandeln
                 </Button>
+                <ConvertRequestToServiceDialog
+                  requestId={request.id}
+                  enabled={Boolean(request.clientId && request.siteId)}
+                />
                 <Button
                   size="sm"
                   variant="outline"

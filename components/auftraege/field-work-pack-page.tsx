@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
-import { Wrench } from "lucide-react";
+import { Siren, Wrench } from "lucide-react";
 
 import { DetailPageHeader } from "@/components/shared/detail-page-header";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,8 @@ import {
   EQUIPMENT_SUBTYPE_LABELS,
 } from "@/lib/installed-equipment/types";
 import { FieldWorkHandoverStatus } from "@/components/auftraege/work-handover-section";
+import { getAssignedServiceContextForJob } from "@/lib/service-cases/actions";
+import { SERVICE_CASE_URGENCY_LABELS } from "@/lib/service-cases/types";
 
 export async function FieldWorkPackPage({
   jobNumber,
@@ -78,6 +80,7 @@ export async function FieldWorkPackPage({
     dispatchResult,
     handoverStatusResult,
     equipmentResult,
+    serviceContextResult,
   ] = await Promise.all([
     getJobInstructionItems(job.id),
     getJobDocuments(job.id),
@@ -88,6 +91,7 @@ export async function FieldWorkPackPage({
     getJobDispatchCards(job.id),
     getWorkHandoverFieldStatus(job.id),
     getAssignedEquipmentForJob(job.id),
+    getAssignedServiceContextForJob(job.id),
   ]);
 
   const fieldJob = projectFieldWorkPackJob(job);
@@ -157,6 +161,45 @@ export async function FieldWorkPackPage({
 
       <main className="mx-auto w-full max-w-5xl space-y-4 px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6">
         <FieldWorkPackOverview job={fieldJob} />
+        <FieldWorkPackSource
+          sourceId={`${job.id}:service-context`}
+          success={serviceContextResult.success}
+          title="Servicekontext nicht verfügbar"
+          description="Die für diesen Auftrag freigegebenen Servicehinweise konnten nicht geladen werden."
+        >
+          {serviceContextResult.success &&
+          serviceContextResult.contexts.length > 0 ? (
+            <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Siren className="size-4" />
+                Serviceeinsatz
+              </h2>
+              <div className="mt-3 space-y-3">
+                {serviceContextResult.contexts.map((context) => (
+                  <div key={context.caseNumber} className="rounded-md border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">{context.summary}</p>
+                      <span className="text-xs text-muted-foreground">
+                        {context.caseNumber} · {SERVICE_CASE_URGENCY_LABELS[context.urgency]}
+                      </span>
+                    </div>
+                    {context.accessInstructions && (
+                      <p className="mt-2 text-sm">
+                        <span className="font-medium">Zugang:</span>{" "}
+                        {context.accessInstructions}
+                      </p>
+                    )}
+                    {context.equipment.length > 0 && (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Betroffene Anlagen: {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </FieldWorkPackSource>
         <FieldWorkPackExecutionSection
           key={job.id}
           jobId={job.id}
