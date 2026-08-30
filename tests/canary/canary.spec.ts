@@ -1,4 +1,3 @@
-import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { expect, test } from '../golden/support/fixtures';
@@ -20,10 +19,10 @@ import {
   textInDom,
 } from '../golden/support/steps';
 import { createSignedDownloadUrl } from '../../lib/storage/r2';
-import { requireEnv } from '../golden/support/env';
 import { goldenTestEmail } from '../golden/support/seed';
 import { ARTIFACTS_DIR } from '../golden/support/world';
 import { expectLiveWithin } from '../golden/support/live';
+import { getDevMigrationHistoryProblems } from '../../lib/testing/dev-migration-history';
 
 // Cloud canary suite (@CANARY) — decision D10 in
 // docs/plans/platform-hardening.md, ADR docs/decisions/0006-testing-architecture.md.
@@ -36,12 +35,13 @@ import { expectLiveWithin } from '../golden/support/live';
 // the growth rule lives in docs/technical/testing.md. It only runs with
 // target cloud (enforced by run-policy) against DEV Supabase and real R2.
 
-const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
-
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Cloud-Canary @CANARY', () => {
-  test('C1: Login und Session-Refresh über geschützte Navigationen', async ({ browser, world }) => {
+  test('C1: Login und Session-Refresh über geschützte Navigationen', async ({
+    browser,
+    world,
+  }) => {
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
       const page = await context.newPage();
@@ -51,14 +51,21 @@ test.describe('Cloud-Canary @CANARY', () => {
       });
       // Protected-route middleware refreshes/rotates the Supabase session on
       // every navigation; none of them may bounce back to /login.
-      for (const route of ['/auftraege', '/kalender', '/kunden', '/dashboard']) {
+      for (const route of [
+        '/auftraege',
+        '/kalender',
+        '/kunden',
+        '/dashboard',
+      ]) {
         await page.goto(route, { waitUntil: 'domcontentloaded' });
         expect(new URL(page.url()).pathname).toBe(route);
       }
       await expect
         .poll(
           async () =>
-            (await context.cookies()).find((cookie) => cookie.name === 'current_org_id')?.value
+            (await context.cookies()).find(
+              (cookie) => cookie.name === 'current_org_id',
+            )?.value,
         )
         .toBe(world.orgId);
     } finally {
@@ -66,7 +73,10 @@ test.describe('Cloud-Canary @CANARY', () => {
     }
   });
 
-  test('C2: Direkter R2-Upload und Download-Roundtrip', async ({ adminPage, world }) => {
+  test('C2: Direkter R2-Upload und Download-Roundtrip', async ({
+    adminPage,
+    world,
+  }) => {
     await createJob(adminPage, {
       jobNumber: `CAN-${world.runId}-1`,
       title: `Canary Auftrag ${world.runId}`,
@@ -76,11 +86,14 @@ test.describe('Cloud-Canary @CANARY', () => {
       adminPage,
       `CAN-${world.runId}-1`,
       resolve(ARTIFACTS_DIR, 'upload-fixture.pdf'),
-      'upload-fixture'
+      'upload-fixture',
     );
     // The browser PUT went straight to R2; prove the bytes are really there by
     // fetching them back over a signed download URL.
-    const storagePath = await getDocumentStoragePathByName(world.orgId, 'upload-fixture');
+    const storagePath = await getDocumentStoragePathByName(
+      world.orgId,
+      'upload-fixture',
+    );
     const downloadUrl = await createSignedDownloadUrl({ path: storagePath });
     const response = await fetch(downloadUrl, {
       signal: AbortSignal.timeout(60_000),
@@ -96,13 +109,18 @@ test.describe('Cloud-Canary @CANARY', () => {
     world,
   }) => {
     await bueroPage.goto('/kunden');
-    await expect(textInDom(bueroPage, `Canary Realtime ${world.runId}`)).toHaveCount(0);
+    await expect(
+      textInDom(bueroPage, `Canary Realtime ${world.runId}`),
+    ).toHaveCount(0);
     await createCustomer(adminPage, `Canary Realtime ${world.runId}`);
     // No reload: the row must arrive through the Realtime subscription within
     // the cloud latency budget (D4); the measured time lands in the archive.
-    await expectLiveWithin(visibleText(bueroPage, `Canary Realtime ${world.runId}`), {
-      label: 'canary C3 realtime cross-session',
-    });
+    await expectLiveWithin(
+      visibleText(bueroPage, `Canary Realtime ${world.runId}`),
+      {
+        label: 'canary C3 realtime cross-session',
+      },
+    );
   });
 
   test('C4: Einladung mit echter Resend-E-Mail und Beitritt', async ({
@@ -113,7 +131,10 @@ test.describe('Cloud-Canary @CANARY', () => {
     // The success flash requires the edge function's real Resend call to
     // return 2xx — a failed send rolls the invite back and fails here.
     await inviteMember(adminPage, world.invitee.email, 'Handwerker/in');
-    const inviteCode = await getPendingInviteCode(world.orgId, world.invitee.email);
+    const inviteCode = await getPendingInviteCode(
+      world.orgId,
+      world.invitee.email,
+    );
     const context = await browser.newContext({ locale: 'de-DE' });
     try {
       const page = await context.newPage();
@@ -121,28 +142,42 @@ test.describe('Cloud-Canary @CANARY', () => {
         page,
         inviteCode,
         { email: world.invitee.email, password: world.invitee.password },
-        world.orgId
+        world.orgId,
       );
     } finally {
       await context.close();
     }
   });
 
-  test('C5: Organisationsgrenze hält gegen fremde Sitzung', async ({ outsiderPage, world }) => {
+  test('C5: Organisationsgrenze hält gegen fremde Sitzung', async ({
+    outsiderPage,
+    world,
+  }) => {
     await outsiderPage.goto('/kunden');
-    await expect(textInDom(outsiderPage, `Canary Realtime ${world.runId}`)).toHaveCount(0);
+    await expect(
+      textInDom(outsiderPage, `Canary Realtime ${world.runId}`),
+    ).toHaveCount(0);
     await outsiderPage.goto('/auftraege');
-    await expect(textInDom(outsiderPage, `CAN-${world.runId}-1`)).toHaveCount(0);
+    await expect(textInDom(outsiderPage, `CAN-${world.runId}-1`)).toHaveCount(
+      0,
+    );
   });
 
-  test('C6: Ein- und Ausstempeln mit persistiertem Eintrag', async ({ employeePage, world }) => {
+  test('C6: Ein- und Ausstempeln mit persistiertem Eintrag', async ({
+    employeePage,
+    world,
+  }) => {
     const before = (await getOrganizationTimeEntrySnapshot(world.orgId)).length;
     await clockInOnJob(employeePage, `Canary Auftrag ${world.runId}`);
     await clockOut(employeePage);
     const entries = await getOrganizationTimeEntrySnapshot(world.orgId);
     const newEntries = entries.slice(before);
-    expect(newEntries.some((entry) => entry.entry_type === 'clock_in')).toBe(true);
-    expect(newEntries.some((entry) => entry.entry_type === 'clock_out')).toBe(true);
+    expect(newEntries.some((entry) => entry.entry_type === 'clock_in')).toBe(
+      true,
+    );
+    expect(newEntries.some((entry) => entry.entry_type === 'clock_out')).toBe(
+      true,
+    );
   });
 
   test('C7: Server-Action-Schreibvorgang mit persistiertem Read-back', async ({
@@ -153,7 +188,9 @@ test.describe('Cloud-Canary @CANARY', () => {
     // Fresh navigation: the row must come from server-rendered persisted
     // state, not the optimistic echo (testing rule 13).
     await adminPage.goto('/kunden');
-    await expect(visibleText(adminPage, `Canary Kunde ${world.runId}`)).toBeVisible();
+    await expect(
+      visibleText(adminPage, `Canary Kunde ${world.runId}`),
+    ).toBeVisible();
   });
 
   test('C8: HIBP-Ablehnung kompromittierter Passwörter mit deutscher Meldung', async ({
@@ -167,16 +204,20 @@ test.describe('Cloud-Canary @CANARY', () => {
       await page.waitForLoadState('networkidle');
       await page.getByLabel('Vorname').fill('Canary');
       await page.getByLabel('Nachname').fill(`Hibp-${world.runId}`);
-      await page.getByLabel('E-Mail').fill(goldenTestEmail('gg-hibp', world.runId));
+      await page
+        .getByLabel('E-Mail')
+        .fill(goldenTestEmail('gg-hibp', world.runId));
       // Meets every client-side rule (length, cases, digit) but is one of the
       // most common breached passwords — only HaveIBeenPwned rejects it.
-      await page.getByRole('textbox', { name: 'Passwort', exact: true }).fill('Password123');
+      await page
+        .getByRole('textbox', { name: 'Passwort', exact: true })
+        .fill('Password123');
       await page.getByRole('button', { name: 'Registrieren' }).click();
       await expect(
         visibleText(
           page,
-          'Dieses Passwort ist aus Datenlecks bekannt und daher unsicher. Bitte wähle ein anderes Passwort.'
-        )
+          'Dieses Passwort ist aus Datenlecks bekannt und daher unsicher. Bitte wähle ein anderes Passwort.',
+        ),
       ).toBeVisible({ timeout: 30_000 });
     } finally {
       await context.close();
@@ -184,26 +225,6 @@ test.describe('Cloud-Canary @CANARY', () => {
   });
 
   test('C9: DEV-Migrationshistorie entspricht den committeten Dateien', async () => {
-    const committedVersions = readdirSync(resolve(__dirname, '../../supabase/migrations'))
-      .filter((fileName) => fileName.endsWith('.sql'))
-      .map((fileName) => fileName.split('_')[0])
-      .sort();
-    const response = await fetch(
-      `https://api.supabase.com/v1/projects/${DEV_PROJECT_REF}/database/query`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: 'select version from supabase_migrations.schema_migrations order by version',
-        }),
-        signal: AbortSignal.timeout(30_000),
-      }
-    );
-    expect(response.status).toBe(201);
-    const rows = (await response.json()) as Array<{ version: string }>;
-    expect(rows.map((row) => row.version).sort()).toEqual(committedVersions);
+    expect(await getDevMigrationHistoryProblems()).toEqual([]);
   });
 });

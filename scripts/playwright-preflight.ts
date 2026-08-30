@@ -9,6 +9,7 @@ import {
   type PlaywrightTarget,
 } from '../lib/testing/run-policy';
 import { getR2Endpoint } from '../lib/storage/r2';
+import { assertDevMigrationHistoryParity } from '../lib/testing/dev-migration-history';
 import { loadEnvLocal, requireEnv } from '../tests/golden/support/env';
 import { listRetainedWorlds } from '../tests/golden/support/run-state';
 import { checkRealtimeParity } from './check-realtime-parity';
@@ -38,34 +39,39 @@ function assertRouting(target: PlaywrightTarget): void {
     const projectRef = supabaseUrl.hostname.split('.')[0];
     if (projectRef !== DEV_PROJECT_REF) {
       throw new Error(
-        `A cloud-target run requires DEV Supabase ${DEV_PROJECT_REF}; found ${projectRef}. Switch with: bun run env:dev`
+        `A cloud-target run requires DEV Supabase ${DEV_PROJECT_REF}; found ${projectRef}. Switch with: bun run env:dev`,
       );
     }
     if (bucket !== DEV_BUCKET) {
-      throw new Error(`A cloud-target run requires R2 bucket ${DEV_BUCKET}; found ${bucket}.`);
+      throw new Error(
+        `A cloud-target run requires R2 bucket ${DEV_BUCKET}; found ${bucket}.`,
+      );
     }
     if (storageEndpointOverride) {
       throw new Error(
-        'R2_ENDPOINT is set, so storage traffic would bypass Cloudflare. A cloud-target run must not carry the local storage override. Switch with: bun run env:dev'
+        'R2_ENDPOINT is set, so storage traffic would bypass Cloudflare. A cloud-target run must not carry the local storage override. Switch with: bun run env:dev',
       );
     }
     return;
   }
 
   const looksLocal =
-    PRIVATE_HOST_PATTERN.test(supabaseUrl.hostname) && supabaseUrl.port === LOCAL_API_PORT;
+    PRIVATE_HOST_PATTERN.test(supabaseUrl.hostname) &&
+    supabaseUrl.port === LOCAL_API_PORT;
   if (!looksLocal) {
     throw new Error(
-      `A local-target run requires .env.local to route at the local Supabase stack (private host, port ${LOCAL_API_PORT}); found ${supabaseUrl.origin}. Switch with: bun run env:local`
+      `A local-target run requires .env.local to route at the local Supabase stack (private host, port ${LOCAL_API_PORT}); found ${supabaseUrl.origin}. Switch with: bun run env:local`,
     );
   }
   if (bucket !== LOCAL_BUCKET) {
-    throw new Error(`A local-target run requires storage bucket ${LOCAL_BUCKET}; found ${bucket}.`);
+    throw new Error(
+      `A local-target run requires storage bucket ${LOCAL_BUCKET}; found ${bucket}.`,
+    );
   }
   const expectedStorageEndpoint = `${supabaseUrl.origin}/storage/v1/s3`;
   if (storageEndpointOverride !== expectedStorageEndpoint) {
     throw new Error(
-      `A local-target run requires R2_ENDPOINT to be exactly ${expectedStorageEndpoint}; found ${storageEndpointOverride ?? 'nothing'}. Regenerate with: bun run env:local`
+      `A local-target run requires R2_ENDPOINT to be exactly ${expectedStorageEndpoint}; found ${storageEndpointOverride ?? 'nothing'}. Regenerate with: bun run env:local`,
     );
   }
 }
@@ -95,11 +101,13 @@ async function probeBounded(input: {
     }
   }
   throw new Error(
-    `${input.label} was unreachable in ${input.attempts} bounded attempts (${lastFailure}). ${input.remedy}`
+    `${input.label} was unreachable in ${input.attempts} bounded attempts (${lastFailure}). ${input.remedy}`,
   );
 }
 
-async function assertSupabaseReachable(target: PlaywrightTarget): Promise<void> {
+async function assertSupabaseReachable(
+  target: PlaywrightTarget,
+): Promise<void> {
   const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
   const publishableKey = requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
   await probeBounded({
@@ -107,7 +115,10 @@ async function assertSupabaseReachable(target: PlaywrightTarget): Promise<void> 
     attempts: 3,
     request: () =>
       fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
-        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+        headers: {
+          apikey: publishableKey,
+          Authorization: `Bearer ${publishableKey}`,
+        },
         signal: AbortSignal.timeout(15_000),
       }),
     accept: (response) => response.ok,
@@ -125,7 +136,10 @@ async function assertStorageReachable(target: PlaywrightTarget): Promise<void> {
     label: target === 'local' ? 'The local storage S3 endpoint' : 'DEV R2',
     attempts: 3,
     request: () =>
-      fetch(getR2Endpoint(), { method: 'HEAD', signal: AbortSignal.timeout(15_000) }),
+      fetch(getR2Endpoint(), {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(15_000),
+      }),
     accept: () => true,
     remedy:
       target === 'local'
@@ -159,23 +173,27 @@ async function assertLocalEdgeRuntimeReachable(): Promise<void> {
 
 function getWindowsListener(): ListenerDetails {
   const script = [
-    "$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1",
+    '$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1',
     "if (-not $listener) { Write-Output 'NO_LISTENER'; exit 0 }",
-    "$process = Get-CimInstance Win32_Process -Filter \"ProcessId = $($listener.OwningProcess)\"",
+    '$process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"',
     "$started = (Get-Process -Id $listener.OwningProcess).StartTime.ToUniversalTime().ToString('o')",
-    "[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress",
+    '[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress',
   ].join('; ');
-  const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
-    encoding: 'utf8',
-    timeout: 20_000,
-    killSignal: 'SIGKILL',
-  });
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-Command', script],
+    {
+      encoding: 'utf8',
+      timeout: 20_000,
+      killSignal: 'SIGKILL',
+    },
+  );
   if (result.error) {
     throw new Error(`Could not inspect port 3000: ${result.error.message}`);
   }
   if (result.status !== 0) {
     throw new Error(
-      `Could not inspect port 3000: ${result.stderr.trim() || `PowerShell exited ${result.status}`}`
+      `Could not inspect port 3000: ${result.stderr.trim() || `PowerShell exited ${result.status}`}`,
     );
   }
   const output = result.stdout.trim();
@@ -184,25 +202,30 @@ function getWindowsListener(): ListenerDetails {
   // diagnosis moment (incident log, 2026-08-28).
   if (!output || output === 'NO_LISTENER') {
     throw new Error(
-      'Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).'
+      'Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).',
     );
   }
   try {
     return JSON.parse(output) as ListenerDetails;
   } catch {
-    throw new Error(`Port-3000 inspection returned invalid JSON: ${output.slice(0, 200)}`);
+    throw new Error(
+      `Port-3000 inspection returned invalid JSON: ${output.slice(0, 200)}`,
+    );
   }
 }
 
-async function assertCertificationServer(repositoryRoot: string): Promise<void> {
+async function assertCertificationServer(
+  repositoryRoot: string,
+): Promise<void> {
   const buildIdPath = resolve(repositoryRoot, '.next/BUILD_ID');
-  if (!existsSync(buildIdPath)) throw new Error('Certification requires a fresh production build.');
+  if (!existsSync(buildIdPath))
+    throw new Error('Certification requires a fresh production build.');
   const buildId = readFileSync(buildIdPath, 'utf8').trim();
   if (!buildId) throw new Error('.next/BUILD_ID is empty.');
 
   if (process.platform !== 'win32') {
     throw new Error(
-      `Certification server ownership verification is not implemented for ${process.platform}.`
+      `Certification server ownership verification is not implemented for ${process.platform}.`,
     );
   }
   const listener = getWindowsListener();
@@ -210,19 +233,22 @@ async function assertCertificationServer(repositoryRoot: string): Promise<void> 
   // protected) — refuse with a directive message instead of a TypeError.
   if (!listener.commandLine) {
     throw new Error(
-      `Port 3000 PID ${listener.processId} has no inspectable command line (elevated or protected process). Stop it and start the server from this workspace.`
+      `Port 3000 PID ${listener.processId} has no inspectable command line (elevated or protected process). Stop it and start the server from this workspace.`,
     );
   }
   const commandLine = listener.commandLine.toLowerCase();
   if (!commandLine.includes('next') || !commandLine.includes('werkflow-app')) {
     throw new Error(
-      `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process.`
+      `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process.`,
     );
   }
   const listenerStartedAt = Date.parse(listener.creationDate);
-  if (!Number.isFinite(listenerStartedAt) || listenerStartedAt < statSync(buildIdPath).mtimeMs) {
+  if (
+    !Number.isFinite(listenerStartedAt) ||
+    listenerStartedAt < statSync(buildIdPath).mtimeMs
+  ) {
     throw new Error(
-      `Port 3000 PID ${listener.processId} started before build ${buildId}. Restart it from this workspace.`
+      `Port 3000 PID ${listener.processId} started before build ${buildId}. Restart it from this workspace.`,
     );
   }
 
@@ -235,10 +261,13 @@ async function assertCertificationServer(repositoryRoot: string): Promise<void> 
     throw new Error(
       `Workspace server health check failed: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
   }
-  if (!response.ok) throw new Error(`Workspace server health check returned HTTP ${response.status}.`);
+  if (!response.ok)
+    throw new Error(
+      `Workspace server health check returned HTTP ${response.status}.`,
+    );
 }
 
 // Realtime parity (Stage B, Tier 2): the provider's table list must match
@@ -252,12 +281,15 @@ function assertRealtimeParity(): void {
     throw new Error(
       `Could not inspect the local stack for Realtime parity: ${
         error instanceof Error ? error.message : String(error)
-      }. ${LOCAL_REMEDY}`
+      }. ${LOCAL_REMEDY}`,
     );
   }
   if (problems.length > 0) {
     throw new Error(
-      ['Realtime parity check failed:', ...problems.map((problem) => `  - ${problem}`)].join('\n')
+      [
+        'Realtime parity check failed:',
+        ...problems.map((problem) => `  - ${problem}`),
+      ].join('\n'),
     );
   }
 }
@@ -270,6 +302,9 @@ export async function runPlaywrightPreflight(input: {
   const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, '..');
   assertRouting(input.target);
   await assertSupabaseReachable(input.target);
+  if (input.target === 'cloud') {
+    await assertDevMigrationHistoryParity(repositoryRoot);
+  }
   await assertStorageReachable(input.target);
   if (input.target === 'local') {
     await assertLocalEdgeRuntimeReachable();
@@ -279,7 +314,7 @@ export async function runPlaywrightPreflight(input: {
   const retainedWorlds = listRetainedWorlds();
   if (retainedWorlds.length > 0) {
     throw new Error(
-      `Certification requires zero retained worlds; clean ${retainedWorlds.length} retained world(s) first.`
+      `Certification requires zero retained worlds; clean ${retainedWorlds.length} retained world(s) first.`,
     );
   }
   await assertCertificationServer(repositoryRoot);
@@ -290,13 +325,13 @@ if (import.meta.main) {
     const laneArgument = process.argv[2] ?? 'iteration';
     if (!PLAYWRIGHT_LANES.includes(laneArgument as PlaywrightLane)) {
       throw new Error(
-        `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(', ')}.`
+        `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(', ')}.`,
       );
     }
     const targetArgument = process.argv[3] ?? 'local';
     if (!PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)) {
       throw new Error(
-        `Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(', ')}.`
+        `Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(', ')}.`,
       );
     }
     const lane = laneArgument as PlaywrightLane;

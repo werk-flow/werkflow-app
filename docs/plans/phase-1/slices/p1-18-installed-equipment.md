@@ -99,6 +99,14 @@ The design review covered desktop table and mobile card composition, customer-si
 
 The slice is accepted complete at `48/48 mapped; 48/48 fully evidenced; 0 partial; 0 unmapped`.
 
+### Post-implementation campaign audit
+
+The 2026-08-30 follow-up reviewed the P1-18 runner manifests, incident evidence and command sequence. It found seven avoidable fresh-world runs: three same-class A1 sign-out attempts after the investigation threshold, one A1-02/A1-03 iteration without its producer chain, one full Golden run before the affected P1-16 proof, one canary world that discovered migration-history drift only at C9, and one complete 9/9 canary mislabeled as focused iteration before the final certification. The [incident log](../../../technical/test-incident-log.md#p1-18-run-discipline-follow-up-2026-08-30) records the run keys and dispositions.
+
+The follow-up made suite-wide focused selections and the learned incomplete A1 iteration chain impossible before world creation (Tier 1). It added classification and a two-same-class budget for fresh focused retries, a changed-file requirement for P1-16 proof before Golden certification, and DEV migration-history parity in cloud preflight with a standalone `bun run migrations:check` command (Tier 2). Long-command polling remains Tier 3 because repository code cannot control the Codex command-session scheduler; the local rule requires one long bounded wait and no unchanged-status narration.
+
+Focused policy tests passed 18/18. The complete unit suite passed 380/380 across 35 files with 700 expectations. TypeScript, ESLint, `docs:check`, `git diff --check` and the live read-only DEV migration comparison passed. Direct runner checks rejected both `@CANARY` as a 9/9 iteration and the incomplete A1 selection before a run manifest or world existed. The audit changed no product behavior, schema or production data.
+
 ### Known limits
 
 P1-19 still owns reactive service/warranty intake, triage and dispatch. P1-20 owns maintenance plans, contracts, recurrence and due work. P1-21 owns time segments; P1-27 owns consumption/installation quantities and returns; P1-44 owns OCR/full-text ingestion; P1-48 owns global search; P1-49 owns mobile/offline behavior. Commercial warranty decisions, external communication, public access, manufacturer compliance rules and telemetry remain absent.
