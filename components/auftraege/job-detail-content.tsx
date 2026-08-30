@@ -1498,7 +1498,7 @@ export function JobDetailContent({
               title="Dokumente & Bilder"
               description="Lade Dateien zu diesem Auftrag hoch oder verknüpfe vorhandene Dokumente."
               documents={documents}
-              jobId={liveJob.id}
+              documentTarget={{ kind: "job", jobId: liveJob.id }}
               contextLabel={liveJob.title}
               canUpload
               canManage={isAdminOrManager}

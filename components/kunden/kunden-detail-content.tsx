@@ -384,7 +384,7 @@ export function KundenDetailContent({
                 title="Dokumente"
                 description="Verträge, Angebote, Rechnungen und weitere Kundendokumente."
                 documents={documents}
-                clientId={client.id}
+                documentTarget={{ kind: "client", clientId: client.id }}
                 contextLabel={client.name}
                 canUpload={isAdminOrManager}
                 canManage={isAdminOrManager}

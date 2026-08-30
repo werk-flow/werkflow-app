@@ -11,8 +11,11 @@
 // so a new spec cannot silently squat on another spec's dates.
 //
 // Only uniqueness-constrained fixtures go through ownedBerlinDateAtOffset;
-// facts without a uniqueness constraint (visit dates inside the dispatch
-// panel's 14-day window, expiry horizons) use the unchecked formatter.
+// facts without a uniqueness constraint use a purpose-specific bounded helper
+// when one exists. Dispatch-visible visit dates use the panel-window helper
+// below. Other facts, such as expiry horizons, use the unchecked formatter.
+
+import { DISPATCH_OVERVIEW_MAX_OFFSET_DAYS } from "@/lib/dispatch/types";
 
 type OffsetRange = { readonly from: number; readonly to: number };
 
@@ -77,6 +80,20 @@ export function berlinDateAtOffset(offsetDays: number): string {
   const date = new Date(`${berlinToday}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offsetDays);
   return date.toISOString().slice(0, 10);
+}
+
+/** Formats a date that the manager dispatch overview can display. */
+export function dispatchOverviewBerlinDateAtOffset(offsetDays: number): string {
+  if (
+    !Number.isInteger(offsetDays) ||
+    offsetDays < 0 ||
+    offsetDays > DISPATCH_OVERVIEW_MAX_OFFSET_DAYS
+  ) {
+    throw new Error(
+      `Dispatch overview offset must be an integer from 0 through ${DISPATCH_OVERVIEW_MAX_OFFSET_DAYS}; received ${offsetDays}.`,
+    );
+  }
+  return berlinDateAtOffset(offsetDays);
 }
 
 /**

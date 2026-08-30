@@ -8,7 +8,7 @@ import {
   getServiceCaseStateByNumber,
 } from "../../golden/support/db";
 import {
-  berlinDateAtOffset,
+  dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
 } from "../../golden/support/date-ownership";
 import { requireChainedValue } from "../../golden/support/preconditions";
@@ -41,7 +41,7 @@ test.describe.configure({ mode: "serial" });
 const DATES = Array.from({ length: 5 }, (_, index) =>
   ownedBerlinDateAtOffset("p1-19", 100 + index),
 );
-const VISIT_DATE = berlinDateAtOffset(7);
+const VISIT_DATE = dispatchOverviewBerlinDateAtOffset(7);
 
 function names(world: TestWorld) {
   return {

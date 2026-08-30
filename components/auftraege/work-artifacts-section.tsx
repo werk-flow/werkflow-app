@@ -378,7 +378,7 @@ function WorkArtifactDialog({
       let signatureDocumentId = pendingSignatureDocumentId;
       if (!signatureDocumentId) {
         const uploaded = await uploadDocumentDirect({ file: signatureFile,
-          target: targetType === 'job' ? { jobId: targetId } : { projectId: targetId }, category: 'photo' });
+          target: targetType === 'job' ? { kind: 'job', jobId: targetId } : { kind: 'project', projectId: targetId }, category: 'photo' });
         if (!uploaded.success) { setError('Die Unterschrift konnte nicht hochgeladen werden.'); return; }
         signatureDocumentId = uploaded.document.id;
         setPendingSignatureDocumentId(signatureDocumentId);

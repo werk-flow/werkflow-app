@@ -1,5 +1,7 @@
 import type { Database, Json } from '@/lib/supabase/database.types';
 
+export const DISPATCH_OVERVIEW_MAX_OFFSET_DAYS = 14;
+
 export type DispatchStatus = Database['public']['Enums']['dispatch_status'];
 export type DispatchChangeKind =
   Database['public']['Enums']['dispatch_change_kind'];

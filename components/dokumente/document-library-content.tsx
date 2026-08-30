@@ -2745,7 +2745,7 @@ export function DocumentLibraryContent({
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         items={uploadItems}
-        target={{ folderId: uploadTargetFolderId }}
+        target={{ kind: "library", folderId: uploadTargetFolderId }}
         allowFolderCreation={allowUploadFolderCreation}
         onComplete={(failedCount) => {
           if (failedCount > 0) {

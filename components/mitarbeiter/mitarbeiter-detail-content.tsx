@@ -535,7 +535,7 @@ export function MitarbeiterDetailContent({
                 title="Dokumente & Bilder"
                 description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
                 documents={documents}
-                employeeId={member.userId}
+                documentTarget={{ kind: "employee", employeeId: member.userId }}
                 contextLabel={fullName}
                 canUpload={isAdminOrManager}
                 canManage={isAdminOrManager}

@@ -871,7 +871,7 @@ export function ProjectDetailContent({
               description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
               documents={projectDocuments}
               jobDocumentGroups={jobDocumentGroups}
-              projectId={liveProject.id}
+              documentTarget={{ kind: "project", projectId: liveProject.id }}
               contextLabel={liveProject.name}
               canUpload={isAdminOrManager}
               canManage={isAdminOrManager}

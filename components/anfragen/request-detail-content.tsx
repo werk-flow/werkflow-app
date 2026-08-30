@@ -446,7 +446,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         title="Dokumente & Bilder"
         description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
         documents={data.documents}
-        requestId={request.id}
+        documentTarget={{ kind: "request", requestId: request.id }}
         canUpload={isEditable}
         canManage
       />

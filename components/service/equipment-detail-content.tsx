@@ -388,7 +388,7 @@ export function EquipmentDetailContent({
                 title="Dokumente & Bilder"
                 description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
                 documents={documents}
-                equipmentId={item.id}
+                documentTarget={{ kind: "equipment", equipmentId: item.id }}
                 contextLabel={item.name}
                 canUpload
                 canManage

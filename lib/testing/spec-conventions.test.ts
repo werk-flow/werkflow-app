@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   berlinDateAtOffset,
+  dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
 } from '../../tests/golden/support/date-ownership';
 import { requireChainedValue } from '../../tests/golden/support/preconditions';
@@ -68,6 +69,13 @@ describe('browser spec conventions (testing.md)', () => {
     expect(ownedBerlinDateAtOffset('a2-kunden', 25)).toBe(berlinDateAtOffset(25));
     expect(() => ownedBerlinDateAtOffset('a2-kunden', 30)).toThrow(
       'Spec "a2-kunden" claimed run-day offset +30 for a uniqueness-constrained fixture, but owns only +25…+29, +66'
+    );
+  });
+
+  test('dispatch overview dates stay inside the panel window', () => {
+    expect(dispatchOverviewBerlinDateAtOffset(7)).toBe(berlinDateAtOffset(7));
+    expect(() => dispatchOverviewBerlinDateAtOffset(15)).toThrow(
+      'Dispatch overview offset must be an integer from 0 through 14; received 15.'
     );
   });
 

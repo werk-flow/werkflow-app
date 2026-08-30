@@ -286,7 +286,7 @@ export async function FieldWorkPackPage({
               title="Dokumente & Bilder"
               description="Dateien zu diesem Auftrag ansehen oder direkt vom Einsatz hochladen."
               documents={documents}
-              jobId={job.id}
+              documentTarget={{ kind: "job", jobId: job.id }}
               contextLabel={job.title}
               canUpload={!readOnly}
               canManage={false}

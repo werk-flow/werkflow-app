@@ -28,6 +28,8 @@
     "test:preflight:certification": "bun scripts/playwright-preflight.ts certification",
     "test:runs": "bun scripts/manage-playwright-runs.ts",
     "migrations:check": "bun scripts/check-dev-migration-history.ts",
+    "types:generate": "bun scripts/generate-supabase-types.ts",
+    "types:check": "bun scripts/generate-supabase-types.ts --check",
     "docs:check": "bun scripts/check-docs.ts",
     "realtime:check": "bun scripts/check-realtime-parity.ts"
   },
@@ -86,6 +88,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
+    "prettier": "3.6.2",
+    "supabase": "2.116.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

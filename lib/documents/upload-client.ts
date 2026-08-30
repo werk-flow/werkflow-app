@@ -11,20 +11,14 @@ import {
   finalizeDocumentUpload,
   finalizeDocumentVersionUpload,
 } from "./actions";
-import type { DocumentCategory, DocumentResult, VersionResult } from "./types";
+import type {
+  DocumentCategory,
+  DocumentResult,
+  DocumentUploadTarget,
+  VersionResult,
+} from "./types";
 
 export type UploadProgressHandler = (fraction: number) => void;
-
-type DocumentUploadTargetInput = {
-  folderId?: string | null;
-  jobId?: string | null;
-  projectId?: string | null;
-  clientId?: string | null;
-  employeeId?: string | null;
-  requestId?: string | null;
-  equipmentId?: string | null;
-  serviceCaseId?: string | null;
-};
 
 // Shorter than the signed upload URL lifetime (30 min) so a stalled transfer
 // fails visibly instead of hanging until the signature expires.
@@ -73,7 +67,7 @@ export async function uploadDocumentDirect({
   onProgress,
 }: {
   file: File;
-  target: DocumentUploadTargetInput;
+  target: DocumentUploadTarget;
   category?: DocumentCategory;
   onProgress?: UploadProgressHandler;
 }): Promise<DocumentResult> {

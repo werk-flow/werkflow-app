@@ -45,6 +45,7 @@ import {
   type DocumentMutationResult,
   type DocumentResult,
   type DocumentRow,
+  type DocumentUploadTarget,
   type DocumentUploader,
   type DocumentVersion,
   type DocumentVersionRow,
@@ -2484,17 +2485,6 @@ export async function deleteDocumentFolder(
   return { success: true };
 }
 
-type DocumentUploadTargetInput = {
-  folderId?: string | null;
-  jobId?: string | null;
-  projectId?: string | null;
-  clientId?: string | null;
-  employeeId?: string | null;
-  requestId?: string | null;
-  equipmentId?: string | null;
-  serviceCaseId?: string | null;
-};
-
 type NormalizedUploadTarget = {
   folderId: string | null;
   jobId: string | null;
@@ -2506,31 +2496,57 @@ type NormalizedUploadTarget = {
   serviceCaseId: string | null;
 };
 
-type CreateDocumentUploadTicketInput = DocumentUploadTargetInput & {
+type CreateDocumentUploadTicketInput = DocumentUploadTarget & {
   fileName: string;
   fileSizeBytes: number;
   mimeType?: string | null;
 };
 
-type FinalizeDocumentUploadInput = DocumentUploadTargetInput & {
+type FinalizeDocumentUploadInput = DocumentUploadTarget & {
   documentId: string;
   fileName: string;
   category?: string | null;
 };
 
 function normalizeUploadTarget(
-  input: DocumentUploadTargetInput,
+  input: DocumentUploadTarget,
 ): NormalizedUploadTarget {
-  return {
+  const normalized: NormalizedUploadTarget = {
     folderId: (input.folderId ?? "").trim() || null,
-    jobId: (input.jobId ?? "").trim() || null,
-    projectId: (input.projectId ?? "").trim() || null,
-    clientId: (input.clientId ?? "").trim() || null,
-    employeeId: (input.employeeId ?? "").trim() || null,
-    requestId: (input.requestId ?? "").trim() || null,
-    equipmentId: (input.equipmentId ?? "").trim() || null,
-    serviceCaseId: (input.serviceCaseId ?? "").trim() || null,
+    jobId: null,
+    projectId: null,
+    clientId: null,
+    employeeId: null,
+    requestId: null,
+    equipmentId: null,
+    serviceCaseId: null,
   };
+
+  switch (input.kind) {
+    case "library":
+      return normalized;
+    case "job":
+      return { ...normalized, jobId: input.jobId.trim() || null };
+    case "project":
+      return { ...normalized, projectId: input.projectId.trim() || null };
+    case "client":
+      return { ...normalized, clientId: input.clientId.trim() || null };
+    case "employee":
+      return { ...normalized, employeeId: input.employeeId.trim() || null };
+    case "request":
+      return { ...normalized, requestId: input.requestId.trim() || null };
+    case "equipment":
+      return { ...normalized, equipmentId: input.equipmentId.trim() || null };
+    case "service_case":
+      return {
+        ...normalized,
+        serviceCaseId: input.serviceCaseId.trim() || null,
+      };
+    default: {
+      const exhaustiveTarget: never = input;
+      return exhaustiveTarget;
+    }
+  }
 }
 
 // Deny-by-default authorization for both the ticket and finalize steps. The

@@ -54,6 +54,7 @@ import {
 } from "@/lib/documents/actions";
 import {
   DOCUMENT_CATEGORY_LABELS,
+  type DocumentContextTarget,
   type OrganizationDocument,
   type ProjectJobDocumentGroup,
 } from "@/lib/documents/types";
@@ -74,13 +75,7 @@ type ContextualDocumentsSectionProps = {
   description: string;
   documents: OrganizationDocument[];
   jobDocumentGroups?: ProjectJobDocumentGroup[];
-  jobId?: string;
-  projectId?: string;
-  clientId?: string;
-  employeeId?: string;
-  requestId?: string;
-  equipmentId?: string;
-  serviceCaseId?: string;
+  documentTarget: DocumentContextTarget;
   contextLabel?: string;
   canUpload: boolean;
   canManage: boolean;
@@ -276,19 +271,30 @@ export function ContextualDocumentsSection({
   description,
   documents,
   jobDocumentGroups = [],
-  jobId,
-  projectId,
-  clientId,
-  employeeId,
-  requestId,
-  equipmentId,
-  serviceCaseId,
+  documentTarget,
   contextLabel,
   canUpload,
   canManage,
   emphasizeUpload = true,
   keepUploadedDocumentsVisible = false,
 }: ContextualDocumentsSectionProps): ReactElement {
+  const jobId = documentTarget.kind === "job" ? documentTarget.jobId : undefined;
+  const projectId =
+    documentTarget.kind === "project" ? documentTarget.projectId : undefined;
+  const clientId =
+    documentTarget.kind === "client" ? documentTarget.clientId : undefined;
+  const employeeId =
+    documentTarget.kind === "employee" ? documentTarget.employeeId : undefined;
+  const requestId =
+    documentTarget.kind === "request" ? documentTarget.requestId : undefined;
+  const equipmentId =
+    documentTarget.kind === "equipment"
+      ? documentTarget.equipmentId
+      : undefined;
+  const serviceCaseId =
+    documentTarget.kind === "service_case"
+      ? documentTarget.serviceCaseId
+      : undefined;
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
@@ -614,15 +620,7 @@ export function ContextualDocumentsSection({
         open={uploadDialogOpen}
         onOpenChange={setUploadDialogOpen}
         items={uploadItems}
-        target={{
-          jobId,
-          projectId,
-          clientId,
-          employeeId,
-          requestId,
-          equipmentId,
-          serviceCaseId,
-        }}
+        target={documentTarget}
         onComplete={(failedCount, uploadedDocuments) => {
           if (failedCount > 0) {
             showFeedback(

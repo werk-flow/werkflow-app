@@ -55,6 +55,19 @@ export type DocumentEquipment = {
   name: string;
 };
 
+export type DocumentContextTarget =
+  | { kind: "job"; jobId: string }
+  | { kind: "project"; projectId: string }
+  | { kind: "client"; clientId: string }
+  | { kind: "employee"; employeeId: string }
+  | { kind: "request"; requestId: string }
+  | { kind: "equipment"; equipmentId: string }
+  | { kind: "service_case"; serviceCaseId: string };
+
+export type DocumentUploadTarget =
+  | { kind: "library"; folderId?: string | null }
+  | (DocumentContextTarget & { folderId?: string | null });
+
 export type DocumentFolder = {
   id: string;
   organizationId: string;

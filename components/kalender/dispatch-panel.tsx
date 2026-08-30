@@ -50,6 +50,7 @@ import {
 } from '@/lib/dispatch/actions';
 import {
   DISPATCH_RECIPIENT_STATE_LABELS,
+  DISPATCH_OVERVIEW_MAX_OFFSET_DAYS,
   dispatchErrorMessage,
   type DispatchOverview,
   type DispatchOverviewOccurrence,
@@ -67,8 +68,6 @@ import {
 } from '@/lib/commitments/types';
 import { DispatchIssueDialog } from './dispatch-issue-dialog';
 import { usePlanningWarningConfirmation } from './planning-warning-dialog';
-
-const OVERVIEW_WINDOW_DAYS = 14;
 
 function berlinTodayIso(): string {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -408,7 +407,7 @@ export function DispatchPanel({
     read: async (): Promise<LiveViewResult<DispatchOverview>> => {
       const result = await getDispatchOverview(
         today,
-        shiftIsoDate(today, OVERVIEW_WINDOW_DAYS)
+        shiftIsoDate(today, DISPATCH_OVERVIEW_MAX_OFFSET_DAYS)
       );
       return result.success
         ? { ok: true, data: result.overview }
@@ -654,7 +653,7 @@ export function DispatchPanel({
             id="dispatch-occurrences-heading"
             className="mb-2 text-sm font-medium text-muted-foreground"
           >
-            Geplante Besuche (nächste {OVERVIEW_WINDOW_DAYS} Tage)
+            Geplante Besuche (nächste {DISPATCH_OVERVIEW_MAX_OFFSET_DAYS} Tage)
           </h3>
           {overview && overview.occurrences.length === 0 && (
             <p className="text-sm text-muted-foreground">

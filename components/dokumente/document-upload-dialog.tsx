@@ -26,6 +26,7 @@ import {
   DOCUMENT_CATEGORY_LABELS,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   type DocumentCategory,
+  type DocumentUploadTarget,
   type OrganizationDocument,
 } from "@/lib/documents/types";
 
@@ -44,24 +45,13 @@ type UploadRow = DocumentUploadItem & {
   error?: string;
 };
 
-type UploadTarget = {
-  folderId?: string | null;
-  jobId?: string;
-  projectId?: string;
-  clientId?: string;
-  employeeId?: string;
-  requestId?: string;
-  equipmentId?: string;
-  serviceCaseId?: string;
-};
-
 type DocumentUploadDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title?: string;
   description?: string;
   items: DocumentUploadItem[];
-  target: UploadTarget;
+  target: DocumentUploadTarget;
   allowFolderCreation?: boolean;
   onComplete: (
     failedCount: number,
@@ -220,16 +210,7 @@ export function DocumentUploadDialog({
           );
           const result = await uploadDocumentDirect({
             file: row.file,
-            target: {
-              folderId,
-              jobId: target.jobId ?? null,
-              projectId: target.projectId ?? null,
-              clientId: target.clientId ?? null,
-              employeeId: target.employeeId ?? null,
-              requestId: target.requestId ?? null,
-              equipmentId: target.equipmentId ?? null,
-              serviceCaseId: target.serviceCaseId ?? null,
-            },
+            target: { ...target, folderId },
             category: row.category,
             onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
           });
