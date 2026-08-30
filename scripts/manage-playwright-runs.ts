@@ -1,4 +1,5 @@
 import { INCIDENT_CLASSES, type IncidentClass } from '../lib/testing/run-policy';
+import { formatRunInventory } from '../lib/testing/run-inventory';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
   listRunManifests,
@@ -13,18 +14,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 function printRuns(): void {
-  for (const manifest of listRunManifests().slice(-30)) {
-    console.log(
-      [
-        manifest.runKey,
-        manifest.status,
-        `${manifest.lane}/${manifest.suite}/${manifest.target ?? 'cloud'}`,
-        manifest.grep ?? 'full',
-        manifest.world?.runId ?? 'no-world',
-        manifest.classification ?? 'unclassified',
-      ].join(' | ')
-    );
-  }
+  for (const line of formatRunInventory(listRunManifests())) console.log(line);
 }
 
 function isIncidentClass(value: string): value is IncidentClass {
