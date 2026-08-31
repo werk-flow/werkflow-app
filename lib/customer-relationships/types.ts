@@ -52,7 +52,8 @@ export type FollowUpSourceType =
   | 'request'
   | 'job'
   | 'project'
-  | 'service_case';
+  | 'service_case'
+  | 'maintenance_coverage';
 
 export type ClientFollowUp = {
   id: string;

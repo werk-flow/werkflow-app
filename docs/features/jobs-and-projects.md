@@ -199,6 +199,7 @@ Phase 1 is not an MVP list. It describes the complete high-value operational cap
 - The handoff prevents the next technician from reconstructing an installation from PDFs and memory.
 - A resulting maintenance visit or fault job links back to the equipment and original project while remaining its own operational work record.
 - Recurring maintenance plans, contracts, service intervals, and asset lifecycle rules belong to the service feature area, not to the generic project hierarchy.
+- Since P1-20, the office deliberately turns one service-owned due item into one ordinary job with the plan revision's exact published work-template version. The due item stores the exact job link; job creation keeps its existing customer/site, qualification, checklist, evidence and lifecycle owners. Scheduling that job creates a separate P1-11 occurrence, and completing the job does not by itself claim that maintenance evidence or the next-due decision is complete.
 
 ### 13. Commercial Readiness And Profitability Inputs
 

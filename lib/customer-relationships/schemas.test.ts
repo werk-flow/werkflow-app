@@ -25,6 +25,18 @@ describe('customer relationship action schemas', () => {
     ).toBe(true);
   });
 
+  test('accepts a maintenance coverage as an exact follow-up source', () => {
+    expect(
+      followUpInputSchema.safeParse({
+        title: 'Vertragsdaten prüfen',
+        ownerUserId: '11111111-1111-4111-8111-111111111111',
+        dueAt: '2026-09-01T08:00:00+02:00',
+        sourceType: 'maintenance_coverage',
+        sourceId: '22222222-2222-4222-8222-222222222222',
+      }).success,
+    ).toBe(true);
+  });
+
   test('rejects malformed follow-up payloads without reading unsafe fields', () => {
     expect(followUpInputSchema.safeParse({ ...VALID_FOLLOW_UP, title: null }).success).toBe(false);
     expect(followUpInputSchema.safeParse({ ...VALID_FOLLOW_UP, dueAt: 'later' }).success).toBe(false);

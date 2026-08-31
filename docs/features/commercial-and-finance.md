@@ -136,6 +136,8 @@ After acceptance, WerkFlow should preserve an agreed commercial baseline:
 
 Whether WerkFlow provides contract templates, VOB/B-specific terms, maintenance agreements, electronic signatures, or legal clause libraries is a decision gate. Templates must not be presented as legal advice.
 
+P1-20 records only operational maintenance coverage: entered validity, notice, renewal and internal-review dates, status, reference, notes and exact documents. It deliberately carries no price, included commercial position, legal interpretation, renewal decision, invoice state or accounting effect. A future commercial maintenance agreement may reference this operational record, but commercial status and operational status remain separate.
+
 ### Performance Evidence, Delivery Notes, And Measurements
 
 Billing should be supported by structured evidence:

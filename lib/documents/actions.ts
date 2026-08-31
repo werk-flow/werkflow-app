@@ -153,6 +153,11 @@ type LinkDocumentToServiceCaseInput = {
   serviceCaseId: string;
 };
 
+type LinkDocumentToMaintenanceCoverageInput = {
+  documentId: string;
+  maintenanceCoverageId: string;
+};
+
 type UnlinkDocumentInput = {
   linkId: string;
 };
@@ -218,6 +223,12 @@ type AttachableDocumentsInput =
     }
   | {
       targetType: "service_case";
+      targetId: string;
+      searchQuery?: string | null;
+      category?: DocumentCategory | "all" | null;
+    }
+  | {
+      targetType: "maintenance_coverage";
       targetId: string;
       searchQuery?: string | null;
       category?: DocumentCategory | "all" | null;
@@ -593,6 +604,23 @@ async function ensureServiceCaseManagerAccess(
     : { success: false, error: "service_case_not_found" };
 }
 
+async function ensureMaintenanceCoverageManagerAccess(
+  context: AuthorizedDocumentContext,
+  maintenanceCoverageId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const manager = requireManager(context);
+  if (!manager.success) return manager;
+  const { data: coverage } = await context.admin
+    .from("maintenance_coverages")
+    .select("id")
+    .eq("id", maintenanceCoverageId)
+    .eq("organization_id", context.orgId)
+    .maybeSingle();
+  return coverage
+    ? { success: true }
+    : { success: false, error: "maintenance_coverage_not_found" };
+}
+
 // Requests (Anfragen) are a manager-only surface; attachments follow suit.
 async function ensureRequestManagerAccess(
   context: AuthorizedDocumentContext,
@@ -791,6 +819,13 @@ async function hydrateDocuments(
         .filter((id): id is string => Boolean(id)),
     ),
   );
+  const maintenanceCoverageIds = Array.from(
+    new Set(
+      linkRows
+        .map((link) => link.maintenance_coverage_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
 
   const [
     jobsResult,
@@ -800,6 +835,7 @@ async function hydrateDocuments(
     requestsResult,
     equipmentResult,
     serviceCasesResult,
+    maintenanceCoveragesResult,
   ] = await Promise.all([
     jobIds.length > 0
       ? admin.from("jobs").select("id, title, job_number").in("id", jobIds)
@@ -836,6 +872,12 @@ async function hydrateDocuments(
           .from("service_cases")
           .select("id, case_number, summary")
           .in("id", serviceCaseIds)
+      : Promise.resolve({ data: [] }),
+    maintenanceCoverageIds.length > 0
+      ? admin
+          .from("maintenance_coverages")
+          .select("id, coverage_number")
+          .in("id", maintenanceCoverageIds)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -902,6 +944,14 @@ async function hydrateDocuments(
       }>
     ).map((serviceCase) => [serviceCase.id, serviceCase]),
   );
+  const maintenanceCoveragesById = new Map(
+    (
+      (maintenanceCoveragesResult.data ?? []) as Array<{
+        id: string;
+        coverage_number: string;
+      }>
+    ).map((coverage) => [coverage.id, coverage]),
+  );
 
   const linksByDocumentId = new Map<string, DocumentLink[]>();
   for (const linkRow of linkRows) {
@@ -924,6 +974,9 @@ async function hydrateDocuments(
     const serviceCase = linkRow.service_case_id
       ? serviceCasesById.get(linkRow.service_case_id)
       : null;
+    const maintenanceCoverage = linkRow.maintenance_coverage_id
+      ? maintenanceCoveragesById.get(linkRow.maintenance_coverage_id)
+      : null;
     const employeeName = employee
       ? [employee.first_name, employee.last_name].filter(Boolean).join(" ") ||
         employee.email
@@ -944,6 +997,7 @@ async function hydrateDocuments(
         equipmentName: equipment?.name ?? null,
         serviceCaseNumber: serviceCase?.case_number ?? null,
         serviceCaseSummary: serviceCase?.summary ?? null,
+        maintenanceCoverageNumber: maintenanceCoverage?.coverage_number ?? null,
       }),
     );
     linksByDocumentId.set(linkRow.document_id, links);
@@ -1482,32 +1536,54 @@ export async function getAttachableDocuments(
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const access =
-    input.targetType === "job"
-      ? await ensureJobAccess(auth.context, input.targetId)
-      : input.targetType === "project"
-        ? await ensureProjectManagerAccess(auth.context, input.targetId)
-        : input.targetType === "client"
-          ? await ensureClientManagerAccess(auth.context, input.targetId)
-          : input.targetType === "employee"
-            ? await ensureEmployeeManagerAccess(auth.context, input.targetId)
-            : input.targetType === "equipment"
-              ? await ensureEquipmentManagerAccess(auth.context, input.targetId)
-              : await ensureServiceCaseManagerAccess(auth.context, input.targetId);
+  let access: { success: true } | { success: false; error: string };
+  let linkColumn:
+    | "job_id"
+    | "project_id"
+    | "client_id"
+    | "employee_id"
+    | "equipment_id"
+    | "service_case_id"
+    | "maintenance_coverage_id";
+  switch (input.targetType) {
+    case "job":
+      access = await ensureJobAccess(auth.context, input.targetId);
+      linkColumn = "job_id";
+      break;
+    case "project":
+      access = await ensureProjectManagerAccess(auth.context, input.targetId);
+      linkColumn = "project_id";
+      break;
+    case "client":
+      access = await ensureClientManagerAccess(auth.context, input.targetId);
+      linkColumn = "client_id";
+      break;
+    case "employee":
+      access = await ensureEmployeeManagerAccess(auth.context, input.targetId);
+      linkColumn = "employee_id";
+      break;
+    case "equipment":
+      access = await ensureEquipmentManagerAccess(auth.context, input.targetId);
+      linkColumn = "equipment_id";
+      break;
+    case "service_case":
+      access = await ensureServiceCaseManagerAccess(
+        auth.context,
+        input.targetId,
+      );
+      linkColumn = "service_case_id";
+      break;
+    case "maintenance_coverage":
+      access = await ensureMaintenanceCoverageManagerAccess(
+        auth.context,
+        input.targetId,
+      );
+      linkColumn = "maintenance_coverage_id";
+      break;
+    default:
+      return { success: false, error: "invalid_target" };
+  }
   if (!access.success) return access;
-
-  const linkColumn =
-    input.targetType === "job"
-      ? "job_id"
-      : input.targetType === "project"
-        ? "project_id"
-        : input.targetType === "client"
-          ? "client_id"
-          : input.targetType === "employee"
-            ? "employee_id"
-            : input.targetType === "equipment"
-              ? "equipment_id"
-              : "service_case_id";
   const { data: existingLinks, error: linksError } = await auth.context.admin
     .from("document_links")
     .select("document_id")
@@ -1909,6 +1985,38 @@ export async function getServiceCaseDocuments(
     .select("document_id")
     .eq("organization_id", auth.context.orgId)
     .eq("service_case_id", serviceCaseId);
+  if (linksError) return { success: false, error: "documents_failed" };
+  const documentIds = (links ?? []).map((link) => link.document_id);
+  if (documentIds.length === 0) return { success: true, documents: [] };
+  const { data: documents, error } = await auth.context.admin
+    .from("documents")
+    .select("*")
+    .eq("organization_id", auth.context.orgId)
+    .in("id", documentIds)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  if (error) return { success: false, error: "documents_failed" };
+  return {
+    success: true,
+    documents: await hydrateDocuments(auth.context.admin, documents ?? []),
+  };
+}
+
+export async function getMaintenanceCoverageDocuments(
+  maintenanceCoverageId: string,
+): Promise<DocumentListResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+  const access = await ensureMaintenanceCoverageManagerAccess(
+    auth.context,
+    maintenanceCoverageId,
+  );
+  if (!access.success) return access;
+  const { data: links, error: linksError } = await auth.context.admin
+    .from("document_links")
+    .select("document_id")
+    .eq("organization_id", auth.context.orgId)
+    .eq("maintenance_coverage_id", maintenanceCoverageId);
   if (linksError) return { success: false, error: "documents_failed" };
   const documentIds = (links ?? []).map((link) => link.document_id);
   if (documentIds.length === 0) return { success: true, documents: [] };
@@ -2494,6 +2602,7 @@ type NormalizedUploadTarget = {
   requestId: string | null;
   equipmentId: string | null;
   serviceCaseId: string | null;
+  maintenanceCoverageId: string | null;
 };
 
 type CreateDocumentUploadTicketInput = DocumentUploadTarget & {
@@ -2520,6 +2629,7 @@ function normalizeUploadTarget(
     requestId: null,
     equipmentId: null,
     serviceCaseId: null,
+    maintenanceCoverageId: null,
   };
 
   switch (input.kind) {
@@ -2541,6 +2651,11 @@ function normalizeUploadTarget(
       return {
         ...normalized,
         serviceCaseId: input.serviceCaseId.trim() || null,
+      };
+    case "maintenance_coverage":
+      return {
+        ...normalized,
+        maintenanceCoverageId: input.maintenanceCoverageId.trim() || null,
       };
     default: {
       const exhaustiveTarget: never = input;
@@ -2565,12 +2680,20 @@ async function authorizeDocumentUploadTarget(
     requestId,
     equipmentId,
     serviceCaseId,
+    maintenanceCoverageId,
   } = target;
 
   if (
-    [jobId, projectId, clientId, employeeId, requestId, equipmentId, serviceCaseId].filter(
-      Boolean,
-    ).length > 1
+    [
+      jobId,
+      projectId,
+      clientId,
+      employeeId,
+      requestId,
+      equipmentId,
+      serviceCaseId,
+      maintenanceCoverageId,
+    ].filter(Boolean).length > 1
   ) {
     return { success: false, error: "invalid_target" };
   }
@@ -2595,6 +2718,12 @@ async function authorizeDocumentUploadTarget(
     if (!access.success) return access;
   } else if (serviceCaseId) {
     const access = await ensureServiceCaseManagerAccess(context, serviceCaseId);
+    if (!access.success) return access;
+  } else if (maintenanceCoverageId) {
+    const access = await ensureMaintenanceCoverageManagerAccess(
+      context,
+      maintenanceCoverageId,
+    );
     if (!access.success) return access;
   } else {
     const manager = requireManager(context);
@@ -2700,6 +2829,7 @@ export async function finalizeDocumentUpload(
     requestId,
     equipmentId,
     serviceCaseId,
+    maintenanceCoverageId,
   } = target;
 
   let head;
@@ -2768,8 +2898,9 @@ export async function finalizeDocumentUpload(
     clientId ||
     employeeId ||
     requestId ||
-    equipmentId
-    || serviceCaseId
+    equipmentId ||
+    serviceCaseId ||
+    maintenanceCoverageId
   ) {
     const { error: linkError } = await auth.context.admin
       .from("document_links")
@@ -2783,6 +2914,7 @@ export async function finalizeDocumentUpload(
         request_id: requestId,
         equipment_id: equipmentId,
         service_case_id: serviceCaseId,
+        maintenance_coverage_id: maintenanceCoverageId,
         created_by: auth.context.userId,
       });
 
@@ -2815,6 +2947,7 @@ export async function finalizeDocumentUpload(
       requestId,
       equipmentId,
       serviceCaseId,
+      maintenanceCoverageId,
     },
   });
 
@@ -2824,8 +2957,9 @@ export async function finalizeDocumentUpload(
     clientId ||
     employeeId ||
     requestId ||
-    equipmentId
-    || serviceCaseId
+    equipmentId ||
+    serviceCaseId ||
+    maintenanceCoverageId
   ) {
     await recordDocumentAuditEvent(auth.context, {
       documentId: input.documentId,
@@ -2838,6 +2972,7 @@ export async function finalizeDocumentUpload(
         requestId,
         equipmentId,
         serviceCaseId,
+        maintenanceCoverageId,
       },
     });
   }
@@ -3369,6 +3504,39 @@ export async function linkDocumentToServiceCase(
   return { success: true };
 }
 
+export async function linkDocumentToMaintenanceCoverage(
+  input: LinkDocumentToMaintenanceCoverageInput,
+): Promise<DocumentMutationResult> {
+  const auth = await getAuthorizedDocumentContext();
+  if (!auth.success) return auth;
+  const document = await getAuthorizedDocument(auth.context, input.documentId);
+  if (!document.success) return document;
+  const access = await ensureMaintenanceCoverageManagerAccess(
+    auth.context,
+    input.maintenanceCoverageId,
+  );
+  if (!access.success) return access;
+  const { error } = await auth.context.admin.from("document_links").insert({
+    organization_id: auth.context.orgId,
+    document_id: input.documentId,
+    maintenance_coverage_id: input.maintenanceCoverageId,
+    created_by: auth.context.userId,
+  });
+  if (error && error.code !== "23505") {
+    console.error("Failed to link document to maintenance coverage:", error);
+    return { success: false, error: "link_failed" };
+  }
+  if (!error) {
+    await recordDocumentAuditEvent(auth.context, {
+      documentId: input.documentId,
+      eventType: "linked",
+      eventPayload: { maintenanceCoverageId: input.maintenanceCoverageId },
+    });
+    revalidateDocuments(auth.context.orgId);
+  }
+  return { success: true };
+}
+
 export async function unlinkDocument(
   input: UnlinkDocumentInput,
 ): Promise<DocumentMutationResult> {
@@ -3407,7 +3575,8 @@ export async function unlinkDocument(
             .eq("id", linkRow.service_case_id!)
             .eq("organization_id", auth.context.orgId)
             .single();
-          if (!serviceCase) return { error: new Error("service_case_not_found") };
+          if (!serviceCase)
+            return { error: new Error("service_case_not_found") };
           return auth.context.admin.rpc("unlink_service_case_document", {
             p_organization_id: auth.context.orgId,
             p_link_id: input.linkId,
@@ -3417,11 +3586,34 @@ export async function unlinkDocument(
             p_idempotency_key: input.linkId,
           });
         })()
-      : await auth.context.admin
-        .from("document_links")
-        .delete()
-        .eq("id", input.linkId)
-        .eq("organization_id", auth.context.orgId);
+      : linkRow.maintenance_coverage_id
+        ? await (async () => {
+            const { data: coverage } = await auth.context.admin
+              .from("maintenance_coverages")
+              .select("version")
+              .eq("id", linkRow.maintenance_coverage_id!)
+              .eq("organization_id", auth.context.orgId)
+              .single();
+            if (!coverage) {
+              return { error: new Error("maintenance_coverage_not_found") };
+            }
+            return auth.context.admin.rpc(
+              "unlink_maintenance_coverage_document",
+              {
+                p_organization_id: auth.context.orgId,
+                p_link_id: input.linkId,
+                p_expected_version: coverage.version,
+                p_reason: "Dokumentverknüpfung entfernt",
+                p_actor_id: auth.context.userId,
+                p_idempotency_key: input.linkId,
+              },
+            );
+          })()
+        : await auth.context.admin
+            .from("document_links")
+            .delete()
+            .eq("id", input.linkId)
+            .eq("organization_id", auth.context.orgId);
 
   if (error) {
     console.error("Failed to unlink document:", error);
@@ -3439,6 +3631,7 @@ export async function unlinkDocument(
       requestId: linkRow.request_id,
       equipmentId: linkRow.equipment_id,
       serviceCaseId: linkRow.service_case_id,
+      maintenanceCoverageId: linkRow.maintenance_coverage_id,
     },
   });
 
@@ -3537,6 +3730,15 @@ export async function updateDocumentLinks(
     else failedCount++;
   }
 
+  for (const maintenanceCoverageId of input.addMaintenanceCoverageIds ?? []) {
+    const result = await linkDocumentToMaintenanceCoverage({
+      documentId: input.documentId,
+      maintenanceCoverageId,
+    });
+    if (result.success) addedCount++;
+    else failedCount++;
+  }
+
   for (const equipmentId of input.addEquipmentIds ?? []) {
     const result = await linkDocumentToEquipment({
       documentId: input.documentId,
@@ -3580,6 +3782,7 @@ export async function linkDocumentsToTarget(
     input.employeeId,
     input.equipmentId,
     input.serviceCaseId,
+    input.maintenanceCoverageId,
   ].filter(Boolean).length;
   if (targetCount !== 1) {
     return {
@@ -3617,10 +3820,17 @@ export async function linkDocumentsToTarget(
                   documentId,
                   equipmentId: input.equipmentId,
                 })
-              : await linkDocumentToServiceCase({
-                  documentId,
-                  serviceCaseId: input.serviceCaseId!,
-                });
+              : input.serviceCaseId
+                ? await linkDocumentToServiceCase({
+                    documentId,
+                    serviceCaseId: input.serviceCaseId,
+                  })
+                : input.maintenanceCoverageId
+                  ? await linkDocumentToMaintenanceCoverage({
+                      documentId,
+                      maintenanceCoverageId: input.maintenanceCoverageId,
+                    })
+                  : ({ success: false, error: "invalid_target" } as const);
 
     if (result.success) linkedCount++;
     else failedCount++;

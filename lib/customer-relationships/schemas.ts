@@ -15,7 +15,15 @@ export const followUpInputSchema = z
     ownerUserId: z.uuid(),
     dueAt: z.iso.datetime({ offset: true }),
     sourceType: z
-      .enum(['contact', 'site', 'request', 'job', 'project', 'service_case'])
+      .enum([
+        'contact',
+        'site',
+        'request',
+        'job',
+        'project',
+        'service_case',
+        'maintenance_coverage',
+      ])
       .optional(),
     sourceId: z.uuid().optional(),
     reason: optionalText(2000),

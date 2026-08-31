@@ -1,23 +1,23 @@
-import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
 
 import {
   PLAYWRIGHT_LANES,
   PLAYWRIGHT_TARGETS,
   type PlaywrightLane,
   type PlaywrightTarget,
-} from '../lib/testing/run-policy';
-import { getR2Endpoint } from '../lib/storage/r2';
-import { assertDevMigrationHistoryParity } from '../lib/testing/dev-migration-history';
-import { loadEnvLocal, requireEnv } from '../tests/golden/support/env';
-import { listRetainedWorlds } from '../tests/golden/support/run-state';
-import { checkRealtimeParity } from './check-realtime-parity';
+} from "../lib/testing/run-policy";
+import { getR2Endpoint } from "../lib/storage/r2";
+import { assertDevMigrationHistoryParity } from "../lib/testing/dev-migration-history";
+import { loadEnvLocal, requireEnv } from "../tests/golden/support/env";
+import { listRetainedWorlds } from "../tests/golden/support/run-state";
+import { checkRealtimeParity } from "./check-realtime-parity";
 
-const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
-const DEV_BUCKET = 'werkflow-documents-dev';
-const LOCAL_BUCKET = 'werkflow-documents-local';
-const LOCAL_API_PORT = '54321';
+const DEV_PROJECT_REF = "mbkkzuqjbdvzelqvuzcn";
+const DEV_BUCKET = "werkflow-documents-dev";
+const LOCAL_BUCKET = "werkflow-documents-local";
+const LOCAL_API_PORT = "54321";
 // The local stack lives inside WSL; the harness reaches it via loopback
 // forwarding or the WSL VM's private NAT address (see environments.md).
 const PRIVATE_HOST_PATTERN =
@@ -31,12 +31,12 @@ type ListenerDetails = {
 
 function assertRouting(target: PlaywrightTarget): void {
   loadEnvLocal();
-  const supabaseUrl = new URL(requireEnv('NEXT_PUBLIC_SUPABASE_URL'));
-  const bucket = requireEnv('R2_BUCKET_NAME');
+  const supabaseUrl = new URL(requireEnv("NEXT_PUBLIC_SUPABASE_URL"));
+  const bucket = requireEnv("R2_BUCKET_NAME");
   const storageEndpointOverride = process.env.R2_ENDPOINT?.trim() || null;
 
-  if (target === 'cloud') {
-    const projectRef = supabaseUrl.hostname.split('.')[0];
+  if (target === "cloud") {
+    const projectRef = supabaseUrl.hostname.split(".")[0];
     if (projectRef !== DEV_PROJECT_REF) {
       throw new Error(
         `A cloud-target run requires DEV Supabase ${DEV_PROJECT_REF}; found ${projectRef}. Switch with: bun run env:dev`,
@@ -49,7 +49,7 @@ function assertRouting(target: PlaywrightTarget): void {
     }
     if (storageEndpointOverride) {
       throw new Error(
-        'R2_ENDPOINT is set, so storage traffic would bypass Cloudflare. A cloud-target run must not carry the local storage override. Switch with: bun run env:dev',
+        "R2_ENDPOINT is set, so storage traffic would bypass Cloudflare. A cloud-target run must not carry the local storage override. Switch with: bun run env:dev",
       );
     }
     return;
@@ -71,13 +71,13 @@ function assertRouting(target: PlaywrightTarget): void {
   const expectedStorageEndpoint = `${supabaseUrl.origin}/storage/v1/s3`;
   if (storageEndpointOverride !== expectedStorageEndpoint) {
     throw new Error(
-      `A local-target run requires R2_ENDPOINT to be exactly ${expectedStorageEndpoint}; found ${storageEndpointOverride ?? 'nothing'}. Regenerate with: bun run env:local`,
+      `A local-target run requires R2_ENDPOINT to be exactly ${expectedStorageEndpoint}; found ${storageEndpointOverride ?? "nothing"}. Regenerate with: bun run env:local`,
     );
   }
 }
 
 const LOCAL_REMEDY =
-  'Start or repair the local stack: `wsl supabase start` in the repo, then `bun run env:local` (the WSL address changes when WSL restarts; certification additionally needs a rebuild so the baked NEXT_PUBLIC_* values match).';
+  "Start or repair the local stack: `wsl supabase start` in the repo, then `bun run env:local` (the WSL address changes when WSL restarts; certification additionally needs a rebuild so the baked NEXT_PUBLIC_* values match).";
 
 async function probeBounded(input: {
   label: string;
@@ -86,7 +86,7 @@ async function probeBounded(input: {
   accept: (response: Response) => boolean;
   remedy: string;
 }): Promise<void> {
-  let lastFailure = 'unknown failure';
+  let lastFailure = "unknown failure";
   for (let attempt = 1; attempt <= input.attempts; attempt += 1) {
     try {
       const response = await input.request();
@@ -108,10 +108,10 @@ async function probeBounded(input: {
 async function assertSupabaseReachable(
   target: PlaywrightTarget,
 ): Promise<void> {
-  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const publishableKey = requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const publishableKey = requireEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
   await probeBounded({
-    label: target === 'local' ? 'The local Supabase stack' : 'DEV Supabase',
+    label: target === "local" ? "The local Supabase stack" : "DEV Supabase",
     attempts: 3,
     request: () =>
       fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
@@ -123,9 +123,9 @@ async function assertSupabaseReachable(
       }),
     accept: (response) => response.ok,
     remedy:
-      target === 'local'
+      target === "local"
         ? LOCAL_REMEDY
-        : 'Do not start Playwright while its authoritative backend is unavailable.',
+        : "Do not start Playwright while its authoritative backend is unavailable.",
   });
 }
 
@@ -133,18 +133,18 @@ async function assertStorageReachable(target: PlaywrightTarget): Promise<void> {
   // Any HTTP response proves the endpoint completed a network round trip;
   // authentication errors are expected without a signed request.
   await probeBounded({
-    label: target === 'local' ? 'The local storage S3 endpoint' : 'DEV R2',
+    label: target === "local" ? "The local storage S3 endpoint" : "DEV R2",
     attempts: 3,
     request: () =>
       fetch(getR2Endpoint(), {
-        method: 'HEAD',
+        method: "HEAD",
         signal: AbortSignal.timeout(15_000),
       }),
     accept: () => true,
     remedy:
-      target === 'local'
+      target === "local"
         ? LOCAL_REMEDY
-        : 'Do not start Playwright while direct uploads cannot reach their authoritative store.',
+        : "Do not start Playwright while direct uploads cannot reach their authoritative store.",
   });
 }
 
@@ -154,38 +154,38 @@ async function assertLocalEdgeRuntimeReachable(): Promise<void> {
   // calls the send-invite-email function, so a dead runtime fails a battery
   // minutes in with a misleading symptom. An OPTIONS preflight answers 204
   // without invoking the function body.
-  const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const supabaseUrl = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
   await probeBounded({
-    label: 'The local edge-function runtime',
+    label: "The local edge-function runtime",
     attempts: 3,
     request: () =>
       fetch(`${supabaseUrl}/functions/v1/send-invite-email`, {
-        method: 'OPTIONS',
+        method: "OPTIONS",
         signal: AbortSignal.timeout(15_000),
       }),
     // The function's own OPTIONS handler answers 204; anything else (404 for
     // an undeployed function, 5xx for a dead runtime) is a real problem.
     accept: (response) => response.status === 204,
     remedy:
-      'Restart it with: wsl docker start supabase_edge_runtime_werkflow-app (a `supabase db reset` leaves this container stopped).',
+      "Restart it with: wsl docker start supabase_edge_runtime_werkflow-app (a `supabase db reset` leaves this container stopped).",
   });
 }
 
-function getWindowsListener(): ListenerDetails {
+function getWindowsListener(): ListenerDetails | null {
   const script = [
-    '$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1',
+    "$listener = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1",
     "if (-not $listener) { Write-Output 'NO_LISTENER'; exit 0 }",
     '$process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"',
     "$started = (Get-Process -Id $listener.OwningProcess).StartTime.ToUniversalTime().ToString('o')",
-    '[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress',
-  ].join('; ');
+    "[pscustomobject]@{ processId = $listener.OwningProcess; commandLine = $process.CommandLine; creationDate = $started } | ConvertTo-Json -Compress",
+  ].join("; ");
   const result = spawnSync(
-    'powershell.exe',
-    ['-NoProfile', '-Command', script],
+    "powershell.exe",
+    ["-NoProfile", "-Command", script],
     {
-      encoding: 'utf8',
+      encoding: "utf8",
       timeout: 20_000,
-      killSignal: 'SIGKILL',
+      killSignal: "SIGKILL",
     },
   );
   if (result.error) {
@@ -200,10 +200,8 @@ function getWindowsListener(): ListenerDetails {
   // An empty port is an expected pre-run state, not an inspection failure —
   // the vague "Could not inspect" wording cost the P1-17 cycle a confused
   // diagnosis moment (incident log, 2026-08-28).
-  if (!output || output === 'NO_LISTENER') {
-    throw new Error(
-      'Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).',
-    );
+  if (!output || output === "NO_LISTENER") {
+    return null;
   }
   try {
     return JSON.parse(output) as ListenerDetails;
@@ -214,21 +212,59 @@ function getWindowsListener(): ListenerDetails {
   }
 }
 
+function assertReusableDevelopmentServer(repositoryRoot: string): void {
+  if (process.platform !== "win32") return;
+  const listener = getWindowsListener();
+  if (!listener) return;
+  if (!listener.commandLine) {
+    throw new Error(
+      `Port 3000 PID ${listener.processId} has no inspectable command line. Stop it before an iteration run.`,
+    );
+  }
+  const commandLine = listener.commandLine.toLowerCase();
+  if (!commandLine.includes("next") || !commandLine.includes("werkflow-app")) {
+    throw new Error(
+      `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process. Stop it before an iteration run.`,
+    );
+  }
+  const listenerStartedAt = Date.parse(listener.creationDate);
+  const environmentPath = resolve(repositoryRoot, ".env.local");
+  if (!existsSync(environmentPath)) {
+    throw new Error(
+      "A reusable development server requires .env.local. Create it with `bun run env:local` or `bun run env:dev` before starting Playwright.",
+    );
+  }
+  const environmentChangedAt = statSync(environmentPath).mtimeMs;
+  if (
+    !Number.isFinite(listenerStartedAt) ||
+    listenerStartedAt < environmentChangedAt
+  ) {
+    throw new Error(
+      `Port 3000 PID ${listener.processId} started before .env.local was last switched. Stop it so Playwright starts a server with the current backend routing.`,
+    );
+  }
+}
+
 async function assertCertificationServer(
   repositoryRoot: string,
 ): Promise<void> {
-  const buildIdPath = resolve(repositoryRoot, '.next/BUILD_ID');
+  const buildIdPath = resolve(repositoryRoot, ".next/BUILD_ID");
   if (!existsSync(buildIdPath))
-    throw new Error('Certification requires a fresh production build.');
-  const buildId = readFileSync(buildIdPath, 'utf8').trim();
-  if (!buildId) throw new Error('.next/BUILD_ID is empty.');
+    throw new Error("Certification requires a fresh production build.");
+  const buildId = readFileSync(buildIdPath, "utf8").trim();
+  if (!buildId) throw new Error(".next/BUILD_ID is empty.");
 
-  if (process.platform !== 'win32') {
+  if (process.platform !== "win32") {
     throw new Error(
       `Certification server ownership verification is not implemented for ${process.platform}.`,
     );
   }
   const listener = getWindowsListener();
+  if (!listener) {
+    throw new Error(
+      "Certification requires a freshly built, workspace-owned `next start` listening on port 3000. Nothing is listening — start the server after `bun run build` (testing rules 7 and 11).",
+    );
+  }
   // CommandLine is null for processes this user cannot inspect (elevated or
   // protected) — refuse with a directive message instead of a TypeError.
   if (!listener.commandLine) {
@@ -237,7 +273,7 @@ async function assertCertificationServer(
     );
   }
   const commandLine = listener.commandLine.toLowerCase();
-  if (!commandLine.includes('next') || !commandLine.includes('werkflow-app')) {
+  if (!commandLine.includes("next") || !commandLine.includes("werkflow-app")) {
     throw new Error(
       `Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process.`,
     );
@@ -254,7 +290,7 @@ async function assertCertificationServer(
 
   let response: Response;
   try {
-    response = await fetch('http://localhost:3000/login', {
+    response = await fetch("http://localhost:3000/login", {
       signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {
@@ -287,9 +323,9 @@ function assertRealtimeParity(): void {
   if (problems.length > 0) {
     throw new Error(
       [
-        'Realtime parity check failed:',
+        "Realtime parity check failed:",
         ...problems.map((problem) => `  - ${problem}`),
-      ].join('\n'),
+      ].join("\n"),
     );
   }
 }
@@ -299,18 +335,21 @@ export async function runPlaywrightPreflight(input: {
   target: PlaywrightTarget;
   repositoryRoot?: string;
 }): Promise<void> {
-  const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, '..');
+  const repositoryRoot = input.repositoryRoot ?? resolve(import.meta.dir, "..");
   assertRouting(input.target);
   await assertSupabaseReachable(input.target);
-  if (input.target === 'cloud') {
+  if (input.target === "cloud") {
     await assertDevMigrationHistoryParity(repositoryRoot);
   }
   await assertStorageReachable(input.target);
-  if (input.target === 'local') {
+  if (input.target === "local") {
     await assertLocalEdgeRuntimeReachable();
     assertRealtimeParity();
   }
-  if (input.lane !== 'certification') return;
+  if (input.lane !== "certification") {
+    assertReusableDevelopmentServer(repositoryRoot);
+    return;
+  }
   const retainedWorlds = listRetainedWorlds();
   if (retainedWorlds.length > 0) {
     throw new Error(
@@ -322,16 +361,16 @@ export async function runPlaywrightPreflight(input: {
 
 if (import.meta.main) {
   try {
-    const laneArgument = process.argv[2] ?? 'iteration';
+    const laneArgument = process.argv[2] ?? "iteration";
     if (!PLAYWRIGHT_LANES.includes(laneArgument as PlaywrightLane)) {
       throw new Error(
-        `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(', ')}.`,
+        `Unknown lane: ${laneArgument}. Expected one of ${PLAYWRIGHT_LANES.join(", ")}.`,
       );
     }
-    const targetArgument = process.argv[3] ?? 'local';
+    const targetArgument = process.argv[3] ?? "local";
     if (!PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)) {
       throw new Error(
-        `Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(', ')}.`,
+        `Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(", ")}.`,
       );
     }
     const lane = laneArgument as PlaywrightLane;

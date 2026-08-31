@@ -1,6 +1,6 @@
 # Realtime And Caching
 
-Status: living — last reviewed 2026-08-29
+Status: living — last reviewed 2026-08-31
 
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
@@ -57,7 +57,7 @@ Recorded from current Supabase primary sources before the Stage B consolidation 
 
 Supabase Realtime subscriptions are centralized in `components/realtime/realtime-provider.tsx`. The published table list has ONE home: `lib/realtime/tables.ts` exports `REALTIME_TABLES`, the `RealtimeTable` type derives from it, and the provider generates one org-filtered binding per entry (`profiles` is the recorded unfiltered exception — profile data is referenced across organization views). Adding a table to Realtime means: publication + replica-identity migration, one line in `REALTIME_TABLES`, done — a table cannot join without its organization filter. `bun run realtime:check` also runs in the local preflight. It checks publication membership in both directions, requires each `USING INDEX` identity to cover exactly `(id, organization_id)`, verifies the three recorded DEFAULT exceptions, rejects FULL identity, and requires INSERT, UPDATE, and DELETE publication operations.
 
-**P1-18 parity checkpoint (2026-08-29):** local, DEV, and PROD each publish the same 74 tables. Seventy-one use replica identity `USING INDEX` on exactly `(id, organization_id)`. `profiles`, `organization_settings`, and `organization_qualification_settings` use the recorded DEFAULT identity. No published table uses FULL identity, and all three backends have INSERT, UPDATE, and DELETE enabled on `supabase_realtime`.
+**P1-20 acceptance checkpoint (2026-08-31):** local, DEV and PROD publish the same 78 tables. Seventy-five use replica identity `USING INDEX` on exactly `(id, organization_id)`. `profiles`, `organization_settings`, and `organization_qualification_settings` use the recorded DEFAULT identity. No published table uses FULL identity, and all three checked backends have INSERT, UPDATE, and DELETE enabled on `supabase_realtime`.
 
 Events are debounced per table inside the provider (`REALTIME_DEBOUNCE_MS` in `lib/realtime/events.ts`) to avoid refresh storms when multiple related rows change quickly. The provider also owns the focus/visibility catch-up: returning to the tab dispatches one coalesced synthetic event per table to every subscriber, so consumers get gap recovery without their own listeners.
 
@@ -84,6 +84,10 @@ P1-16 composes the assigned worker's field pack from these existing live sources
 P1-17 publishes only the mutable `work_handover_packages` root with replica identity `USING INDEX` on exactly `(id, organization_id)`. Immutable releases, draft/release membership and append-only events remain unpublished; every accepted package mutation updates the root, which signals one authoritative refetch of the complete server-projected state. Handover detail and the unified attention pipeline consume that signal through the central 150 ms debounce, generation guards, focus/visibility catch-up, keep-last-known stale state and shared dialog suspension. Package mutations reuse jobs/projects, documents and responsibility invalidation; preview remains side-effect free and creates no parallel cache.
 
 P1-18 publishes only the mutable `installed_equipment` root with replica identity `USING INDEX` on exactly `(id, organization_id)`. Identifiers, work links, equipment document links and append-only events stay unpublished; accepted child and lifecycle mutations touch the root. The service list/detail and compact customer/assigned-job projections refetch authoritative bounded data through the existing live-view family, including dialog suspension, focus/visibility catch-up and keep-last-known stale behavior.
+
+P1-19 publishes only the mutable `service_cases` root. Relations, exact equipment/job/evidence/document links and append-only events stay unpublished; successful child mutations touch the root so manager and assigned-field projections refetch authoritative state.
+
+P1-20 publishes the three mutable roots `maintenance_coverages`, `maintenance_plans`, and `maintenance_due_work`, each with replica identity `USING INDEX` on exactly `(id, organization_id)`. Immutable plan revisions, exact equipment/job/occurrence/service/evidence links and event ledgers remain unpublished. A successful child mutation updates its owning root, and `/service/wartung` uses one `useLiveView` read over those three invalidation signals. The assigned field pack continues to refresh from the exact job root and receives only the bounded maintenance projection authorized for that assignment.
 
 ## Refresh Patterns
 

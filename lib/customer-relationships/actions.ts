@@ -949,6 +949,27 @@ async function loadSingleFollowUpSource(
         : null,
     };
   }
+  if (sourceType === 'maintenance_coverage') {
+    const result = await context.admin
+      .from('maintenance_coverages')
+      .select('coverage_number,reference')
+      .eq('id', sourceId)
+      .eq('client_id', clientId)
+      .eq('organization_id', context.orgId)
+      .maybeSingle();
+    if (result.error) return { success: false, error: 'source_load_failed' };
+    return {
+      success: true,
+      source: result.data
+        ? {
+            label: result.data.reference
+              ? `${result.data.coverage_number} · ${result.data.reference}`
+              : result.data.coverage_number,
+            href: '/service/wartung',
+          }
+        : null,
+    };
+  }
   const result = await context.admin
     .from('projects')
     .select('project_number,name')
@@ -1074,6 +1095,40 @@ async function loadFollowUps(
         sourceReferences.set(`${sourceType}:${row.id}`, {
           label: row.job_number ?? row.title,
           href,
+        });
+      }
+      return true;
+    }
+    if (sourceType === 'service_case') {
+      const result = await context.admin
+        .from('service_cases')
+        .select('id,case_number,summary')
+        .in('id', ids)
+        .eq('organization_id', context.orgId)
+        .eq('client_id', clientId);
+      if (result.error) return false;
+      for (const row of result.data ?? []) {
+        sourceReferences.set(`${sourceType}:${row.id}`, {
+          label: `${row.case_number} · ${row.summary}`,
+          href: `/service/faelle/${encodeURIComponent(row.case_number)}`,
+        });
+      }
+      return true;
+    }
+    if (sourceType === 'maintenance_coverage') {
+      const result = await context.admin
+        .from('maintenance_coverages')
+        .select('id,coverage_number,reference')
+        .in('id', ids)
+        .eq('organization_id', context.orgId)
+        .eq('client_id', clientId);
+      if (result.error) return false;
+      for (const row of result.data ?? []) {
+        sourceReferences.set(`${sourceType}:${row.id}`, {
+          label: row.reference
+            ? `${row.coverage_number} · ${row.reference}`
+            : row.coverage_number,
+          href: '/service/wartung',
         });
       }
       return true;

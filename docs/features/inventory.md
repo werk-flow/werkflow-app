@@ -57,6 +57,7 @@ The implemented V1 is a useful native WerkFlow foundation, not the complete oper
 - P1-14 reads planned demand and shortfall through the shared readiness projection, labels planned material „nicht reserviert“ and records only that assessment in transition snapshots. Execution, blocker, dependency, parking, completion and handover mutations never create, reserve, consume, return or repair stock.
 - P1-17 can freeze a bounded customer-safe material summary and its source fingerprint in an office-handover release. The summary does not reinterpret planned/taken/returned quantities as reservation, consumption, installation, billability or valuation; releasing, withdrawing or reopening a package creates no inventory movement or procurement fact.
 - P1-19 shows the linked job's existing planned, taken and returned material facts in the reactive-service context. It creates no service-owned material ledger and does not reinterpret those quantities as consumption, warranty return, billability or cost.
+- P1-20 may consume planned-material hints already frozen into a published P1-13 work-template version and later applied to a normal visit job. The plan and due-work records create no reservation, stock movement, consumption, supplier demand, tool-maintenance record or billability fact.
 - A billable default and billable-quantity infrastructure exist, but no structured offer or invoice module consumes them yet.
 
 ### Tools, Assets, And Missing Operational Depth

@@ -1,12 +1,12 @@
 export const PLAYWRIGHT_LANES = [
-  'iteration',
-  'certification',
-  'diagnostic',
-  'direct',
+  "iteration",
+  "certification",
+  "diagnostic",
+  "direct",
 ] as const;
 export type PlaywrightLane = (typeof PLAYWRIGHT_LANES)[number];
 
-export const PLAYWRIGHT_SUITES = ['golden', 'audit', 'canary'] as const;
+export const PLAYWRIGHT_SUITES = ["golden", "audit", "canary"] as const;
 export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
 
 // Where a run's authoritative backend lives (decision D8, docs/plans/
@@ -15,20 +15,20 @@ export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
 // and only ever runs against cloud DEV. `--target cloud` on golden/audit is
 // the deliberate exception for wave-end and partner-milestone certifications
 // (decision D11).
-export const PLAYWRIGHT_TARGETS = ['local', 'cloud'] as const;
+export const PLAYWRIGHT_TARGETS = ["local", "cloud"] as const;
 export type PlaywrightTarget = (typeof PLAYWRIGHT_TARGETS)[number];
 
 export function defaultTargetForSuite(
   suite: PlaywrightSuite,
 ): PlaywrightTarget {
-  return suite === 'canary' ? 'cloud' : 'local';
+  return suite === "canary" ? "cloud" : "local";
 }
 
 export const INCIDENT_CLASSES = [
-  'product',
-  'harness',
-  'environment',
-  'transient',
+  "product",
+  "harness",
+  "environment",
+  "transient",
 ] as const;
 export type IncidentClass = (typeof INCIDENT_CLASSES)[number];
 
@@ -42,7 +42,7 @@ export type RunRequest = {
 
 export type CertificationAttempt = {
   runKey: string;
-  status: 'passed' | 'failed';
+  status: "passed" | "failed";
   startedAt: string;
   classification: IncidentClass | null;
   classifiedAt: string | null;
@@ -51,7 +51,7 @@ export type CertificationAttempt = {
 };
 
 export type FocusedVerification = {
-  status: 'passed' | 'failed';
+  status: "passed" | "failed";
   startedAt: string;
   sourceFingerprint: string;
   suite: PlaywrightSuite;
@@ -61,7 +61,7 @@ export type FocusedVerification = {
 
 export type FocusedIterationAttempt = {
   runKey: string;
-  status: 'failed';
+  status: "failed";
   classification: IncidentClass | null;
   classifiedAt: string | null;
 };
@@ -86,20 +86,26 @@ type SerialSelectionRule = {
 
 const SERIAL_SELECTION_RULES = [
   {
-    suite: 'audit',
-    dependentTitleToken: 'A1-02/A1-03',
-    requiredTitleTokens: ['A1-01/A1-07'],
-    recoveryGrep: 'A1-01/A1-07|A1-02/A1-03',
+    suite: "golden",
+    dependentTitleToken: "@P1-04",
+    requiredTitleTokens: ["@P1-03"],
+    recoveryGrep: "@P1-03|@P1-04",
+  },
+  {
+    suite: "audit",
+    dependentTitleToken: "A1-02/A1-03",
+    requiredTitleTokens: ["A1-01/A1-07"],
+    recoveryGrep: "A1-01/A1-07|A1-02/A1-03",
   },
 ] as const satisfies readonly SerialSelectionRule[];
 
 const FOCUSED_PROOF_IMPACT_RULES = [
   {
-    path: 'components/auftraege/field-work-pack-page.tsx',
+    path: "components/auftraege/field-work-pack-page.tsx",
     requirement: {
-      suite: 'golden',
-      token: 'p1-16',
-      reason: 'The assigned field-work pack changed.',
+      suite: "golden",
+      token: "p1-16",
+      reason: "The assigned field-work pack changed.",
     },
   },
 ] as const satisfies ReadonlyArray<{
@@ -122,7 +128,7 @@ export function focusedProofTokenForFailure(input: {
   failedTitle: string | null;
   failedSpecFile: string | null;
 }): string | null {
-  if (input.suite === 'canary' && input.failedTitle) {
+  if (input.suite === "canary" && input.failedTitle) {
     return /\bC\d+:/i.exec(input.failedTitle)?.[0] ?? null;
   }
   return focusedProofToken(input.failedSpecFile);
@@ -131,31 +137,31 @@ export function focusedProofTokenForFailure(input: {
 // Token-boundary match: "@P1-16-stage-boundaries" covers token "p1-16", but a
 // bare substring must not let "p1-1" cover "@P1-16".
 export function focusedGrepCoversToken(grep: string, token: string): boolean {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`${escaped}(?![a-z0-9])`, 'i').test(grep);
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${escaped}(?![a-z0-9])`, "i").test(grep);
 }
 
 export function validateRunRequest(request: RunRequest): string[] {
   const errors: string[] = [];
-  if (request.suite === 'canary' && request.target !== 'cloud') {
+  if (request.suite === "canary" && request.target !== "cloud") {
     errors.push(
-      'The canary suite proves cloud behavior; it only runs with target cloud.',
+      "The canary suite proves cloud behavior; it only runs with target cloud.",
     );
   }
-  if (request.lane === 'iteration' && !request.grep?.trim()) {
+  if (request.lane === "iteration" && !request.grep?.trim()) {
     errors.push(
-      'Iteration runs require --grep. Use certification for a complete battery.',
+      "Iteration runs require --grep. Use certification for a complete battery.",
     );
   }
-  if (request.lane === 'certification' && request.grep?.trim()) {
-    errors.push('Certification runs cannot use --grep.');
+  if (request.lane === "certification" && request.grep?.trim()) {
+    errors.push("Certification runs cannot use --grep.");
   }
-  if (request.lane === 'diagnostic') {
-    if (!request.grep?.trim()) errors.push('Diagnostic runs require --grep.');
+  if (request.lane === "diagnostic") {
+    if (!request.grep?.trim()) errors.push("Diagnostic runs require --grep.");
     if (!request.reuseRunKey)
-      errors.push('Diagnostic runs require --reuse-run <run-key>.');
+      errors.push("Diagnostic runs require --reuse-run <run-key>.");
   } else if (request.reuseRunKey) {
-    errors.push('--reuse-run is available only in diagnostic mode.');
+    errors.push("--reuse-run is available only in diagnostic mode.");
   }
   return errors;
 }
@@ -164,7 +170,7 @@ export function parsePlaywrightListOutput(output: string): PlaywrightSelection {
   const totalMatch = /^Total:\s+(\d+)\s+tests?/m.exec(output);
   if (!totalMatch)
     throw new Error(
-      'Playwright --list output did not report a total test count.',
+      "Playwright --list output did not report a total test count.",
     );
   const total = Number.parseInt(totalMatch[1], 10);
   const titles = output
@@ -185,14 +191,14 @@ export function validateFocusedSelection(input: {
   selectedTestCount: number;
   fullSuiteTestCount: number;
 }): string[] {
-  if (!['iteration', 'diagnostic'].includes(input.lane)) return [];
+  if (!["iteration", "diagnostic"].includes(input.lane)) return [];
   if (input.selectedTestCount <= 0) {
     return [
-      `${input.lane === 'iteration' ? 'Iteration' : 'Diagnostic'} selected no tests.`,
+      `${input.lane === "iteration" ? "Iteration" : "Diagnostic"} selected no tests.`,
     ];
   }
   if (input.selectedTestCount >= input.fullSuiteTestCount) {
-    const laneName = input.lane === 'iteration' ? 'Iteration' : 'Diagnostic';
+    const laneName = input.lane === "iteration" ? "Iteration" : "Diagnostic";
     return [
       `${laneName} must select fewer than all ${input.fullSuiteTestCount} ${input.suite} tests.`,
     ];
@@ -205,7 +211,7 @@ export function validateSerialSelection(input: {
   suite: PlaywrightSuite;
   selectedTitles: readonly string[];
 }): string[] {
-  if (input.lane !== 'iteration') return [];
+  if (input.lane !== "iteration") return [];
   const errors: string[] = [];
   for (const rule of SERIAL_SELECTION_RULES) {
     if (rule.suite !== input.suite) continue;
@@ -256,7 +262,7 @@ export function requiredFocusedProofsForChangedFiles(
   changedFiles: readonly string[],
 ): FocusedProofRequirement[] {
   const normalizedFiles = new Set(
-    changedFiles.map((file) => file.replaceAll('\\', '/')),
+    changedFiles.map((file) => file.replaceAll("\\", "/")),
   );
   const requirements = new Map<string, FocusedProofRequirement>();
   for (const rule of FOCUSED_PROOF_IMPACT_RULES) {
@@ -276,7 +282,7 @@ export function evaluateRequiredFocusedProofs(input: {
     (requirement) =>
       !input.focusedVerifications.some(
         (verification) =>
-          verification.status === 'passed' &&
+          verification.status === "passed" &&
           verification.sourceFingerprint === input.currentSourceFingerprint &&
           verification.suite === requirement.suite &&
           verification.total > 0 &&
@@ -307,7 +313,7 @@ export function evaluateFullCertificationRerun(input: {
   overrideReason: string | null;
 }): { allowed: boolean; reason: string | null } {
   const failedAttempts = input.attemptsSinceLastPass.filter(
-    (attempt) => attempt.status === 'failed',
+    (attempt) => attempt.status === "failed",
   );
   const latestFailure = failedAttempts.at(-1);
   if (!latestFailure) return { allowed: true, reason: null };
@@ -327,7 +333,7 @@ export function evaluateFullCertificationRerun(input: {
     Number.isFinite(classifiedAt) &&
     input.focusedVerifications.some(
       (verification) =>
-        verification.status === 'passed' &&
+        verification.status === "passed" &&
         verification.sourceFingerprint === input.currentSourceFingerprint &&
         verification.total > 0 &&
         verification.total < input.fullSuiteTestCount &&
@@ -338,7 +344,7 @@ export function evaluateFullCertificationRerun(input: {
   if (!focusedProofExists) {
     const scope = requiredToken
       ? ` covering ${requiredToken} (grep must match the failed spec)`
-      : '';
+      : "";
     return {
       allowed: false,
       reason: `Run a focused verification${scope} on the current source after classifying ${latestFailure.runKey}.`,

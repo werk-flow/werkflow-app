@@ -2,8 +2,8 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 // Pages often render the same text twice (desktop table + hidden mobile card);
 // assertions must target the visible instance.
-export function visibleText(page: Page, text: string): Locator {
-  return page.getByText(text).filter({ visible: true }).first();
+export function visibleText(container: Page | Locator, text: string): Locator {
+  return container.getByText(text).filter({ visible: true }).first();
 }
 
 // Absence and privacy assertions must inspect every matching DOM node. A
@@ -428,22 +428,159 @@ export async function createAndPublishWorkTemplate(
   await expect(editor).toHaveCount(0, { timeout: 20_000 });
 }
 
+export async function createMaintenanceCoverageViaDialog(
+  page: Page,
+  options: {
+    clientName: string;
+    siteName: string;
+    reference: string;
+    validFrom: string;
+    validUntil: string;
+    noticeDate: string;
+    renewalDate: string;
+    reviewDueDate: string;
+    operationalNote?: string;
+  },
+): Promise<void> {
+  await page.goto("/service/wartung");
+  await page.getByRole("button", { name: "Abdeckung erfassen" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#coverage-client").click();
+  await page
+    .getByRole("option", { name: options.clientName, exact: true })
+    .click();
+  await dialog.locator("#coverage-site").click();
+  await page
+    .getByRole("option", { name: options.siteName, exact: true })
+    .click();
+  await dialog.locator("#coverage-reference").fill(options.reference);
+  await typeIntoDatePickerById(
+    dialog,
+    "coverage-valid-from",
+    options.validFrom,
+  );
+  await typeIntoDatePickerById(
+    dialog,
+    "coverage-valid-until",
+    options.validUntil,
+  );
+  await typeIntoDatePickerById(dialog, "coverage-notice", options.noticeDate);
+  await typeIntoDatePickerById(dialog, "coverage-renewal", options.renewalDate);
+  await typeIntoDatePickerById(
+    dialog,
+    "coverage-review",
+    options.reviewDueDate,
+  );
+  if (options.operationalNote) {
+    await dialog.locator("#coverage-note").fill(options.operationalNote);
+  }
+  await dialog.getByRole("button", { name: "Abdeckung speichern" }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await page.getByRole("tab", { name: /Abdeckungen/ }).click();
+  await expect(visibleText(page, options.reference)).toBeVisible({
+    timeout: 20_000,
+  });
+}
+
+export async function createMaintenancePlanViaDialog(
+  page: Page,
+  options: {
+    clientName: string;
+    siteName: string;
+    coverageReference?: string;
+    templateName: string;
+    equipmentName: string;
+    effectiveFrom: string;
+    firstDue: string;
+    intervalMonths?: string;
+    instructions?: string;
+    overlapReason?: string;
+  },
+): Promise<void> {
+  await page.goto("/service/wartung");
+  await page.getByRole("button", { name: "Wartungsplan anlegen" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("#maintenance-client").click();
+  await page
+    .getByRole("option", { name: options.clientName, exact: true })
+    .click();
+  await dialog.locator("#maintenance-site").click();
+  await page
+    .getByRole("option", { name: options.siteName, exact: true })
+    .click();
+  if (options.coverageReference) {
+    await dialog.locator("#maintenance-coverage").click();
+    await page
+      .getByRole("option")
+      .filter({ hasText: options.coverageReference })
+      .click();
+  }
+  await dialog.locator("#maintenance-template").click();
+  await page
+    .getByRole("option")
+    .filter({ hasText: options.templateName })
+    .click();
+  await typeIntoDatePickerById(
+    dialog,
+    "maintenance-effective",
+    options.effectiveFrom,
+  );
+  await typeIntoDatePickerById(
+    dialog,
+    "maintenance-first-due",
+    options.firstDue,
+  );
+  if (options.intervalMonths) {
+    await dialog.locator("#maintenance-interval").fill(options.intervalMonths);
+  }
+  await dialog
+    .getByText(options.equipmentName, { exact: true })
+    .locator("..")
+    .click();
+  if (options.instructions) {
+    await dialog
+      .locator("#maintenance-instructions")
+      .fill(options.instructions);
+  }
+  if (options.overlapReason) {
+    await dialog.locator("#maintenance-overlap").fill(options.overlapReason);
+  }
+  await dialog.getByRole("button", { name: "Wartungsplan anlegen" }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await page.getByRole("tab", { name: /Pläne/ }).click();
+  await expect(
+    page
+      .getByTestId("maintenance-plan-card")
+      .filter({ hasText: options.clientName })
+      .filter({ hasText: options.equipmentName }),
+  ).toBeVisible({ timeout: 20_000 });
+}
+
 // Uploads into the "Dokumente & Bilder" section of the page currently open.
 // Shared by the job-page and request-page upload steps.
 export async function uploadIntoDocumentsSection(
   page: Page,
   filePath: string,
   expectedFileName: string,
+  options?: { enclosingDialog?: Locator },
 ): Promise<void> {
-  const documentsHeading = visibleText(page, "Dokumente & Bilder");
+  const documentsContainer = options?.enclosingDialog ?? page;
+  const documentsHeading = visibleText(
+    documentsContainer,
+    "Dokumente & Bilder",
+  );
   await expect(documentsHeading).toBeVisible({
     timeout: 30_000,
   });
 
-  const section = page
-    .locator("section, div")
-    .filter({ has: documentsHeading });
+  const section = documentsContainer
+    .getByTestId("contextual-documents-section")
+    .filter({ hasText: "Dokumente & Bilder" })
+    .first();
   await section.locator('input[type="file"]').first().setInputFiles(filePath);
+  const uploadDialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Dateien hochladen" }),
+  });
 
   // Direct-to-R2 upload dialog: the dialog closes itself 650 ms after a fully
   // successful upload, so the completion counter is a transient flash on a
@@ -455,14 +592,10 @@ export async function uploadIntoDocumentsSection(
   await expect
     .poll(
       async () => {
-        if (await page.getByText("1 von 1 abgeschlossen").isVisible()) {
+        if (await uploadDialog.getByText("1 von 1 abgeschlossen").isVisible()) {
           return "complete";
         }
-        const dialogOpen =
-          (await page
-            .getByRole("dialog")
-            .filter({ hasText: "abgeschlossen" })
-            .count()) > 0;
+        const dialogOpen = (await uploadDialog.count()) > 0;
         if (dialogOpen) {
           uploadDialogSeen = true;
           return "uploading";
@@ -474,17 +607,21 @@ export async function uploadIntoDocumentsSection(
     .toMatch(/^(complete|closed)$/);
   await expect(page.getByText("Upload fehlgeschlagen.")).toHaveCount(0);
 
-  const closeButton = page.getByRole("button", { name: "Schließen" });
+  const closeButton = uploadDialog.getByRole("button", { name: "Schließen" });
   if (await closeButton.isVisible().catch(() => false)) {
-    await closeButton.click();
+    await closeButton.click().catch(() => undefined);
   }
   // Dialog must be gone before asserting, so the file name match can only come
   // from the documents section itself, not from the dialog's row list.
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 10_000 });
+  await expect(uploadDialog).toHaveCount(0, { timeout: 10_000 });
 
-  await expect(visibleText(page, expectedFileName)).toBeVisible({
-    timeout: 15_000,
-  });
+  const persistedFile = options?.enclosingDialog
+    ? options.enclosingDialog
+        .getByText(expectedFileName)
+        .filter({ visible: true })
+        .first()
+    : visibleText(page, expectedFileName);
+  await expect(persistedFile).toBeVisible({ timeout: 15_000 });
 }
 
 export async function uploadDocumentOnJobPage(
@@ -1861,20 +1998,94 @@ export async function selectFromSearchable(
   optionText: string,
   options?: { searchFirst?: boolean },
 ): Promise<void> {
-  await trigger.click();
-  const listbox = page.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  if (options?.searchFirst ?? true) {
-    await listbox.locator("..").getByRole("textbox").fill(optionText);
-  }
+  const listbox = page.getByRole("listbox").filter({ visible: true }).first();
+  const triggerId = await trigger.getAttribute("id");
+  const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
+  const openPicker = async (): Promise<void> => {
+    if (await listbox.isVisible().catch(() => false)) return;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await stableTrigger.click({ force: true, timeout: 2_000 });
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+        return;
+      } catch (error) {
+        lastError = error;
+        // Retry the same semantic trigger when a live refresh remounts it.
+      }
+    }
+    throw new Error("Searchable picker could not be opened.", {
+      cause: lastError,
+    });
+  };
+  const searchFirst = options?.searchFirst ?? true;
+  const restoreOpenState = async (): Promise<void> => {
+    await openPicker();
+    if (searchFirst) {
+      await listbox
+        .locator("..")
+        .getByRole("textbox")
+        .fill(optionText, { timeout: 2_000 });
+    }
+  };
+  await restoreOpenState();
   const optionName = new RegExp(
     `(?:^|\\s|·)${escapeRegExp(optionText)}(?:$|\\s)`,
   );
   const optionButton = listbox
     .getByRole("button", { name: optionName })
     .first();
-  await expect(optionButton).toBeVisible({ timeout: 15_000 });
-  await optionButton.click();
+  let selected = false;
+  let lastSelectionError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await restoreOpenState();
+      await expect(optionButton).toBeVisible({ timeout: 5_000 });
+      // Realtime-backed option sources can remount the same semantic row
+      // during any locator action. Query and click the current exact option
+      // in one browser turn, then prove the resulting value below.
+      const listboxId = await listbox.getAttribute("id");
+      const clicked = await page.evaluate(
+        ({ optionPattern, listboxId }) => {
+          const listboxElement = listboxId
+            ? document.getElementById(listboxId)
+            : Array.from(document.querySelectorAll('[role="listbox"]')).find(
+                (candidate) => candidate.getClientRects().length > 0,
+              );
+          if (!listboxElement) return false;
+          const matcher = new RegExp(optionPattern);
+          const button = Array.from(
+            listboxElement.querySelectorAll<HTMLButtonElement>("button"),
+          ).find((candidate) => matcher.test(candidate.innerText));
+          if (!button) return false;
+          button.click();
+          return true;
+        },
+        { optionPattern: optionName.source, listboxId },
+      );
+      if (!clicked) {
+        throw new Error("The exact searchable option was remounted.");
+      }
+      if (triggerId) {
+        await expect(stableTrigger).toContainText(optionText, {
+          timeout: 5_000,
+        });
+      } else {
+        await expect(listbox).toBeHidden({ timeout: 2_000 });
+      }
+      selected = true;
+      break;
+    } catch (error) {
+      lastSelectionError = error;
+      // A remount also closes the popover. The next attempt restores it and
+      // any search text before resolving the same exact option again.
+    }
+  }
+  if (!selected) {
+    throw new Error(`Searchable option could not be selected: ${optionText}`, {
+      cause: lastSelectionError,
+    });
+  }
   // Single select closes its popover on selection.
   await expect(listbox).toBeHidden();
 }
@@ -2552,7 +2763,14 @@ export async function signOutViaUi(page: Page): Promise<void> {
       .first();
     for (let attempt = 1; attempt <= 3; attempt++) {
       await accountMenuButton.click();
-      await expect(menuItem).toBeVisible({ timeout: 2_000 });
+      const menuOpened = await menuItem
+        .waitFor({ state: "visible", timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!menuOpened) {
+        await page.keyboard.press("Escape");
+        continue;
+      }
       const reachedLogin = page
         .waitForURL("**/login", { timeout: 5_000 })
         .then(() => true)
@@ -3643,23 +3861,35 @@ export async function showPlanningMonth(
   await page.goto("/kalender");
   await page.getByRole("tab", { name: "Monat", exact: true }).click();
   if (!targetDate) return;
-  const todayParts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Berlin",
-      year: "numeric",
-      month: "2-digit",
-    })
-      .formatToParts(new Date())
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, Number(part.value)]),
+  const dayCells = page.locator(".fc-daygrid-day[data-date]");
+  const primaryMonthDayCells = page.locator(
+    ".fc-daygrid-day:not(.fc-day-other)[data-date]",
   );
-  const [targetYear, targetMonth] = targetDate.split("-").map(Number);
-  const monthDifference =
-    (targetYear - todayParts.year) * 12 + (targetMonth - todayParts.month);
-  const direction = monthDifference >= 0 ? "Weiter" : /Zur.ck/;
-  for (let index = 0; index < Math.abs(monthDifference); index += 1) {
+  await expect(dayCells.first()).toBeVisible({ timeout: 15_000 });
+  for (let attempt = 1; attempt <= 24; attempt += 1) {
+    const primaryMonthDates = await primaryMonthDayCells.evaluateAll((cells) =>
+      cells
+        .map((cell) => cell.getAttribute("data-date"))
+        .filter((date): date is string => Boolean(date)),
+    );
+    if (primaryMonthDates.includes(targetDate)) return;
+    if (primaryMonthDates.length === 0) {
+      throw new Error("The planning month grid has no primary-month cells.");
+    }
+    const previousGrid = primaryMonthDates.join(",");
+    const direction = targetDate < primaryMonthDates[0] ? /Zur.ck/ : "Weiter";
     await page.getByRole("button", { name: direction }).click();
+    await expect
+      .poll(
+        () =>
+          primaryMonthDayCells.evaluateAll((cells) =>
+            cells.map((cell) => cell.getAttribute("data-date")).join(","),
+          ),
+        { timeout: 10_000 },
+      )
+      .not.toBe(previousGrid);
   }
+  throw new Error(`Planning month could not reach ${targetDate}.`);
 }
 
 export async function editPlannedCalendarOccurrence(
@@ -4387,15 +4617,31 @@ export async function createDirectServiceCase(
   await expect(
     dialog.getByRole("heading", { name: "Servicefall erfassen" }),
   ).toBeVisible();
-  await selectRadixOption(page, dialog.locator("#service-client"), options.customerName);
-  await selectRadixOption(page, dialog.locator("#service-site"), options.siteName);
+  await selectRadixOption(
+    page,
+    dialog.locator("#service-client"),
+    options.customerName,
+  );
+  await selectRadixOption(
+    page,
+    dialog.locator("#service-site"),
+    options.siteName,
+  );
   await dialog.locator("#service-statement").fill(options.statement);
   await dialog.locator("#service-summary").fill(options.summary);
   if (options.urgencyLabel) {
-    await selectRadixOption(page, dialog.locator("#service-urgency"), options.urgencyLabel);
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-urgency"),
+      options.urgencyLabel,
+    );
   }
   if (options.chargeContextLabel) {
-    await selectRadixOption(page, dialog.locator("#service-charge"), options.chargeContextLabel);
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-charge"),
+      options.chargeContextLabel,
+    );
   }
   if (options.accessInstructions) {
     await dialog.locator("#service-access").fill(options.accessInstructions);
@@ -4418,23 +4664,31 @@ export async function createDirectServiceCase(
     timeout: 20_000,
   });
   const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
-  if (!match) throw new Error("createDirectServiceCase: service case number missing");
-  await expect(visibleText(page, options.statement)).toBeVisible({ timeout: 15_000 });
+  if (!match)
+    throw new Error("createDirectServiceCase: service case number missing");
+  await expect(visibleText(page, options.statement)).toBeVisible({
+    timeout: 15_000,
+  });
   return match[1];
 }
 
 export async function convertRequestToServiceCase(page: Page): Promise<string> {
-  await page.getByRole("button", { name: "Als Servicefall übernehmen" }).click();
+  await page
+    .getByRole("button", { name: "Als Servicefall übernehmen" })
+    .click();
   const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("heading", { name: "Anfrage als Servicefall übernehmen?" }),
+    dialog.getByRole("heading", {
+      name: "Anfrage als Servicefall übernehmen?",
+    }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Übernehmen", exact: true }).click();
   await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
     timeout: 20_000,
   });
   const match = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/);
-  if (!match) throw new Error("convertRequestToServiceCase: service case number missing");
+  if (!match)
+    throw new Error("convertRequestToServiceCase: service case number missing");
   return match[1];
 }
 
@@ -4459,13 +4713,25 @@ export async function updateServiceCaseViaDialog(
     await dialog.locator("#service-summary").fill(options.summary);
   }
   if (options.statusLabel) {
-    await selectRadixOption(page, dialog.locator("#service-status"), options.statusLabel);
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-status"),
+      options.statusLabel,
+    );
   }
   if (options.urgencyLabel) {
-    await selectRadixOption(page, dialog.locator("#service-urgency"), options.urgencyLabel);
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-urgency"),
+      options.urgencyLabel,
+    );
   }
   if (options.chargeContextLabel) {
-    await selectRadixOption(page, dialog.locator("#service-charge"), options.chargeContextLabel);
+    await selectRadixOption(
+      page,
+      dialog.locator("#service-charge"),
+      options.chargeContextLabel,
+    );
   }
   if (options.jobNumber) {
     await selectRadixOption(

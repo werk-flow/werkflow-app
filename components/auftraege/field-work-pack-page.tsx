@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
-import { Siren, Wrench } from "lucide-react";
+import { CalendarClock, Siren, Wrench } from "lucide-react";
 
 import { DetailPageHeader } from "@/components/shared/detail-page-header";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ import {
 import { FieldWorkHandoverStatus } from "@/components/auftraege/work-handover-section";
 import { getAssignedServiceContextForJob } from "@/lib/service-cases/actions";
 import { SERVICE_CASE_URGENCY_LABELS } from "@/lib/service-cases/types";
+import { getAssignedMaintenanceContextForJob } from "@/lib/maintenance/actions";
 
 export async function FieldWorkPackPage({
   jobNumber,
@@ -81,6 +82,7 @@ export async function FieldWorkPackPage({
     handoverStatusResult,
     equipmentResult,
     serviceContextResult,
+    maintenanceContextResult,
   ] = await Promise.all([
     getJobInstructionItems(job.id),
     getJobDocuments(job.id),
@@ -92,6 +94,7 @@ export async function FieldWorkPackPage({
     getWorkHandoverFieldStatus(job.id),
     getAssignedEquipmentForJob(job.id),
     getAssignedServiceContextForJob(job.id),
+    getAssignedMaintenanceContextForJob(job.id),
   ]);
 
   const fieldJob = projectFieldWorkPackJob(job);
@@ -194,6 +197,45 @@ export async function FieldWorkPackPage({
                         Betroffene Anlagen: {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(", ")}
                       </p>
                     )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </FieldWorkPackSource>
+        <FieldWorkPackSource
+          sourceId={`${job.id}:maintenance-context`}
+          success={maintenanceContextResult.success}
+          title="Wartungskontext nicht verfügbar"
+          description="Die für diesen Auftrag freigegebenen Wartungshinweise konnten nicht geladen werden."
+        >
+          {maintenanceContextResult.success &&
+          maintenanceContextResult.contexts.length > 0 ? (
+            <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <CalendarClock className="size-4" />
+                Wartung
+              </h2>
+              <div className="mt-3 space-y-3">
+                {maintenanceContextResult.contexts.map((context) => (
+                  <div
+                    key={`${context.planNumber}:${context.dueDate}`}
+                    className="rounded-md border p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">
+                        {context.templateName} · Version {context.templateVersionNumber}
+                      </p>
+                      <span className="text-xs text-muted-foreground">
+                        {context.planNumber} · fällig {new Intl.DateTimeFormat("de-DE").format(new Date(`${context.dueDate}T12:00:00Z`))}
+                      </span>
+                    </div>
+                    {context.operationalInstructions && (
+                      <p className="mt-2 text-sm">{context.operationalInstructions}</p>
+                    )}
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Anlagen: {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(", ")}
+                    </p>
                   </div>
                 ))}
               </div>

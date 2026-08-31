@@ -774,3 +774,113 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-19-F96` — P1-19 führt weder Offline-Warteschlange, native mobile Hülle, externen Connector, Herstellerregelwerk, Telemetrie, Ferndiagnose, automatische Diagnose noch rechtliche Gewährleistungsklassifikation ein.
 
 **Acceptance invariant:** `96/96 mapped; 96/96 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-30).
+
+### `P1-20` — Wartungspläne und operative Abdeckung (2026-08-31)
+
+- `P1-20-F01` — Büro/Admin öffnen unter `/service/wartung` eine gemeinsame Wartungsübersicht; Mitarbeiter werden von der managerweiten Route weggeleitet.
+- `P1-20-F02` — Die Übersicht trennt fällige Arbeit, Wartungspläne und operative Abdeckungen in klar benannte Ansichten.
+- `P1-20-F03` — Ein ehrlicher Leerzustand erklärt, dass ohne bewusst angelegte Abdeckung und Pläne keine Wartungsarbeit existiert.
+- `P1-20-F04` — Büro/Admin durchsuchen Wartungsdaten nach Plan, Kunde, Einsatzort, Anlage oder Referenz, ohne beim Lesen Fachzeilen anzulegen.
+- `P1-20-F05` — Status- und Fälligkeitsfilter verändern nur die Ansicht und erzeugen weder Fälligkeit noch Termin.
+- `P1-20-F06` — Eine operative Abdeckung gehört genau zu einem vorhandenen Kunden und einem vorhandenen Einsatzort dieses Kunden.
+- `P1-20-F07` — Die Abdeckung erhält eine freie betriebliche Referenz, einen begrenzten Status und optional eingegebene Gültigkeitsdaten.
+- `P1-20-F08` — Kündigungs-, Verlängerungs- und interne Prüfdaten bleiben eingegebene operative Tatsachen statt errechneter Vertragsbehauptungen.
+- `P1-20-F09` — Fehlende Abdeckungsdaten bleiben sichtbar unbekannt; WerkFlow leitet sie nicht aus Dokumenten, Garantie, Auftrag oder Notiz ab.
+- `P1-20-F10` — Ein sichtbares Verlängerungs- oder Prüfrisiko ist ein interner Hinweis und keine automatische Vertragsverlängerung oder Kündigung.
+- `P1-20-F11` — Eine operative Notiz bleibt manager-intern und wird nicht in das Einsatzpaket eines Mitarbeiters projiziert.
+- `P1-20-F12` — Eine Abdeckung enthält weder Preis, Leistungsposition, Rechtsauslegung, Rechnung noch kaufmännischen Vertragsstatus.
+- `P1-20-F13` — Jeder Wartungsplan erhält eine stabile organisationsweit eindeutige Plannummer.
+- `P1-20-F14` — Ein Plan gehört genau zu einem vorhandenen Kunden und einem vorhandenen Einsatzort dieses Kunden.
+- `P1-20-F15` — Ein Plan referenziert mindestens eine genaue installierte Anlage oder Komponente dieses Einsatzorts.
+- `P1-20-F16` — Anlagen-, Komponenten-, Kunden- und Einsatzortidentitäten bleiben bei P1-18 und werden nicht in Wartungstext kopiert.
+- `P1-20-F17` — Ein Plan referenziert genau eine veröffentlichte P1-13-Arbeitsvorlagenversion.
+- `P1-20-F18` — Eine unveröffentlichte, archivierte, gelöschte oder zielartfremde Vorlagenversion kann keinen neuen aktiven Plan tragen.
+- `P1-20-F19` — Aufgaben, Nachweise, Abhängigkeiten, Materialhinweise und Qualifikationen bleiben in der genauen Vorlagenversion nachvollziehbar.
+- `P1-20-F20` — Spätere Vorlagenänderungen biegen eine gespeicherte Planrevision oder einen erzeugten Besuchsauftrag nicht still um.
+- `P1-20-F21` — Ein Plan kann eine vorhandene operative Abdeckung desselben Kunden und Einsatzorts referenzieren.
+- `P1-20-F22` — Eine Abdeckung ist für den Plan optional; fehlende Abdeckung wird nicht als fehlender rechtlicher Vertrag interpretiert.
+- `P1-20-F23` — Ein Plan speichert einen Wirksamkeitsbeginn, ein erstes Fälligkeitsdatum, ein positives Monatsintervall und eine ausgewählte Nächste-Fälligkeit-Basis.
+- `P1-20-F24` — Plananweisungen ergänzen den betrieblichen Kontext, ersetzen aber weder Checkliste noch Arbeitsnachweis.
+- `P1-20-F25` — Jede Planrevision bewahrt die damaligen Kunden-, Einsatzort-, Anlagen-, Vorlagen-, Intervall-, Basis- und Anweisungsfakten unveränderlich.
+- `P1-20-F26` — Ein neuer Plan beginnt als Entwurf und erzeugt noch keine fällige Arbeit.
+- `P1-20-F27` — Die bewusste Aktivierung erzeugt einen verständlichen 18-Monats-Horizont serviceeigener Fälligkeiten.
+- `P1-20-F28` — Normales Öffnen, Suchen, Filtern, Fokusrückkehr und Realtime-Nachladen erzeugen keine neue Fälligkeit.
+- `P1-20-F29` — Anlage, Aktivierung, Revision, Fortsetzung, Abschluss und ausdrückliche Horizonterweiterung dürfen den Horizont idempotent vorziehen.
+- `P1-20-F30` — Wiederholte Generierung mit demselben Stand erzeugt keine doppelte Fälligkeit.
+- `P1-20-F31` — Jede Fälligkeit besitzt eine stabile Identität aus Planrevision, geplanter Sequenz und genauer Anlage.
+- `P1-20-F32` — Mehrere Anlagen eines Plans behalten getrennte Fälligkeitsidentitäten, auch wenn sie später denselben Besuch teilen.
+- `P1-20-F33` — Monatsfolgen verwenden geklemmte Kalendermonate; ein nicht vorhandener Monatstag verrutscht nicht in den Folgemonat.
+- `P1-20-F34` — Der erzeugte Horizont ist begrenzt und kann nur bewusst in weiteren begrenzten Abschnitten erweitert werden.
+- `P1-20-F35` — Offene Fälligkeiten zeigen Plannummer, Kunde, Einsatzort, Anlage, Solltermin und aktuellen Arbeitsbezug.
+- `P1-20-F36` — Überfälligkeit wird aus einer offenen, zeitlich vergangenen Fälligkeit abgeleitet und nicht als eigener widersprüchlicher Status gespeichert.
+- `P1-20-F37` — Ein fehlender Besuch bleibt als offene Fälligkeit sichtbar und wird nicht durch einen leeren Kalender als erledigt dargestellt.
+- `P1-20-F38` — Fällige Arbeit entsteht ohne Auftrag, Kalendertermin, Disposition, Zeitbuchung oder Bestandsbewegung.
+- `P1-20-F39` — Zwei gleichzeitig aktive Pläne für dieselbe genaue Anlage und überlappenden Umfang verlangen einen sichtbaren fachlichen Grund.
+- `P1-20-F40` — Ein fehlender Überlappungsgrund weist die Anlage atomar ab und hinterlässt keinen zweiten Plan oder Teilverlauf.
+- `P1-20-F41` — Ein begründeter überlappender Plan bleibt mit eigener Identität, Revision, Fälligkeit und Historie erhalten.
+- `P1-20-F42` — Der Planstatus ist genau „Entwurf“, „Aktiv“, „Pausiert“ oder „Beendet“.
+- `P1-20-F43` — Büro/Admin pausieren einen aktiven Plan nur mit einem sichtbaren Grund.
+- `P1-20-F44` — Pausieren erzeugt keine neuen Fälligkeiten und löscht weder bestehende Arbeit noch abgeschlossene Historie.
+- `P1-20-F45` — Büro/Admin setzen einen pausierten Plan bewusst fort; die Fortsetzung kann den begrenzten Horizont idempotent auffüllen.
+- `P1-20-F46` — Büro/Admin beenden einen Plan nur mit Grund; ein beendeter Plan kann nicht still reaktiviert werden.
+- `P1-20-F47` — Archivieren ändert nur die normale Sichtbarkeit und ist erst nach Beendigung zulässig.
+- `P1-20-F48` — Ein aktiver oder pausierter Plan kann nicht archiviert werden, um offene Arbeit oder Historie zu verstecken.
+- `P1-20-F49` — Eine fachliche Planänderung erzeugt eine neue unveränderliche Revision statt alte Definitionen zu überschreiben.
+- `P1-20-F50` — Eine neue Revision schreibt abgeschlossene, übersprungene, abgebrochene oder bereits verknüpfte Fälligkeiten nicht um.
+- `P1-20-F51` — Eine offene Fälligkeit kann bewusst übersprungen, abgebrochen oder durch eine neue Revision abgelöst werden; diese Bedeutungen bleiben getrennt.
+- `P1-20-F52` — Überspringen und Abbrechen verlangen einen fachlichen Grund und bewahren die ursprüngliche Sollfälligkeit.
+- `P1-20-F53` — „Abgelöst“ bezeichnet nur einen nachvollziehbaren Revisionswechsel und ist kein versteckter Abschluss.
+- `P1-20-F54` — Mehrere kompatible Fälligkeiten dürfen bewusst in einem vorhandenen Besuchsauftrag zusammengeführt werden.
+- `P1-20-F55` — Zusammengeführte Fälligkeiten behalten getrennte Identitäten, Anlagen, Ergebnisse und nächste Termine.
+- `P1-20-F56` — Die Besuchserstellung ist eine bewusste Manageraktion und kein Nebeneffekt des Lesens oder der Horizonterzeugung.
+- `P1-20-F57` — Ein Besuch ist ein normaler Auftrag mit eigener stabiler Auftragsnummer und dem vorhandenen Kunden-/Einsatzortbezug.
+- `P1-20-F58` — Der Besuchsauftrag erhält die genaue veröffentlichte Vorlagenversion der Fälligkeit über den bestehenden P1-13-Anwendungsweg.
+- `P1-20-F59` — Checkliste, erwartete Nachweise, Materialhinweise und Qualifikationsanforderungen werden als bearbeitbare auftragseigene Planung angewendet.
+- `P1-20-F60` — Die Wartungsoberfläche kopiert keine privaten Job-Inserts und umgeht keine vorhandene Kunden-, Einsatzort-, Vorlagen- oder Qualifikationsprüfung.
+- `P1-20-F61` — Wiederholtes Auslösen mit derselben Anfrage-ID liefert denselben Besuchsbezug statt eines zweiten Auftrags.
+- `P1-20-F62` — Gleiche Anfrage-ID mit abweichendem Inhalt wird ohne zweiten Auftrag und ohne Teilverknüpfung abgewiesen.
+- `P1-20-F63` — Die Fälligkeit wechselt erst nach erfolgreicher atomarer Auftragsverknüpfung auf „Besuch angelegt“.
+- `P1-20-F64` — Ein Besuchsauftrag ist noch kein Kalendertermin; die Planung bleibt eine getrennte bewusste Manageraktion.
+- `P1-20-F65` — Der geplante Besuch verwendet eine normale P1-11-Auftragsvorkommnis-Identität mit Datum, Zeit und Zuordnung.
+- `P1-20-F66` — Kapazität, Qualifikationsabdeckung, Teamauflösung und Planungshinweise bleiben bei P1-11.
+- `P1-20-F67` — Das Verschieben eines einzelnen Termins ändert weder Wartungsintervall noch Planrevision, Sollfälligkeit oder andere Besuche.
+- `P1-20-F68` — P1-11-Einzel-, Zukunfts- und Serienänderungen bleiben Terminsemantik und werden nicht als Wartungsdefinitionsänderung missverstanden.
+- `P1-20-F69` — Ein abgesagter oder ausgelassener Kalendertermin schließt die serviceeigene Fälligkeit nicht automatisch.
+- `P1-20-F70` — Auftrag, Vorkommnis und Fälligkeit bleiben drei getrennte, exakt verknüpfte Identitäten.
+- `P1-20-F71` — Ein exakt dem Besuchsauftrag zugewiesener Mitarbeiter sieht im vorhandenen Einsatzpaket einen kompakten Wartungskontext.
+- `P1-20-F72` — Der Feldkontext zeigt Plannummer, genaue Anlage, Solltermin und operative Anweisungen für diesen Besuch.
+- `P1-20-F73` — Der Feldkontext verwendet vorhandene Auftragsschritte, Arbeitsnachweise, Dokumente, eigene Zeit und Materialaktionen statt eines zweiten mobilen Ablaufs.
+- `P1-20-F74` — Abdeckungsdaten, Verlängerungsrisiko, interne Prüfung und managerinterne Notizen bleiben aus dem Feldkontext ausgeschlossen.
+- `P1-20-F75` — Eine nicht zugewiesene Person erhält keinen Wartungskontext; Entzug der Auftragszuweisung beendet den abgeleiteten Zugriff.
+- `P1-20-F76` — Kunden-, Einsatzort-, Anlagenwurzel-, Komponenten-, Plan- oder Abdeckungsnähe allein erweitert den Mitarbeiterzugriff nicht.
+- `P1-20-F77` — Der normale P1-14-Lebenszyklus steuert Start, Unterbrechung, Fortsetzung und Ausführungsabschluss des Besuchs.
+- `P1-20-F78` — „Ausführung abgeschlossen“ bedeutet nicht automatisch „Wartung vollständig belegt“ oder „technisches Problem gelöst“.
+- `P1-20-F79` — Ein Wartungsabschluss referenziert eine genaue unveränderliche eingereichte P1-15-Arbeitsnachweisrevision des genauen Besuchsauftrags.
+- `P1-20-F80` — Eine spätere Nachweisrevision biegt den gespeicherten Wartungsbeleg nicht still um.
+- `P1-20-F81` — Fehlt der erforderliche genaue Nachweis, bleibt die Fälligkeit offen und die Oberfläche erklärt den fehlenden Abschlussbeleg.
+- `P1-20-F82` — Der Abschlussstatus „Vollständig“, „Teilweise“ oder „Ungeklärt“ bleibt getrennt vom Fälligkeitsstatus „Abgeschlossen“.
+- `P1-20-F83` — „Teilweise“ und „Ungeklärt“ bewahren eine sichtbare Begründung und können Folgearbeit auslösen, ohne sie als erledigt auszugeben.
+- `P1-20-F84` — Der Abschluss verknüpft die genaue Anlage und den Besuch nachvollziehbar mit der vorhandenen P1-18-Anlagenhistorie.
+- `P1-20-F85` — Die nächste Fälligkeit folgt entweder der geplanten Sollfälligkeit oder dem tatsächlichen Abschlussdatum gemäß der gespeicherten Planrevision.
+- `P1-20-F86` — Fehlendes oder widersprüchliches Abschlussdatum erzeugt eine sichtbare Ausnahme statt eines erfundenen nächsten Termins.
+- `P1-20-F87` — Der berechnete nächste Termin erweitert den begrenzten Horizont idempotent und erzeugt keine doppelte Fälligkeit.
+- `P1-20-F88` — Abschluss, nächster Termin und Ergebnis schreiben keine rechtliche Vertragserfüllung, Abrechenbarkeit oder Mängelfreiheit fest.
+- `P1-20-F89` — Büro/Admin verknüpfen einen vorhandenen passenden P1-19-Servicefall als reaktiven Kontext einer Fälligkeit oder eines Besuchs.
+- `P1-20-F90` — Der Servicefall behält eigene Nummer, Triage, Status, Verlauf und Auftrag; P1-20 kopiert oder schließt ihn nicht.
+- `P1-20-F91` — Nur ein Servicefall desselben Kunden und Einsatzorts kann verknüpft werden; fremde oder nur ähnliche Fälle werden abgewiesen.
+- `P1-20-F92` — Büro/Admin legen aus einer Abdeckung eine normale P1-10-Wiedervorlage mit genauer Abdeckungsquelle und vorhandenem Manager-Eigentümer an.
+- `P1-20-F93` — Abschluss, Pause, Beendigung oder Archivierung schließen eine offene Wiedervorlage nicht automatisch.
+- `P1-20-F94` — Ein vorhandenes oder neu hochgeladenes Dokument wird über den typisierten Dokumenteigentümer genau mit der Abdeckung verknüpft.
+- `P1-20-F95` — Dateibytes bleiben im privaten R2-Pfad; Verknüpfung und Upload kopieren keine Bytes und leiten sie nicht durch eine Server Action.
+- `P1-20-F96` — Ein Abdeckungsdokument erweitert weder Mitarbeiterzugriff noch Kunden-, Plan- oder Anlagenberechtigungen.
+- `P1-20-F97` — Jede Mutation prüft Organisation, Rolle, Zielbeziehungen, erwartete Version und Anfrage-ID erneut auf dem Server.
+- `P1-20-F98` — Ein veralteter Plan-, Abdeckungs- oder Fälligkeitsstand überschreibt keinen neueren Stand und hinterlässt keine Teilmutation.
+- `P1-20-F99` — Gleiche Anfrage-ID mit gleichem Inhalt ist idempotent; widersprüchliche Wiederverwendung wird atomar abgewiesen.
+- `P1-20-F100` — Unveränderliche Ereignisse bewahren Akteur, Aufzeichnungszeit, Grund, Anfrage-ID sowie fachlichen Vorher-/Nachherkontext.
+- `P1-20-F101` — Admin und Büro dürfen Wartungspläne, Fälligkeiten und operative Abdeckung lesen und verändern; Mitarbeiter dürfen die Wurzeln nicht direkt lesen oder schreiben.
+- `P1-20-F102` — Mitglieder einer fremden Organisation sehen und verändern weder Plan, Revision, Fälligkeit, Abdeckung, Verknüpfung, Beleg noch Verlauf.
+- `P1-20-F103` — Die drei veränderlichen Wurzeln Abdeckung, Plan und Fälligkeit aktualisieren Managersitzungen über den zentralen Realtime-Abgleich; unveränderliche Kindzeilen bleiben unveröffentlicht.
+- `P1-20-F104` — Erstes Laden, Fehler, veralteter letzter Stand, Dialogaufschub, Fokus-/Sichtbarkeitsrückkehr, Tastatur, sichtbarer Fokus, deutsche Namen und ausreichend große Ziele folgen den vorhandenen gemeinsamen UI-Primitiven.
+- `P1-20-F105` — P1-20 erzeugt ohne bewusste Fachaktion weder Altbestands-Backfill, Auftrag, Termin, Disposition, Nachricht, Zeitsegment, Bestand, Verbrauch, Bestellung, Preis, Vertrag, Rechnung, Rechtsbehauptung, Offline-Warteschlange, Connector, Herstellerregelwerk, Telemetrie noch automatische Diagnose.
+
+**Acceptance invariant:** `105/105 mapped; 105/105 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).

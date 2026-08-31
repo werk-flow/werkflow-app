@@ -1,6 +1,6 @@
 # Service And Maintenance
 
-Status: living — last reviewed 2026-08-30
+Status: living — last reviewed 2026-08-31
 
 Service and maintenance covers recurring maintenance, reactive customer service, faults, inspections, emergency work, and the long-term history of installed customer equipment.
 
@@ -22,11 +22,15 @@ The feature should reduce forgotten maintenance, paper service folders, repeated
 
 ## Current Product Baseline
 
-WerkFlow now has two dedicated service-owned foundations. P1-18 provides installed-equipment records. Büro/Admin manage site-bound roots and one bounded component level under `/service/anlagen`, including stable equipment numbers, typed identifiers, honest unknown technical facts, warranty and commissioning data, exact installation origins, existing-document links, work links, lifecycle state and immutable searchable history. Customer pages show only a compact site projection, while an assigned field worker receives only equipment explicitly linked to that assigned job.
+WerkFlow now has three dedicated service-owned foundations. P1-18 provides installed-equipment records. Büro/Admin manage site-bound roots and one bounded component level under `/service/anlagen`, including stable equipment numbers, typed identifiers, honest unknown technical facts, warranty and commissioning data, exact installation origins, existing-document links, work links, lifecycle state and immutable searchable history. Customer pages show only a compact site projection, while an assigned field worker receives only equipment explicitly linked to that assigned job.
 
 P1-19 adds reactive-service intake and triage under `/service/faelle`. Büro/Admin create a direct case or atomically qualify an existing request, preserve the original customer statement, select one customer site and exact installed equipment, record urgency, access guidance and a suspected charge context, relate duplicate or continuing cases, and connect one existing operational job. The job continues through the existing calendar, dispatch, field-work, artifact, document, follow-up and material owners. An assigned employee sees only the compact issue, urgency, access and equipment context for that exact assigned job; internal triage and suspected commercial context stay office-only.
 
-P1-19 does not provide maintenance plans, contracts, recurrence, due work, final commercial warranty decisions, inventory consumption, time segmentation, outbound messages, offline/mobile behavior, telemetry or manufacturer rule sets. Those remain with their named later slices.
+P1-20 adds maintenance planning and operational coverage under `/service/wartung`. Büro/Admin record entered coverage dates and review/renewal signals separately from legal or commercial contract truth. A versioned maintenance plan binds one customer site, exact installed equipment and one published work-template version, materializes stable service-owned due work for an understandable 18-month horizon and requires an explicit reason for overlapping active coverage. Due work exists before a job. A manager deliberately creates one normal template-backed visit job, then schedules it through a normal P1-11 occurrence. Appointment changes remain calendar facts and do not rewrite the maintenance definition or unrelated due work.
+
+Completion links the exact submitted P1-15 artifact revision, retains the P1-18 equipment-history relationship, records a separate complete/partial/unresolved outcome and advances the next due date from the plan revision's selected basis. A reactive finding may link the existing P1-19 service case, and operational review may create an ordinary P1-10 follow-up. The assigned employee receives only the exact plan/equipment/instruction context for that assigned visit job; coverage dates, renewal risk and internal notes remain manager-only.
+
+P1-20 does not infer plans from existing equipment, jobs, requests, documents or warranty dates. It does not decide contract legality or price, create messages, mutate stock, segment time, encode manufacturer rules, or add offline/mobile, telemetry or automated diagnosis behavior.
 
 Relevant foundations already exist:
 
@@ -45,7 +49,7 @@ Relevant foundations already exist:
 
 These foundations should be reused. A future service feature should not create parallel customer, job, time, document, or inventory systems.
 
-`P1-11` does not introduce maintenance plans, contracts, installed-equipment recurrence, or automatic job generation. It supplies the generic occurrence/series planning primitive that those future service-owned records can feed once their lifecycle and source-of-truth contract is decided.
+`P1-11` does not own maintenance plans, operational coverage or service due-work identity. P1-20 now feeds a deliberately created visit job into its generic occurrence/assignment primitive; P1-11 remains the owner of appointment time, one/future/series edits, capacity and qualification assessment, and skipped/cancelled planning states.
 
 `P1-15` supplies reusable field evidence, not a dedicated service order, installed-equipment record, maintenance contract, warranty decision or service history. Later service slices reference the artifacts instead of copying their content into a parallel report model.
 
@@ -81,15 +85,15 @@ Office staff should be able to turn a call, email, message, or customer-portal r
 
 The business should be able to triage, clarify, merge duplicates, assign responsibility, schedule a visit, and preserve the original customer statement.
 
-### Maintenance Plans And Contracts
+### Maintenance Plans And Operational Coverage
 
 The product should support recurring maintenance without requiring the office to recreate every job manually:
 
-- maintenance plan tied to a customer site or installed system;
-- interval, due window, checklist/template, expected duration, skills, tools, and material;
-- responsible team or service area;
-- contract start/end, included scope, exclusions, pricing basis, and renewal context;
-- automatic generation or proposal of upcoming service work;
+- maintenance plan tied to one customer site and exact installed equipment;
+- interval, due basis, published checklist/template version and operational instructions;
+- entered coverage dates, internal review, notice and renewal context without legal or commercial claims;
+- stable service-owned due work before job creation;
+- deliberate creation of a normal visit job and a separate normal calendar occurrence;
 - exception handling for skipped, combined, moved, or canceled visits;
 - due, overdue, completed, and contract-at-risk views;
 - evidence that the agreed work was completed.
@@ -239,8 +243,8 @@ Predictive-maintenance claims require enough reliable history and domain validat
 
 - Which installed-system types need structured fields first for SHK?
 - Should sites, buildings, apartments, and technical rooms be separate levels or one flexible location model?
-- When should a maintenance plan generate a job, and how far into the future?
-- How should recurring work interact with contract renewal or cancellation?
+- Which later slice should add responsible service areas, default duration, tools and material readiness to a plan without duplicating their owners?
+- How should commercial maintenance agreements reference operational coverage once the finance domain owns contract truth?
 - Which checklist and measurement templates should WerkFlow provide versus the customer create?
 - How should field workers record removed/replaced components and warranty returns?
 - Which service response commitments need timers or escalation?

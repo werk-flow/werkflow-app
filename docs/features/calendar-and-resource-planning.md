@@ -50,6 +50,7 @@ The current `/kalender` implementation already includes:
 - since `P1-14`, job detail reuses the exact P1-12 readiness composer and exposes planned, readiness and execution as separate facts. The first successful job-linked clock-in or break-end atomically starts/resumes execution; schedule and dispatch mutations never do. Calendar projections carry the execution version needed for safe parking without storing another schedule.
 - since `P1-16`, the assigned-worker work pack projects the current planned window, dispatch acknowledgement/challenge and the same readiness dimensions around one next action. Opening or executing the pack never moves an occurrence, rewrites actual time, acknowledges dispatch automatically or changes a customer commitment; calendar and dispatch remain the authoritative planning sources.
 - since `P1-19`, reactive service reuses the normal job visit and dispatch path after a manager links the case to one existing job. The service case does not own a second appointment, assignment or dispatch state, and service-case updates never move the plan.
+- since `P1-20`, a service-owned due item can deliberately create one normal visit job and then one normal P1-11 occurrence. The maintenance plan owns cadence, due identity and next-due calculation; calendar owns the appointment, assignment, capacity/qualification assessment and one/future/series scheduling semantics. Moving or cancelling one appointment never rewrites the maintenance revision or unrelated due items.
 
 This is an operational scheduling foundation with recurring people-capacity planning and first-class dispatch, acknowledgement, parked-work context, and customer-commitment distinction. It is not yet the complete route/provider, tool/vehicle/material-reservation, external-calendar, or maintenance-contract product described below.
 
@@ -240,7 +241,7 @@ The system should start with proposals and previews. Automatic rescheduling, cus
 ## Open Product Decisions
 
 - Whether additional non-job entry types beyond the bounded `P1-11` internal vocabulary are operationally necessary.
-- Whether a future maintenance plan should generate jobs, propose them closer to the due date, or reference planning occurrences directly; generic `P1-11` recurrence deliberately does not synthesize jobs.
+- Whether later service automation should propose visit jobs closer to the due date; P1-20 requires a manager to create each normal visit job and schedule its P1-11 occurrence deliberately.
 - How later job/project progress should summarize multi-visit completion; `P1-11` owns visit planning and preserves one underlying job.
 - Which employee skills, qualifications, and supervision rules should affect scheduling?
 - ~~Should tools and vehicles be reserved from the calendar or only surfaced as readiness signals?~~ Decided for this phase with P1-12: readiness signals only, honestly labeled „nicht bewertet" until `P1-32` owns tool availability/custody; reservation semantics remain `P1-26`/`P1-32` scope.

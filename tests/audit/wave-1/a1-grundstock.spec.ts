@@ -367,8 +367,13 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     ).toBeVisible();
     await expect(textInDom(bueroPage, "Rolle ändern")).toHaveCount(0);
     await bueroPage.keyboard.press("Escape");
+    await expect(
+      bueroPage.getByRole("menuitem", { name: "Details anzeigen" }),
+    ).toBeHidden();
 
-    await employeeRow.click();
+    await employeeRow
+      .getByText(`Emil Golden-${world.runId}`, { exact: true })
+      .click();
     await expect(bueroPage).toHaveURL(/\/mitarbeiter\//);
     await expect(visibleText(bueroPage, "Tagesfortschritt")).toBeVisible();
 

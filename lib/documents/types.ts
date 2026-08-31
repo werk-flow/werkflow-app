@@ -62,7 +62,8 @@ export type DocumentContextTarget =
   | { kind: "employee"; employeeId: string }
   | { kind: "request"; requestId: string }
   | { kind: "equipment"; equipmentId: string }
-  | { kind: "service_case"; serviceCaseId: string };
+  | { kind: "service_case"; serviceCaseId: string }
+  | { kind: "maintenance_coverage"; maintenanceCoverageId: string };
 
 export type DocumentUploadTarget =
   | { kind: "library"; folderId?: string | null }
@@ -90,6 +91,7 @@ export type DocumentLink = {
   requestId: string | null;
   equipmentId: string | null;
   serviceCaseId: string | null;
+  maintenanceCoverageId: string | null;
   jobTitle: string | null;
   jobNumber: string | null;
   projectName: string | null;
@@ -103,6 +105,7 @@ export type DocumentLink = {
   equipmentName: string | null;
   serviceCaseNumber: string | null;
   serviceCaseSummary: string | null;
+  maintenanceCoverageNumber: string | null;
   createdBy: string;
   createdAt: string;
 };
@@ -180,6 +183,7 @@ export type UpdateDocumentLinksInput = {
   addEmployeeIds?: string[];
   addEquipmentIds?: string[];
   addServiceCaseIds?: string[];
+  addMaintenanceCoverageIds?: string[];
   removeLinkIds?: string[];
 };
 
@@ -205,6 +209,7 @@ export type LinkDocumentsToTargetInput = {
   employeeId?: string;
   equipmentId?: string;
   serviceCaseId?: string;
+  maintenanceCoverageId?: string;
 };
 
 export type LinkDocumentsToTargetResult =
@@ -348,6 +353,7 @@ export function toDocumentLink(
     equipmentName?: string | null;
     serviceCaseNumber?: string | null;
     serviceCaseSummary?: string | null;
+    maintenanceCoverageNumber?: string | null;
   },
 ): DocumentLink {
   return {
@@ -361,6 +367,7 @@ export function toDocumentLink(
     requestId: row.request_id,
     equipmentId: row.equipment_id,
     serviceCaseId: row.service_case_id,
+    maintenanceCoverageId: row.maintenance_coverage_id,
     jobTitle: context?.jobTitle ?? null,
     jobNumber: context?.jobNumber ?? null,
     projectName: context?.projectName ?? null,
@@ -374,6 +381,7 @@ export function toDocumentLink(
     equipmentName: context?.equipmentName ?? null,
     serviceCaseNumber: context?.serviceCaseNumber ?? null,
     serviceCaseSummary: context?.serviceCaseSummary ?? null,
+    maintenanceCoverageNumber: context?.maintenanceCoverageNumber ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

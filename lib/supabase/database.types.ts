@@ -1010,6 +1010,7 @@ export type Database = {
           equipment_id: string | null;
           id: string;
           job_id: string | null;
+          maintenance_coverage_id: string | null;
           organization_id: string;
           project_id: string | null;
           request_id: string | null;
@@ -1024,6 +1025,7 @@ export type Database = {
           equipment_id?: string | null;
           id?: string;
           job_id?: string | null;
+          maintenance_coverage_id?: string | null;
           organization_id: string;
           project_id?: string | null;
           request_id?: string | null;
@@ -1038,6 +1040,7 @@ export type Database = {
           equipment_id?: string | null;
           id?: string;
           job_id?: string | null;
+          maintenance_coverage_id?: string | null;
           organization_id?: string;
           project_id?: string | null;
           request_id?: string | null;
@@ -1085,6 +1088,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "jobs";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "document_links_maintenance_coverage_fk";
+            columns: ["maintenance_coverage_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_coverages";
+            referencedColumns: ["id", "organization_id"];
           },
           {
             foreignKeyName: "document_links_organization_id_fkey";
@@ -3706,6 +3716,720 @@ export type Database = {
             columns: ["site_id"];
             isOneToOne: false;
             referencedRelation: "client_sites";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_coverage_events: {
+        Row: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_coverage_event_type"];
+          id: string;
+          idempotency_key: string;
+          maintenance_coverage_id: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Insert: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot?: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_coverage_event_type"];
+          id?: string;
+          idempotency_key: string;
+          maintenance_coverage_id: string;
+          organization_id: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Update: {
+          actor_id?: string;
+          after_snapshot?: Json;
+          before_snapshot?: Json | null;
+          event_type?: Database["public"]["Enums"]["maintenance_coverage_event_type"];
+          id?: string;
+          idempotency_key?: string;
+          maintenance_coverage_id?: string;
+          organization_id?: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation?: string;
+          request_payload?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_coverage_events_maintenance_coverage_id_organi_fkey";
+            columns: ["maintenance_coverage_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_coverages";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_coverage_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_coverages: {
+        Row: {
+          client_id: string;
+          coverage_number: string;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          id: string;
+          notice_date: string | null;
+          operational_note: string | null;
+          organization_id: string;
+          reference: string | null;
+          renewal_date: string | null;
+          review_due_date: string | null;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_coverage_status"];
+          updated_at: string;
+          updated_by: string;
+          valid_from: string | null;
+          valid_until: string | null;
+          version: number;
+        };
+        Insert: {
+          client_id: string;
+          coverage_number: string;
+          created_at?: string;
+          created_by: string;
+          description?: string | null;
+          id: string;
+          notice_date?: string | null;
+          operational_note?: string | null;
+          organization_id: string;
+          reference?: string | null;
+          renewal_date?: string | null;
+          review_due_date?: string | null;
+          site_id: string;
+          status?: Database["public"]["Enums"]["maintenance_coverage_status"];
+          updated_at?: string;
+          updated_by: string;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          version?: number;
+        };
+        Update: {
+          client_id?: string;
+          coverage_number?: string;
+          created_at?: string;
+          created_by?: string;
+          description?: string | null;
+          id?: string;
+          notice_date?: string | null;
+          operational_note?: string | null;
+          organization_id?: string;
+          reference?: string | null;
+          renewal_date?: string | null;
+          review_due_date?: string | null;
+          site_id?: string;
+          status?: Database["public"]["Enums"]["maintenance_coverage_status"];
+          updated_at?: string;
+          updated_by?: string;
+          valid_from?: string | null;
+          valid_until?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_coverages_client_id_organization_id_fkey";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_coverages_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_coverages_site_id_organization_id_fkey";
+            columns: ["site_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      maintenance_due_evidence_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          work_artifact_revision_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          work_artifact_revision_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          maintenance_due_work_id?: string;
+          organization_id?: string;
+          work_artifact_revision_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_due_evidence_link_maintenance_due_work_id_orga_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_evidence_link_work_artifact_revision_id_or_fkey";
+            columns: ["work_artifact_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifact_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_evidence_links_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_due_work: {
+        Row: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        Insert: {
+          completed_on?: string | null;
+          created_at?: string;
+          created_by: string;
+          due_date: string;
+          exception_reason?: string | null;
+          id: string;
+          job_id?: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date?: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id?: string | null;
+          scope_outcome?:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status?: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at?: string;
+          updated_by: string;
+          version?: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        Update: {
+          completed_on?: string | null;
+          created_at?: string;
+          created_by?: string;
+          due_date?: string;
+          exception_reason?: string | null;
+          id?: string;
+          job_id?: string | null;
+          maintenance_plan_id?: string;
+          maintenance_plan_revision_id?: string;
+          next_due_date?: string | null;
+          organization_id?: string;
+          original_due_date?: string;
+          planning_occurrence_id?: string | null;
+          scope_outcome?:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status?: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at?: string;
+          updated_by?: string;
+          version?: number;
+          window_end_date?: string;
+          window_start_date?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_due_work_job_id_organization_id_fkey";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_maintenance_plan_id_organization_id_fkey";
+            columns: ["maintenance_plan_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plans";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_maintenance_plan_revision_id_organiza_fkey";
+            columns: ["maintenance_plan_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plan_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_planning_occurrence_id_organization_i_fkey";
+            columns: ["planning_occurrence_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "planning_occurrences";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      maintenance_due_work_events: {
+        Row: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_due_event_type"];
+          id: string;
+          idempotency_key: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Insert: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot?: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_due_event_type"];
+          id?: string;
+          idempotency_key: string;
+          maintenance_due_work_id: string;
+          organization_id: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Update: {
+          actor_id?: string;
+          after_snapshot?: Json;
+          before_snapshot?: Json | null;
+          event_type?: Database["public"]["Enums"]["maintenance_due_event_type"];
+          id?: string;
+          idempotency_key?: string;
+          maintenance_due_work_id?: string;
+          organization_id?: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation?: string;
+          request_payload?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_due_work_events_maintenance_due_work_id_organi_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_due_work_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_plan_events: {
+        Row: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_plan_event_type"];
+          id: string;
+          idempotency_key: string;
+          maintenance_plan_id: string;
+          organization_id: string;
+          reason: string | null;
+          recorded_at: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Insert: {
+          actor_id: string;
+          after_snapshot: Json;
+          before_snapshot?: Json | null;
+          event_type: Database["public"]["Enums"]["maintenance_plan_event_type"];
+          id?: string;
+          idempotency_key: string;
+          maintenance_plan_id: string;
+          organization_id: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation: string;
+          request_payload: Json;
+        };
+        Update: {
+          actor_id?: string;
+          after_snapshot?: Json;
+          before_snapshot?: Json | null;
+          event_type?: Database["public"]["Enums"]["maintenance_plan_event_type"];
+          id?: string;
+          idempotency_key?: string;
+          maintenance_plan_id?: string;
+          organization_id?: string;
+          reason?: string | null;
+          recorded_at?: string;
+          request_operation?: string;
+          request_payload?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plan_events_maintenance_plan_id_organization_i_fkey";
+            columns: ["maintenance_plan_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plans";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plan_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_plan_revision_equipment: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          equipment_id: string;
+          id: string;
+          maintenance_plan_revision_id: string;
+          organization_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          equipment_id: string;
+          id?: string;
+          maintenance_plan_revision_id: string;
+          organization_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          equipment_id?: string;
+          id?: string;
+          maintenance_plan_revision_id?: string;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plan_revision_equ_equipment_id_organization_id_fkey";
+            columns: ["equipment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "installed_equipment";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plan_revision_equ_maintenance_plan_revision_id_fkey";
+            columns: ["maintenance_plan_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plan_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plan_revision_equipment_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      maintenance_plan_revisions: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          due_window_after_days: number;
+          due_window_before_days: number;
+          effective_from_date: string;
+          first_due_date: string;
+          id: string;
+          interval_months: number;
+          maintenance_plan_id: string;
+          next_due_basis: Database["public"]["Enums"]["maintenance_next_due_basis"];
+          operational_instructions: string | null;
+          organization_id: string;
+          overlap_reason: string | null;
+          planned_duration_minutes: number;
+          reason: string;
+          revision_number: number;
+          template_version_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          due_window_after_days?: number;
+          due_window_before_days?: number;
+          effective_from_date: string;
+          first_due_date: string;
+          id: string;
+          interval_months: number;
+          maintenance_plan_id: string;
+          next_due_basis: Database["public"]["Enums"]["maintenance_next_due_basis"];
+          operational_instructions?: string | null;
+          organization_id: string;
+          overlap_reason?: string | null;
+          planned_duration_minutes: number;
+          reason: string;
+          revision_number: number;
+          template_version_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          due_window_after_days?: number;
+          due_window_before_days?: number;
+          effective_from_date?: string;
+          first_due_date?: string;
+          id?: string;
+          interval_months?: number;
+          maintenance_plan_id?: string;
+          next_due_basis?: Database["public"]["Enums"]["maintenance_next_due_basis"];
+          operational_instructions?: string | null;
+          organization_id?: string;
+          overlap_reason?: string | null;
+          planned_duration_minutes?: number;
+          reason?: string;
+          revision_number?: number;
+          template_version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plan_revisions_maintenance_plan_id_organizatio_fkey";
+            columns: ["maintenance_plan_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plans";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plan_revisions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_plan_revisions_template_version_id_organizatio_fkey";
+            columns: ["template_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "work_template_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      maintenance_plans: {
+        Row: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        Insert: {
+          archived_at?: string | null;
+          archived_by?: string | null;
+          client_id: string;
+          created_at?: string;
+          created_by: string;
+          current_revision_id?: string | null;
+          generation_through_date?: string | null;
+          id: string;
+          maintenance_coverage_id?: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status?: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at?: string;
+          updated_by: string;
+          version?: number;
+        };
+        Update: {
+          archived_at?: string | null;
+          archived_by?: string | null;
+          client_id?: string;
+          created_at?: string;
+          created_by?: string;
+          current_revision_id?: string | null;
+          generation_through_date?: string | null;
+          id?: string;
+          maintenance_coverage_id?: string | null;
+          organization_id?: string;
+          plan_number?: string;
+          site_id?: string;
+          status?: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at?: string;
+          updated_by?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_plans_client_id_organization_id_fkey";
+            columns: ["client_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "clients";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plans_current_revision_fkey";
+            columns: ["current_revision_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plan_revisions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plans_maintenance_coverage_id_organization_id_fkey";
+            columns: ["maintenance_coverage_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_coverages";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_plans_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "maintenance_plans_site_id_organization_id_fkey";
+            columns: ["site_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "client_sites";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      maintenance_service_case_links: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          maintenance_due_work_id: string;
+          maintenance_plan_id: string;
+          organization_id: string;
+          reason: string;
+          service_case_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          maintenance_due_work_id: string;
+          maintenance_plan_id: string;
+          organization_id: string;
+          reason: string;
+          service_case_id: string;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          maintenance_due_work_id?: string;
+          maintenance_plan_id?: string;
+          organization_id?: string;
+          reason?: string;
+          service_case_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_service_case_link_maintenance_due_work_id_orga_fkey";
+            columns: ["maintenance_due_work_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_due_work";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_case_link_maintenance_plan_id_organiza_fkey";
+            columns: ["maintenance_plan_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "maintenance_plans";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_case_link_service_case_id_organization_fkey";
+            columns: ["service_case_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "service_cases";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "maintenance_service_case_links_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];
@@ -8444,6 +9168,49 @@ export type Database = {
         };
         Returns: number;
       };
+      complete_maintenance_due_work: {
+        Args: {
+          p_actor_id: string;
+          p_completed_on: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_scope_outcome: Database["public"]["Enums"]["maintenance_scope_outcome"];
+          p_work_artifact_revision_ids: string[];
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       correct_installed_equipment_terminal_action: {
         Args: {
           p_actor_id: string;
@@ -8585,6 +9352,76 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "installed_equipment";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_maintenance_coverage: {
+        Args: {
+          p_actor_id: string;
+          p_idempotency_key: string;
+          p_maintenance_coverage_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+        };
+        Returns: {
+          client_id: string;
+          coverage_number: string;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          id: string;
+          notice_date: string | null;
+          operational_note: string | null;
+          organization_id: string;
+          reference: string | null;
+          renewal_date: string | null;
+          review_due_date: string | null;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_coverage_status"];
+          updated_at: string;
+          updated_by: string;
+          valid_from: string | null;
+          valid_until: string | null;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_coverages";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      create_maintenance_plan: {
+        Args: {
+          p_actor_id: string;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_revision_id: string;
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
           isOneToOne: true;
           isSetofReturn: false;
         };
@@ -8772,6 +9609,46 @@ export type Database = {
         };
       };
       generate_job_number: { Args: { p_org_id: string }; Returns: string };
+      generate_maintenance_due_work: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_through_date: string;
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       generate_personnel_number: {
         Args: { p_org_id: string };
         Returns: string;
@@ -8928,6 +9805,76 @@ export type Database = {
         SetofOptions: {
           from: "*";
           to: "installed_equipment";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      link_maintenance_due_visit: {
+        Args: {
+          p_actor_id: string;
+          p_expected_versions: number[];
+          p_idempotency_key: string;
+          p_job_id: string;
+          p_maintenance_due_work_ids: string[];
+          p_organization_id: string;
+          p_planning_occurrence_id: string;
+          p_reason: string;
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      link_maintenance_service_case: {
+        Args: {
+          p_actor_id: string;
+          p_expected_due_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_service_case_id: string;
+        };
+        Returns: {
+          created_at: string;
+          created_by: string;
+          id: string;
+          maintenance_due_work_id: string;
+          maintenance_plan_id: string;
+          organization_id: string;
+          reason: string;
+          service_case_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_service_case_links";
           isOneToOne: true;
           isSetofReturn: false;
         };
@@ -9442,6 +10389,42 @@ export type Database = {
         };
         Returns: Json;
       };
+      revise_maintenance_plan: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_reason: string;
+          p_revision_id: string;
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       save_client_communication_settings: {
         Args: {
           p_accessibility_note: string;
@@ -9710,6 +10693,122 @@ export type Database = {
         };
         Returns: number;
       };
+      set_maintenance_due_exception: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_to_status: Database["public"]["Enums"]["maintenance_due_status"];
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      set_maintenance_due_occurrence: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_due_work_id: string;
+          p_organization_id: string;
+          p_planning_occurrence_id: string;
+        };
+        Returns: {
+          completed_on: string | null;
+          created_at: string;
+          created_by: string;
+          due_date: string;
+          exception_reason: string | null;
+          id: string;
+          job_id: string | null;
+          maintenance_plan_id: string;
+          maintenance_plan_revision_id: string;
+          next_due_date: string | null;
+          organization_id: string;
+          original_due_date: string;
+          planning_occurrence_id: string | null;
+          scope_outcome:
+            | Database["public"]["Enums"]["maintenance_scope_outcome"]
+            | null;
+          status: Database["public"]["Enums"]["maintenance_due_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+          window_end_date: string;
+          window_start_date: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_due_work";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      set_maintenance_plan_archived: {
+        Args: {
+          p_actor_id: string;
+          p_archived: boolean;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_reason: string;
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       set_planning_occurrence_status: {
         Args: {
           p_actor_id: string;
@@ -9836,6 +10935,41 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      transition_maintenance_plan: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_plan_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_to_status: Database["public"]["Enums"]["maintenance_plan_status"];
+        };
+        Returns: {
+          archived_at: string | null;
+          archived_by: string | null;
+          client_id: string;
+          created_at: string;
+          created_by: string;
+          current_revision_id: string | null;
+          generation_through_date: string | null;
+          id: string;
+          maintenance_coverage_id: string | null;
+          organization_id: string;
+          plan_number: string;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_plan_status"];
+          updated_at: string;
+          updated_by: string;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_plans";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       transition_work_execution: {
         Args: {
           p_actor_id: string;
@@ -9880,6 +11014,17 @@ export type Database = {
           p_idempotency_key: string;
           p_link_id: string;
           p_organization_id: string;
+        };
+        Returns: boolean;
+      };
+      unlink_maintenance_coverage_document: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_link_id: string;
+          p_organization_id: string;
+          p_reason: string;
         };
         Returns: boolean;
       };
@@ -10011,6 +11156,44 @@ export type Database = {
           p_requirement_state: string;
         };
         Returns: undefined;
+      };
+      update_maintenance_coverage: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_idempotency_key: string;
+          p_maintenance_coverage_id: string;
+          p_organization_id: string;
+          p_payload: Json;
+          p_reason: string;
+        };
+        Returns: {
+          client_id: string;
+          coverage_number: string;
+          created_at: string;
+          created_by: string;
+          description: string | null;
+          id: string;
+          notice_date: string | null;
+          operational_note: string | null;
+          organization_id: string;
+          reference: string | null;
+          renewal_date: string | null;
+          review_due_date: string | null;
+          site_id: string;
+          status: Database["public"]["Enums"]["maintenance_coverage_status"];
+          updated_at: string;
+          updated_by: string;
+          valid_from: string | null;
+          valid_until: string | null;
+          version: number;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "maintenance_coverages";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_planning_dispatch_instruction: {
         Args: {
@@ -10288,6 +11471,40 @@ export type Database = {
       invite_status: "pending" | "accepted" | "expired" | "cancelled";
       job_priority: "niedrig" | "mittel" | "hoch";
       job_status: "nicht_bearbeitet" | "in_bearbeitung" | "fertig" | "geparkt";
+      maintenance_coverage_event_type:
+        | "created"
+        | "updated"
+        | "status_changed"
+        | "document_linked"
+        | "document_unlinked";
+      maintenance_coverage_status: "active" | "suspended" | "terminated";
+      maintenance_due_event_type:
+        | "generated"
+        | "visit_linked"
+        | "visit_rescheduled"
+        | "combined"
+        | "completed"
+        | "skipped"
+        | "cancelled"
+        | "superseded"
+        | "service_case_linked";
+      maintenance_due_status:
+        | "open"
+        | "visit_created"
+        | "completed"
+        | "skipped"
+        | "cancelled"
+        | "superseded";
+      maintenance_next_due_basis: "planned_due_date" | "actual_completion_date";
+      maintenance_plan_event_type:
+        | "created"
+        | "revised"
+        | "status_changed"
+        | "horizon_extended"
+        | "archived"
+        | "restored";
+      maintenance_plan_status: "draft" | "active" | "suspended" | "terminated";
+      maintenance_scope_outcome: "complete" | "partial" | "unresolved";
       org_role: "admin" | "buero" | "employee";
       organization_responsibility:
         | "time_approval"
@@ -10688,6 +11905,47 @@ export const Constants = {
       invite_status: ["pending", "accepted", "expired", "cancelled"],
       job_priority: ["niedrig", "mittel", "hoch"],
       job_status: ["nicht_bearbeitet", "in_bearbeitung", "fertig", "geparkt"],
+      maintenance_coverage_event_type: [
+        "created",
+        "updated",
+        "status_changed",
+        "document_linked",
+        "document_unlinked",
+      ],
+      maintenance_coverage_status: ["active", "suspended", "terminated"],
+      maintenance_due_event_type: [
+        "generated",
+        "visit_linked",
+        "visit_rescheduled",
+        "combined",
+        "completed",
+        "skipped",
+        "cancelled",
+        "superseded",
+        "service_case_linked",
+      ],
+      maintenance_due_status: [
+        "open",
+        "visit_created",
+        "completed",
+        "skipped",
+        "cancelled",
+        "superseded",
+      ],
+      maintenance_next_due_basis: [
+        "planned_due_date",
+        "actual_completion_date",
+      ],
+      maintenance_plan_event_type: [
+        "created",
+        "revised",
+        "status_changed",
+        "horizon_extended",
+        "archived",
+        "restored",
+      ],
+      maintenance_plan_status: ["draft", "active", "suspended", "terminated"],
+      maintenance_scope_outcome: ["complete", "partial", "unresolved"],
       org_role: ["admin", "buero", "employee"],
       organization_responsibility: [
         "time_approval",

@@ -107,6 +107,7 @@ function getContextLink(
     requestId?: string;
     equipmentId?: string;
     serviceCaseId?: string;
+    maintenanceCoverageId?: string;
   },
 ) {
   return document.links.find((link) => {
@@ -118,6 +119,8 @@ function getContextLink(
     if (context.equipmentId) return link.equipmentId === context.equipmentId;
     if (context.serviceCaseId)
       return link.serviceCaseId === context.serviceCaseId;
+    if (context.maintenanceCoverageId)
+      return link.maintenanceCoverageId === context.maintenanceCoverageId;
     return false;
   });
 }
@@ -140,6 +143,7 @@ function getUnlinkLabel(context: {
   requestId?: string;
   equipmentId?: string;
   serviceCaseId?: string;
+  maintenanceCoverageId?: string;
 }): string {
   if (context.jobId) return "Verknüpfung zu diesem Auftrag entfernen";
   if (context.projectId) return "Verknüpfung zu diesem Projekt entfernen";
@@ -149,6 +153,8 @@ function getUnlinkLabel(context: {
   if (context.equipmentId) return "Verknüpfung zu dieser Anlage entfernen";
   if (context.serviceCaseId)
     return "Verknüpfung zu diesem Servicefall entfernen";
+  if (context.maintenanceCoverageId)
+    return "Verknüpfung zu dieser Abdeckung entfernen";
   return "Verknüpfung entfernen";
 }
 
@@ -164,6 +170,7 @@ type DocumentRowProps = {
     requestId?: string;
     equipmentId?: string;
     serviceCaseId?: string;
+    maintenanceCoverageId?: string;
   };
   indented?: boolean;
   onOpen: (document: OrganizationDocument) => void;
@@ -278,7 +285,8 @@ export function ContextualDocumentsSection({
   emphasizeUpload = true,
   keepUploadedDocumentsVisible = false,
 }: ContextualDocumentsSectionProps): ReactElement {
-  const jobId = documentTarget.kind === "job" ? documentTarget.jobId : undefined;
+  const jobId =
+    documentTarget.kind === "job" ? documentTarget.jobId : undefined;
   const projectId =
     documentTarget.kind === "project" ? documentTarget.projectId : undefined;
   const clientId =
@@ -294,6 +302,10 @@ export function ContextualDocumentsSection({
   const serviceCaseId =
     documentTarget.kind === "service_case"
       ? documentTarget.serviceCaseId
+      : undefined;
+  const maintenanceCoverageId =
+    documentTarget.kind === "maintenance_coverage"
+      ? documentTarget.maintenanceCoverageId
       : undefined;
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -337,6 +349,7 @@ export function ContextualDocumentsSection({
     requestId,
     equipmentId,
     serviceCaseId,
+    maintenanceCoverageId,
   };
   const displayedDocuments = keepUploadedDocumentsVisible
     ? [
@@ -535,6 +548,7 @@ export function ContextualDocumentsSection({
 
   return (
     <div
+      data-testid="contextual-documents-section"
       className={cn(
         "min-w-0 rounded-lg border bg-card p-4 transition-colors sm:p-5",
         isDragActive && "border-primary bg-primary/5",
@@ -559,7 +573,13 @@ export function ContextualDocumentsSection({
         {canUpload && (
           <div className="flex shrink-0 flex-wrap gap-2">
             {canManage &&
-              (jobId || projectId || clientId || employeeId || equipmentId || serviceCaseId) && (
+              (jobId ||
+                projectId ||
+                clientId ||
+                employeeId ||
+                equipmentId ||
+                serviceCaseId ||
+                maintenanceCoverageId) && (
                 <Button
                   type="button"
                   size="sm"
@@ -756,7 +776,13 @@ export function ContextualDocumentsSection({
       </AlertDialog>
 
       {canManage &&
-        (jobId || projectId || clientId || employeeId || equipmentId || serviceCaseId) && (
+        (jobId ||
+          projectId ||
+          clientId ||
+          employeeId ||
+          equipmentId ||
+          serviceCaseId ||
+          maintenanceCoverageId) && (
           <AttachDocumentDialog
             open={attachDialogOpen}
             onOpenChange={setAttachDialogOpen}
@@ -771,10 +797,18 @@ export function ContextualDocumentsSection({
                       ? "employee"
                       : equipmentId
                         ? "equipment"
-                        : "service_case"
+                        : serviceCaseId
+                          ? "service_case"
+                          : "maintenance_coverage"
             }
             targetId={
-              jobId ?? projectId ?? clientId ?? employeeId ?? equipmentId ?? serviceCaseId!
+              jobId ??
+              projectId ??
+              clientId ??
+              employeeId ??
+              equipmentId ??
+              serviceCaseId ??
+              maintenanceCoverageId!
             }
             targetLabel={contextLabel}
             onAttached={(variant, message) => {

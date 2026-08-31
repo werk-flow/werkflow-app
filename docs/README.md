@@ -88,6 +88,7 @@ Phase 1 execution lives in `phase-1/`, split by change rate:
 | [p1-18-installed-equipment.md](plans/phase-1/slices/p1-18-installed-equipment.md)                                    | Closed — accepted P1-18 installed-equipment identity, lifecycle, authorization and acceptance record.                                                              |
 | [p1-18-installed-equipment-implementation-plan.md](plans/p1-18-installed-equipment-implementation-plan.md)           | Complete — P1-18 execution order for schema, app, rollout, review and acceptance.                                                                                  |
 | [p1-19-reactive-service.md](plans/phase-1/slices/p1-19-reactive-service.md)                                          | Closed — accepted P1-19 reactive-service identity, triage, owner reuse, authorization, rollout and acceptance record.                                               |
+| [p1-20-maintenance-plans.md](plans/phase-1/slices/p1-20-maintenance-plans.md)                                        | Closed — accepted P1-20 maintenance-plan, operational-coverage, due-work, rollout and campaign-audit record.                                                       |
 
 ### Decision records (`docs/decisions/`)
 

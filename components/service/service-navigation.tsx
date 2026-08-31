@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { href: "/service/faelle", label: "Servicefälle" },
   { href: "/service/anlagen", label: "Anlagen & Geräte" },
+  { href: "/service/wartung", label: "Wartung" },
 ] as const;
 
 export function ServiceNavigation(): ReactElement {
