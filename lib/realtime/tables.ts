@@ -8,6 +8,7 @@ export const REALTIME_TABLES = [
   "time_sessions",
   "time_segments",
   "entry_change_requests",
+  "time_correction_requests",
   "organization_invites",
   "organization_members",
   "organization_settings",

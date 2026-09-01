@@ -1,6 +1,7 @@
 import { expect, test } from './support/fixtures';
 import {
   expectOwnerRoleMutationRejected,
+  findLatestManualTimeEntryState,
   getEmployeeRecordStateByUser,
   getLatestManualTimeEntryState,
   getLatestResponsibilityConfigurationState,
@@ -16,6 +17,7 @@ import {
   expectMemberRemovalBlockedByResponsibility,
   expectPendingTimeApprovalHidden,
   expectPendingTimeApprovalVisible,
+  expectTimeApprovalsUnavailable,
   expectVisibleAfterSave,
   openTimeApprovals,
   previewResponsibilityChange,
@@ -132,13 +134,18 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       shiftIsoDate(berlinTodayIso(), -1)
     );
 
-    await createOwnManualTimeEntry(employeePage, {
-      dateDigits: yesterdayDigits,
-      clockInDigits: '0600',
-      clockOutDigits: '0700',
-    });
-    await openTimeApprovals(bueroPage);
-    await expectPendingTimeApprovalHidden(bueroPage, world.users.employee.id);
+    const existingEmployeeEntry = await findLatestManualTimeEntryState(
+      world.orgId,
+      world.users.employee.id
+    );
+    if (existingEmployeeEntry?.status !== 'pending') {
+      await createOwnManualTimeEntry(employeePage, {
+        dateDigits: yesterdayDigits,
+        clockInDigits: '0600',
+        clockOutDigits: '0700',
+      });
+    }
+    await expectTimeApprovalsUnavailable(bueroPage);
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalHidden(employeePage, world.users.employee.id);
 

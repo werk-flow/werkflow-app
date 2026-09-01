@@ -195,9 +195,13 @@ Concepts:
 - Segment event: append-only transition attribution; operation receipt: idempotent replay ownership for one client request.
 - Legacy time entry: an unchanged clock-in, clock-out, break-start or break-end fact used by the compatibility projection; a live legacy sequence is bridged on its first canonical action rather than bulk-backfilled.
 - Live clock state: the current session/segment projection for the user in an organization.
-- Change request: the existing pending edit/delete workflow for legacy entries. Canonical correction, split, reclassification and reassignment belong to `P1-22`.
+- Legacy change request: the retained historical edit/delete workflow for old entries; existing rows keep their meaning but new corrections use the P1-22 aggregate.
+- Time correction request: one mutable organization-scoped lifecycle root for add, edit, delete, split, reclassification, reallocation, reassignment and missed-clock proposals across legacy entries, canonical sessions/segments and earlier accepted applications.
+- Correction revision/source/event/application: immutable before/proposed revisions, exact source identities and versions, lifecycle attribution and the accepted overlay. A private unique applied-source ledger prevents two accepted applications from consuming the same source; a sequential correction references the prior application explicitly.
 
 Permitted activity segments can be linked to jobs or remain explicitly unallocated. Atomic versioned RPCs validate organization ownership, serialize one employee boundary, preserve append-only attribution and make duplicate requests replay-safe. Europe/Berlin day splitting is a presentation projection and never changes the stable source interval.
+
+P1-22 correction RPCs are service-role-only and revalidate membership, organization, current source versions, expected request revision and effective `time_approval` scope. Pending proposals never mutate the source. Confirmed readers overlay the newest accepted application and suppress its replaced source while preserving every original row and immutable canonical event. Only `time_correction_requests` is published as an invalidation root; immutable correction children remain unpublished.
 
 ## Settings And Preferences
 

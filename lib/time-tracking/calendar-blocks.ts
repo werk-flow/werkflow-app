@@ -67,7 +67,9 @@ function cloneBlock(
     isOpen: endEntry === null,
     isOnBreak,
     isComposite,
-    isPending: state.block.sourceEntries.some((entry) => entry.status === 'pending')
+    isPending: state.block.sourceEntries.some(
+      (entry) => entry.status === 'pending' || Boolean(entry.pendingCorrectionRequestId)
+    )
   };
 }
 

@@ -81,6 +81,11 @@ import {
   splitSegmentAtLocalDayBoundaries,
   toTimeSegmentFact,
 } from './segments';
+import {
+  getApprovedTimeCorrectionApplications,
+  getProvisionalTimeCorrectionProjection,
+} from '@/lib/time-corrections/actions';
+import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
 
 function isWorkingEntryType(entryType: string): boolean {
   return entryType === 'clock_in' || entryType === 'break_end';
@@ -1685,6 +1690,8 @@ async function getCanonicalTimeEntries(params: {
         updatedAt: row.updated_at,
         activityKind: segment.kind,
         canonicalSegmentId: segment.id,
+        sourceKind: 'canonical_segment',
+        sourceVersion: row.updated_at,
       });
     }
     return { success: true, entries };
@@ -1714,6 +1721,8 @@ async function getCanonicalTimeEntries(params: {
         updatedAt: row.updated_at,
         activityKind: segment.kind,
         canonicalSegmentId: segment.id,
+        sourceKind: 'canonical_segment' as const,
+        sourceVersion: row.updated_at,
       };
       entries.push({
         ...common,
@@ -1817,11 +1826,65 @@ export async function getTimeEntries(
     const visibleCanonicalEntries = canonicalEntries.filter((entry) =>
       canViewEntries(callerRole, entry.userId, user.id)
     );
+    const applications = status && status !== 'approved'
+      ? []
+      : await getApprovedTimeCorrectionApplications({
+          organizationId,
+          userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+        });
+    const projectedEntries = applyApprovedTimeCorrections(
+      [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
+      applications,
+      organizationId
+    ).filter((entry) => {
+      const timestamp = Date.parse(entry.timestamp);
+      return timestamp >= fromTimestamp && timestamp <= toTimestamp
+        && (!userId || entry.userId === userId)
+        && (!status || entry.status === status);
+    });
+    const provisionalProjection = status
+      ? { entries: [], sources: [] }
+      : await getProvisionalTimeCorrectionProjection({
+          organizationId,
+          from: normalizedFrom,
+          to: normalizedTo,
+          userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+        });
+    const pendingByLegacyId = new Map(
+      provisionalProjection.sources
+        .filter((source) => source.sourceKind === 'legacy_entry')
+        .map((source) => [source.sourceId, source])
+    );
+    const pendingBySegmentId = new Map(
+      provisionalProjection.sources
+        .filter((source) => source.sourceKind === 'canonical_segment')
+        .map((source) => [source.sourceId, source])
+    );
+    const pendingByApplicationId = new Map(
+      provisionalProjection.sources
+        .filter((source) => source.sourceKind === 'correction_application')
+        .map((source) => [source.sourceId, source])
+    );
+    const officialEntries = projectedEntries.map((entry) => {
+      const pending = pendingByLegacyId.get(entry.id)
+        ?? (entry.canonicalSegmentId
+          ? pendingBySegmentId.get(entry.canonicalSegmentId)
+          : undefined)
+        ?? (entry.correctionApplicationId
+          ? pendingByApplicationId.get(entry.correctionApplicationId)
+          : undefined);
+      return pending ? {
+        ...entry,
+        pendingCorrectionRequestId: pending.requestId,
+        pendingCorrectionKind: pending.kind,
+      } : entry;
+    });
     return {
       success: true,
-      entries: [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries].sort(
+      entries: officialEntries.sort(
         (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
       ),
+      provisionalEntries: provisionalProjection.entries,
     };
   } catch (error) {
     console.error('Unexpected error in getTimeEntries:', error);
@@ -3156,6 +3219,16 @@ export async function getTimeEntriesForJob(
       return { success: false, error: 'fetch_failed' };
     }
     const canonicalEntries = canonicalResult.entries;
+    const correctionApplications = await getApprovedTimeCorrectionApplications({
+      organizationId: job.organization_id,
+      userId: isManager ? undefined : user.id,
+    });
+    const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
+      applyApprovedTimeCorrections(
+        entries,
+        correctionApplications,
+        job.organization_id
+      ).filter((entry) => entry.jobId === jobId);
     async function loadParticipants(
       entries: readonly TimeEntry[]
     ): Promise<JobTimeParticipant[]> {
@@ -3209,10 +3282,11 @@ export async function getTimeEntriesForJob(
 
     const targetClockIns = toTimeEntries(jobClockIns || []);
     if (targetClockIns.length === 0) {
+      const correctedCanonicalEntries = projectJobEntries(canonicalEntries);
       return {
         success: true,
-        entries: canonicalEntries,
-        participants: await loadParticipants(canonicalEntries),
+        entries: correctedCanonicalEntries,
+        participants: await loadParticipants(correctedCanonicalEntries),
       };
     }
 
@@ -3288,11 +3362,12 @@ export async function getTimeEntriesForJob(
       }
     }
 
-    const participants = await loadParticipants([...dedupedEntries.values()]);
+    const correctedEntries = projectJobEntries([...dedupedEntries.values()]);
+    const participants = await loadParticipants(correctedEntries);
 
     return {
       success: true,
-      entries: [...dedupedEntries.values()].sort((a, b) => {
+      entries: correctedEntries.sort((a, b) => {
           const timestampDiff =
             new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
           if (timestampDiff !== 0) return timestampDiff;

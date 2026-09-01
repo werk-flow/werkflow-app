@@ -4,6 +4,8 @@ import dynamic from 'next/dynamic';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ZeiterfassungDashboard } from './zeiterfassung-dashboard';
+import { TimeCorrectionRequests } from './time-correction-requests';
+import { ProvisionalTimeSummary } from './provisional-time-summary';
 
 const VacationApprovals = dynamic(
   () => import('./vacation-approvals').then((mod) => mod.VacationApprovals),
@@ -55,7 +57,6 @@ interface MemberInfo {
 interface ZeiterfassungContentProps {
   organizationId: string;
   userId: string;
-  isAdminOrManager: boolean;
   canApproveTime: boolean;
   canApproveLeave: boolean;
   isAdmin: boolean;
@@ -69,7 +70,6 @@ interface ZeiterfassungContentProps {
 export function ZeiterfassungContent({
   organizationId,
   userId,
-  isAdminOrManager,
   canApproveTime,
   canApproveLeave,
   isAdmin,
@@ -82,23 +82,16 @@ export function ZeiterfassungContent({
   // counts exactly those (P1-06's documented undercount is resolved here).
   const { approvalsCount } = useAttentionCounts();
 
-  // For regular employees, just show the dashboard
-  if (!isAdminOrManager && !canApproveTime && !canApproveLeave) {
-    return (
-      <ZeiterfassungDashboard
-        organizationId={organizationId}
-        userId={userId}
-        initialOverview={initialOverview}
-      />
-    );
-  }
+  const hasApprovalSurface = canApproveTime || canApproveLeave;
+  const activeInitialTab = initialTab === 'approvals' && !hasApprovalSurface
+    ? 'overview'
+    : initialTab;
 
-  // Scoped approvers get the approval surface without manager history access.
   return (
-    <Tabs defaultValue={initialTab} className="w-full">
+    <Tabs defaultValue={activeInitialTab} className="w-full">
       <TabsList className="gap-1">
         <TabsTrigger value="overview">Übersicht</TabsTrigger>
-        <TabsTrigger value="approvals" className="group">
+        {hasApprovalSurface ? <TabsTrigger value="approvals" className="group">
           Anträge
           {approvalsCount > 0 && (
             <>
@@ -111,13 +104,12 @@ export function ZeiterfassungContent({
               <span className="sr-only">{`${approvalsCount} ausstehende Freigaben`}</span>
             </>
           )}
-        </TabsTrigger>
-        {isAdminOrManager ? (
-          <TabsTrigger value="history">Verlauf</TabsTrigger>
-        ) : null}
+        </TabsTrigger> : null}
+        <TabsTrigger value="history">Verlauf</TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="mt-4">
+        <ProvisionalTimeSummary organizationId={organizationId} userId={userId} />
         <ZeiterfassungDashboard
           organizationId={organizationId}
           userId={userId}
@@ -125,21 +117,25 @@ export function ZeiterfassungContent({
         />
       </TabsContent>
 
-      <TabsContent value="approvals" className="mt-4 space-y-6">
-        <VacationApprovals />
+      {hasApprovalSurface ? <TabsContent value="approvals" className="mt-4 space-y-6">
+        {canApproveLeave ? <VacationApprovals /> : null}
+        {canApproveTime ? (
+          <TimeCorrectionRequests organizationId={organizationId} mode="approvals" />
+        ) : null}
+        {canApproveTime ? (
         <PendingApprovals
           organizationId={organizationId}
           isAdmin={isAdmin}
           currentUserRole={currentUserRole}
           currentUserId={userId}
         />
-      </TabsContent>
+        ) : null}
+      </TabsContent> : null}
 
-      {isAdminOrManager ? (
-        <TabsContent value="history" className="mt-4">
+      <TabsContent value="history" className="mt-4 space-y-8">
+          <TimeCorrectionRequests organizationId={organizationId} mode="history" />
           <EntryHistory organizationId={organizationId} members={members} />
-        </TabsContent>
-      ) : null}
+      </TabsContent>
     </Tabs>
   );
 }

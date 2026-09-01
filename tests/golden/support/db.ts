@@ -3674,3 +3674,58 @@ export async function getTimeCaptureCountsAs(
     return counts;
   });
 }
+
+export async function getTimeCorrectionState(orgId: string) {
+  const admin = createAdminClient();
+  const rowLimit = 10_000;
+  const [requests, revisions, sources, events, applications] = await Promise.all([
+    admin.from("time_correction_requests").select("*")
+      .eq("organization_id", orgId).order("created_at").limit(rowLimit + 1),
+    admin.from("time_correction_request_revisions").select("*")
+      .eq("organization_id", orgId).order("created_at").limit(rowLimit + 1),
+    admin.from("time_correction_request_sources").select("*")
+      .eq("organization_id", orgId).order("request_id").order("revision").order("ordinal")
+      .limit(rowLimit + 1),
+    admin.from("time_correction_events").select("*")
+      .eq("organization_id", orgId).order("occurred_at").order("id").limit(rowLimit + 1),
+    admin.from("time_correction_applications").select("*")
+      .eq("organization_id", orgId).order("applied_at").order("id").limit(rowLimit + 1),
+  ]);
+  const firstError = requests.error ?? revisions.error ?? sources.error
+    ?? events.error ?? applications.error;
+  if (firstError) throw new Error(`Time-correction lookup failed: ${firstError.message}`);
+  if ([requests, revisions, sources, events, applications].some(
+    (result) => (result.data?.length ?? 0) > rowLimit,
+  )) throw new Error(`Time-correction lookup exceeded ${rowLimit} rows.`);
+  return {
+    requests: requests.data ?? [],
+    revisions: revisions.data ?? [],
+    sources: sources.data ?? [],
+    events: events.data ?? [],
+    applications: applications.data ?? [],
+  };
+}
+
+export async function getTimeCorrectionCountsAs(
+  user: { email: string; password: string },
+  orgId: string,
+) {
+  return withRoleClient(user, async (client) => {
+    const tables = [
+      "time_correction_requests",
+      "time_correction_request_revisions",
+      "time_correction_request_sources",
+      "time_correction_events",
+      "time_correction_applications",
+    ] as const;
+    const counts = {} as Record<(typeof tables)[number], number>;
+    for (const table of tables) {
+      const { count, error } = await client.from(table)
+        .select("*", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+      if (error) throw new Error(`Time-correction RLS lookup failed for ${table}: ${error.message}`);
+      counts[table] = count ?? 0;
+    }
+    return counts;
+  });
+}

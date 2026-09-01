@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 
 const assertionFile = resolve(
   process.cwd(),
@@ -36,4 +36,4 @@ if (exitCode !== 0) {
   throw new Error(`SQL assertions failed with exit code ${exitCode}.`);
 }
 
-console.log(`[test:sql:p121] passed — ${assertionFile}`);
+console.log(`[test:sql:${basename(assertionFile, '.sql')}] passed — ${assertionFile}`);

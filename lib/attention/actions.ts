@@ -24,6 +24,8 @@ import {
   getPendingChangeRequests,
   getPendingSessions,
 } from '@/lib/time-tracking/actions';
+import { getTimeCorrectionRequests } from '@/lib/time-corrections/actions';
+import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
 import {
   getOwnVacationOverview,
   getPendingVacationRequestsForApprover,
@@ -134,6 +136,22 @@ async function deriveApprovalTasks(
     } else {
       failed = true;
     }
+  }
+
+  const correctionsResult = await getTimeCorrectionRequests(context.orgId);
+  if (correctionsResult.success) {
+    for (const request of correctionsResult.requests) {
+      if (!request.canReview || request.status !== 'submitted') continue;
+      tasks.push({
+        sourceType: 'time_correction_approval',
+        sourceId: request.id,
+        personName: request.subjectName,
+        correctionLabel: TIME_CORRECTION_KIND_LABELS[request.kind],
+        stateVersion: String(request.currentRevision),
+      });
+    }
+  } else {
+    failed = true;
   }
 
   // Pending vacation requests: the approver loader filters per target through

@@ -953,3 +953,58 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-21-F64` — P1-21 erzeugt ohne bewusste Zeitaktion weder Termin, Disposition, Wartungsarbeit, Dokument, Bestand, Verbrauch, Bestellung, Nachricht, Offline-Warteschlange noch externen Provideraufruf.
 
 **Acceptance invariant:** `64/64 mapped; 64/64 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).
+
+### `P1-22` — Einheitliche Zeitkorrekturen und Freigaben (2026-09-01)
+
+- `P1-22-F01` — Mitarbeiter öffnen aus ihrem persönlichen Verlauf eine geführte Zeitkorrektur; Kalender und Verlauf führen in dieselbe Korrekturdomäne.
+- `P1-22-F02` — Admin und Büro verwenden für Korrekturen dieselbe Oberfläche und denselben nachvollziehbaren Datenpfad wie Mitarbeiter.
+- `P1-22-F03` — Die Oberfläche unterstützt Nachtrag, Änderung, Entfernung, Aufteilung, Tätigkeitswechsel, Auftragswechsel, Mitarbeiterwechsel und vergessene Buchung als klar benannte Vorgänge.
+- `P1-22-F04` — Eine Korrektur referenziert die genaue Ausgangsquelle und verändert weder deren ursprüngliche Erfassung noch unveränderliche kanonische Vorgänge oder Ereignisse.
+- `P1-22-F05` — Jede Korrektur verlangt einen verständlichen Grund; Rückfrage und Ablehnung verlangen zusätzlich einen Kommentar.
+- `P1-22-F06` — Vor dem Speichern zeigt WerkFlow den bisher wirksamen und den vorgeschlagenen Zustand getrennt.
+- `P1-22-F07` — Die Vorschau zeigt Zeit, Person, Tätigkeit und Auftragszuordnung und erklärt die Änderung der wirksamen Dauer, ohne eine Zeitkonto- oder Abrechnungswirkung zu erfinden.
+- `P1-22-F08` — Nachtrag und vergessene Buchung erzeugen neue vorgeschlagene Fakten ohne fingierte Ausgangsquelle.
+- `P1-22-F09` — Eine Änderung ersetzt nach Freigabe nur die ausgewählten Zeitfakten und bewahrt die Ausgangsquelle im Verlauf.
+- `P1-22-F10` — Eine Entfernung schlägt einen leeren Folgezustand vor und löscht die ursprüngliche Quelle nicht.
+- `P1-22-F11` — Eine Aufteilung erzeugt mehrere nachvollziehbare Folgefakten und bleibt als spätere Korrektur erkennbar.
+- `P1-22-F12` — Eine Tätigkeitsänderung bewahrt Zeit und Person, während die neue Tätigkeit ausdrücklich ausgewiesen wird.
+- `P1-22-F13` — Ein Auftragswechsel bewahrt die Zeit und trennt „Ohne Auftrag“ von einem genauen vorhandenen Auftrag.
+- `P1-22-F14` — Ein Mitarbeiterwechsel bewahrt ursprüngliche und angenommene Person und wird nur innerhalb der Zuständigkeit des Handelnden angewendet.
+- `P1-22-F15` — Legacy-Eintrag, kanonische Sitzung, kanonisches Segment und bereits angewendete Korrektur sind unterscheidbare Quellarten derselben Korrekturdomäne.
+- `P1-22-F16` — Ungültige Reihenfolgen, Zeitgrenzen, Formen, fremde Quellen oder unzulässige Ziele werden vor einer Teilanwendung sichtbar abgewiesen.
+- `P1-22-F17` — Eine eigene Korrektur ist immer ein Antrag; es gibt kein Zeitfenster für eine direkte Selbstkorrektur.
+- `P1-22-F18` — Ein zuständiger Admin oder Büro-Nutzer kann die Zeit einer anderen Person direkt und atomar korrigieren.
+- `P1-22-F19` — Korrigiert Admin oder Büro die eigene Zeit, bleibt die Änderung bis zur Entscheidung einer anderen zuständigen Person ein Antrag.
+- `P1-22-F20` — Jede Entscheidung löst `time_approval` am Handlungstag und für die betroffene Person erneut auf.
+- `P1-22-F21` — Eine gültige zeitlich begrenzte Vertretung erbt nur den Umfang des vertretenen Freigabeverantwortlichen; nach Ablauf ist die Handlung gesperrt.
+- `P1-22-F22` — Ohne ausdrückliche Konfiguration gilt der vorhandene rollenbasierte Zeitfreigabe-Fallback; eine Konfiguration ersetzt diesen Fallback.
+- `P1-22-F23` — Fehlt eine zweite geeignete Freigabeperson, bleibt der Antrag sichtbar offen und wird nicht still selbst freigegeben.
+- `P1-22-F24` — Auch Admin besitzt keinen Selbstfreigabe- oder Wiederherstellungs-Bypass für eigene Korrekturen.
+- `P1-22-F25` — Ein eingereichter Vorschlag verändert bestätigte Zeitfakten nicht und erzeugt noch keine Korrekturanwendung.
+- `P1-22-F26` — Tages- und Wochenansichten kennzeichnen vorgeschlagene Summen ausdrücklich als vorläufig und halten bestätigte Summen getrennt.
+- `P1-22-F27` — Der Kalender zeigt einen offenen Vorschlag als vorläufigen tatsächlichen Zeitkontext, ohne ihn als bestätigte Zeit oder Planung auszugeben.
+- `P1-22-F28` — Offene Anträge erscheinen im persönlichen Verlauf, in der Freigabeansicht und für zuständige Personen im gemeinsamen Aufgabenmuster.
+- `P1-22-F29` — „Zur Prüfung“, „Rückfrage“, „Freigegeben“, „Abgelehnt“, „Zurückgezogen“ und „Anwendung fehlgeschlagen“ bleiben als verständliche Zustände sichtbar.
+- `P1-22-F30` — Der Antragsteller kann einen eigenen offenen oder zur Klärung zurückgegebenen Antrag zurückziehen; Antrag und Verlauf bleiben erhalten.
+- `P1-22-F31` — Eine Ablehnung verändert keine Zeitquelle und zeigt dem Antragsteller den Entscheidungsgrund.
+- `P1-22-F32` — Eine Rückfrage verändert weder Quelle noch ursprüngliche Antragsrevision und zeigt die Frage im persönlichen Verlauf.
+- `P1-22-F33` — Die Antwort auf eine Rückfrage erzeugt eine neue unveränderliche Revision und reicht genau diese Revision erneut ein.
+- `P1-22-F34` — Eine Entscheidung oder erneute Einreichung mit veralteter Revisionsnummer überschreibt keinen neueren Antrag.
+- `P1-22-F35` — Eine Freigabe erzeugt genau eine atomare Anwendung; identische Wiederholung liefert dasselbe Ergebnis statt einer zweiten Wirkung.
+- `P1-22-F36` — Scheitert die Anwendung, behauptet WerkFlow keinen bestätigten Zeitstand und bewahrt den Fehlerzustand zur Klärung.
+- `P1-22-F37` — Eine spätere Korrektur kann die genaue vorherige Anwendung als Quelle verwenden; Leser zeigen nur den neuesten wirksamen Stand der Kette.
+- `P1-22-F38` — Dieselbe Ausgangsquelle kann nicht in zwei unabhängigen freigegebenen Anwendungen doppelt wirksam werden.
+- `P1-22-F39` — Zuständige Personen wählen mehrere weiterhin einzeln sichtbare Anträge für eine gemeinsame Freigabe aus; unterschiedliche Gründe und Vorschauen bleiben erkennbar.
+- `P1-22-F40` — Eine Stapelentscheidung ist vollständig atomar: eine veraltete oder unzulässige Position verhindert jede Teilfreigabe.
+- `P1-22-F41` — Antrag, Revision, Entscheidung, Anwendung und Ereignis bewahren Organisation, Person, Antragsteller, Akteur, Prüfer, Zeitpunkte, Grund, Kommentar sowie Vorher-/Nachherzustand.
+- `P1-22-F42` — Freigegebene, abgelehnte, zurückgezogene und zur Klärung zurückgegebene Vorgänge verschwinden nicht aus der persönlichen und berechtigten Managerhistorie.
+- `P1-22-F43` — Historien und Freigabelisten sind begrenzt, deterministisch sortiert und behalten bei Ladefehlern den letzten bekannten Stand, während veraltete Aktionen gesperrt sind.
+- `P1-22-F44` — Mitarbeiter sehen ihre eigenen Korrekturen; Admin und Büro sehen organisationsbezogene Historie, aber nur wirksame `time_approval`-Inhaber erhalten Entscheidungsaktionen.
+- `P1-22-F45` — Mitglieder einer fremden Organisation sehen weder Antrag, Revision, Quelle, Ereignis noch Anwendung.
+- `P1-22-F46` — Direkte Client-Schreibrechte bleiben gesperrt; öffentliche Korrektur-RPCs sind nur für die Service-Rolle ausführbar und prüfen Organisation und Akteur erneut.
+- `P1-22-F47` — Änderungen der veränderlichen Antragswurzel aktualisieren offene Verlauf-, Aufgaben-, Kalender- und Summenansichten über den zentralen Realtime-Abgleich; unveränderliche Kindtabellen bleiben unveröffentlicht.
+- `P1-22-F48` — Zeit-, Kalender-, Auftrags- und Projektleser verwenden dieselbe bestätigte Korrekturprojektion, unterdrücken ersetzte Quellen und kopieren keine zweite Zeitwahrheit.
+- `P1-22-F49` — Eine Zeitkorrektur plant keinen Termin um und erzeugt weder Disposition, Bestand, Dokument, Nachricht, kommerzielle Entscheidung, Abrechnung, Lohnlauf, Offline-Warteschlange noch Provideraufruf.
+- `P1-22-F50` — P1-22 reserviert den verständlichen Fehler `period_closed` für den späteren Periodenbesitzer, führt aber selbst weder Periodenabschluss noch Wiedereröffnung, Zeitkonto oder Export ein.
+
+**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).

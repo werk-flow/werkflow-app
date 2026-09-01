@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-08-31
+Status: living — last reviewed 2026-09-01
 
 Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
 
@@ -109,7 +109,7 @@ Dispatch acknowledgement (`P1-12`, 2026-08-14):
 
 Explicit time activities (`P1-21`, 2026-08-31):
 
-- Each active organization membership can own at most one stable attendance session with at most one open factual activity segment. Employees, Admin and Büro capture only their own work, travel, break, standby/on-call, call-out or fixed internal activity through the global clock; every switch is atomic, version-checked, idempotent and attributable. Removing a membership closes its canonical session and segment before the existing destructive cleanup continues, while the personnel record survives as before. Managers inspect the same compatibility projection but do not mutate another person's live session; correction and approval remain `P1-22`.
+- Each active organization membership can own at most one stable attendance session with at most one open factual activity segment. Employees, Admin and Büro capture only their own work, travel, break, standby/on-call, call-out or fixed internal activity through the global clock; every switch is atomic, version-checked, idempotent and attributable. Removing a membership closes its canonical session and segment before the existing destructive cleanup continues, while the personnel record survives as before. Managers inspect the same compatibility projection and never impersonate another person's live capture. Since `P1-22`, later corrections retain the stable `employee_record_id`, original and accepted person, exact source and full request/decision/application history; direct manager correction requires explicit scope, and every self-correction requires a second `time_approval` holder.
 
 Important current limitations:
 

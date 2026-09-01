@@ -548,7 +548,10 @@ export function CalendarContainer({
             return;
           }
 
-          setEntries(result.entries);
+          setEntries([
+            ...result.entries,
+            ...(result.provisionalEntries ?? []),
+          ]);
           hasDataRef.current = true;
           fetchedRangeRef.current = { start, end };
 

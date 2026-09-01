@@ -222,7 +222,8 @@ export function AufgabenContent() {
   const timeTasks = overview.tasks.filter(
     (task) =>
       task.sourceType === 'time_session_approval' ||
-      task.sourceType === 'time_change_request_approval'
+      task.sourceType === 'time_change_request_approval' ||
+      task.sourceType === 'time_correction_approval'
   );
   const vacationTasks = overview.tasks.filter(
     (task) => task.sourceType === 'vacation_request_approval'
@@ -618,6 +619,21 @@ function TaskRow({ task }: { task: AttentionTask }) {
           {task.requestType === 'delete'
             ? 'Löschung eines Zeiteintrags'
             : 'Änderung eines Zeiteintrags'}
+        </p>
+      </TaskLink>
+    );
+  }
+
+  if (task.sourceType === 'time_correction_approval') {
+    return (
+      <TaskLink
+        href="/zeiterfassung?tab=approvals"
+        ariaLabel={`Zeitkorrektur von ${task.personName} öffnen`}
+        sourceId={task.sourceId}
+      >
+        <p className="text-sm font-medium">{task.personName}</p>
+        <p className="text-xs text-muted-foreground">
+          {task.correctionLabel}
         </p>
       </TaskLink>
     );

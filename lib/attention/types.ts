@@ -25,6 +25,7 @@ export type AttentionEventRow =
 export type AttentionSourceType =
   | 'time_session_approval'
   | 'time_change_request_approval'
+  | 'time_correction_approval'
   | 'vacation_request_approval'
   | 'client_request_open'
   | 'vacation_decision'
@@ -72,6 +73,13 @@ export type AttentionTask =
       sourceId: string;
       personName: string;
       requestType: 'edit' | 'delete';
+    }
+  | {
+      sourceType: 'time_correction_approval';
+      sourceId: string;
+      personName: string;
+      correctionLabel: string;
+      stateVersion: string;
     }
   | {
       sourceType: 'vacation_request_approval';

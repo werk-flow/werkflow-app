@@ -197,6 +197,15 @@ export type TimeEntry = {
   /** Present for P1-21 compatibility projections from canonical segments. */
   activityKind?: TimeSegmentKind;
   canonicalSegmentId?: string;
+  /** Stable optimistic-lock source for a correction request. */
+  sourceKind?: 'legacy_entry' | 'canonical_segment' | 'correction_application';
+  sourceVersion?: string;
+  /** Present when this entry is projected from an approved correction. */
+  correctionApplicationId?: string;
+  correctionSourceFingerprint?: string;
+  pendingCorrectionRequestId?: string;
+  pendingCorrectionKind?: Database['public']['Enums']['time_correction_kind'];
+  isProvisionalCorrection?: boolean;
 };
 
 /**
@@ -410,6 +419,8 @@ export type GetTimeEntriesResult =
   | {
       success: true;
       entries: TimeEntry[];
+      /** Proposed entries for calendar overlays; excluded from official totals. */
+      provisionalEntries?: TimeEntry[];
       participants?: JobTimeParticipant[];
     }
   | { success: false; error: string };
@@ -494,7 +505,9 @@ export function toTimeEntry(row: TimeEntryRow): TimeEntry {
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    sourceKind: 'legacy_entry',
+    sourceVersion: row.updated_at
   };
 }
 

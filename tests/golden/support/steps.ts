@@ -1972,13 +1972,17 @@ export async function typeIntoDatePickerById(
   scope: Locator,
   id: string,
   isoDate: string, // 'YYYY-MM-DD'
+  options?: { timeout?: number },
 ): Promise<void> {
   const digits = `${isoDate.slice(8, 10)}${isoDate.slice(5, 7)}${isoDate.slice(0, 4)}`;
   const group = scope.locator(`#${id}`);
-  await group.click();
-  await group.press("ArrowLeft");
-  await group.press("ArrowLeft");
-  await group.pressSequentially(digits, { delay: 50 });
+  await group.click({ timeout: options?.timeout });
+  await group.press("ArrowLeft", { timeout: options?.timeout });
+  await group.press("ArrowLeft", { timeout: options?.timeout });
+  await group.pressSequentially(digits, {
+    delay: 50,
+    timeout: options?.timeout,
+  });
 }
 
 // DateTimeField (DatePicker + TimeInput over one combined value). Accepts the
@@ -1987,14 +1991,16 @@ export async function typeIntoDateTimeField(
   scope: Locator,
   idPrefix: string,
   localValue: string, // 'YYYY-MM-DDTHH:mm'
+  options?: { timeout?: number },
 ): Promise<void> {
   const [datePart, timePart] = localValue.split("T");
-  await typeIntoDatePickerById(scope, `${idPrefix}-date`, datePart);
+  await typeIntoDatePickerById(scope, `${idPrefix}-date`, datePart, options);
   if (timePart) {
     await typeIntoTimeInput(
       scope,
       `${idPrefix}-time`,
       timePart.replace(":", ""),
+      options,
     );
   }
 }
@@ -2258,18 +2264,25 @@ export async function typeIntoTimeInput(
   dialog: Locator,
   id: string,
   digits: string,
+  options?: { timeout?: number },
 ): Promise<void> {
   if (!/^\d{4}$/.test(digits)) {
     throw new Error("typeIntoTimeInput requires exactly four HHMM digits");
   }
   const group = dialog.locator(`#${id}`);
-  await group.focus();
-  await group.press("ArrowLeft");
-  await group.press("Delete");
-  await group.pressSequentially(digits.slice(0, 2), { delay: 50 });
-  await group.press("ArrowRight");
-  await group.press("Delete");
-  await group.pressSequentially(digits.slice(2), { delay: 50 });
+  await group.focus({ timeout: options?.timeout });
+  await group.press("ArrowLeft", { timeout: options?.timeout });
+  await group.press("Delete", { timeout: options?.timeout });
+  await group.pressSequentially(digits.slice(0, 2), {
+    delay: 50,
+    timeout: options?.timeout,
+  });
+  await group.press("ArrowRight", { timeout: options?.timeout });
+  await group.press("Delete", { timeout: options?.timeout });
+  await group.pressSequentially(digits.slice(2), {
+    delay: 50,
+    timeout: options?.timeout,
+  });
 }
 
 export async function createOwnManualTimeEntry(
@@ -2318,6 +2331,21 @@ export async function openTimeApprovals(page: Page): Promise<void> {
       timeout: 30_000,
     },
   );
+}
+
+export async function expectTimeApprovalsUnavailable(page: Page): Promise<void> {
+  await page.goto("/zeiterfassung?tab=approvals");
+  await expect(page.getByRole("tab", { name: /Anträge/ })).toHaveAttribute(
+    "aria-selected",
+    "true",
+    { timeout: 15_000 },
+  );
+  await expect(page.getByTestId("pending-approvals-panel")).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await expect(page.getByRole("heading", { name: "Zeitkorrekturen prüfen" })).toHaveCount(0, {
+    timeout: 15_000,
+  });
 }
 
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {

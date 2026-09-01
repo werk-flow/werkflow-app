@@ -148,12 +148,11 @@ async function ZeiterfassungData({
     <ZeiterfassungContent
       organizationId={activeOrgId}
       userId={userId}
-      isAdminOrManager={isAdminOrManager}
       canApproveTime={Boolean(timeApprovalHolder)}
       canApproveLeave={Boolean(leaveApprovalHolder)}
       isAdmin={isAdmin}
       currentUserRole={currentUserRole}
-      initialTab={tab === 'approvals' ? 'approvals' : 'overview'}
+      initialTab={tab === 'approvals' || tab === 'history' ? tab : 'overview'}
       members={members}
       initialOverview={initialOverview}
     />

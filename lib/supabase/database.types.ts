@@ -6728,6 +6728,312 @@ export type Database = {
           },
         ];
       };
+      time_correction_applications: {
+        Row: {
+          applied_at: string;
+          applied_by: string;
+          applied_snapshot: Json;
+          before_snapshot: Json;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          previous_application_id: string | null;
+          request_id: string;
+          responsibility_snapshot: Json;
+          revision: number;
+          source_fingerprint: string;
+        };
+        Insert: {
+          applied_at?: string;
+          applied_by: string;
+          applied_snapshot: Json;
+          before_snapshot: Json;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          previous_application_id?: string | null;
+          request_id: string;
+          responsibility_snapshot: Json;
+          revision: number;
+          source_fingerprint: string;
+        };
+        Update: {
+          applied_at?: string;
+          applied_by?: string;
+          applied_snapshot?: Json;
+          before_snapshot?: Json;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          previous_application_id?: string | null;
+          request_id?: string;
+          responsibility_snapshot?: Json;
+          revision?: number;
+          source_fingerprint?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_applications_previous_fkey";
+            columns: ["previous_application_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_applications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_correction_applications_request_org_fkey";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_correction_applications_revision_fkey";
+            columns: ["request_id", "revision"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_request_revisions";
+            referencedColumns: ["request_id", "revision"];
+          },
+        ];
+      };
+      time_correction_events: {
+        Row: {
+          actor_id: string;
+          comment: string | null;
+          event_type: Database["public"]["Enums"]["time_correction_event_type"];
+          id: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+          request_id: string;
+          responsibility_snapshot: Json | null;
+          revision: number;
+        };
+        Insert: {
+          actor_id: string;
+          comment?: string | null;
+          event_type: Database["public"]["Enums"]["time_correction_event_type"];
+          id?: string;
+          occurred_at?: string;
+          operation_id: string;
+          organization_id: string;
+          request_id: string;
+          responsibility_snapshot?: Json | null;
+          revision: number;
+        };
+        Update: {
+          actor_id?: string;
+          comment?: string | null;
+          event_type?: Database["public"]["Enums"]["time_correction_event_type"];
+          id?: string;
+          occurred_at?: string;
+          operation_id?: string;
+          organization_id?: string;
+          request_id?: string;
+          responsibility_snapshot?: Json | null;
+          revision?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_events_request_org_fkey";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_correction_request_revisions: {
+        Row: {
+          before_snapshot: Json;
+          created_at: string;
+          created_by: string;
+          organization_id: string;
+          proposed_snapshot: Json;
+          reason: string;
+          request_id: string;
+          revision: number;
+          source_fingerprint: string;
+        };
+        Insert: {
+          before_snapshot: Json;
+          created_at?: string;
+          created_by: string;
+          organization_id: string;
+          proposed_snapshot: Json;
+          reason: string;
+          request_id: string;
+          revision: number;
+          source_fingerprint: string;
+        };
+        Update: {
+          before_snapshot?: Json;
+          created_at?: string;
+          created_by?: string;
+          organization_id?: string;
+          proposed_snapshot?: Json;
+          reason?: string;
+          request_id?: string;
+          revision?: number;
+          source_fingerprint?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_revisions_request_org_fkey";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_correction_request_sources: {
+        Row: {
+          correction_application_id: string | null;
+          ordinal: number;
+          organization_id: string;
+          request_id: string;
+          revision: number;
+          source_kind: Database["public"]["Enums"]["time_correction_source_kind"];
+          source_version: string;
+          time_entry_id: string | null;
+          time_segment_id: string | null;
+          time_session_id: string | null;
+        };
+        Insert: {
+          correction_application_id?: string | null;
+          ordinal: number;
+          organization_id: string;
+          request_id: string;
+          revision: number;
+          source_kind: Database["public"]["Enums"]["time_correction_source_kind"];
+          source_version: string;
+          time_entry_id?: string | null;
+          time_segment_id?: string | null;
+          time_session_id?: string | null;
+        };
+        Update: {
+          correction_application_id?: string | null;
+          ordinal?: number;
+          organization_id?: string;
+          request_id?: string;
+          revision?: number;
+          source_kind?: Database["public"]["Enums"]["time_correction_source_kind"];
+          source_version?: string;
+          time_entry_id?: string | null;
+          time_segment_id?: string | null;
+          time_session_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_sources_application_fkey";
+            columns: ["correction_application_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_applications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_correction_sources_entry_org_fkey";
+            columns: ["time_entry_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_entries";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_correction_sources_request_org_fkey";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_correction_sources_revision_fkey";
+            columns: ["request_id", "revision"];
+            isOneToOne: false;
+            referencedRelation: "time_correction_request_revisions";
+            referencedColumns: ["request_id", "revision"];
+          },
+          {
+            foreignKeyName: "time_correction_sources_segment_org_fkey";
+            columns: ["time_segment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_segments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_correction_sources_session_org_fkey";
+            columns: ["time_session_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_sessions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_correction_requests: {
+        Row: {
+          created_at: string;
+          current_revision: number;
+          decision_comment: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["time_correction_kind"];
+          organization_id: string;
+          requested_by: string;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          source_scope_key: string;
+          status: Database["public"]["Enums"]["time_correction_status"];
+          subject_employee_record_id: string;
+          subject_user_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          current_revision?: number;
+          decision_comment?: string | null;
+          id?: string;
+          kind: Database["public"]["Enums"]["time_correction_kind"];
+          organization_id: string;
+          requested_by: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source_scope_key: string;
+          status?: Database["public"]["Enums"]["time_correction_status"];
+          subject_employee_record_id: string;
+          subject_user_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          current_revision?: number;
+          decision_comment?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["time_correction_kind"];
+          organization_id?: string;
+          requested_by?: string;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          source_scope_key?: string;
+          status?: Database["public"]["Enums"]["time_correction_status"];
+          subject_employee_record_id?: string;
+          subject_user_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_correction_requests_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_correction_requests_subject_org_fkey";
+            columns: ["subject_employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       time_entries: {
         Row: {
           capture_source:
@@ -9865,6 +10171,23 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_time_correction_request: {
+        Args: {
+          p_actor_id: string;
+          p_before_snapshot: Json;
+          p_kind: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_proposed_snapshot: Json;
+          p_reason: string;
+          p_responsibility_snapshot?: Json;
+          p_source_fingerprint: string;
+          p_source_scope_key: string;
+          p_sources: Json;
+          p_subject_employee_record_id: string;
+        };
+        Returns: Json;
+      };
       create_work_artifact_revision: {
         Args: {
           p_actor_id: string;
@@ -9903,6 +10226,30 @@ export type Database = {
           p_template_id: string;
         };
         Returns: string;
+      };
+      decide_time_correction: {
+        Args: {
+          p_actor_id: string;
+          p_comment: string;
+          p_decision: string;
+          p_expected_revision: number;
+          p_operation_id: string;
+          p_request_id: string;
+          p_responsibility_snapshot: Json;
+        };
+        Returns: Json;
+      };
+      decide_time_correction_batch: {
+        Args: {
+          p_actor_id: string;
+          p_comment: string;
+          p_decision: string;
+          p_expected_revisions: number[];
+          p_operation_ids: string[];
+          p_request_ids: string[];
+          p_responsibility_snapshot: Json;
+        };
+        Returns: Json;
       };
       end_responsibility_delegation: {
         Args: {
@@ -10816,6 +11163,21 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      revise_time_correction_request: {
+        Args: {
+          p_actor_id: string;
+          p_before_snapshot: Json;
+          p_expected_revision: number;
+          p_operation_id: string;
+          p_proposed_snapshot: Json;
+          p_reason: string;
+          p_request_id: string;
+          p_source_fingerprint: string;
+          p_source_scope_key: string;
+          p_sources: Json;
+        };
+        Returns: Json;
       };
       save_client_communication_settings: {
         Args: {
@@ -11763,6 +12125,14 @@ export type Database = {
         };
         Returns: undefined;
       };
+      withdraw_time_correction: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_request_id: string;
+        };
+        Returns: Json;
+      };
       withdraw_work_handover: {
         Args: {
           p_actor_id: string;
@@ -11998,6 +12368,35 @@ export type Database = {
         | "manager"
         | "system_recovery"
         | "legacy_compatibility";
+      time_correction_event_type:
+        | "submitted"
+        | "clarification_requested"
+        | "resubmitted"
+        | "approved"
+        | "rejected"
+        | "withdrawn"
+        | "application_failed";
+      time_correction_kind:
+        | "add"
+        | "edit"
+        | "delete"
+        | "split"
+        | "reclassify"
+        | "reallocate"
+        | "reassign"
+        | "missed_clock";
+      time_correction_source_kind:
+        | "legacy_entry"
+        | "canonical_session"
+        | "canonical_segment"
+        | "correction_application";
+      time_correction_status:
+        | "submitted"
+        | "clarification_required"
+        | "approved"
+        | "rejected"
+        | "withdrawn"
+        | "application_failed";
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete";
       time_operation_kind:
         | "start"
@@ -12484,6 +12883,39 @@ export const Constants = {
         "manager",
         "system_recovery",
         "legacy_compatibility",
+      ],
+      time_correction_event_type: [
+        "submitted",
+        "clarification_requested",
+        "resubmitted",
+        "approved",
+        "rejected",
+        "withdrawn",
+        "application_failed",
+      ],
+      time_correction_kind: [
+        "add",
+        "edit",
+        "delete",
+        "split",
+        "reclassify",
+        "reallocate",
+        "reassign",
+        "missed_clock",
+      ],
+      time_correction_source_kind: [
+        "legacy_entry",
+        "canonical_session",
+        "canonical_segment",
+        "correction_application",
+      ],
+      time_correction_status: [
+        "submitted",
+        "clarification_required",
+        "approved",
+        "rejected",
+        "withdrawn",
+        "application_failed",
       ],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
       time_operation_kind: [

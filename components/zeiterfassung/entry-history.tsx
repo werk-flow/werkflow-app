@@ -4,6 +4,8 @@ import { useState } from 'react';
 import {
   RefreshCw,
   Clock,
+  Pencil,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -30,6 +32,7 @@ import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { TimeCorrectionDialog } from './time-correction-dialog';
 
 interface MemberInfo {
   user_id: string;
@@ -116,6 +119,9 @@ export function EntryHistory({
     date.setDate(date.getDate() + 14);
     return date;
   });
+  const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(
+    undefined
+  );
 
   // Helper to get member display name
   const getMemberDisplayName = (member: MemberInfo): string => {
@@ -126,7 +132,7 @@ export function EntryHistory({
   };
 
   const view = useLiveView<EntryWithProfile[]>({
-    tables: ['time_entries', 'time_sessions', 'time_segments'],
+    tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
     read: async (): Promise<LiveViewResult<EntryWithProfile[]>> => {
       // Without a complete date range there is nothing to read; keep whatever
       // was shown last.
@@ -262,6 +268,9 @@ export function EntryHistory({
           />
           Laden
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setCorrectionEntry(null)}>
+          <Plus className="mr-1.5 size-4" /> Zeit nachtragen
+        </Button>
       </div>
 
       {/* Results */}
@@ -323,6 +332,15 @@ export function EntryHistory({
                     Manuell
                   </span>
                 )}
+                {entry.pendingCorrectionRequestId ? (
+                  <Button variant="ghost" size="sm" disabled>
+                    <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
+                  </Button>
+                ) : entry.status === 'approved' ? (
+                  <Button variant="ghost" size="sm" onClick={() => setCorrectionEntry(entry)}>
+                    <Pencil className="mr-1.5 size-4" /> Korrigieren
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -338,6 +356,7 @@ export function EntryHistory({
                   <TableHead>Status</TableHead>
                   <TableHead>Manuell</TableHead>
                   <TableHead>Bearbeitet am</TableHead>
+                  <TableHead className="text-right">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -366,6 +385,17 @@ export function EntryHistory({
                         ? formatDateTime(entry.reviewedAt)
                         : '-'}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {entry.pendingCorrectionRequestId ? (
+                        <Button variant="ghost" size="sm" disabled>
+                          <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
+                        </Button>
+                      ) : entry.status === 'approved' ? (
+                        <Button variant="ghost" size="sm" onClick={() => setCorrectionEntry(entry)}>
+                          <Pencil className="mr-1.5 size-4" /> Korrigieren
+                        </Button>
+                      ) : null}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -373,6 +403,19 @@ export function EntryHistory({
           </div>
         </>
       )}
+      {correctionEntry !== undefined ? (
+        <TimeCorrectionDialog
+          key={correctionEntry?.id ?? 'add'}
+          organizationId={organizationId}
+          entry={correctionEntry ?? undefined}
+          open
+          hideTrigger
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setCorrectionEntry(undefined);
+          }}
+          onSubmitted={() => void view.refresh()}
+        />
+      ) : null}
     </div>
   );
 }

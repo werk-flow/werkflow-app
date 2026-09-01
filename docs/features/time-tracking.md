@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-08-31
+Status: living — last reviewed 2026-09-01
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
@@ -23,7 +23,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated through `P1-21`) includes:
+The implemented baseline (updated through `P1-22`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Stable attendance sessions and factual activity segments for work, travel, break, standby, call-out, and fixed internal activities. Every switch is one version-checked, idempotent database operation with append-only attribution; existing `time_entries` remain unchanged compatibility facts and are not backfilled.
@@ -37,7 +37,11 @@ The implemented baseline (updated through `P1-21`) includes:
 - Manual same-day work or break entries with sequence/overlap validation. Employees can add their own entries for approval; admins and Büro can add records within their management scope. Since `P1-05`, a Büro user's own new manual entries are pending rather than silently self-approved; admin-owned additions remain auto-approved as the owner recovery path.
 - Approval of pending sessions by effective holders of the scoped `time_approval` responsibility (**Zeitfreigaben**), including paired session display and job context. With no explicit configuration, active Admin and Büro holders preserve the prior matrix (Admin can approve Büro/employee; Büro can approve employee). Selected holders replace that default, and direct holders can be ordinary employees without gaining any other manager capability.
 - Manager history filters by date range, employee, and status.
-- Correction, deletion, reassignment, pending-state, review, and calendar-visualization infrastructure for time records.
+- One additive correction aggregate for legacy entries, canonical sessions/segments and earlier correction applications. It retains exact sources, immutable before/proposed revisions, requester/subject/reviewer, reason/comment, lifecycle events and the applied result without rewriting original capture history.
+- A guided `Zeitkorrektur` form for add, edit, delete, split, activity reclassification, job reallocation, employee reassignment and missed-clock work. Employees always submit their own changes; an authorized Admin/Büro user may apply a correction for another person directly, but their own correction still needs another effective `time_approval` holder.
+- A complete visible request lifecycle: `Zur Prüfung`, `Rückfrage`, resubmission as a new revision, `Freigegeben`, `Abgelehnt`, `Zurückgezogen` and `Anwendung fehlgeschlagen`. Withdrawal, clarification and rejection never erase the request. Selected approvals are one atomic batch and a stale member prevents partial application.
+- Before/after review, explicit reasons, provisional daily/weekly summaries, pending calendar blocks, personal history and one manager approval surface. Confirmed readers overlay only approved applications, suppress replaced source facts and keep sequential correction chains attributable.
+- Action-time responsibility and delegation through the existing `time_approval` owner. There is no self-approval or Admin bypass; a missing second approver leaves a visible pending request rather than silently approving it.
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
 - Realtime refreshes for legacy entries, canonical sessions and segments, and attention counts. Since `P1-07` the badge pipeline is unified: the Zeiterfassung sidebar badge and the Anträge tab badge count time **and** vacation approvals for the viewer, and pending legacy time sessions/change requests additionally appear as attention items on `/aufgaben` for exactly the effective holders. Decisions run only through the existing review actions.
 - Visible recovery for sessions open longer than 24 hours, legacy-open bridging on the next canonical action, and attributable closure on sign-out or member removal.
@@ -46,13 +50,12 @@ The implemented baseline (updated through `P1-21`) includes:
 
 Important current limitations:
 
-- Canonical segments are intentionally read-only in legacy edit/delete/change-request surfaces until `P1-22` owns one consistent correction workflow.
+- The two historical production `entry_change_requests` retain their legacy interpretation; new correction work uses the P1-22 aggregate and does not rewrite or backfill those rows.
 - Resolved with `P1-06` (2026-08-06) and `P1-08` (2026-08-08): the former static „9 von 30" vacation widget is replaced by the real balance workflow, and sickness/privacy-sensitive absence landed as the second absence type. Absence remains owned by employee management; time tracking consumes its effect on targets exclusively through the extended `resolveDailyTarget` contract. Further absence vocabulary, hour-based absence, and paid/unpaid classification remain later scope (`P1-23`).
 - Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Since `P1-06` approved vacation reduces targets through the same contract; sickness follows with `P1-08`.
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
 - Standby and call-out are captured as distinct facts, but schedules, credited/payroll treatment, night/Sunday/holiday supplements, and explicit overtime approval remain `P1-23` scope.
-- Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.
-- Four eyes is active for every pending time approval: a holder can never approve their own entry. Büro users' own new manual additions become pending and need another holder with sufficient scope. Existing Büro edit/delete behavior still does not create a change request, and the complete correction/request workflow remains `P1-22`.
+- Four eyes is active for every pending time approval: a holder can never approve their own entry or correction. Büro and Admin self-corrections need another holder with sufficient scope. P1-22 reserves a `period_closed` refusal code for the future boundary, but no period can be closed or reopened yet.
 - Date-effective substitutes inherit only their base holder's approval scope for an inclusive Berlin-date window. Every approval action resolves current responsibility server-side; an ended or expired substitute is denied even if a stale browser still shows the old approval card.
 - There is no native mobile app or offline time queue. Web behavior must not be described as offline-capable.
 - There is no payroll-ready period workflow, standard payroll/accounting export, or native finance handoff.
@@ -318,13 +321,14 @@ Every intelligent action must show its source, proposed change, uncertainty, hum
 
 ## Open Product Decisions
 
-Resolved with `P1-05` (2026-08-06): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer, the complete correction request model, batch decisions, and closed-period behavior remain later scope.
+Resolved with `P1-05` (2026-08-06): the fixed-role fallback remains Admin plus Büro. Admin can approve Büro and employee time; Büro can approve employee time. A selected direct holder can approve any other member but never themselves, while a substitute inherits the delegator's narrower or broader scope. Büro-owned new manual entries are pending; admin-owned additions remain auto-approved so an organization always has an owner recovery path. Holder removal cannot leave a selected responsibility without a base holder. Ownership transfer remains later scope; P1-22 now owns the complete correction request and batch-decision model, while actual closed-period behavior remains P1-23.
+
+Resolved with `P1-22` (2026-09-01): every own correction is a proposal with no direct self-edit window; a scoped Admin/Büro correction for another person can apply immediately, but no role can self-approve. The one immutable request/revision/source/event/application aggregate covers add, edit, delete, split, reclassification, reallocation, reassignment and missed clocks across legacy and canonical sources. `time_approval` is resolved at action time with existing delegation, clarification appends a revision, withdrawal/rejection retain history, selected approval is atomic, and pending projections are explicitly provisional. Sequential applications remain attributable. Actual close/reopen, time accounts, credited/payroll classifications and correction/re-export stay with `P1-23`.
 
 - Which time categories and internal activities should ship as defaults for SHK businesses?
 - Is job selection required for all field work, required only for selected roles, or handled through an unallocated-time queue?
 - Which travel models must be supported first: company start, home-to-site, site-to-site, passengers, or driver distinction?
 - How should standby/on-call schedules and active call-outs affect credited time, supplements, and rest warnings?
-- Which employee edits are direct, which require approval, and how long is the self-correction window?
 - Which German state holiday calendars and exceptional-work configurations are needed first?
 - Which warnings should be informational, approval-required, or blocking by default?
 - How are overtime approval, time off in lieu, carryover, expiry, payout, and caps configured?
