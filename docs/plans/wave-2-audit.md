@@ -36,6 +36,7 @@ Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five 
 | P1-19                                                     | +100 … +104           |
 | P1-20                                                     | +105 … +109           |
 | P1-21                                                     | +110 … +114           |
+| P1-22                                                     | +115 … +119           |
 | (assign the next block when a slice enters `in_progress`) | …                     |
 
 ## Per-slice validation ladder (what actually runs at each Wave 2 acceptance)
