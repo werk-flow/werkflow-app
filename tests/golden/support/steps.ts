@@ -2,8 +2,12 @@ import { expect, type Locator, type Page } from "@playwright/test";
 
 // Pages often render the same text twice (desktop table + hidden mobile card);
 // assertions must target the visible instance.
-export function visibleText(container: Page | Locator, text: string): Locator {
-  return container.getByText(text).filter({ visible: true }).first();
+export function visibleText(
+  container: Page | Locator,
+  text: string,
+  exact = false,
+): Locator {
+  return container.getByText(text, { exact }).filter({ visible: true }).first();
 }
 
 // Absence and privacy assertions must inspect every matching DOM node. A

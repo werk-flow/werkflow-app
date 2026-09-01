@@ -92,6 +92,8 @@ Phase 1 execution lives in `phase-1/`, split by change rate:
 | [p1-21-time-segments.md](plans/phase-1/slices/p1-21-time-segments.md)                                                | Living — P1-21 explicit attendance-session and activity-segment implementation, rollout, verification and campaign-audit record.                                  |
 | [p1-22-time-corrections-and-approvals.md](plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)              | Accepted — P1-22 correction contract, schema/role model, rollout, acceptance evidence and campaign audit.                                                       |
 | [p1-22-time-corrections-and-approvals-implementation-plan.md](plans/p1-22-time-corrections-and-approvals-implementation-plan.md) | Complete — P1-22 execution order across schema, permissions, UI, verification, rollout and closure.                                                      |
+| [p1-23-time-accounts-period-close-and-payroll-export.md](plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md) | Closed — accepted P1-23 policy, account, calculation, close/reopen, statement, deterministic export, rollout and campaign-audit record. |
+| [p1-23-time-accounts-period-close-and-payroll-export-implementation-plan.md](plans/p1-23-time-accounts-period-close-and-payroll-export-implementation-plan.md) | Closed — completed P1-23 implementation order across domain, schema, permissions, UI, export, verification and rollout.             |
 
 ### Decision records (`docs/decisions/`)
 

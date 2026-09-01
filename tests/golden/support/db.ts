@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 import type { Database } from "../../../lib/supabase/database.types";
 
@@ -3727,5 +3728,206 @@ export async function getTimeCorrectionCountsAs(
       counts[table] = count ?? 0;
     }
     return counts;
+  });
+}
+
+export async function prepareP123PersonnelPrerequisites(input: {
+  organizationId: string;
+  actorUserId: string;
+  validFrom: string;
+}): Promise<Array<{ id: string; userId: string | null }>> {
+  const admin = createAdminClient();
+  const { data: employees, error: employeeError } = await admin
+    .from("employee_records")
+    .select("id, user_id, employee_number")
+    .eq("organization_id", input.organizationId)
+    .order("id");
+  if (employeeError || !employees?.length)
+    throw new Error(
+      `P1-23 employee setup failed: ${employeeError?.message ?? "no employees"}`,
+    );
+  const { error: dateError } = await admin
+    .from("employee_records")
+    .update({ entry_date: input.validFrom })
+    .eq("organization_id", input.organizationId);
+  if (dateError)
+    throw new Error(`P1-23 entry-date setup failed: ${dateError.message}`);
+  for (const employee of employees) {
+    if (employee.employee_number) continue;
+    const { error: numberError } = await admin
+      .from("employee_records")
+      .update({ employee_number: `P123-${employee.id.slice(0, 8)}` })
+      .eq("id", employee.id)
+      .eq("organization_id", input.organizationId);
+    if (numberError)
+      throw new Error(`P1-23 employee-number setup failed: ${numberError.message}`);
+  }
+  const weekdayMinutes = [480, 420, 360, 240];
+  const { error: scheduleError } = await admin.from("work_schedules").upsert(
+    employees.map((employee, index) => {
+      const dailyMinutes =
+        weekdayMinutes[index % weekdayMinutes.length] ?? 480;
+      return {
+        organization_id: input.organizationId,
+        employee_record_id: employee.id,
+        valid_from: input.validFrom,
+        monday_minutes: dailyMinutes,
+        tuesday_minutes: dailyMinutes,
+        wednesday_minutes: dailyMinutes,
+        thursday_minutes: dailyMinutes,
+        friday_minutes: dailyMinutes,
+        saturday_minutes: 0,
+        sunday_minutes: 0,
+        note: "P1-23 acceptance prerequisite",
+        created_by: input.actorUserId,
+      };
+    }),
+    { onConflict: "employee_record_id,valid_from" },
+  );
+  if (scheduleError)
+    throw new Error(`P1-23 schedule setup failed: ${scheduleError.message}`);
+  return employees.map((employee) => ({
+    id: employee.id,
+    userId: employee.user_id,
+  }));
+}
+
+export async function openRemainingP123Accounts(input: {
+  organizationId: string;
+  actorUserId: string;
+  openedOn: string;
+}): Promise<void> {
+  const admin = createAdminClient();
+  const [{ data: employees, error: employeeError }, { data: accounts, error: accountError }] =
+    await Promise.all([
+      admin.from("employee_records").select("id").eq("organization_id", input.organizationId).order("id"),
+      admin.from("time_accounts").select("employee_record_id").eq("organization_id", input.organizationId),
+    ]);
+  if (employeeError || accountError)
+    throw new Error(
+      `P1-23 account fixture lookup failed: ${employeeError?.message ?? accountError?.message}`,
+    );
+  const existing = new Set((accounts ?? []).map((account) => account.employee_record_id));
+  for (const employee of employees ?? []) {
+    if (existing.has(employee.id)) continue;
+    const requestHash = createHash("sha256")
+      .update(`${input.organizationId}:${employee.id}:${input.openedOn}`)
+      .digest("hex");
+    const operationId = `${requestHash.slice(0, 8)}-${requestHash.slice(8, 12)}-${requestHash.slice(12, 16)}-${requestHash.slice(16, 20)}-${requestHash.slice(20, 32)}`;
+    const { error } = await admin.rpc("open_time_account", {
+      p_organization_id: input.organizationId,
+      p_employee_record_id: employee.id,
+      p_opening_minutes: 0,
+      p_opened_on: input.openedOn,
+      p_reason: "P1-23 acceptance opening",
+      p_actor_id: input.actorUserId,
+      p_operation_id: operationId,
+      p_request_hash: requestHash,
+    });
+    if (error)
+      throw new Error(`P1-23 account fixture RPC failed: ${error.message}`);
+  }
+}
+
+export async function getP123State(organizationId: string) {
+  const admin = createAdminClient();
+  const [accounts, events, periods, calculations, results, findings, closes, mappings, exports,
+    policyAssignments, adjustmentRequests, adjustmentEvents] =
+    await Promise.all([
+      admin.from("time_accounts").select("*").eq("organization_id", organizationId).order("employee_record_id"),
+      admin.from("time_account_events").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+      admin.from("time_periods").select("*").eq("organization_id", organizationId).order("period_start_date").order("id"),
+      admin.from("time_period_calculations").select("*").eq("organization_id", organizationId).order("version").order("id"),
+      admin.from("time_period_employee_results").select("*").eq("organization_id", organizationId),
+      admin.from("time_period_findings").select("*").eq("organization_id", organizationId),
+      admin.from("time_period_close_versions").select("*").eq("organization_id", organizationId).order("version").order("id"),
+      admin.from("payroll_mapping_versions").select("*").eq("organization_id", organizationId).order("version").order("id"),
+      admin.from("payroll_exports").select("*").eq("organization_id", organizationId).order("version").order("id"),
+      admin.from("time_account_policy_assignments").select("*").eq("organization_id", organizationId).order("valid_from").order("id"),
+      admin.from("time_account_adjustment_requests").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+      admin.from("time_account_adjustment_events").select("*").eq("organization_id", organizationId),
+    ]);
+  const error =
+    accounts.error ?? events.error ?? periods.error ?? calculations.error ??
+    results.error ?? findings.error ?? closes.error ?? mappings.error ?? exports.error ??
+    policyAssignments.error ?? adjustmentRequests.error ?? adjustmentEvents.error;
+  if (error) throw new Error(`P1-23 state query failed: ${error.message}`);
+  return {
+    accounts: accounts.data ?? [],
+    events: events.data ?? [],
+    periods: periods.data ?? [],
+    calculations: calculations.data ?? [],
+    results: results.data ?? [],
+    findings: findings.data ?? [],
+    closes: closes.data ?? [],
+    mappings: mappings.data ?? [],
+    exports: exports.data ?? [],
+    policyAssignments: policyAssignments.data ?? [],
+    adjustmentRequests: adjustmentRequests.data ?? [],
+    adjustmentEvents: adjustmentEvents.data ?? [],
+  };
+}
+
+export async function seedP123UnclosedLegacySequence(input: {
+  organizationId: string;
+  userId: string;
+  startedAt: string;
+}): Promise<void> {
+  const { error } = await createAdminClient()
+    .from("time_entries")
+    .insert({
+      organization_id: input.organizationId,
+      user_id: input.userId,
+      entry_type: "clock_in",
+      timestamp: input.startedAt,
+      is_manual: true,
+      status: "approved",
+    });
+  if (error)
+    throw new Error(`P1-23 open legacy-sequence setup failed: ${error.message}`);
+}
+
+export async function closeP123LegacySequence(input: {
+  organizationId: string;
+  userId: string;
+  endedAt: string;
+}): Promise<void> {
+  const { error } = await createAdminClient()
+    .from("time_entries")
+    .insert({
+      organization_id: input.organizationId,
+      user_id: input.userId,
+      entry_type: "clock_out",
+      timestamp: input.endedAt,
+      is_manual: true,
+      status: "approved",
+    });
+  if (error)
+    throw new Error(`P1-23 legacy-sequence cleanup failed: ${error.message}`);
+}
+
+export async function getP123CountsAs(
+  user: { email: string; password: string },
+  organizationId: string,
+) {
+  const tableNames = [
+    "time_accounts",
+    "time_periods",
+    "time_period_employee_results",
+    "payroll_exports",
+  ] as const;
+  return withRoleClient(user, async (client) => {
+    const counts = await Promise.all(
+      tableNames.map(async (tableName) => {
+        const { count, error } = await client
+          .from(tableName)
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", organizationId);
+        if (error)
+          throw new Error(`P1-23 ${tableName} RLS query failed: ${error.message}`);
+        return [tableName, count ?? 0] as const;
+      }),
+    );
+    return Object.fromEntries(counts) as Record<(typeof tableNames)[number], number>;
   });
 }

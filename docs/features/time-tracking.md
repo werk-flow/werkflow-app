@@ -23,7 +23,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated through `P1-22`) includes:
+The implemented baseline (updated through `P1-23`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Stable attendance sessions and factual activity segments for work, travel, break, standby, call-out, and fixed internal activities. Every switch is one version-checked, idempotent database operation with append-only attribution; existing `time_entries` remain unchanged compatibility facts and are not backfilled.
@@ -42,6 +42,7 @@ The implemented baseline (updated through `P1-22`) includes:
 - A complete visible request lifecycle: `Zur Prüfung`, `Rückfrage`, resubmission as a new revision, `Freigegeben`, `Abgelehnt`, `Zurückgezogen` and `Anwendung fehlgeschlagen`. Withdrawal, clarification and rejection never erase the request. Selected approvals are one atomic batch and a stale member prevents partial application.
 - Before/after review, explicit reasons, provisional daily/weekly summaries, pending calendar blocks, personal history and one manager approval surface. Confirmed readers overlay only approved applications, suppress replaced source facts and keep sequential correction chains attributable.
 - Action-time responsibility and delegation through the existing `time_approval` owner. There is no self-approval or Admin bypass; a missing second approver leaves a visible pending request rather than silently approving it.
+- Versioned organization-wide and employee-specific credited-time policies; explicitly opened employee time accounts; complete-workforce Berlin calendar-month calculations; source-linked findings; immutable close/reopen history; employee-visible monthly statements; and deterministic, private payroll-ready ZIP versions. The model keeps source time, credited time, absence, supplements, account movement and export values separate and calculates no wages or legal conclusions.
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
 - Realtime refreshes for legacy entries, canonical sessions and segments, and attention counts. Since `P1-07` the badge pipeline is unified: the Zeiterfassung sidebar badge and the Anträge tab badge count time **and** vacation approvals for the viewer, and pending legacy time sessions/change requests additionally appear as attention items on `/aufgaben` for exactly the effective holders. Decisions run only through the existing review actions.
 - Visible recovery for sessions open longer than 24 hours, legacy-open bridging on the next canonical action, and attributable closure on sign-out or member removal.
@@ -51,15 +52,15 @@ The implemented baseline (updated through `P1-22`) includes:
 Important current limitations:
 
 - The two historical production `entry_change_requests` retain their legacy interpretation; new correction work uses the P1-22 aggregate and does not rewrite or backfill those rows.
-- Resolved with `P1-06` (2026-08-06) and `P1-08` (2026-08-08): the former static „9 von 30" vacation widget is replaced by the real balance workflow, and sickness/privacy-sensitive absence landed as the second absence type. Absence remains owned by employee management; time tracking consumes its effect on targets exclusively through the extended `resolveDailyTarget` contract. Further absence vocabulary, hour-based absence, and paid/unpaid classification remain later scope (`P1-23`).
+- Resolved with `P1-06`, `P1-08` and `P1-23`: vacation and sickness remain owned by employee management and reach target calculation through `resolveDailyTarget`; the confirmed P1-23 policy classifies each separately as paid, unpaid or informational for the close/export projection. Further absence vocabulary and hour-based absence remain later scope.
 - Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Since `P1-06` approved vacation reduces targets through the same contract; sickness follows with `P1-08`.
-- There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
-- Standby and call-out are captured as distinct facts, but schedules, credited/payroll treatment, night/Sunday/holiday supplements, and explicit overtime approval remain `P1-23` scope.
-- Four eyes is active for every pending time approval: a holder can never approve their own entry or correction. Büro and Admin self-corrections need another holder with sufficient scope. P1-22 reserves a `period_closed` refusal code for the future boundary, but no period can be closed or reopened yet.
+- P1-23 provides explainable time accounts, manual adjustment/expiry/payout event types and reasoned close/reopen. It deliberately provides no automatic caps, expiry, payout, forfeiture or compensatory-time request workflow.
+- Standby, call-out, travel and other canonical activities receive versioned 0/50/100 credited treatment. Night/Sunday/holiday values are classifications only; arbitrary percentages, organization-defined categories, premiums and wage values remain outside the slice.
+- Four eyes is active for time corrections, positive overtime candidates and account adjustments. A closed period makes affected correction application fail with `period_closed`; Admin must reopen with a reason before correction, recalculation, successor close and re-export.
 - Date-effective substitutes inherit only their base holder's approval scope for an inclusive Berlin-date window. Every approval action resolves current responsibility server-side; an ended or expired substitute is denied even if a stale browser still shows the old approval card.
 - There is no native mobile app or offline time queue. Web behavior must not be described as offline-capable.
-- There is no payroll-ready period workflow, standard payroll/accounting export, or native finance handoff.
-- There is no complete German working-time compliance configuration. Current break settings alone must not be presented as proof of compliance.
+- The payroll handoff is a generic, deterministic ZIP with explicit employee/code mapping. It is not a provider integration, payroll calculation, accounting export, PDF payslip or native finance handoff.
+- P1-23 adds policy-driven operational warnings for breaks, daily duration, rest and classified night/Sunday/holiday work. They are review aids, not proof of compliance with German law, a tariff or an employment agreement.
 
 Current application code and live database state remain authoritative if this baseline drifts.
 

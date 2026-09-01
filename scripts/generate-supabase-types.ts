@@ -5,6 +5,8 @@ import { spawnSync } from "node:child_process";
 
 import { format } from "prettier";
 
+import { getSpawnFailureDetail } from "../lib/testing/spawn-result";
+
 const DEV_PROJECT_ID = "mbkkzuqjbdvzelqvuzcn";
 const REPOSITORY_ROOT = resolve(import.meta.dir, "..");
 const OUTPUT_PATH = resolve(
@@ -43,8 +45,9 @@ const generated = spawnSync(
 );
 
 if (generated.error || generated.status !== 0) {
-  const detail = generated.stderr.trim() || generated.error?.message;
-  throw new Error(`Supabase type generation failed: ${detail || "unknown error"}`);
+  throw new Error(
+    `Supabase type generation failed: ${getSpawnFailureDetail(generated, "unknown error")}`,
+  );
 }
 
 const formatted = await format(generated.stdout, {

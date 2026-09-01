@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-09-01
 
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
@@ -30,6 +30,7 @@ WerkFlow does not currently have structured commercial or finance modules.
 - Job, project, customer, and employee pages can hold linked documents and images. The central document library can store business documents, but an uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
 - Inventory V1 stores basic purchase price, sale price, tax-rate infrastructure, billable defaults, material planning, and actual take/return quantities. No current workflow converts these fields into offers, invoices, procurement accounting, revenue, or profit.
 - Time entries can be associated with operational work, but there is no approved billable-time handoff, labor calculation, commercial rate card, or job post-calculation.
+- P1-23 provides a versioned payroll-ready time ZIP with employee/code mappings, allocations, correction history and control totals. It contains minutes rather than money and creates no wage calculation, accounting posting, billable labor, invoice, payment or provider transmission.
 - P1-15 provides versioned operational Aufmaß and Regie-/Änderungsnachweise with internal decisions and customer-response evidence. They carry no prices, commercial scope acceptance, billing release or invoice effect.
 - P1-17 records an operational handover result as `ready_for_commercial_review` or `ready_with_exceptions` on an immutable release. This means only that the office-reviewed evidence package is ready for a later commercial process; it creates no calculation, price/tax decision, billable quantity, offer, contract, invoice, payment, posting or message.
 - There is no structured product/service price catalog, calculation engine, offer, order confirmation, commercial contract/change order, billable measurement, invoice, credit, incoming-bill, payment, open-item, dunning, bank-matching, accounting-export, or native ledger workflow.

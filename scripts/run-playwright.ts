@@ -18,6 +18,7 @@ import {
   type PlaywrightSuite,
   type PlaywrightTarget,
 } from '../lib/testing/run-policy';
+import { getSpawnFailureDetail } from '../lib/testing/spawn-result';
 import { runPlaywrightPreflight } from './playwright-preflight';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
@@ -154,7 +155,7 @@ function discoverPlaywrightSelection(
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(
-      `Could not discover ${suite} tests: ${result.stderr.trim() || `Playwright exited ${result.status}`}`,
+      `Could not discover ${suite} tests: ${getSpawnFailureDetail(result, `Playwright exited ${result.status}`)}`,
     );
   }
   return parsePlaywrightListOutput(result.stdout);

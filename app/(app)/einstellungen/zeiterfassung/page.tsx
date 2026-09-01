@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 
 import { TimeTrackingSettingsForm } from '@/components/settings/time-tracking-settings-form'
 import { HolidayCalendarSettings } from '@/components/settings/holiday-calendar-settings'
+import TimeAccountSettingsPage from '@/app/(app)/zeiterfassung/einstellungen/page'
 import {
   getCachedMemberships,
   getCachedOrganizationCalendar,
@@ -52,6 +53,7 @@ export default async function TimeTrackingSettingsPage() {
         closureDays={calendar.closureDays}
         role={activeMembership.role}
       />
+      <TimeAccountSettingsPage embedded />
     </div>
   )
 }

@@ -1,38 +1,44 @@
-import { Suspense } from 'react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import { Suspense } from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
-import { getCachedOrganizationSettings } from '@/lib/data/cached';
-import { ZeiterfassungHeader } from '@/components/zeiterfassung/zeiterfassung-header';
-import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
-import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
+import { resolveActiveOrgId } from "@/lib/org/cookies";
+import { getCachedUser, getCachedMemberships } from "@/lib/data/cached";
+import { getCachedOrganizationSettings } from "@/lib/data/cached";
+import { ZeiterfassungHeader } from "@/components/zeiterfassung/zeiterfassung-header";
+import { ZeiterfassungContent } from "@/components/zeiterfassung/zeiterfassung-content";
+import { ZeiterfassungContentSkeleton } from "@/components/loading-states/zeiterfassung-content-skeleton";
 import {
   getCurrentClockState,
   getTimeEntries,
-} from '@/lib/time-tracking/actions';
-import { getWeeklyTargets } from '@/lib/personnel/target-actions';
-import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
-import type { LiveClockState, ZeiterfassungOverview } from '@/lib/time-tracking/types';
+} from "@/lib/time-tracking/actions";
+import { getWeeklyTargets } from "@/lib/personnel/target-actions";
+import { getOrgMembersForUser, type OrgRole } from "@/lib/members/actions";
+import type {
+  LiveClockState,
+  ZeiterfassungOverview,
+} from "@/lib/time-tracking/types";
 import {
   buildWeeklyTimeData,
   computeWeekLabel,
   getTodayIndex,
   getWeekBounds,
-} from '@/lib/time-tracking/weekly';
-import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
+} from "@/lib/time-tracking/weekly";
+import { getEffectiveResponsibilityHolderForActor } from "@/lib/responsibilities/server";
+import { getTimeAccountAccess } from "@/lib/time-accounts/actions";
 
 function createDefaultClockState(
   activeOrgId: string,
-  organizationSettings: Awaited<ReturnType<typeof getCachedOrganizationSettings>>
+  organizationSettings: Awaited<
+    ReturnType<typeof getCachedOrganizationSettings>
+  >,
 ): LiveClockState {
   return {
     organizationId: activeOrgId,
     breakMode: organizationSettings.breakMode,
     autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
     autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
-    status: 'clocked_out',
+    status: "clocked_out",
     isClockedIn: false,
     isOnBreak: false,
     clockInTime: null,
@@ -44,7 +50,7 @@ function createDefaultClockState(
     timelineSegments: [],
     activeJobId: null,
     activeJobInfo: null,
-    captureModel: 'none',
+    captureModel: "none",
     sessionId: null,
     sessionVersion: null,
     currentSegmentId: null,
@@ -61,24 +67,28 @@ function createDefaultClockState(
 
 async function getInitialOverview(
   activeOrgId: string,
-  userId: string
+  userId: string,
 ): Promise<ZeiterfassungOverview> {
   const { monday, sunday } = getWeekBounds();
   const weekLabel = computeWeekLabel(monday);
   const todayIndex = getTodayIndex();
 
-  const [clockStateResult, weekEntriesResult, organizationSettings, targetsResult] =
-    await Promise.all([
-      getCurrentClockState(activeOrgId),
-      getTimeEntries({
-        organizationId: activeOrgId,
-        from: monday.toISOString(),
-        to: sunday.toISOString(),
-        userId,
-      }),
-      getCachedOrganizationSettings(activeOrgId),
-      getWeeklyTargets({ userId }),
-    ]);
+  const [
+    clockStateResult,
+    weekEntriesResult,
+    organizationSettings,
+    targetsResult,
+  ] = await Promise.all([
+    getCurrentClockState(activeOrgId),
+    getTimeEntries({
+      organizationId: activeOrgId,
+      from: monday.toISOString(),
+      to: sunday.toISOString(),
+      userId,
+    }),
+    getCachedOrganizationSettings(activeOrgId),
+    getWeeklyTargets({ userId }),
+  ]);
 
   const weekTargets = targetsResult.success ? targetsResult.targets : undefined;
 
@@ -92,7 +102,7 @@ async function getInitialOverview(
             weekEntriesResult.entries,
             monday,
             organizationSettings,
-            weekTargets
+            weekTargets,
           )
         : [],
     todayIndex,
@@ -107,7 +117,7 @@ async function ZeiterfassungData({
   isAdminOrManager,
   isAdmin,
   currentUserRole,
-  tab
+  tab,
 }: {
   activeOrgId: string;
   userId: string;
@@ -116,13 +126,15 @@ async function ZeiterfassungData({
   currentUserRole: OrgRole;
   tab: string | undefined;
 }) {
-  async function fetchMembers(): Promise<Array<{
-    user_id: string;
-    first_name: string | null;
-    last_name: string | null;
-    email: string;
-    role: string;
-  }>> {
+  async function fetchMembers(): Promise<
+    Array<{
+      user_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      email: string;
+      role: string;
+    }>
+  > {
     if (!isAdminOrManager) return [];
 
     return getOrgMembersForUser(activeOrgId, userId);
@@ -134,12 +146,12 @@ async function ZeiterfassungData({
       fetchMembers(),
       getEffectiveResponsibilityHolderForActor({
         organizationId: activeOrgId,
-        responsibility: 'time_approval',
+        responsibility: "time_approval",
         actorUserId: userId,
       }),
       getEffectiveResponsibilityHolderForActor({
         organizationId: activeOrgId,
-        responsibility: 'leave_approval',
+        responsibility: "leave_approval",
         actorUserId: userId,
       }),
     ]);
@@ -152,7 +164,7 @@ async function ZeiterfassungData({
       canApproveLeave={Boolean(leaveApprovalHolder)}
       isAdmin={isAdmin}
       currentUserRole={currentUserRole}
-      initialTab={tab === 'approvals' || tab === 'history' ? tab : 'overview'}
+      initialTab={tab === "approvals" || tab === "history" ? tab : "overview"}
       members={members}
       initialOverview={initialOverview}
     />
@@ -164,21 +176,24 @@ interface ZeiterfassungPageProps {
 }
 
 export default async function ZeiterfassungPage({
-  searchParams
+  searchParams,
 }: ZeiterfassungPageProps) {
-  const [{ tab }, { data: { user } }, cookieStore] = await Promise.all([
-    searchParams,
-    getCachedUser(),
-    cookies()
-  ]);
+  const [
+    { tab },
+    {
+      data: { user },
+    },
+    cookieStore,
+  ] = await Promise.all([searchParams, getCachedUser(), cookies()]);
 
   if (!user) {
-    redirect('/login');
+    redirect("/login");
   }
 
-  const [activeOrgId, memberships] = await Promise.all([
+  const [activeOrgId, memberships, timeAccountAccess] = await Promise.all([
     resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id)
+    getCachedMemberships(user.id),
+    getTimeAccountAccess(),
   ]);
 
   if (!activeOrgId) {
@@ -195,17 +210,20 @@ export default async function ZeiterfassungPage({
   const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
 
   if (!currentMembership) {
-    redirect('/dashboard');
+    redirect("/dashboard");
   }
 
   const currentUserRole = currentMembership.role as OrgRole;
   const isAdminOrManager =
-    currentUserRole === 'admin' || currentUserRole === 'buero';
-  const isAdmin = currentUserRole === 'admin';
-
+    currentUserRole === "admin" || currentUserRole === "buero";
+  const isAdmin = currentUserRole === "admin";
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <ZeiterfassungHeader />
+      <ZeiterfassungHeader
+        showManagement={timeAccountAccess.canManage}
+        showSettings={isAdmin}
+        showAdjustmentManagement={timeAccountAccess.canProposeAdjustments}
+      />
 
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <Suspense fallback={<ZeiterfassungContentSkeleton />}>

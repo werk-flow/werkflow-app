@@ -20,7 +20,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline (updated through slice `P1-21`) includes:
+The implemented baseline (updated through slice `P1-23`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -113,12 +113,14 @@ Explicit time activities (`P1-21`, 2026-08-31):
 
 Important current limitations:
 
+- P1-23 adds explicitly opened time accounts for every in-scope personnel record, including records without a login; dated default/employee-specific time policies; employee payroll references in a versioned export mapping; and own-account/monthly-statement visibility. These are operational time/payroll handoff facts, not compensation, payroll profiles, payslips or employment-contract data.
+
 - Teams and operational qualification coverage are implemented through `P1-09`. Capacity conflicts, minimum staffing, team availability, shift rotations, seasonal patterns, and date-specific schedule overrides remain `P1-11`.
-- Vacation and sickness/privacy-sensitive absence are the implemented absence types; further vocabulary (training, special leave, compensatory time) and hour-based absence remain later scope. Sickness carries no paid/unpaid classification yet — the type + portion + dates shape is what `P1-23` will classify without rewriting it. Entitlement carryover into the next year, expiry rules, and manual balance adjustments are deliberately deferred: no period-close or time-account concept exists yet (`P1-23`), and carryover without expiry rules would invent policy — an organization adjusts a year's entitlement through a dated condition, which stays visible arithmetic.
+- Vacation and sickness/privacy-sensitive absence are the implemented absence types; further vocabulary (training, special leave, compensatory time) and hour-based absence remain later scope. P1-23 classifies each type as paid, unpaid or informational in the confirmed time policy without rewriting the absence. Time-account adjustments, expiry and payout are manual, four-eyes minute events; there is no automatic carryover, expiry or money calculation.
 - The shared attention pattern (`P1-07`) covers approvals, open requests, and decision notifications in-app only: no reminders, snooze, or escalation engine, no per-user notification preferences yet (the smallest honest step was quiet-by-default; configurability grows with real usage), and no external delivery (`P1-46`).
 - Capacity conflicts, minimum staffing, and availability planning that combines absence remain `P1-11`; the calendar shows minimal visible absence signals only.
 - Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents (`P1-24`).
-- There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, payroll profile, payroll export, or accounting handoff.
+- There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, compensation/payroll profile, provider-specific payroll integration or accounting handoff. P1-23 supplies only a generic payroll-ready ZIP and employee/code mapping.
 - Current member removal remains destructive for legacy time: it closes an active canonical or legacy session, deletes that member's organization legacy `time_entries`, and then deletes the membership. Stable canonical sessions, segments, operations and events remain attached to the surviving personnel record so captured history is not erased. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
 - Custom roles, custom role names, and granular permission editing are intentionally not part of Phase 1; fixed roles plus scoped responsibilities are the accepted safe model.
 - Employees cannot yet view or propose corrections to their own personnel record; the self-service surface is later scope.

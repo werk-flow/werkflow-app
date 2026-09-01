@@ -10,6 +10,7 @@ import {
 } from "../lib/testing/run-policy";
 import { getR2Endpoint } from "../lib/storage/r2";
 import { assertDevMigrationHistoryParity } from "../lib/testing/dev-migration-history";
+import { getSpawnFailureDetail } from "../lib/testing/spawn-result";
 import { loadEnvLocal, requireEnv } from "../tests/golden/support/env";
 import { listRetainedWorlds } from "../tests/golden/support/run-state";
 import { checkRealtimeParity } from "./check-realtime-parity";
@@ -193,7 +194,7 @@ function getWindowsListener(): ListenerDetails | null {
   }
   if (result.status !== 0) {
     throw new Error(
-      `Could not inspect port 3000: ${result.stderr.trim() || `PowerShell exited ${result.status}`}`,
+      `Could not inspect port 3000: ${getSpawnFailureDetail(result, `PowerShell exited ${result.status}`)}`,
     );
   }
   const output = result.stdout.trim();

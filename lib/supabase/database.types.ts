@@ -4968,6 +4968,365 @@ export type Database = {
         };
         Relationships: [];
       };
+      payroll_code_mappings: {
+        Row: {
+          activity_kind:
+            | Database["public"]["Enums"]["time_segment_kind"]
+            | null;
+          created_at: string;
+          id: string;
+          mapping_version_id: string;
+          organization_id: string;
+          output_code: string;
+          value_kind: Database["public"]["Enums"]["payroll_mapping_value_kind"];
+        };
+        Insert: {
+          activity_kind?:
+            | Database["public"]["Enums"]["time_segment_kind"]
+            | null;
+          created_at?: string;
+          id?: string;
+          mapping_version_id: string;
+          organization_id: string;
+          output_code: string;
+          value_kind: Database["public"]["Enums"]["payroll_mapping_value_kind"];
+        };
+        Update: {
+          activity_kind?:
+            | Database["public"]["Enums"]["time_segment_kind"]
+            | null;
+          created_at?: string;
+          id?: string;
+          mapping_version_id?: string;
+          organization_id?: string;
+          output_code?: string;
+          value_kind?: Database["public"]["Enums"]["payroll_mapping_value_kind"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_code_mappings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_code_mappings_version_org_fkey";
+            columns: ["mapping_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_mapping_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      payroll_employee_mappings: {
+        Row: {
+          created_at: string;
+          employee_record_id: string;
+          external_employee_reference: string;
+          id: string;
+          mapping_version_id: string;
+          organization_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          employee_record_id: string;
+          external_employee_reference: string;
+          id?: string;
+          mapping_version_id: string;
+          organization_id: string;
+        };
+        Update: {
+          created_at?: string;
+          employee_record_id?: string;
+          external_employee_reference?: string;
+          id?: string;
+          mapping_version_id?: string;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_employee_mappings_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_employee_mappings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_employee_mappings_version_org_fkey";
+            columns: ["mapping_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_mapping_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      payroll_export_events: {
+        Row: {
+          actor_id: string;
+          event_payload: Json;
+          event_type: string;
+          export_id: string;
+          id: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+        };
+        Insert: {
+          actor_id: string;
+          event_payload?: Json;
+          event_type: string;
+          export_id: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id: string;
+          organization_id: string;
+        };
+        Update: {
+          actor_id?: string;
+          event_payload?: Json;
+          event_type?: string;
+          export_id?: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id?: string;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_export_events_export_org_fkey";
+            columns: ["export_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_exports";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_export_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payroll_exports: {
+        Row: {
+          close_version_id: string;
+          content_fingerprint: string;
+          created_at: string;
+          document_id: string | null;
+          failure_reason: string | null;
+          generator_version: string;
+          id: string;
+          mapping_version_id: string;
+          operation_id: string;
+          organization_id: string;
+          period_id: string;
+          ready_at: string | null;
+          request_hash: string;
+          requested_by: string;
+          scope: Database["public"]["Enums"]["payroll_export_scope"];
+          size_bytes: number | null;
+          state: Database["public"]["Enums"]["payroll_export_state"];
+          supersedes_export_id: string | null;
+          updated_at: string;
+          version: number;
+          zip_sha256: string | null;
+        };
+        Insert: {
+          close_version_id: string;
+          content_fingerprint: string;
+          created_at?: string;
+          document_id?: string | null;
+          failure_reason?: string | null;
+          generator_version: string;
+          id?: string;
+          mapping_version_id: string;
+          operation_id: string;
+          organization_id: string;
+          period_id: string;
+          ready_at?: string | null;
+          request_hash: string;
+          requested_by: string;
+          scope?: Database["public"]["Enums"]["payroll_export_scope"];
+          size_bytes?: number | null;
+          state?: Database["public"]["Enums"]["payroll_export_state"];
+          supersedes_export_id?: string | null;
+          updated_at?: string;
+          version: number;
+          zip_sha256?: string | null;
+        };
+        Update: {
+          close_version_id?: string;
+          content_fingerprint?: string;
+          created_at?: string;
+          document_id?: string | null;
+          failure_reason?: string | null;
+          generator_version?: string;
+          id?: string;
+          mapping_version_id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          period_id?: string;
+          ready_at?: string | null;
+          request_hash?: string;
+          requested_by?: string;
+          scope?: Database["public"]["Enums"]["payroll_export_scope"];
+          size_bytes?: number | null;
+          state?: Database["public"]["Enums"]["payroll_export_state"];
+          supersedes_export_id?: string | null;
+          updated_at?: string;
+          version?: number;
+          zip_sha256?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_exports_close_org_fkey";
+            columns: ["close_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_close_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_exports_document_org_fkey";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_exports_mapping_org_fkey";
+            columns: ["mapping_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_mapping_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_exports_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_exports_period_org_fkey";
+            columns: ["period_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_periods";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_exports_supersedes_org_fkey";
+            columns: ["supersedes_export_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_exports";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      payroll_mapping_profiles: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          current_version_id: string | null;
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          current_version_id?: string | null;
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          current_version_id?: string | null;
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_mapping_profiles_current_version_org_fkey";
+            columns: ["current_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_mapping_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "payroll_mapping_profiles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: true;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      payroll_mapping_versions: {
+        Row: {
+          confirmed_at: string;
+          confirmed_by: string;
+          generator_compatibility_version: string;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          profile_id: string;
+          request_hash: string;
+          version: number;
+        };
+        Insert: {
+          confirmed_at?: string;
+          confirmed_by: string;
+          generator_compatibility_version?: string;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          profile_id: string;
+          request_hash: string;
+          version: number;
+        };
+        Update: {
+          confirmed_at?: string;
+          confirmed_by?: string;
+          generator_compatibility_version?: string;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          profile_id?: string;
+          request_hash?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "payroll_mapping_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "payroll_mapping_versions_profile_org_fkey";
+            columns: ["profile_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "payroll_mapping_profiles";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       planning_customer_commitment_events: {
         Row: {
           commitment_id: string;
@@ -6728,6 +7087,624 @@ export type Database = {
           },
         ];
       };
+      time_account_adjustment_events: {
+        Row: {
+          actor_id: string;
+          event_type: string;
+          id: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+          reason: string | null;
+          request_id: string;
+          responsibility_snapshot: Json | null;
+        };
+        Insert: {
+          actor_id: string;
+          event_type: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id: string;
+          organization_id: string;
+          reason?: string | null;
+          request_id: string;
+          responsibility_snapshot?: Json | null;
+        };
+        Update: {
+          actor_id?: string;
+          event_type?: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string | null;
+          request_id?: string;
+          responsibility_snapshot?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_adjustment_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_adjustment_events_request_org_fkey";
+            columns: ["request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_adjustment_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_adjustment_requests: {
+        Row: {
+          account_id: string;
+          adjustment_kind: Database["public"]["Enums"]["time_account_adjustment_kind"];
+          created_at: string;
+          decided_at: string | null;
+          decided_by: string | null;
+          decision_reason: string | null;
+          effective_date: string;
+          employee_record_id: string;
+          id: string;
+          minutes: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          requested_by: string;
+          status: Database["public"]["Enums"]["time_account_request_status"];
+          updated_at: string;
+          version: number;
+        };
+        Insert: {
+          account_id: string;
+          adjustment_kind: Database["public"]["Enums"]["time_account_adjustment_kind"];
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_reason?: string | null;
+          effective_date: string;
+          employee_record_id: string;
+          id?: string;
+          minutes: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          requested_by: string;
+          status?: Database["public"]["Enums"]["time_account_request_status"];
+          updated_at?: string;
+          version?: number;
+        };
+        Update: {
+          account_id?: string;
+          adjustment_kind?: Database["public"]["Enums"]["time_account_adjustment_kind"];
+          created_at?: string;
+          decided_at?: string | null;
+          decided_by?: string | null;
+          decision_reason?: string | null;
+          effective_date?: string;
+          employee_record_id?: string;
+          id?: string;
+          minutes?: number;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string;
+          request_hash?: string;
+          requested_by?: string;
+          status?: Database["public"]["Enums"]["time_account_request_status"];
+          updated_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_adjustment_requests_account_org_fkey";
+            columns: ["account_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_accounts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_adjustment_requests_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_adjustment_requests_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_account_events: {
+        Row: {
+          account_id: string;
+          adjustment_request_id: string | null;
+          close_version_id: string | null;
+          created_at: string;
+          created_by: string;
+          effective_date: string;
+          employee_record_id: string;
+          event_kind: Database["public"]["Enums"]["time_account_event_kind"];
+          id: string;
+          minutes: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          reverses_event_id: string | null;
+        };
+        Insert: {
+          account_id: string;
+          adjustment_request_id?: string | null;
+          close_version_id?: string | null;
+          created_at?: string;
+          created_by: string;
+          effective_date: string;
+          employee_record_id: string;
+          event_kind: Database["public"]["Enums"]["time_account_event_kind"];
+          id?: string;
+          minutes: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          reverses_event_id?: string | null;
+        };
+        Update: {
+          account_id?: string;
+          adjustment_request_id?: string | null;
+          close_version_id?: string | null;
+          created_at?: string;
+          created_by?: string;
+          effective_date?: string;
+          employee_record_id?: string;
+          event_kind?: Database["public"]["Enums"]["time_account_event_kind"];
+          id?: string;
+          minutes?: number;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string;
+          request_hash?: string;
+          reverses_event_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_events_account_org_fkey";
+            columns: ["account_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_accounts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_events_close_org_fkey";
+            columns: ["close_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_close_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_events_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_events_request_org_fkey";
+            columns: ["adjustment_request_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_adjustment_requests";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_events_reverses_org_fkey";
+            columns: ["reverses_event_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_events";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_policies: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          is_default: boolean;
+          name: string;
+          organization_id: string;
+          retired_at: string | null;
+          updated_at: string;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name: string;
+          organization_id: string;
+          retired_at?: string | null;
+          updated_at?: string;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          is_default?: boolean;
+          name?: string;
+          organization_id?: string;
+          retired_at?: string | null;
+          updated_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policies_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_account_policy_assignments: {
+        Row: {
+          assigned_by: string;
+          created_at: string;
+          employee_record_id: string;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          policy_id: string;
+          reason: string;
+          request_hash: string;
+          valid_from: string;
+          valid_until: string | null;
+        };
+        Insert: {
+          assigned_by: string;
+          created_at?: string;
+          employee_record_id: string;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          policy_id: string;
+          reason: string;
+          request_hash: string;
+          valid_from: string;
+          valid_until?: string | null;
+        };
+        Update: {
+          assigned_by?: string;
+          created_at?: string;
+          employee_record_id?: string;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          policy_id?: string;
+          reason?: string;
+          request_hash?: string;
+          valid_from?: string;
+          valid_until?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policy_assignments_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_assignments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_assignments_policy_org_fkey";
+            columns: ["policy_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policies";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_policy_credit_rules: {
+        Row: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at: string;
+          credit_percentage: number;
+          id: string;
+          organization_id: string;
+          policy_version_id: string;
+          standby_context:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          travel_role: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route: Database["public"]["Enums"]["time_travel_route"] | null;
+        };
+        Insert: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          credit_percentage: number;
+          id?: string;
+          organization_id: string;
+          policy_version_id: string;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+        };
+        Update: {
+          activity_kind?: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          credit_percentage?: number;
+          id?: string;
+          organization_id?: string;
+          policy_version_id?: string;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policy_credit_rules_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_credit_rules_version_org_fkey";
+            columns: ["policy_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policy_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_policy_supplement_rules: {
+        Row: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at: string;
+          enabled: boolean;
+          id: string;
+          organization_id: string;
+          policy_version_id: string;
+          supplement_kind: Database["public"]["Enums"]["time_supplement_kind"];
+        };
+        Insert: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          enabled?: boolean;
+          id?: string;
+          organization_id: string;
+          policy_version_id: string;
+          supplement_kind: Database["public"]["Enums"]["time_supplement_kind"];
+        };
+        Update: {
+          activity_kind?: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          enabled?: boolean;
+          id?: string;
+          organization_id?: string;
+          policy_version_id?: string;
+          supplement_kind?: Database["public"]["Enums"]["time_supplement_kind"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policy_supplement_rules_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_supplement_rules_version_org_fkey";
+            columns: ["policy_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policy_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_policy_versions: {
+        Row: {
+          calculation_schema_version: number;
+          confirmed_at: string;
+          confirmed_by: string;
+          created_at: string;
+          effective_from: string;
+          id: string;
+          night_window_end: string | null;
+          night_window_start: string | null;
+          operation_id: string;
+          organization_id: string;
+          policy_id: string;
+          request_hash: string;
+          sickness_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          vacation_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          version: number;
+        };
+        Insert: {
+          calculation_schema_version?: number;
+          confirmed_at?: string;
+          confirmed_by: string;
+          created_at?: string;
+          effective_from: string;
+          id?: string;
+          night_window_end?: string | null;
+          night_window_start?: string | null;
+          operation_id: string;
+          organization_id: string;
+          policy_id: string;
+          request_hash: string;
+          sickness_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          vacation_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          version: number;
+        };
+        Update: {
+          calculation_schema_version?: number;
+          confirmed_at?: string;
+          confirmed_by?: string;
+          created_at?: string;
+          effective_from?: string;
+          id?: string;
+          night_window_end?: string | null;
+          night_window_start?: string | null;
+          operation_id?: string;
+          organization_id?: string;
+          policy_id?: string;
+          request_hash?: string;
+          sickness_treatment?: Database["public"]["Enums"]["time_absence_treatment"];
+          vacation_treatment?: Database["public"]["Enums"]["time_absence_treatment"];
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policy_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_versions_policy_org_fkey";
+            columns: ["policy_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policies";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_account_policy_warning_rules: {
+        Row: {
+          created_at: string;
+          enabled: boolean;
+          id: string;
+          organization_id: string;
+          policy_version_id: string;
+          severity: Database["public"]["Enums"]["time_finding_severity"];
+          threshold_minutes: number | null;
+          warning_kind: Database["public"]["Enums"]["time_policy_warning_kind"];
+        };
+        Insert: {
+          created_at?: string;
+          enabled?: boolean;
+          id?: string;
+          organization_id: string;
+          policy_version_id: string;
+          severity?: Database["public"]["Enums"]["time_finding_severity"];
+          threshold_minutes?: number | null;
+          warning_kind: Database["public"]["Enums"]["time_policy_warning_kind"];
+        };
+        Update: {
+          created_at?: string;
+          enabled?: boolean;
+          id?: string;
+          organization_id?: string;
+          policy_version_id?: string;
+          severity?: Database["public"]["Enums"]["time_finding_severity"];
+          threshold_minutes?: number | null;
+          warning_kind?: Database["public"]["Enums"]["time_policy_warning_kind"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_policy_warning_rules_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_policy_warning_rules_version_org_fkey";
+            columns: ["policy_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policy_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_accounts: {
+        Row: {
+          created_at: string;
+          current_balance_minutes: number;
+          employee_record_id: string;
+          id: string;
+          last_closed_period_end_date: string | null;
+          opened_by: string;
+          opened_on: string;
+          organization_id: string;
+          updated_at: string;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          current_balance_minutes?: number;
+          employee_record_id: string;
+          id?: string;
+          last_closed_period_end_date?: string | null;
+          opened_by: string;
+          opened_on: string;
+          organization_id: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          current_balance_minutes?: number;
+          employee_record_id?: string;
+          id?: string;
+          last_closed_period_end_date?: string | null;
+          opened_by?: string;
+          opened_on?: string;
+          organization_id?: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_accounts_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_accounts_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_correction_applications: {
         Row: {
           applied_at: string;
@@ -7190,6 +8167,659 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "time_sessions";
             referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_period_calculations: {
+        Row: {
+          absence_minutes: number;
+          account_event_minutes: number;
+          calculation_schema_version: number;
+          credited_minutes: number;
+          generated_at: string;
+          generated_by: string;
+          id: string;
+          organization_id: string;
+          overtime_minutes: number;
+          period_id: string;
+          source_fingerprint: string;
+          source_seconds: number;
+          target_minutes: number;
+          version: number;
+        };
+        Insert: {
+          absence_minutes?: number;
+          account_event_minutes?: number;
+          calculation_schema_version?: number;
+          credited_minutes?: number;
+          generated_at?: string;
+          generated_by: string;
+          id?: string;
+          organization_id: string;
+          overtime_minutes?: number;
+          period_id: string;
+          source_fingerprint: string;
+          source_seconds?: number;
+          target_minutes?: number;
+          version: number;
+        };
+        Update: {
+          absence_minutes?: number;
+          account_event_minutes?: number;
+          calculation_schema_version?: number;
+          credited_minutes?: number;
+          generated_at?: string;
+          generated_by?: string;
+          id?: string;
+          organization_id?: string;
+          overtime_minutes?: number;
+          period_id?: string;
+          source_fingerprint?: string;
+          source_seconds?: number;
+          target_minutes?: number;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_calculations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_period_calculations_period_org_fkey";
+            columns: ["period_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_periods";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_period_close_versions: {
+        Row: {
+          calculation_id: string;
+          closed_at: string;
+          closed_by: string;
+          closing_balance_total_minutes: number;
+          id: string;
+          opening_balance_total_minutes: number;
+          organization_id: string;
+          period_delta_total_minutes: number;
+          period_id: string;
+          source_fingerprint: string;
+          supersedes_close_version_id: string | null;
+          version: number;
+        };
+        Insert: {
+          calculation_id: string;
+          closed_at?: string;
+          closed_by: string;
+          closing_balance_total_minutes: number;
+          id?: string;
+          opening_balance_total_minutes: number;
+          organization_id: string;
+          period_delta_total_minutes: number;
+          period_id: string;
+          source_fingerprint: string;
+          supersedes_close_version_id?: string | null;
+          version: number;
+        };
+        Update: {
+          calculation_id?: string;
+          closed_at?: string;
+          closed_by?: string;
+          closing_balance_total_minutes?: number;
+          id?: string;
+          opening_balance_total_minutes?: number;
+          organization_id?: string;
+          period_delta_total_minutes?: number;
+          period_id?: string;
+          source_fingerprint?: string;
+          supersedes_close_version_id?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_close_versions_calculation_org_fkey";
+            columns: ["calculation_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_calculations";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_close_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_period_close_versions_period_org_fkey";
+            columns: ["period_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_periods";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_close_versions_supersedes_org_fkey";
+            columns: ["supersedes_close_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_close_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_period_daily_results: {
+        Row: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at: string;
+          credit_percentage: number;
+          credited_minutes: number;
+          credited_seconds: number;
+          employee_record_id: string;
+          employee_result_id: string;
+          id: string;
+          local_date: string;
+          night_minutes: number;
+          organization_id: string;
+          public_holiday_minutes: number;
+          rounding_delta_seconds: number;
+          sickness_minutes: number;
+          source_minutes: number;
+          source_seconds: number;
+          standby_context:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          sunday_minutes: number;
+          target_minutes: number;
+          travel_role: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route: Database["public"]["Enums"]["time_travel_route"] | null;
+          vacation_minutes: number;
+        };
+        Insert: {
+          activity_kind: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          credit_percentage: number;
+          credited_minutes: number;
+          credited_seconds: number;
+          employee_record_id: string;
+          employee_result_id: string;
+          id?: string;
+          local_date: string;
+          night_minutes?: number;
+          organization_id: string;
+          public_holiday_minutes?: number;
+          rounding_delta_seconds: number;
+          sickness_minutes?: number;
+          source_minutes: number;
+          source_seconds: number;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          sunday_minutes?: number;
+          target_minutes?: number;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+          vacation_minutes?: number;
+        };
+        Update: {
+          activity_kind?: Database["public"]["Enums"]["time_segment_kind"];
+          created_at?: string;
+          credit_percentage?: number;
+          credited_minutes?: number;
+          credited_seconds?: number;
+          employee_record_id?: string;
+          employee_result_id?: string;
+          id?: string;
+          local_date?: string;
+          night_minutes?: number;
+          organization_id?: string;
+          public_holiday_minutes?: number;
+          rounding_delta_seconds?: number;
+          sickness_minutes?: number;
+          source_minutes?: number;
+          source_seconds?: number;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          sunday_minutes?: number;
+          target_minutes?: number;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+          vacation_minutes?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_daily_results_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_daily_results_employee_result_org_fkey";
+            columns: ["employee_result_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_employee_results";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_daily_results_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_period_employee_results: {
+        Row: {
+          account_event_minutes: number;
+          authoritative_targets: boolean;
+          calculation_id: string;
+          closing_balance_minutes: number;
+          created_at: string;
+          credited_minutes: number;
+          employee_record_id: string;
+          id: string;
+          organization_id: string;
+          overtime_candidate_minutes: number;
+          period_delta_minutes: number;
+          policy_version_id: string | null;
+          previous_balance_minutes: number;
+          sickness_minutes: number;
+          source_minutes: number;
+          source_seconds: number;
+          target_minutes: number;
+          vacation_minutes: number;
+        };
+        Insert: {
+          account_event_minutes: number;
+          authoritative_targets: boolean;
+          calculation_id: string;
+          closing_balance_minutes: number;
+          created_at?: string;
+          credited_minutes: number;
+          employee_record_id: string;
+          id?: string;
+          organization_id: string;
+          overtime_candidate_minutes: number;
+          period_delta_minutes: number;
+          policy_version_id?: string | null;
+          previous_balance_minutes: number;
+          sickness_minutes: number;
+          source_minutes: number;
+          source_seconds: number;
+          target_minutes: number;
+          vacation_minutes: number;
+        };
+        Update: {
+          account_event_minutes?: number;
+          authoritative_targets?: boolean;
+          calculation_id?: string;
+          closing_balance_minutes?: number;
+          created_at?: string;
+          credited_minutes?: number;
+          employee_record_id?: string;
+          id?: string;
+          organization_id?: string;
+          overtime_candidate_minutes?: number;
+          period_delta_minutes?: number;
+          policy_version_id?: string | null;
+          previous_balance_minutes?: number;
+          sickness_minutes?: number;
+          source_minutes?: number;
+          source_seconds?: number;
+          target_minutes?: number;
+          vacation_minutes?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_employee_results_calculation_org_fkey";
+            columns: ["calculation_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_calculations";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_employee_results_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_employee_results_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_period_employee_results_policy_org_fkey";
+            columns: ["policy_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_policy_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_period_events: {
+        Row: {
+          actor_id: string;
+          calculation_id: string | null;
+          close_version_id: string | null;
+          event_payload: Json;
+          event_type: string;
+          id: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+          period_id: string;
+          reason: string | null;
+          request_hash: string;
+        };
+        Insert: {
+          actor_id: string;
+          calculation_id?: string | null;
+          close_version_id?: string | null;
+          event_payload?: Json;
+          event_type: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id: string;
+          organization_id: string;
+          period_id: string;
+          reason?: string | null;
+          request_hash: string;
+        };
+        Update: {
+          actor_id?: string;
+          calculation_id?: string | null;
+          close_version_id?: string | null;
+          event_payload?: Json;
+          event_type?: string;
+          id?: string;
+          occurred_at?: string;
+          operation_id?: string;
+          organization_id?: string;
+          period_id?: string;
+          reason?: string | null;
+          request_hash?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_events_calculation_org_fkey";
+            columns: ["calculation_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_calculations";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_events_close_org_fkey";
+            columns: ["close_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_close_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_period_events_period_org_fkey";
+            columns: ["period_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_periods";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_period_finding_decisions: {
+        Row: {
+          decided_at: string;
+          decided_by: string;
+          decision: Database["public"]["Enums"]["time_period_finding_decision"];
+          finding_id: string;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          responsibility_snapshot: Json;
+        };
+        Insert: {
+          decided_at?: string;
+          decided_by: string;
+          decision: Database["public"]["Enums"]["time_period_finding_decision"];
+          finding_id: string;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          responsibility_snapshot: Json;
+        };
+        Update: {
+          decided_at?: string;
+          decided_by?: string;
+          decision?: Database["public"]["Enums"]["time_period_finding_decision"];
+          finding_id?: string;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string;
+          responsibility_snapshot?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_finding_decisions_finding_org_fkey";
+            columns: ["finding_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_findings";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_finding_decisions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_period_findings: {
+        Row: {
+          calculation_id: string;
+          created_at: string;
+          employee_record_id: string | null;
+          explanation: Json;
+          finding_kind: Database["public"]["Enums"]["time_period_finding_kind"];
+          id: string;
+          local_date: string | null;
+          organization_id: string;
+          severity: Database["public"]["Enums"]["time_finding_severity"];
+          source_fingerprint: string;
+        };
+        Insert: {
+          calculation_id: string;
+          created_at?: string;
+          employee_record_id?: string | null;
+          explanation?: Json;
+          finding_kind: Database["public"]["Enums"]["time_period_finding_kind"];
+          id?: string;
+          local_date?: string | null;
+          organization_id: string;
+          severity: Database["public"]["Enums"]["time_finding_severity"];
+          source_fingerprint: string;
+        };
+        Update: {
+          calculation_id?: string;
+          created_at?: string;
+          employee_record_id?: string | null;
+          explanation?: Json;
+          finding_kind?: Database["public"]["Enums"]["time_period_finding_kind"];
+          id?: string;
+          local_date?: string | null;
+          organization_id?: string;
+          severity?: Database["public"]["Enums"]["time_finding_severity"];
+          source_fingerprint?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_findings_calculation_org_fkey";
+            columns: ["calculation_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_calculations";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_findings_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_findings_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_period_result_sources: {
+        Row: {
+          created_at: string;
+          daily_result_id: string | null;
+          employee_result_id: string;
+          id: string;
+          organization_id: string;
+          source_fingerprint: string;
+          source_id: string | null;
+          source_key: string | null;
+          source_kind: string;
+          source_snapshot: Json;
+        };
+        Insert: {
+          created_at?: string;
+          daily_result_id?: string | null;
+          employee_result_id: string;
+          id?: string;
+          organization_id: string;
+          source_fingerprint: string;
+          source_id?: string | null;
+          source_key?: string | null;
+          source_kind: string;
+          source_snapshot?: Json;
+        };
+        Update: {
+          created_at?: string;
+          daily_result_id?: string | null;
+          employee_result_id?: string;
+          id?: string;
+          organization_id?: string;
+          source_fingerprint?: string;
+          source_id?: string | null;
+          source_key?: string | null;
+          source_kind?: string;
+          source_snapshot?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_period_result_sources_daily_result_org_fkey";
+            columns: ["daily_result_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_daily_results";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_result_sources_employee_result_org_fkey";
+            columns: ["employee_result_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_employee_results";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_period_result_sources_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_periods: {
+        Row: {
+          created_at: string;
+          current_calculation_id: string | null;
+          current_close_version_id: string | null;
+          id: string;
+          organization_id: string;
+          period_end_date: string;
+          period_start_date: string;
+          prepared_by: string;
+          state: Database["public"]["Enums"]["time_period_state"];
+          timezone: string;
+          updated_at: string;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          current_calculation_id?: string | null;
+          current_close_version_id?: string | null;
+          id?: string;
+          organization_id: string;
+          period_end_date: string;
+          period_start_date: string;
+          prepared_by: string;
+          state?: Database["public"]["Enums"]["time_period_state"];
+          timezone?: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          current_calculation_id?: string | null;
+          current_close_version_id?: string | null;
+          id?: string;
+          organization_id?: string;
+          period_end_date?: string;
+          period_start_date?: string;
+          prepared_by?: string;
+          state?: Database["public"]["Enums"]["time_period_state"];
+          timezone?: string;
+          updated_at?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_periods_current_calculation_org_fkey";
+            columns: ["current_calculation_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_calculations";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_periods_current_close_org_fkey";
+            columns: ["current_close_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_period_close_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_periods_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -9784,6 +11414,20 @@ export type Database = {
         };
         Returns: Json;
       };
+      assign_time_account_policy: {
+        Args: {
+          p_actor_id: string;
+          p_employee_record_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_policy_id: string;
+          p_reason: string;
+          p_request_hash: string;
+          p_valid_from: string;
+          p_valid_until: string;
+        };
+        Returns: string;
+      };
       batch_reschedule_planning_occurrences: {
         Args: {
           p_actor_id: string;
@@ -9834,6 +11478,26 @@ export type Database = {
           p_reason: string;
         };
         Returns: number;
+      };
+      close_time_period: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_id: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
+      close_time_period_p1_23_base: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_id: string;
+          p_request_hash: string;
+        };
+        Returns: string;
       };
       close_time_session_for_member_removal: {
         Args: {
@@ -10102,6 +11766,28 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_payroll_mapping_version: {
+        Args: {
+          p_actor_id: string;
+          p_code_mappings: Json;
+          p_employee_mappings: Json;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
+      create_payroll_mapping_version_p1_23_base: {
+        Args: {
+          p_actor_id: string;
+          p_code_mappings: Json;
+          p_employee_mappings: Json;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
       create_planning_entry_materialized: {
         Args: {
           p_actor_id: string;
@@ -10171,6 +11857,26 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      create_time_account_policy_version: {
+        Args: {
+          p_actor_id: string;
+          p_credit_rules: Json;
+          p_effective_from: string;
+          p_is_default: boolean;
+          p_name: string;
+          p_night_window_end: string;
+          p_night_window_start: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_policy_id: string;
+          p_request_hash: string;
+          p_sickness_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          p_supplement_rules: Json;
+          p_vacation_treatment: Database["public"]["Enums"]["time_absence_treatment"];
+          p_warning_rules: Json;
+        };
+        Returns: string;
+      };
       create_time_correction_request: {
         Args: {
           p_actor_id: string;
@@ -10227,6 +11933,18 @@ export type Database = {
         };
         Returns: string;
       };
+      decide_time_account_adjustment: {
+        Args: {
+          p_actor_id: string;
+          p_decision: Database["public"]["Enums"]["time_period_finding_decision"];
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_id: string;
+        };
+        Returns: string;
+      };
       decide_time_correction: {
         Args: {
           p_actor_id: string;
@@ -10250,6 +11968,17 @@ export type Database = {
           p_responsibility_snapshot: Json;
         };
         Returns: Json;
+      };
+      decide_time_period_finding: {
+        Args: {
+          p_actor_id: string;
+          p_decision: Database["public"]["Enums"]["time_period_finding_decision"];
+          p_finding_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+        };
+        Returns: string;
       };
       end_responsibility_delegation: {
         Args: {
@@ -10278,6 +12007,38 @@ export type Database = {
           p_series_id: string;
         };
         Returns: string[];
+      };
+      fail_payroll_export: {
+        Args: {
+          p_actor_id: string;
+          p_export_id: string;
+          p_failure_reason: string;
+          p_operation_id: string;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
+      fail_payroll_export_p1_23_base: {
+        Args: {
+          p_actor_id: string;
+          p_export_id: string;
+          p_failure_reason: string;
+          p_operation_id: string;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
+      finalize_payroll_export: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_export_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_size_bytes: number;
+          p_zip_sha256: string;
+        };
+        Returns: string;
       };
       finalize_work_artifact_export: {
         Args: {
@@ -10427,6 +12188,15 @@ export type Database = {
           role: Database["public"]["Enums"]["org_role"];
           user_id: string;
         }[];
+      };
+      get_time_period_source_fingerprint: {
+        Args: {
+          p_actor_id: string;
+          p_organization_id: string;
+          p_period_end_date: string;
+          p_period_start_date: string;
+        };
+        Returns: string;
       };
       get_user_admin_or_manager_org_ids: {
         Args: { p_user_id: string };
@@ -10732,6 +12502,19 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      open_time_account: {
+        Args: {
+          p_actor_id: string;
+          p_employee_record_id: string;
+          p_opened_on: string;
+          p_opening_minutes: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
       park_work_target: {
         Args: {
           p_actor_id: string;
@@ -10743,6 +12526,38 @@ export type Database = {
           p_responsible_employee_record_id: string;
           p_target_id: string;
           p_target_type: string;
+        };
+        Returns: string;
+      };
+      prepare_time_period: {
+        Args: {
+          p_actor_id: string;
+          p_daily_results: Json;
+          p_employee_results: Json;
+          p_findings: Json;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_end_date: string;
+          p_period_start_date: string;
+          p_request_hash: string;
+          p_source_fingerprint: string;
+          p_sources: Json;
+        };
+        Returns: string;
+      };
+      prepare_time_period_p1_23_base: {
+        Args: {
+          p_actor_id: string;
+          p_daily_results: Json;
+          p_employee_results: Json;
+          p_findings: Json;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_end_date: string;
+          p_period_start_date: string;
+          p_request_hash: string;
+          p_source_fingerprint: string;
+          p_sources: Json;
         };
         Returns: string;
       };
@@ -10973,6 +12788,28 @@ export type Database = {
         };
         Returns: string;
       };
+      reopen_time_period: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
+      reopen_time_period_p1_23_base: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
       replace_installed_equipment: {
         Args: {
           p_actor_id: string;
@@ -11094,6 +12931,20 @@ export type Database = {
           p_series: Json;
         };
         Returns: string[];
+      };
+      reserve_payroll_export: {
+        Args: {
+          p_actor_id: string;
+          p_content_fingerprint: string;
+          p_generator_version: string;
+          p_mapping_version_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_period_id: string;
+          p_request_hash: string;
+          p_supersedes_export_id: string;
+        };
+        Returns: string;
       };
       resolve_planning_dispatch_challenge: {
         Args: {
@@ -11597,6 +13448,21 @@ export type Database = {
           p_template_id: string;
         };
         Returns: undefined;
+      };
+      submit_time_account_adjustment: {
+        Args: {
+          p_account_id: string;
+          p_actor_id: string;
+          p_adjustment_kind: Database["public"]["Enums"]["time_account_adjustment_kind"];
+          p_effective_date: string;
+          p_expected_account_version: number;
+          p_minutes: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: string;
       };
       transition_client_follow_up: {
         Args: {
@@ -12293,6 +14159,29 @@ export type Database = {
         | "leave_approval"
         | "work_artifact_approval"
         | "work_handover_review";
+      payroll_export_scope: "organization_period";
+      payroll_export_state:
+        | "requested"
+        | "generating"
+        | "ready"
+        | "failed"
+        | "superseded";
+      payroll_mapping_value_kind:
+        | "target"
+        | "source_attendance"
+        | "effective_attendance"
+        | "credited_activity"
+        | "vacation"
+        | "sickness"
+        | "overtime"
+        | "night_supplement"
+        | "sunday_supplement"
+        | "public_holiday_supplement"
+        | "manual_adjustment"
+        | "expiry"
+        | "payout"
+        | "opening_balance"
+        | "closing_balance";
       planning_entry_kind: "job_visit" | "internal";
       planning_internal_type:
         | "internal_work"
@@ -12358,6 +14247,20 @@ export type Database = {
         | "closed_without_visit"
         | "duplicate";
       subscription_status: "active" | "inactive" | "canceled" | "trialing";
+      time_absence_treatment: "paid" | "unpaid" | "informational";
+      time_account_adjustment_kind: "manual_adjustment" | "expiry" | "payout";
+      time_account_event_kind:
+        | "opening_balance"
+        | "manual_adjustment"
+        | "expiry"
+        | "payout"
+        | "period_close"
+        | "period_reopen_reversal";
+      time_account_request_status:
+        | "submitted"
+        | "approved"
+        | "rejected"
+        | "superseded";
       time_allocation_kind:
         | "job"
         | "internal_activity"
@@ -12398,6 +14301,10 @@ export type Database = {
         | "withdrawn"
         | "application_failed";
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete";
+      time_finding_severity:
+        | "informational"
+        | "approval_required"
+        | "close_blocked";
       time_operation_kind:
         | "start"
         | "switch"
@@ -12407,6 +14314,34 @@ export type Database = {
         | "recover_continue"
         | "recover_end"
         | "system_repair";
+      time_period_finding_decision: "acknowledged" | "approved" | "rejected";
+      time_period_finding_kind:
+        | "missing_policy"
+        | "missing_opening_balance"
+        | "missing_schedule"
+        | "open_session"
+        | "recovery_session"
+        | "missing_clock"
+        | "overlap"
+        | "pending_correction"
+        | "absence_conflict"
+        | "unallocated_time"
+        | "positive_overtime"
+        | "stale_calculation"
+        | "break_duration"
+        | "daily_duration"
+        | "rest_duration"
+        | "night_work"
+        | "sunday_work"
+        | "public_holiday_work";
+      time_period_state: "prepared" | "closed" | "reopened";
+      time_policy_warning_kind:
+        | "break_duration"
+        | "daily_duration"
+        | "rest_duration"
+        | "night_work"
+        | "sunday_work"
+        | "public_holiday_work";
       time_segment_event_type:
         | "session_started"
         | "segment_started"
@@ -12425,6 +14360,7 @@ export type Database = {
         | "internal_activity";
       time_session_status: "open" | "closed" | "recovery_required";
       time_standby_context: "on_site" | "remote" | "unspecified";
+      time_supplement_kind: "night" | "sunday" | "public_holiday";
       time_tracking_break_mode: "manual" | "automatic";
       time_travel_role: "driver" | "passenger" | "unspecified";
       time_travel_route:
@@ -12809,6 +14745,31 @@ export const Constants = {
         "work_artifact_approval",
         "work_handover_review",
       ],
+      payroll_export_scope: ["organization_period"],
+      payroll_export_state: [
+        "requested",
+        "generating",
+        "ready",
+        "failed",
+        "superseded",
+      ],
+      payroll_mapping_value_kind: [
+        "target",
+        "source_attendance",
+        "effective_attendance",
+        "credited_activity",
+        "vacation",
+        "sickness",
+        "overtime",
+        "night_supplement",
+        "sunday_supplement",
+        "public_holiday_supplement",
+        "manual_adjustment",
+        "expiry",
+        "payout",
+        "opening_balance",
+        "closing_balance",
+      ],
       planning_entry_kind: ["job_visit", "internal"],
       planning_internal_type: ["internal_work", "meeting", "training", "other"],
       planning_occurrence_status: ["scheduled", "skipped", "cancelled"],
@@ -12877,6 +14838,22 @@ export const Constants = {
         "duplicate",
       ],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
+      time_absence_treatment: ["paid", "unpaid", "informational"],
+      time_account_adjustment_kind: ["manual_adjustment", "expiry", "payout"],
+      time_account_event_kind: [
+        "opening_balance",
+        "manual_adjustment",
+        "expiry",
+        "payout",
+        "period_close",
+        "period_reopen_reversal",
+      ],
+      time_account_request_status: [
+        "submitted",
+        "approved",
+        "rejected",
+        "superseded",
+      ],
       time_allocation_kind: ["job", "internal_activity", "unallocated", "none"],
       time_capture_source: [
         "employee",
@@ -12918,6 +14895,11 @@ export const Constants = {
         "application_failed",
       ],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
+      time_finding_severity: [
+        "informational",
+        "approval_required",
+        "close_blocked",
+      ],
       time_operation_kind: [
         "start",
         "switch",
@@ -12927,6 +14909,36 @@ export const Constants = {
         "recover_continue",
         "recover_end",
         "system_repair",
+      ],
+      time_period_finding_decision: ["acknowledged", "approved", "rejected"],
+      time_period_finding_kind: [
+        "missing_policy",
+        "missing_opening_balance",
+        "missing_schedule",
+        "open_session",
+        "recovery_session",
+        "missing_clock",
+        "overlap",
+        "pending_correction",
+        "absence_conflict",
+        "unallocated_time",
+        "positive_overtime",
+        "stale_calculation",
+        "break_duration",
+        "daily_duration",
+        "rest_duration",
+        "night_work",
+        "sunday_work",
+        "public_holiday_work",
+      ],
+      time_period_state: ["prepared", "closed", "reopened"],
+      time_policy_warning_kind: [
+        "break_duration",
+        "daily_duration",
+        "rest_duration",
+        "night_work",
+        "sunday_work",
+        "public_holiday_work",
       ],
       time_segment_event_type: [
         "session_started",
@@ -12948,6 +14960,7 @@ export const Constants = {
       ],
       time_session_status: ["open", "closed", "recovery_required"],
       time_standby_context: ["on_site", "remote", "unspecified"],
+      time_supplement_kind: ["night", "sunday", "public_holiday"],
       time_tracking_break_mode: ["manual", "automatic"],
       time_travel_role: ["driver", "passenger", "unspecified"],
       time_travel_route: [
