@@ -82,14 +82,20 @@ export function buildWeeklyTimeData(
     const dayEntries = grouped[key] || [];
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);
-    const workMinutes = calculateTotalMinutes(workSessions);
+    const productiveMinutes = calculateTotalMinutes(
+      workSessions.filter((session) => session.clockIn?.activityKind !== 'standby')
+    );
+    const standbyMinutes = calculateTotalMinutes(
+      workSessions.filter((session) => session.clockIn?.activityKind === 'standby')
+    );
     const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
-    const totalMinutes = workMinutes + trackedBreakMinutes;
+    const policyMinutes = productiveMinutes + trackedBreakMinutes;
+    const totalMinutes = policyMinutes + standbyMinutes;
     const referenceTimestamp = dayEntries[dayEntries.length - 1]?.timestamp ?? null;
     const effectiveSettings = resolveBreakPolicyAtTimestamp(settings, referenceTimestamp);
     const target = weekTargets?.[i];
     const breakdown = computeBreakdownForSettings(
-      totalMinutes,
+      policyMinutes,
       trackedBreakMinutes,
       effectiveSettings,
       target?.targetMinutes
@@ -102,6 +108,18 @@ export function buildWeeklyTimeData(
       workMinutes: breakdown.workMinutes,
       breakMinutes: breakdown.breakMinutes,
       overtimeMinutes: breakdown.overtimeMinutes,
+      // Category minutes explain totalMinutes; they do not add to it. Travel,
+      // call-out and internal activity are productive, while standby is not.
+      travelMinutes: calculateTotalMinutes(
+        workSessions.filter((session) => session.clockIn?.activityKind === 'travel')
+      ),
+      standbyMinutes,
+      calloutMinutes: calculateTotalMinutes(
+        workSessions.filter((session) => session.clockIn?.activityKind === 'callout')
+      ),
+      internalMinutes: calculateTotalMinutes(
+        workSessions.filter((session) => session.clockIn?.activityKind === 'internal_activity')
+      ),
       target,
     });
   }

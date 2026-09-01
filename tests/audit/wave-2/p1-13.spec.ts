@@ -302,6 +302,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     expect(state.planningOccurrences).toHaveLength(1);
     expect(state.assignments).toHaveLength(1);
     expect(state.timeEntries).toHaveLength(0);
+    expect(state.timeSegments).toHaveLength(0);
     expect(state.documentLinks).toHaveLength(0);
     expect(state.materials[0].taken_quantity).toBe(0);
     expect(state.materials[0].returned_quantity).toBe(0);

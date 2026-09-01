@@ -68,6 +68,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Quantity / count | `QuantityStepper` | `components/ui/quantity-stepper` |
 | Other numeric field | `Input` with `inputMode="decimal"` + the shared de-DE parser | `components/ui/input`, `lib/ui/search` |
 | Job picking in clock flows | `JobPickerModal` | `components/job-picker-modal` |
+| Time activity capture and switching | `TimeActivityDialog` | `components/time-activity-dialog` |
 | Document linking | `DocumentLinkDialog` / `AttachDocumentDialog` | `components/dokumente/*` |
 | Inline-editable detail fields | `MetadataSection` | `components/shared/metadata-section` |
 | Success/error/info/progress feedback | `Banner` via `useBanner()` | `components/ui/banner` |

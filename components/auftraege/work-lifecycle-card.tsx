@@ -808,6 +808,8 @@ export function WorkLifecycleCard({
       "work_dependencies",
       "job_instruction_items",
       "time_entries",
+      "time_sessions",
+      "time_segments",
       "job_assignments",
       "planning_occurrence_assignments",
       "planning_occurrences",

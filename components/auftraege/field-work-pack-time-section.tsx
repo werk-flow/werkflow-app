@@ -2,11 +2,12 @@
 
 import { Clock3, Loader2, LogIn, LogOut, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useTransition, type ReactElement } from 'react';
+import { useState, useTransition, type ReactElement } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
@@ -42,6 +43,7 @@ export function FieldWorkPackTimeSection({
   const { showBanner } = useBanner();
   const { state, isLoading, isPending, statusError, clockIn, clockOut, switchJob } = useClockState();
   const [isRefreshing, startRefresh] = useTransition();
+  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const sessions = calculateWorkSessions(
     entries.filter((entry) => entry.userId === currentUserId)
   ).filter((session) => session.jobId === jobId);
@@ -61,6 +63,14 @@ export function FieldWorkPackTimeSection({
       });
       return;
     }
+    if (result.outcome === 'recovery_required') {
+      setActivityDialogOpen(true);
+      showBanner({
+        variant: 'info',
+        message: 'Die Erfassung ist ungewöhnlich lang. Bitte prüfe sie, bevor du sie beendest oder fortsetzt.',
+      });
+      return;
+    }
     showBanner({
       variant: 'success',
       message: isClockedIntoThisJob
@@ -74,6 +84,14 @@ export function FieldWorkPackTimeSection({
 
   return (
     <section id="zeit" className="rounded-lg border bg-card p-4 shadow-xs sm:p-5" aria-labelledby="field-time-heading">
+      {state?.organizationId && (
+        <TimeActivityDialog
+          open={activityDialogOpen}
+          onOpenChange={setActivityDialogOpen}
+          organizationId={state.organizationId}
+          preferredJobId={jobId}
+        />
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="field-time-heading" className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -85,26 +103,47 @@ export function FieldWorkPackTimeSection({
           </p>
         </div>
         {!readOnly && (
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={isLoading || isPending || Boolean(statusError)}
-            onClick={() => void changeClock()}
-          >
-            {isLoading || isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : isClockedIntoThisJob ? (
-              <LogOut className="size-4" />
-            ) : (
-              <LogIn className="size-4" />
-            )}
-            {isClockedIntoThisJob
-              ? 'Arbeitszeit beenden'
-              : isClockedIntoAnotherJob
-                ? 'Zu diesem Auftrag wechseln'
-                : 'Arbeitszeit starten'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={
+                isLoading ||
+                isPending ||
+                Boolean(statusError) ||
+                !state?.organizationId
+              }
+              onClick={() => void changeClock()}
+            >
+              {isLoading || isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : isClockedIntoThisJob ? (
+                <LogOut className="size-4" />
+              ) : (
+                <LogIn className="size-4" />
+              )}
+              {isClockedIntoThisJob
+                ? 'Arbeitszeit beenden'
+                : isClockedIntoAnotherJob
+                  ? 'Zu diesem Auftrag wechseln'
+                  : 'Arbeitszeit starten'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={
+                isLoading ||
+                isPending ||
+                Boolean(statusError) ||
+                !state?.organizationId
+              }
+              onClick={() => setActivityDialogOpen(true)}
+            >
+              <Clock3 className="size-4" />
+              Aktivität wählen
+            </Button>
+          </div>
         )}
       </div>
 

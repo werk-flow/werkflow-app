@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { expect, test } from '../golden/support/fixtures';
 import {
   getDocumentStoragePathByName,
-  getOrganizationTimeEntrySnapshot,
   getPendingInviteCode,
+  getTimeCaptureState,
 } from '../golden/support/db';
 import {
   clockInOnJob,
@@ -163,21 +163,43 @@ test.describe('Cloud-Canary @CANARY', () => {
     );
   });
 
-  test('C6: Ein- und Ausstempeln mit persistiertem Eintrag', async ({
+  test('C6: Ein- und Ausstempeln mit persistierter kanonischer Sitzung', async ({
     employeePage,
     world,
   }) => {
-    const before = (await getOrganizationTimeEntrySnapshot(world.orgId)).length;
-    await clockInOnJob(employeePage, `Canary Auftrag ${world.runId}`);
+    const before = await getTimeCaptureState(
+      world.orgId,
+      world.users.employee.id,
+    );
+    const previousSessionIds = new Set(
+      before.sessions.map((session) => session.id),
+    );
+    const previousSegmentIds = new Set(
+      before.segments.map((segment) => segment.id),
+    );
+    await clockInOnJob(employeePage);
     await clockOut(employeePage);
-    const entries = await getOrganizationTimeEntrySnapshot(world.orgId);
-    const newEntries = entries.slice(before);
-    expect(newEntries.some((entry) => entry.entry_type === 'clock_in')).toBe(
-      true,
+    const after = await getTimeCaptureState(
+      world.orgId,
+      world.users.employee.id,
     );
-    expect(newEntries.some((entry) => entry.entry_type === 'clock_out')).toBe(
-      true,
+    const newSessions = after.sessions.filter(
+      (session) => !previousSessionIds.has(session.id),
     );
+    const newSegments = after.segments.filter(
+      (segment) => !previousSegmentIds.has(segment.id),
+    );
+    expect(newSessions).toHaveLength(1);
+    expect(newSessions[0]).toMatchObject({ status: 'closed' });
+    expect(newSessions[0]?.ended_at).not.toBeNull();
+    expect(newSegments).toHaveLength(1);
+    expect(newSegments[0]).toMatchObject({
+      kind: 'work',
+      allocation_kind: 'unallocated',
+    });
+    expect(newSegments[0]?.job_id).toBeNull();
+    expect(newSegments[0]?.ended_at).not.toBeNull();
+    expect(after.legacyEntries).toHaveLength(before.legacyEntries.length);
   });
 
   test('C7: Server-Action-Schreibvorgang mit persistiertem Read-back', async ({

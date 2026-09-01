@@ -18,6 +18,7 @@ import {
   MoreVertical,
   Loader2,
   Pencil,
+  RefreshCw,
 } from 'lucide-react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
@@ -52,6 +53,7 @@ import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-t
 import { JobInstructionItemsCard } from './job-instruction-items-card';
 import { ProjectQualificationSection } from './project-qualification-section';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ErrorText } from '@/components/ui/error-text';
 import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
@@ -66,7 +68,7 @@ import {
   getAuftraegeDialogOptions,
   updateJob,
 } from '@/lib/jobs/actions';
-import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
+import { getTimeEntriesForProjectJobs } from '@/lib/time-tracking/actions';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { useRealtimeEvent } from '@/components/realtime/realtime-provider';
@@ -328,19 +330,21 @@ export function ProjectDetailContent({
   const timeView = useLiveView<
     { jobId: string; jobTitle: string; entries: TimeEntry[] }[]
   >({
-    tables: ['time_entries'],
+    tables: ['time_entries', 'time_sessions', 'time_segments'],
     read: async () => {
-      const results = await Promise.all(
-        liveJobs.map(async (job) => {
-          const result = await getTimeEntriesForJob(job.id);
-          return {
-            jobId: job.id,
-            jobTitle: getJobDisplayTitle(job),
-            entries: result.success ? result.entries : [],
-          };
-        })
+      const result = await getTimeEntriesForProjectJobs(liveProject.id);
+      if (!result.success) return { ok: false, error: result.error };
+      const entriesByJobId = new Map(
+        result.jobs.map((job) => [job.jobId, job.entries])
       );
-      return { ok: true, data: results };
+      return {
+        ok: true,
+        data: liveJobs.map((job) => ({
+          jobId: job.id,
+          jobTitle: getJobDisplayTitle(job),
+          entries: entriesByJobId.get(job.id) ?? [],
+        })),
+      };
     },
     resetKey: liveJobs
       .map((job) => job.id)
@@ -352,6 +356,9 @@ export function ProjectDetailContent({
     [timeView.data]
   );
   const isLoadingTime = timeView.isLoading;
+  const timeLoadError = !isLoadingTime && (
+    timeView.error !== null || timeView.data === undefined
+  );
 
   // Server props are the authority for project and job facts: Realtime
   // changes trigger a debounced route refresh, and the sync effects above
@@ -427,7 +434,10 @@ export function ProjectDetailContent({
   const artifactTimeEntryOptions = useMemo(
     () => projectTimeEntries.flatMap((group) => group.entries
       .filter((entry) => entry.entryType === 'clock_in')
-      .map((entry) => ({ id: entry.id,
+      .map((entry) => ({ id: entry.canonicalSegmentId ?? entry.id,
+        sourceType: entry.canonicalSegmentId
+          ? ('time_segment' as const)
+          : ('time_entry' as const),
         label: `${group.jobTitle} · ${formatDateTime(entry.timestamp)}` }))),
     [projectTimeEntries]
   );
@@ -888,6 +898,26 @@ export function ProjectDetailContent({
                 <div className="space-y-3">
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-8 w-3/4" />
+                </div>
+              ) : timeLoadError ? (
+                <div className="space-y-3" role="alert">
+                  <ErrorText>
+                    Die Arbeitszeiten für dieses Projekt konnten nicht geladen werden.
+                  </ErrorText>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={timeView.isRefreshing}
+                    onClick={() => void timeView.refresh()}
+                  >
+                    {timeView.isRefreshing ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-4" />
+                    )}
+                    Erneut laden
+                  </Button>
                 </div>
               ) : projectTimeSummary.totalMinutes === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">

@@ -186,17 +186,18 @@ Dispatch turns a plan into an issued, confirmable work instruction without becom
 
 ## Time Domain
 
-Time tracking is event-based.
+Time tracking has stable attendance-session and factual activity-segment identities. The former event ledger remains a compatibility source for history that predates `P1-21`.
 
 Concepts:
 
-- Time entry: clock-in, clock-out, break-start, or break-end event.
-- Work session: derived from paired time entries.
-- Break session: derived from paired break entries.
-- Live clock state: current computed state for the user in an organization.
-- Change request: pending edit/delete workflow for time entries.
+- Attendance session: one stable start/end identity per presence interval, versioned on every transition.
+- Activity segment: one stable work, travel, break, standby/on-call, call-out or internal-activity interval, with optional job allocation where the kind permits it.
+- Segment event: append-only transition attribution; operation receipt: idempotent replay ownership for one client request.
+- Legacy time entry: an unchanged clock-in, clock-out, break-start or break-end fact used by the compatibility projection; a live legacy sequence is bridged on its first canonical action rather than bulk-backfilled.
+- Live clock state: the current session/segment projection for the user in an organization.
+- Change request: the existing pending edit/delete workflow for legacy entries. Canonical correction, split, reclassification and reassignment belong to `P1-22`.
 
-Time entries can be linked to jobs. The app should preserve enough history for approvals, corrections, and operational accountability.
+Permitted activity segments can be linked to jobs or remain explicitly unallocated. Atomic versioned RPCs validate organization ownership, serialize one employee boundary, preserve append-only attribution and make duplicate requests replay-safe. Europe/Berlin day splitting is a presentation projection and never changes the stable source interval.
 
 ## Settings And Preferences
 

@@ -401,7 +401,6 @@ export function EntryDetailsDialog({
   entryUserRole
 }: EntryDetailsDialogProps) {
   const { run: runPendingTask, isPending } = usePendingTask();
-  const [isEditing, setIsEditing] = useState(startInEditMode);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editedClockIn, setEditedClockIn] = useState<Date | null>(null);
@@ -465,6 +464,12 @@ export function EntryDetailsDialog({
           entries.findIndex((candidate) => candidate.id === entry.id) === index
       ),
     [sourceEntries]
+  );
+  const hasCanonicalSegment = sessionEntriesForReview.some(
+    (entry) => entry.canonicalSegmentId
+  );
+  const [isEditing, setIsEditing] = useState(
+    startInEditMode && !hasCanonicalSegment
   );
   const blockReferenceDate = useMemo(
     () =>
@@ -530,7 +535,7 @@ export function EntryDetailsDialog({
     // draft from the current snapshot when editing begins, so the snapshot
     // values are deliberately read without being dependencies here.
      
-    setIsEditing(startInEditMode);
+    setIsEditing(startInEditMode && !hasCanonicalSegment);
     setError(null);
     setSuccessMessage(null);
     setEditedClockIn(clockInTimestamp ? new Date(clockInTimestamp) : null);
@@ -660,6 +665,7 @@ export function EntryDetailsDialog({
   ]);
 
   const canEdit = (() => {
+    if (hasCanonicalSegment) return false;
     if (currentUserRole === 'admin') return true;
     if (currentUserRole === 'buero') {
       if (isOwnEntry) return true;
@@ -670,7 +676,6 @@ export function EntryDetailsDialog({
     }
     return false;
   })();
-
   const pendingEntries = sessionEntriesForReview.filter(
     (entry) => entry.status === 'pending'
   );
@@ -683,6 +688,7 @@ export function EntryDetailsDialog({
     !interactiveSession.isOnBreakBlock &&
     (session.endEntryType === 'break_start' || session.clockOut !== null);
   const canApprove =
+    !hasCanonicalSegment &&
     hasPendingEntry &&
     (currentUserRole === 'admin' ||
       (currentUserRole === 'buero' && !isOwnEntry && canEdit));
@@ -900,6 +906,12 @@ export function EntryDetailsDialog({
   const handleSaveEdit = async () => {
     setError(null);
     setSuccessMessage(null);
+
+    if (hasCanonicalSegment) {
+      setIsEditing(false);
+      setError('Kanonische Zeitsegmente können hier nicht bearbeitet werden.');
+      return;
+    }
 
     const validationError = validateTimeline();
     if (validationError) {
@@ -1781,6 +1793,14 @@ export function EntryDetailsDialog({
                   ist kein Arbeitsende des gesamten Arbeitstages.
                 </p>
               </div>
+            </div>
+          )}
+
+          {hasCanonicalSegment && (
+            <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-3">
+              <p className="text-xs text-muted-foreground">
+                Aktivitätsabschnitte werden in der Zeiterfassung korrigiert und sind im Kalender schreibgeschützt.
+              </p>
             </div>
           )}
 

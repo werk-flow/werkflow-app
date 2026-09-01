@@ -1,6 +1,6 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-08-30
+Status: living — last reviewed 2026-08-31
 
 Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central operational work objects. A job represents work that a team can plan, perform, document, and complete. A project groups related work when the business needs a larger delivery context, but it must never be required for a simple service visit or small order.
 
@@ -71,6 +71,7 @@ The following behavior exists today and is the baseline future work must preserv
 - **Structured work artifacts (P1-15):** job and project details share one `Arbeitsnachweise` surface for Bautagebuch, Arbeitsbericht, Aufmaß, Mangel and Regie-/Änderungsnachweis. One stable artifact owns immutable numbered revisions; exact-revision review decisions, customer outcomes, signatures, document/time sources, evidence fulfilment and deterministic HTML exports remain attributable. Assigned field workers get the job/project-bounded capture path; managers get organization-wide capture, review, export, customer recording and reasoned void actions. A decided record is corrected by a new revision and voided rather than deleted.
 - P1-15 makes required instruction evidence, formal artifact approvals and required customer/signature outcomes assessable in the existing lifecycle snapshot. P1-17 consumes those exact-version facts without turning defects into blockers or measurements into prices; neither feature changes schedule, dispatch, time, stock, billing or messages.
 - Job and project detail pages show linked time entries. Project views aggregate time from their jobs.
+- **Explicit factual time (`P1-21`):** work, travel and call-out segments can reference one normal job or remain explicitly unallocated. The global clock and assigned-worker field pack use the same versioned attendance session; starting or switching to work/call-out on a job can atomically start or resume its execution lifecycle, while travel never does. Job, project, field-pack, artifact, handover and maintenance projections read the shared legacy-plus-canonical compatibility view. They do not own, copy or correct time, and canonical synthetic rows stay read-only until `P1-22`.
 - Contextual `Dokumente & Bilder` sections link work to the central document system. Assigned employees can upload and view files on their jobs; managers have broader project and document-management actions.
 - Job and project detail pages already include `Material & Inventar`.
 - Managers can plan material without changing stock. Users can explicitly take stock or return previously taken quantities. Unplanned take actions are supported.
@@ -79,7 +80,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Important Current Limitations
 
 - Request intake and once-only conversion exist (P1-02), and P1-19 can qualify a request into a reactive service case that later links one existing job. Converting a request directly into an update of existing work remains deferred.
-- P1-14 distinguishes execution completion from handover; P1-15 supplies structured evidence and exact-version decisions; P1-16 supplies the web field work pack; P1-17 now supplies office review, a customer-safe package, operational commercial-readiness classification and immutable reopening history. Delivery/public access, billing, service-equipment history, time segmentation, material consumption and offline/mobile behavior remain later scope.
+- P1-14 distinguishes execution completion from handover; P1-15 supplies structured evidence and exact-version decisions; P1-16 supplies the web field work pack; P1-17 supplies office review, a customer-safe package, operational commercial-readiness classification and immutable reopening history; P1-21 supplies factual time segmentation. Delivery/public access, billing, service-equipment history, time correction/approval, material consumption and offline/mobile behavior remain later scope.
 - P1-15 artifacts are operational evidence, not a handover package, service equipment history, commercial acceptance, invoice basis or qualified electronic signature.
 - Planned-versus-actual comparison now has a reliable visit-level planning source (`P1-11`) and separate actual time records, but there is still no complete operational variance or profitability view.
 - Structured offers, contracts, invoices, payments, and accounting remain outside the current implementation.

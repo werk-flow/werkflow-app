@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath, updateTag } from 'next/cache';
+import { z } from 'zod';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -325,22 +326,43 @@ export async function linkWorkArtifactDocument(input: {
 
 export async function linkWorkArtifactSource(input: {
   artifactId: string; revisionId: string; linkId: string; expectedVersion: number;
-  timeEntryId?: string; inventoryMovementId?: string; description?: string;
+  timeEntryId?: string; timeSegmentId?: string; inventoryMovementId?: string; description?: string;
 }): Promise<WorkArtifactMutationResult> {
-  if (Boolean(input.timeEntryId) === Boolean(input.inventoryMovementId)) {
+  const sourceCount = [input.timeEntryId, input.timeSegmentId, input.inventoryMovementId]
+    .filter(Boolean).length;
+  if (sourceCount !== 1) {
+    return { success: false, error: 'invalid_input' };
+  }
+  const selectedSourceId =
+    input.timeEntryId ?? input.timeSegmentId ?? input.inventoryMovementId;
+  if (![
+    input.artifactId,
+    input.revisionId,
+    input.linkId,
+    selectedSourceId,
+  ].every((identifier) => z.uuid().safeParse(identifier).success)) {
     return { success: false, error: 'invalid_input' };
   }
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc('link_work_artifact_source', {
-    p_organization_id: auth.context.orgId, p_actor_id: auth.context.userId,
-    p_artifact_id: input.artifactId, p_revision_id: input.revisionId,
-    p_link_id: input.linkId, p_expected_version: input.expectedVersion,
-    p_time_entry_id: input.timeEntryId ?? null,
-    p_inventory_movement_id: input.inventoryMovementId ?? null,
-    p_description: input.description ?? null,
-  } as unknown as Database['public']['Functions']['link_work_artifact_source']['Args']);
+  const rpcResult = input.timeSegmentId
+    ? await admin.rpc('link_work_artifact_time_segment', {
+        p_organization_id: auth.context.orgId, p_actor_id: auth.context.userId,
+        p_artifact_id: input.artifactId, p_revision_id: input.revisionId,
+        p_link_id: input.linkId, p_expected_version: input.expectedVersion,
+        p_time_segment_id: input.timeSegmentId,
+        p_description: input.description ?? null,
+      } as unknown as Database['public']['Functions']['link_work_artifact_time_segment']['Args'])
+    : await admin.rpc('link_work_artifact_source', {
+        p_organization_id: auth.context.orgId, p_actor_id: auth.context.userId,
+        p_artifact_id: input.artifactId, p_revision_id: input.revisionId,
+        p_link_id: input.linkId, p_expected_version: input.expectedVersion,
+        p_time_entry_id: input.timeEntryId ?? null,
+        p_inventory_movement_id: input.inventoryMovementId ?? null,
+        p_description: input.description ?? null,
+      } as unknown as Database['public']['Functions']['link_work_artifact_source']['Args']);
+  const { data, error } = rpcResult;
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }

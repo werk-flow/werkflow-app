@@ -884,3 +884,72 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-20-F105` — P1-20 erzeugt ohne bewusste Fachaktion weder Altbestands-Backfill, Auftrag, Termin, Disposition, Nachricht, Zeitsegment, Bestand, Verbrauch, Bestellung, Preis, Vertrag, Rechnung, Rechtsbehauptung, Offline-Warteschlange, Connector, Herstellerregelwerk, Telemetrie noch automatische Diagnose.
 
 **Acceptance invariant:** `105/105 mapped; 105/105 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).
+
+### `P1-21` — Explizite Zeitsegmente (2026-08-31)
+
+- `P1-21-F01` — Ein Mitarbeiter startet seine eigene Zeiterfassung über eine eindeutige, touchfreundliche Hauptaktion; WerkFlow zeigt die laufende Aktivität und verstrichene Zeit.
+- `P1-21-F02` — Admin und Büro verwenden für die eigene Zeit dieselbe Erfassung; P1-21 erlaubt ihnen keine spontane Live-Steuerung fremder Sitzungen.
+- `P1-21-F03` — Ein Start erzeugt genau eine stabile Anwesenheitssitzung und genau ein offenes Aktivitätssegment.
+- `P1-21-F04` — Ein Mitarbeiter beendet seine laufende Erfassung bewusst; Sitzung und letztes Segment schließen in einem atomaren Schritt.
+- `P1-21-F05` — „Arbeit“ erfasst produktive Arbeit getrennt von Fahrt, Pause, Bereitschaft, Notdienst und interner Tätigkeit.
+- `P1-21-F06` — „Fahrt“ erfasst Fahrzeit als eigenes Segment und verlangt eine sichtbare Strecke und Rolle.
+- `P1-21-F07` — Die Fahrstrecke bleibt eine begrenzte Auswahl wie Lager, Zuhause und Einsatzort statt frei erfundener Routingdaten.
+- `P1-21-F08` — Die Fahrrolle bleibt Fahrer/in, Mitfahrer/in oder ausdrücklich unbekannt; WerkFlow berechnet weder Kilometer noch Kosten.
+- `P1-21-F09` — „Pause“ unterbricht die laufende Aktivität, ohne die Anwesenheitssitzung zu beenden.
+- `P1-21-F10` — Nach einer Pause setzt der Mitarbeiter bewusst Arbeit oder eine andere Aktivität fort; die Pause wird dabei atomar geschlossen.
+- `P1-21-F11` — Bei automatischer Pausenregel ist die manuelle Pausenaktion nicht verfügbar und ein direkter manueller Pausenversuch wird serverseitig abgewiesen.
+- `P1-21-F12` — Die automatische Pausenberechnung bleibt von tatsächlich gestempelten Segmenten getrennt und wird nicht als Mitarbeiterhandlung gespeichert.
+- `P1-21-F13` — „Bereitschaft“ erfasst Bereitschaft getrennt von aktiver Arbeit oder einem Notdiensteinsatz.
+- `P1-21-F14` — Bereitschaft bewahrt den gewählten Kontext vor Ort, extern oder unbekannt, ohne daraus Vergütung abzuleiten.
+- `P1-21-F15` — „Notdienst“ erfasst einen aktiven Einsatz als eigenes Segment und nicht als Bereitschaft.
+- `P1-21-F16` — „Intern“ verwendet eine feste praktische Auswahl für Betriebsarbeit, Besprechung, Schulung oder Sonstiges.
+- `P1-21-F17` — Arbeit, Notdienst und Fahrt können einem vorhandenen passenden Auftrag zugeordnet werden.
+- `P1-21-F18` — Arbeit, Notdienst und Fahrt können ausdrücklich „Ohne Auftrag“ erfasst werden; fehlende Zuordnung verliert keine Zeit.
+- `P1-21-F19` — Ein Mitarbeiter wählt standardmäßig nur relevante zugewiesene Aufträge; eine fremde Zuordnung wird bei der Schreibaktion erneut abgewiesen.
+- `P1-21-F20` — Pause, Bereitschaft und interne Tätigkeit tragen keine fingierte Auftragszuordnung.
+- `P1-21-F21` — Direkte Projekt- oder Kundenzuordnung entsteht nicht; ein Auftrag liefert diesen vorhandenen Kontext.
+- `P1-21-F22` — Ein Auftragswechsel beendet nur das aktuelle Segment und startet ein neues Segment in derselben Anwesenheitssitzung.
+- `P1-21-F23` — Jeder Aktivitätswechsel schließt das vorherige und öffnet das neue Segment in derselben Datenbanktransaktion.
+- `P1-21-F24` — Ein fehlgeschlagener Wechsel hinterlässt weder ein halb geschlossenes Segment noch einen fälschlich bestätigten UI-Stand.
+- `P1-21-F25` — Jede gültige Mutation prüft die erwartete Sitzungsversion; ein veraltetes Gerät überschreibt keinen neueren Stand.
+- `P1-21-F26` — Derselbe Wiederholungsauftrag mit gleichem Inhalt liefert dasselbe Ergebnis und erzeugt kein zweites Segment.
+- `P1-21-F27` — Dieselbe Anfrage-ID mit abweichendem Inhalt wird ohne Teilmutation abgewiesen.
+- `P1-21-F28` — Gleichzeitige Aktionen zweier Geräte werden pro Mitarbeiter und Organisation serialisiert; nur ein gültiger Folgezustand gewinnt.
+- `P1-21-F29` — Eine Person kann organisationsübergreifend nur eine offene Anwesenheitssitzung besitzen.
+- `P1-21-F30` — Ein anderer Mitarbeiter kann parallel seine eigene unabhängige Sitzung führen.
+- `P1-21-F31` — Jedes Segment besitzt eine stabile Identität, die bei Tages-, Wochen-, Kalender-, Auftrags- und Übergabeansichten erhalten bleibt.
+- `P1-21-F32` — Eine über Mitternacht laufende Aktivität bleibt ein Segment; die Europe/Berlin-Tagesanzeige teilt nur die Darstellung.
+- `P1-21-F33` — Ein geteilter Arbeitstag mit mehreren Sitzungen bleibt als getrennte stabile Anwesenheit nachvollziehbar.
+- `P1-21-F34` — Anwesenheit, Arbeit, Fahrt, Pause, Bereitschaft, Notdienst und interne Tätigkeit werden als getrennte Tatsachen summiert.
+- `P1-21-F35` — Auftragsbezogene und ausdrücklich nicht zugeordnete Zeit bleiben getrennt sichtbar.
+- `P1-21-F36` — Sollzeit und Überstundenanzeige verwenden weiterhin die P1-04-Ziele; P1-21 erfindet keine gutgeschriebene oder abrechenbare Zeit.
+- `P1-21-F37` — Ein seit mehr als 24 Stunden offener Stand zeigt eine konkrete Wiederherstellung statt still weiterzulaufen.
+- `P1-21-F38` — Der Mitarbeiter kann einen ungewöhnlich langen Stand bewusst fortsetzen oder beenden.
+- `P1-21-F39` — Automatische Wiederherstellung wird als System-/Managerquelle mit Grund und Zeitpunkt festgehalten und nie als ursprüngliche Mitarbeiteraktion ausgegeben.
+- `P1-21-F40` — Eine ungültige oder überlappende Sequenz wird atomar abgewiesen und bleibt als konkreter Fehler sichtbar.
+- `P1-21-F41` — Ein vorhandener offener Legacy-Stempel bleibt nach dem Rollout nutzbar und wird bei der nächsten Aktion sichtbar in das kanonische Modell überführt.
+- `P1-21-F42` — Die Legacy-Überführung schließt genau die offene Altsequenz, ohne frühere Zeitzeilen zu verändern oder historische Segmente zu erfinden.
+- `P1-21-F43` — Alle vorhandenen Legacy-Zeitzeilen behalten Zeitstempel, Akteur, Status, Auftrag, Prüfung und ursprüngliche Bedeutung.
+- `P1-21-F44` — Organisationen ohne neue Erfassung erhalten durch die Migration keine kanonischen Sitzungen, Segmente oder Ereignisse.
+- `P1-21-F45` — Abmelden schließt eine eigene offene kanonische Sitzung nachvollziehbar, damit kein unsichtbarer Stand zurückbleibt.
+- `P1-21-F46` — Das Entfernen eines Mitglieds schließt dessen offene Sitzung und Segment mit systemseitiger Attribution, bevor die Mitgliedschaft endet.
+- `P1-21-F47` — Historische Zeit bleibt nach dem Entfernen oder Offboarding erhalten und weiterhin der damaligen Person zuordenbar.
+- `P1-21-F48` — Mitarbeiter sehen nur ihre eigenen organisationsbezogenen kanonischen Zeitdaten.
+- `P1-21-F49` — Admin und Büro sehen organisationsbezogene Mitarbeiterstände und Zeitprojektionen gemäß ihrer bestehenden Rolle.
+- `P1-21-F50` — Außenstehende und Mitglieder einer fremden Organisation sehen weder Sitzung, Segment, Vorgang noch Ereignis.
+- `P1-21-F51` — Direkte Client-Schreibrechte auf kanonische Tabellen bleiben gesperrt; jede Mutation läuft durch die erneut autorisierende Servergrenze.
+- `P1-21-F52` — Laufende Sitzungs- und Segmentänderungen aktualisieren andere offene Ansichten über den zentralen Realtime-Abgleich.
+- `P1-21-F53` — Unveränderliche Ereignis- und Vorgangszeilen bleiben unveröffentlicht; ein Wurzel-/Segment-Signal löst das autoritative Nachladen aus.
+- `P1-21-F54` — Beim Organisationswechsel verwirft der Client einen Stand der vorherigen Organisation, statt ihn kurz als neuen Stand anzuzeigen.
+- `P1-21-F55` — Auftrags- und Projektansichten verwenden dieselbe kanonische Kompatibilitätsprojektion und keinen zweiten lokalen Timer.
+- `P1-21-F56` — Das zugewiesene Einsatzpaket startet oder wechselt Arbeit am aktuellen Auftrag über dieselbe globale Sitzung.
+- `P1-21-F57` — Jobbezogene Arbeit oder Notdienst kann den vorhandenen P1-14-Ausführungsstart auslösen; reine Fahrt tut das nicht.
+- `P1-21-F58` — P1-15-Arbeitsnachweise und P1-17-Übergaben lesen nachvollziehbare Zeitquellen, verändern oder klassifizieren sie aber nicht.
+- `P1-21-F59` — Kalenderansichten unterscheiden weiterhin geplante Termine von tatsächlichen Zeitsegmenten; keine Seite schreibt die jeweils andere Wahrheit um.
+- `P1-21-F60` — Kanonische Projektionen sind in alten Bearbeiten-, Löschen- und Änderungsantragswegen bis P1-22 sichtbar schreibgeschützt.
+- `P1-21-F61` — Tastaturbedienung, sichtbarer Fokus, deutsche zugängliche Namen und große primäre Ziele bleiben im Aktivitätsdialog erhalten.
+- `P1-21-F62` — Lade-, Netzwerk-, Veraltet- und Wiederherstellungsfehler behaupten keinen Erfolg und gleichen anschließend den Serverstand ab.
+- `P1-21-F63` — P1-21 erzeugt keine Korrekturfreigabe, Zeitkonto-, Zuschlags-, Compliance-, Periodenabschluss-, Lohn-, Rechnungs- oder Billability-Entscheidung.
+- `P1-21-F64` — P1-21 erzeugt ohne bewusste Zeitaktion weder Termin, Disposition, Wartungsarbeit, Dokument, Bestand, Verbrauch, Bestellung, Nachricht, Offline-Warteschlange noch externen Provideraufruf.
+
+**Acceptance invariant:** `64/64 mapped; 64/64 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).

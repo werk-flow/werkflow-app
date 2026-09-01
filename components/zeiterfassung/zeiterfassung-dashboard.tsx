@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { JobPickerModal } from '@/components/job-picker-modal';
+import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import {
   formatDuration,
   getNonNegativeElapsedMs,
@@ -109,6 +110,7 @@ export function ZeiterfassungDashboard({
   const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'switch' | 'resume'>('switch');
+  const [activityDialogOpen, setActivityDialogOpen] = useState(false);
 
   const liveTimelineSegments: ClockTimelineSegment[] = (() => {
     const segments = [...(effectiveState.timelineSegments ?? [])];
@@ -203,6 +205,18 @@ export function ZeiterfassungDashboard({
       : null;
   const ringTimelineSegments =
     effectiveState.breakMode === 'manual' ? liveTimelineSegments : undefined;
+  const currentActivityMinutes =
+    effectiveState.isClockedIn && effectiveState.statusStartedAt
+      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
+      : 0;
+  const liveTravelMinutes = effectiveState.travelMinutes +
+    (effectiveState.currentActivity?.kind === 'travel' ? currentActivityMinutes : 0);
+  const liveStandbyMinutes = effectiveState.standbyMinutes +
+    (effectiveState.currentActivity?.kind === 'standby' ? currentActivityMinutes : 0);
+  const liveCalloutMinutes = effectiveState.calloutMinutes +
+    (effectiveState.currentActivity?.kind === 'callout' ? currentActivityMinutes : 0);
+  const liveInternalMinutes = effectiveState.internalMinutes +
+    (effectiveState.currentActivity?.kind === 'internal_activity' ? currentActivityMinutes : 0);
 
   if (isLoading && !effectiveState) {
     return <ZeiterfassungDashboardSkeleton />;
@@ -312,6 +326,31 @@ export function ZeiterfassungDashboard({
               {formatDuration(breakdown.workMinutes)}
             </span>
           </span>
+          {liveTravelMinutes > 0 && (
+            <span className="flex items-center gap-1.5">
+              <Car className="size-3.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Fahrt</span>
+              <span className="font-medium tabular-nums">{formatDuration(liveTravelMinutes)}</span>
+            </span>
+          )}
+          {liveStandbyMinutes > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Bereitschaft</span>
+              <span className="font-medium tabular-nums">{formatDuration(liveStandbyMinutes)}</span>
+            </span>
+          )}
+          {liveCalloutMinutes > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Notdienst</span>
+              <span className="font-medium tabular-nums">{formatDuration(liveCalloutMinutes)}</span>
+            </span>
+          )}
+          {liveInternalMinutes > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Intern</span>
+              <span className="font-medium tabular-nums">{formatDuration(liveInternalMinutes)}</span>
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2 w-2 rounded-full bg-yellow-500" />
             <span className="text-muted-foreground">Pause</span>
@@ -393,8 +432,8 @@ export function ZeiterfassungDashboard({
         <MenuCard
           icon={Car}
           title="Fahrzeit"
-          subtitle="Fahrzeiten dokumentieren"
-          disabled
+          subtitle="Fahrt mit Strecke und Rolle erfassen"
+          onClick={() => setActivityDialogOpen(true)}
         />
       </div>
 
@@ -497,6 +536,12 @@ export function ZeiterfassungDashboard({
         currentJobId={effectiveState.activeJobId}
         isPending={isPending}
       />
+      <TimeActivityDialog
+        open={activityDialogOpen}
+        onOpenChange={setActivityDialogOpen}
+        organizationId={organizationId}
+        initialActivity="travel"
+      />
 
       {statusError && (
         <p className="text-center text-xs text-destructive">{statusError}</p>
@@ -525,44 +570,47 @@ function MenuCard({
   onClick
 }: MenuCardProps) {
   return (
-    <Card
-      className={cn(
-        'transition-colors',
-        disabled
-          ? 'opacity-60 cursor-not-allowed'
-          : 'cursor-pointer hover:bg-accent/50',
-        active && 'ring-1 ring-primary/30'
-      )}
-      onClick={disabled ? undefined : onClick}
+    <button
+      type="button"
+      className="w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      disabled={disabled}
+      onClick={onClick}
     >
-      <CardContent className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-full',
-              active ? 'bg-primary/10' : 'bg-brand-purple/10'
-            )}
-          >
-            <Icon
+      <Card
+        className={cn(
+          'transition-colors',
+          disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent/50',
+          active && 'ring-1 ring-primary/30'
+        )}
+      >
+        <CardContent className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <div
               className={cn(
-                'h-5 w-5',
-                active ? 'text-primary' : 'text-brand-purple'
+                'flex h-10 w-10 items-center justify-center rounded-full',
+                active ? 'bg-primary/10' : 'bg-brand-purple/10'
               )}
-            />
-          </div>
-          <div>
-            <p className="font-medium">{title}</p>
-            <p
-              className="text-xs text-muted-foreground truncate max-w-[200px]"
-              title={disabled && disabledHint ? disabledHint : subtitle}
             >
-              {disabled && disabledHint ? disabledHint : subtitle}
-            </p>
+              <Icon
+                className={cn(
+                  'h-5 w-5',
+                  active ? 'text-primary' : 'text-brand-purple'
+                )}
+              />
+            </div>
+            <div>
+              <p className="font-medium">{title}</p>
+              <p
+                className="max-w-[200px] truncate text-xs text-muted-foreground"
+                title={disabled && disabledHint ? disabledHint : subtitle}
+              >
+                {disabled && disabledHint ? disabledHint : subtitle}
+              </p>
+            </div>
           </div>
-        </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-      </CardContent>
-    </Card>
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        </CardContent>
+      </Card>
+    </button>
   );
 }
-

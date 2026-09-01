@@ -164,7 +164,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       email,
       password,
     });
-    await expect(page.getByTitle("Einstempeln")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Zeiterfassung starten" }),
+    ).toBeVisible();
     await signOutViaUi(page);
     await context.close();
   });
@@ -539,7 +541,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     ).toBeVisible({
       timeout: 20_000,
     });
-    await employeePage.getByTitle("Einstempeln").click();
+    await employeePage
+      .getByRole("button", { name: "Zeiterfassung starten" })
+      .click();
     await clockInConfirmationButton(employeePage).click();
     await expect(
       visibleText(
@@ -880,7 +884,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
         .filter({ visible: true }),
     ).not.toHaveCount(0);
 
-    const projectLifecycle = adminPage.getByTestId("work-lifecycle-card");
+    const projectLifecycle = adminPage
+      .getByRole("main")
+      .getByTestId("work-lifecycle-card");
     await projectLifecycle
       .getByRole("button", { name: "Storniert", exact: true })
       .click();
@@ -1087,6 +1093,7 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .click();
     await expect(
       adminPage
+        .getByRole("main")
         .getByTestId("work-lifecycle-card")
         .getByText("Nicht geplant", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
@@ -1106,7 +1113,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     await expect(visibleMatchingText(adminPage, /50\s*%/)).toBeVisible();
-    const projectLifecycle = adminPage.getByTestId("work-lifecycle-card");
+    const projectLifecycle = adminPage
+      .getByRole("main")
+      .getByTestId("work-lifecycle-card");
     await projectLifecycle
       .getByRole("button", { name: "Parken", exact: true })
       .click();
@@ -1329,7 +1338,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       title: `A1 Parkplatzliste ${world.runId}`,
     });
     await adminPage.goto(`/auftraege/${parkingJobNumber}`);
-    const parkingLifecycle = adminPage.getByTestId("work-lifecycle-card");
+    const parkingLifecycle = adminPage
+      .getByRole("main")
+      .getByTestId("work-lifecycle-card");
     await parkingLifecycle
       .getByRole("button", { name: "Parken", exact: true })
       .click();

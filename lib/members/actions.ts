@@ -232,90 +232,18 @@ export async function removeMember(
       };
     }
 
-    let autoClockedOut = false;
-
-    // If the member is currently working today in this org, insert an automatic clock_out
-    // before removal (best-effort). This mirrors "clock out via FAB, then remove from org".
-    try {
-      const now = new Date();
-      const todayStart = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        0,
-        0,
-        0,
-        0
-      );
-      const todayEnd = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-        999
-      );
-
-      const { data: lastTodayEntry, error: lastEntryError } = await admin
-        .from('time_entries')
-        .select('entry_type')
-        .eq('user_id', memberId)
-        .eq('organization_id', orgId)
-        .gte('timestamp', todayStart.toISOString())
-        .lte('timestamp', todayEnd.toISOString())
-        .neq('status', 'rejected')
-        .neq('status', 'pending_delete')
-        .order('timestamp', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!lastEntryError && lastTodayEntry?.entry_type === 'clock_in') {
-        const { error: clockOutError } = await admin.from('time_entries').insert({
-          user_id: memberId,
-          organization_id: orgId,
-          entry_type: 'clock_out',
-          timestamp: now.toISOString(),
-          is_manual: false,
-          status: 'approved'
-        });
-
-        if (clockOutError) {
-          console.error('Error inserting auto clock_out on member removal:', clockOutError);
-        } else {
-          autoClockedOut = true;
-        }
-      } else if (lastEntryError) {
-        console.error('Error checking open session on member removal:', lastEntryError);
+    const { data: autoClockedOut, error: deleteError } = await admin.rpc(
+      'remove_member_with_time_capture',
+      {
+        p_organization_id: orgId,
+        p_target_user_id: memberId,
+        p_actor_id: user.id,
+        p_operation_id: crypto.randomUUID(),
       }
-    } catch (e) {
-      console.error('Unexpected error handling auto clock_out on member removal:', e);
-    }
-
-    // Delete the member's time entries first (before removing membership)
-    const { error: timeEntriesDeleteError } = await admin
-      .from('time_entries')
-      .delete()
-      .eq('user_id', memberId)
-      .eq('organization_id', orgId);
-
-    if (timeEntriesDeleteError) {
-      console.error(
-        'Error deleting member time entries:',
-        timeEntriesDeleteError
-      );
-      return { success: false, error: 'delete_time_entries_failed' };
-    }
-
-    // Remove the member using admin client
-    const { error: deleteError } = await admin
-      .from('organization_members')
-      .delete()
-      .eq('organization_id', orgId)
-      .eq('user_id', memberId);
+    );
 
     if (deleteError) {
-      console.error('Error removing member:', deleteError);
+      console.error('Error removing member atomically:', deleteError);
       if (deleteError.message.includes('last_responsibility_holder:')) {
         const responsibility = deleteError.message.includes('leave_approval')
           ? 'leave_approval'
@@ -367,7 +295,7 @@ export async function removeMember(
               event_type: 'membership_removed',
               event_payload: {
                 exit_date: todayIso,
-                auto_clocked_out: autoClockedOut,
+                auto_clocked_out: autoClockedOut === true,
               },
               created_by: user.id,
             });

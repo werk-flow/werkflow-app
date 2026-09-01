@@ -14,8 +14,9 @@ export type RunInventoryEntry = {
 export type RetainedWorldState = 'none' | 'open' | 'cleaned';
 
 export function retainedWorldState(
-  entry: Pick<RunInventoryEntry, 'retainedAt' | 'cleanedAt'>,
+  entry: Pick<RunInventoryEntry, 'world' | 'retainedAt' | 'cleanedAt'>,
 ): RetainedWorldState {
+  if (!entry.world) return 'none';
   if (entry.cleanedAt) return 'cleaned';
   if (entry.retainedAt) return 'open';
   return 'none';

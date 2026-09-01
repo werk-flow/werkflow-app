@@ -3,6 +3,7 @@ import {
   resolveDailyTarget,
   resolveHolidayRegionOnDate,
 } from '../../../lib/personnel/targets';
+import { formatDuration } from '../../../lib/time-tracking/helpers';
 import { expect, test } from '../../golden/support/fixtures';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import {
@@ -74,6 +75,47 @@ function toBerlinIsoDate(value: string): string {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(value));
+}
+
+function getCompletedBerlinTimeWindow(now = new Date()): {
+  clockInDigits: string;
+  clockOutDigits: string;
+  calendarTitle: RegExp;
+} {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Berlin',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+  const currentMinute = hour * 60 + minute;
+
+  if (!Number.isInteger(currentMinute) || currentMinute < 11) {
+    throw new Error(
+      'A3-R02 needs ten completed Berlin minutes after midnight to prove overtime.'
+    );
+  }
+
+  const endMinute = currentMinute - 1;
+  const startMinute = endMinute - 10;
+  const formatDigits = (minuteOfDay: number) =>
+    `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}${String(
+      minuteOfDay % 60
+    ).padStart(2, '0')}`;
+  const formatLabel = (minuteOfDay: number) =>
+    `${String(Math.floor(minuteOfDay / 60)).padStart(2, '0')}:${String(
+      minuteOfDay % 60
+    ).padStart(2, '0')}`;
+
+  return {
+    clockInDigits: formatDigits(startMinute),
+    clockOutDigits: formatDigits(endMinute),
+    calendarTitle: new RegExp(
+      `${formatLabel(startMinute)}.*${formatLabel(endMinute)}`
+    ),
+  };
 }
 
 function personnelRow(
@@ -156,10 +198,13 @@ async function deleteWorkBlockViaCalendar(
   await page.getByRole('button', { name: 'Aktualisieren' }).click();
   const block = page.getByTitle(title).filter({ visible: true });
   await expect(block).toBeVisible({ timeout: 20_000 });
-  await block.click();
+  const openDetailsButton = block.getByRole('button');
+  await openDetailsButton.focus();
+  await openDetailsButton.press('Enter');
   const dialog = page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: 'Eintrag Details' }),
   });
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
   await dialog.getByRole('button', { name: 'Löschen', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Löschen', exact: true }).click();
   await expect(page.getByTitle(title)).toHaveCount(0, { timeout: 20_000 });
@@ -577,30 +622,31 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const today = berlinDateAtOffset(0);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
-    const scheduleNote = `A3 Ein-Stunden-Modell ${world.runId}`;
+    const scheduleNote = `A3 Ein-Minuten-Modell ${world.runId}`;
+    const completedTimeWindow = getCompletedBerlinTimeWindow();
 
     await openMemberDetailFromList(adminPage, employeeName);
     await addWorkScheduleViaDialog(adminPage, {
       validFromDigits: toDatePickerDigits(today),
-      dayHours: ['1', '1', '1', '1', '1', '1', '1'],
+      dayHours: ['0,02', '0,02', '0,02', '0,02', '0,02', '0,02', '0,02'],
       note: scheduleNote,
     });
-    await expect(visibleText(adminPage, '7 Std. pro Woche')).toBeVisible({
+    await expect(visibleText(adminPage, '7 Min. pro Woche')).toBeVisible({
       timeout: 15_000,
     });
 
     await createOwnManualTimeEntry(adminPage, {
       memberName: employeeName,
       dateDigits: toDatePickerDigits(today),
-      clockInDigits: '0300',
-      clockOutDigits: '0500',
+      clockInDigits: completedTimeWindow.clockInDigits,
+      clockOutDigits: completedTimeWindow.clockOutDigits,
     });
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
       'approved'
     );
 
     await employeePage.goto('/zeiterfassung');
-    await expect(visibleText(employeePage, 'Tagesziel: 1 Std. Arbeitszeit')).toBeVisible({
+    await expect(visibleText(employeePage, 'Tagesziel: 1 Min. Arbeitszeit')).toBeVisible({
       timeout: 15_000,
     });
     await expect(visibleText(employeePage, 'Gesamtzeit')).toBeVisible();
@@ -609,15 +655,14 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const mondayBasedDayIndex = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
     const mondayIso = shiftIsoDate(today, -mondayBasedDayIndex);
     const targetContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);
-    const expectedWeeklyHours =
-      Array.from({ length: 7 }, (_, index) =>
+    const expectedWeeklyMinutes = Array.from({ length: 7 }, (_, index) =>
         resolveDailyTarget({
           dateIso: shiftIsoDate(mondayIso, index),
           ...targetContext,
         })
-      ).reduce((total, target) => total + target.targetMinutes, 0) / 60;
+      ).reduce((total, target) => total + target.targetMinutes, 0);
     await expect(
-      visibleText(employeePage, `Soll: ${expectedWeeklyHours.toLocaleString('de-DE')} Std.`)
+      visibleText(employeePage, `Soll: ${formatDuration(expectedWeeklyMinutes)}`)
     ).toBeVisible();
 
     await adminPage.goto('/mitarbeiter');
@@ -651,7 +696,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       await removeClosureDayViaSettings(adminPage, toGermanDate(today));
     }
 
-    await deleteWorkBlockViaCalendar(adminPage, /03:00.*05:00/);
+    await deleteWorkBlockViaCalendar(adminPage, completedTimeWindow.calendarTitle);
     await openMemberDetailFromList(adminPage, employeeName);
     await deleteWorkScheduleViaDetail(adminPage, today, scheduleNote);
     const cleanedContext = await getTargetContextForRecord(world.orgId, employeeRecord.id);

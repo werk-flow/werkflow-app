@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+import type { Database } from "../../../lib/supabase/database.types";
+
 import {
   toWorkSchedule,
   type WorkSchedule,
@@ -22,8 +24,8 @@ import { requireEnv } from "./env";
 // the UI cannot prove (the invite code inside the email link, and the stock
 // ledger behind the visible quantities).
 
-function createAdminClient(): SupabaseClient {
-  return createClient(
+function createAdminClient(): SupabaseClient<Database> {
+  return createClient<Database>(
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("SUPABASE_SECRET_KEY"),
     {
@@ -174,6 +176,7 @@ export async function getAppliedWorkTemplateState(
     occurrences,
     assignments,
     timeEntries,
+    timeSegments,
     documentLinks,
     assessments,
     projectJobs,
@@ -224,6 +227,13 @@ export async function getAppliedWorkTemplateState(
     isJob
       ? admin
           .from("time_entries")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("job_id", targetId)
+      : Promise.resolve({ data: [], error: null }),
+    isJob
+      ? admin
+          .from("time_segments")
           .select("id")
           .eq("organization_id", orgId)
           .eq("job_id", targetId)
@@ -292,6 +302,7 @@ export async function getAppliedWorkTemplateState(
     occurrences,
     assignments,
     timeEntries,
+    timeSegments,
     documentLinks,
     assessments,
     projectJobs,
@@ -316,6 +327,7 @@ export async function getAppliedWorkTemplateState(
     planningOccurrences: occurrences.data ?? [],
     assignments: assignments.data ?? [],
     timeEntries: timeEntries.data ?? [],
+    timeSegments: timeSegments.data ?? [],
     documentLinks: documentLinks.data ?? [],
     qualificationAssessments: assessments.data ?? [],
     projectJobs: projectJobs.data ?? [],
@@ -2431,7 +2443,9 @@ export async function getDispatchState(
         status: dispatch.status,
         targetKind: dispatch.occurrence_id ? "occurrence" : "job",
         currentRevisionNumber:
-          revisionNumberById.get(dispatch.current_revision_id) ?? null,
+          dispatch.current_revision_id
+            ? revisionNumberById.get(dispatch.current_revision_id) ?? null
+            : null,
         revisionChangeKinds: revisions.map((row) => row.change_kind as string),
         currentRecipientRecordIds: (recipientsResult.data ?? [])
           .filter((row) => row.revision_id === dispatch.current_revision_id)
@@ -2578,7 +2592,7 @@ export async function getWorkLifecycleState(
       admin
         .from("work_execution_events")
         .select(
-          "event_type, from_state, to_state, reason, gate_snapshot, gate_fingerprint, previous_version, resulting_version",
+          "event_type, from_state, to_state, reason, gate_snapshot, gate_fingerprint, previous_version, resulting_version, created_by",
         )
         .eq("organization_id", orgId)
         .eq(targetColumn, targetId)
@@ -3558,6 +3572,103 @@ export async function getMaintenanceCountsAs(
           `Maintenance RLS lookup failed for ${table}: ${error.message}`,
         );
       }
+      counts[table] = count ?? 0;
+    }
+    return counts;
+  });
+}
+
+export async function getTimeCaptureState(orgId: string, userId: string) {
+  const rowLimit = 10_000;
+  const admin = createAdminClient();
+  const { data: sessions, error: sessionError } = await admin
+    .from("time_sessions")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("user_id", userId)
+    .order("started_at")
+    .order("id")
+    .limit(rowLimit + 1);
+  if (sessionError) throw new Error(`Time-session lookup failed: ${sessionError.message}`);
+  if ((sessions?.length ?? 0) > rowLimit) {
+    throw new Error(`Time-session lookup exceeded ${rowLimit} rows.`);
+  }
+  const sessionIds = (sessions ?? []).map((session) => session.id as string);
+  const [segmentsResult, operationsResult, eventsResult, legacyResult] = await Promise.all([
+    sessionIds.length
+      ? admin.from("time_segments").select("*").in("session_id", sessionIds)
+          .order("started_at").order("id").limit(rowLimit + 1)
+      : Promise.resolve({ data: [], error: null }),
+    admin.from("time_operations").select("*").eq("organization_id", orgId)
+      .eq("actor_id", userId).order("created_at").order("id").limit(rowLimit + 1),
+    sessionIds.length
+      ? admin.from("time_segment_events").select("*").in("session_id", sessionIds)
+          .order("occurred_at").order("event_sequence").limit(rowLimit + 1)
+      : Promise.resolve({ data: [], error: null }),
+    admin.from("time_entries").select("*").eq("organization_id", orgId)
+      .eq("user_id", userId).order("timestamp").order("created_at").order("id")
+      .limit(rowLimit + 1),
+  ]);
+  const error = segmentsResult.error ?? operationsResult.error ?? eventsResult.error ?? legacyResult.error;
+  if (error) throw new Error(`Time-capture lookup failed: ${error.message}`);
+  if ([segmentsResult, operationsResult, eventsResult, legacyResult].some(
+    (result) => (result.data?.length ?? 0) > rowLimit,
+  )) {
+    throw new Error(`Time-capture lookup exceeded ${rowLimit} rows.`);
+  }
+  return {
+    sessions: sessions ?? [],
+    segments: segmentsResult.data ?? [],
+    operations: operationsResult.data ?? [],
+    events: eventsResult.data ?? [],
+    legacyEntries: legacyResult.data ?? [],
+  };
+}
+
+export async function seedLegacyOpenTimeEntry(orgId: string, userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: latest, error: latestError } = await admin
+    .from("time_entries")
+    .select("entry_type")
+    .eq("organization_id", orgId)
+    .eq("user_id", userId)
+    .neq("status", "rejected")
+    .neq("status", "pending_delete")
+    .order("timestamp", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latestError) {
+    throw new Error(`Legacy time fixture precondition failed: ${latestError.message}`);
+  }
+  if (["clock_in", "break_end", "break_start"].includes(latest?.entry_type ?? "")) {
+    throw new Error("Legacy time fixture requires a clocked-out user.");
+  }
+  const { error } = await admin.from("time_entries").insert({
+    organization_id: orgId,
+    user_id: userId,
+    entry_type: "clock_in",
+    timestamp: new Date().toISOString(),
+    is_manual: false,
+    status: "approved",
+  });
+  if (error) throw new Error(`Legacy time fixture failed: ${error.message}`);
+}
+
+export async function getTimeCaptureCountsAs(
+  user: { email: string; password: string },
+  orgId: string,
+) {
+  return withRoleClient(user, async (client) => {
+    const tables = ["time_sessions", "time_segments", "time_operations", "time_segment_events"] as const;
+    const counts = {} as Record<(typeof tables)[number], number>;
+    for (const table of tables) {
+      const { count, error } = await client
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId);
+      if (error) throw new Error(`Time-capture RLS lookup failed for ${table}: ${error.message}`);
       counts[table] = count ?? 0;
     }
     return counts;

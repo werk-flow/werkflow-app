@@ -53,6 +53,7 @@ import {
   customerSiteRow,
   newestCustomerTimelineRow,
 } from '../support/a2-steps';
+import { waitForRouteIntercept } from '../support/network';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -499,17 +500,9 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
 
     await bueroPage.goto('/anfragen');
     try {
-      const suggestionRequest = bueroPage.waitForRequest(
-        (request) =>
-          request.method() === 'POST' &&
-          new URL(request.url()).pathname === '/anfragen' &&
-          Boolean(request.headers()['next-action']),
-        { timeout: 15_000 }
-      );
       await bueroPage.getByRole('button', { name: 'Anfrage erfassen' }).click();
       try {
-        await suggestionRequest;
-        await intercepted;
+        await waitForRouteIntercept(intercepted);
       } catch {
         throw new Error(
           'The request-number suggestion server action was not intercepted within 15 seconds.'
@@ -518,7 +511,15 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
       const dialog = bueroPage.getByRole('dialog');
       await dialog.locator('#request-summary').fill(summary);
       await dialog.locator('#request-number').fill(requestNumber);
+      const suggestionResponse = bueroPage.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === '/anfragen' &&
+          Boolean(response.request().headers()['next-action']),
+        { timeout: 15_000 }
+      );
       releaseSuggestion();
+      await suggestionResponse;
       await expect(dialog.locator('#request-number')).toHaveValue(requestNumber, {
         timeout: 15_000,
       });

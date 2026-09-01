@@ -657,35 +657,47 @@ export async function clockInOnJob(
   jobTitle?: string,
 ): Promise<void> {
   await page.goto("/dashboard");
-  // The clock control is a floating action button named via its title attribute.
-  await page.locator('button[title="Einstempeln"]').click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Einstempeln" }),
-  ).toBeVisible();
+  await page.locator('button[title="Zeiterfassung starten"]').click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Zeiterfassung starten" }),
+  });
+  await expect(dialog).toBeVisible();
 
   if (jobTitle) {
-    await selectJobInPicker(dialog, jobTitle);
+    await dialog.getByRole("button", { name: "Ohne Auftrag" }).click();
+    const picker = page.getByRole("dialog").filter({
+      has: page.getByRole("heading", { name: "Einstempeln" }),
+    });
+    await selectJobInPicker(picker, jobTitle);
+    await picker.getByRole("button", { name: "Einstempeln", exact: true }).click();
   }
 
-  await dialog
-    .getByRole("button", { name: "Einstempeln", exact: true })
-    .click();
-  await expect(page.locator('button[title="Ausstempeln"]')).toBeVisible({
+  await dialog.getByRole("button", { name: "Starten", exact: true }).click();
+  await expect(page.locator('button[title="Zeiterfassung öffnen"]')).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function clockOut(page: Page): Promise<void> {
-  await page.locator('button[title="Ausstempeln"]').click();
-  await expect(page.locator('button[title="Einstempeln"]')).toBeVisible({
+  await page.locator('button[title="Zeiterfassung öffnen"]').click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
+  });
+  await dialog.getByRole("button", { name: "Erfassung beenden" }).click();
+  await expect(page.locator('button[title="Zeiterfassung starten"]')).toBeVisible({
     timeout: 15_000,
   });
 }
 
 export async function startClockBreak(page: Page): Promise<void> {
-  await page.locator('button[title="Pause starten"]').click();
-  await expect(page.locator('button[title="Arbeit fortsetzen"]')).toBeVisible({
+  await page.locator('button[title="Zeiterfassung öffnen"]').click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
+  });
+  await dialog.getByRole("button", { name: "Pause", exact: true }).click();
+  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /^Pause/ })).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -694,42 +706,44 @@ export async function endClockBreak(
   page: Page,
   jobTitle?: string,
 ): Promise<void> {
-  await page.locator('button[title="Arbeit fortsetzen"]').click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Arbeit fortsetzen" }),
-  ).toBeVisible();
+  await page.locator('button[title="Zeiterfassung öffnen"]').click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
+  });
+  await dialog.getByRole("button", { name: "Arbeit", exact: true }).click();
   if (jobTitle) {
-    await selectJobInPicker(dialog, jobTitle);
+    await dialog.getByRole("button", {
+      name: /^Auftrag auswählen:/,
+    }).click();
+    const picker = page.getByRole("dialog").filter({
+      has: page.getByRole("heading", { name: "Auftrag wechseln" }),
+    });
+    await selectJobInPicker(picker, jobTitle);
+    await picker.getByRole("button", { name: "Wechseln", exact: true }).click();
   }
-  // Without a job the picker keeps its default „Ohne Auftrag" selection.
-  await dialog.getByRole("button", { name: "Fortsetzen", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Arbeit fortsetzen" }),
-  ).toBeHidden({
-    timeout: 15_000,
-  });
-  await expect(page.locator('button[title="Pause starten"]')).toBeVisible({
-    timeout: 15_000,
-  });
+  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function switchClockJob(
   page: Page,
   jobTitle: string,
 ): Promise<void> {
-  await page.locator('button[title="Auftrag wechseln"]').click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Auftrag wechseln" }),
-  ).toBeVisible();
-  await selectJobInPicker(dialog, jobTitle);
-  await dialog.getByRole("button", { name: "Wechseln", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Auftrag wechseln" }),
-  ).toBeHidden({
-    timeout: 15_000,
+  await page.locator('button[title="Zeiterfassung öffnen"]').click();
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Aktivität wechseln" }),
   });
+  await dialog.getByRole("button", { name: "Arbeit", exact: true }).click();
+  await dialog.getByRole("button", {
+    name: /^Auftrag auswählen:/,
+  }).click();
+  const picker = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: "Auftrag wechseln" }),
+  });
+  await selectJobInPicker(picker, jobTitle);
+  await picker.getByRole("button", { name: "Wechseln", exact: true }).click();
+  await dialog.getByRole("button", { name: "Aktivität wechseln", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function createInventoryLocation(
@@ -1024,7 +1038,7 @@ export async function transitionWorkOnJobPage(
   label: string,
   reason?: string,
 ): Promise<void> {
-  const lifecycle = page.getByTestId("work-lifecycle-card");
+  const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: label, exact: true }).click();
   const dialog = page.getByRole("dialog");
   if (reason) await dialog.locator("#work-transition-reason").fill(reason);
@@ -1062,7 +1076,7 @@ export async function reportOwnBlockerOnJobPage(
   page: Page,
   details: string,
 ): Promise<void> {
-  const lifecycle = page.getByTestId("work-lifecycle-card");
+  const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: "Blocker", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.locator("#work-blocker-reason").click();
@@ -1076,7 +1090,7 @@ export async function resolveOwnBlockerOnJobPage(
   page: Page,
   reason: string,
 ): Promise<void> {
-  const lifecycle = page.getByTestId("work-lifecycle-card");
+  const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: "Lösen", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.locator("#work-reason").fill(reason);
@@ -1092,7 +1106,7 @@ export async function parkJobOnJobPage(
   reviewDate: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
-  const lifecycle = page.getByTestId("work-lifecycle-card");
+  const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: "Parken", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.locator("#work-blocker-reason").click();
@@ -2044,14 +2058,11 @@ export async function selectFromSearchable(
       // Realtime-backed option sources can remount the same semantic row
       // during any locator action. Query and click the current exact option
       // in one browser turn, then prove the resulting value below.
-      const listboxId = await listbox.getAttribute("id");
       const clicked = await page.evaluate(
-        ({ optionPattern, listboxId }) => {
-          const listboxElement = listboxId
-            ? document.getElementById(listboxId)
-            : Array.from(document.querySelectorAll('[role="listbox"]')).find(
-                (candidate) => candidate.getClientRects().length > 0,
-              );
+        ({ optionPattern }) => {
+          const listboxElement = Array.from(
+            document.querySelectorAll('[role="listbox"]'),
+          ).find((candidate) => candidate.getClientRects().length > 0);
           if (!listboxElement) return false;
           const matcher = new RegExp(optionPattern);
           const button = Array.from(
@@ -2061,7 +2072,7 @@ export async function selectFromSearchable(
           button.click();
           return true;
         },
-        { optionPattern: optionName.source, listboxId },
+        { optionPattern: optionName.source },
       );
       if (!clicked) {
         throw new Error("The exact searchable option was remounted.");
@@ -3043,16 +3054,17 @@ export async function expectClockInBlockedByVacation(
   page: Page,
 ): Promise<void> {
   await page.goto("/dashboard");
-  await page.locator('button[title="Einstempeln"]').click();
+  await page.getByRole("button", { name: "Zeiterfassung starten" }).click();
   await expect(
-    page.getByRole("heading", { name: "Einstempeln" }),
+    page.getByRole("heading", { name: "Zeiterfassung starten" }),
   ).toBeVisible();
-  await page.locator("button:not([title])", { hasText: "Einstempeln" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Starten", exact: true }).click();
   await expect(visibleText(page, "Heute ist Urlaub genehmigt")).toBeVisible({
     timeout: 15_000,
   });
-  // Still clocked out: the FAB keeps offering Einstempeln, never Ausstempeln.
-  await expect(page.locator('button[title="Ausstempeln"]')).toHaveCount(0);
+  // Still clocked out: the FAB keeps offering a start, never an active session.
+  await expect(page.getByRole("button", { name: "Zeiterfassung starten" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Laufende Zeiterfassung öffnen" })).toHaveCount(0);
 }
 
 // P1-08: sickness / privacy-sensitive absence. A report is a fact, not a
@@ -3310,18 +3322,18 @@ export async function expectClockInNoticeForSickness(
   page: Page,
 ): Promise<void> {
   await page.goto("/dashboard");
-  await page.locator('button[title="Einstempeln"]').click();
+  await page.getByRole("button", { name: "Zeiterfassung starten" }).click();
   await expect(
-    page.getByRole("heading", { name: "Einstempeln" }),
+    page.getByRole("heading", { name: "Zeiterfassung starten" }),
   ).toBeVisible();
-  await page.locator("button:not([title])", { hasText: "Einstempeln" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Starten", exact: true }).click();
   await expect(
     visibleText(page, "Für heute liegt eine Krankmeldung vor"),
   ).toBeVisible({
     timeout: 15_000,
   });
   // Clocked IN despite the notice — the warn-not-block contract.
-  await expect(page.locator('button[title="Ausstempeln"]')).toBeVisible({
+  await expect(page.getByRole("button", { name: "Laufende Zeiterfassung öffnen" })).toBeVisible({
     timeout: 15_000,
   });
 }

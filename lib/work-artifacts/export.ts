@@ -5,7 +5,7 @@ import {
   WORK_ARTIFACT_UNIT_LABELS, type WorkArtifactDetail,
 } from './types';
 
-export const WORK_ARTIFACT_EXPORT_RENDERER_VERSION = 'p1-15-html-v3';
+export const WORK_ARTIFACT_EXPORT_RENDERER_VERSION = 'p1-21-html-v4';
 
 const DEFECT_SEVERITY_LABELS = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' } as const;
 const DEFECT_STATE_LABELS = { open: 'Offen', in_progress: 'In Bearbeitung', resolved: 'Behoben' } as const;
@@ -87,8 +87,8 @@ export function buildWorkArtifactExport(artifact: WorkArtifactDetail): {
       { created_at, action_type, signer_name, reason, comment }
     )),
     documents: documents.map(({ document_id, relation, description }) => ({ document_id, relation, description })),
-    sources: sources.map(({ time_entry_id, inventory_movement_id, description }) => (
-      { time_entry_id, inventory_movement_id, description }
+    sources: sources.map(({ time_entry_id, time_segment_id, inventory_movement_id, description }) => (
+      { time_entry_id, time_segment_id, inventory_movement_id, description }
     )),
     rendererVersion: WORK_ARTIFACT_EXPORT_RENDERER_VERSION,
   });
@@ -118,7 +118,7 @@ export function buildWorkArtifactExport(artifact: WorkArtifactDetail): {
   const measurementTable = measurementLines.length ? `<table><thead><tr><th>Position</th><th>Ort</th><th>Menge</th><th>Einheit</th><th>Hinweis</th></tr></thead><tbody>${measurementLines.map((line) => `<tr><td>${escapeHtml(line.description)}</td><td>${escapeHtml(line.location)}</td><td>${escapeHtml(line.quantity)}</td><td>${escapeHtml(WORK_ARTIFACT_UNIT_LABELS[line.unit])}</td><td>${escapeHtml(line.note)}</td></tr>`).join('')}</tbody></table>` : '';
   const actionTable = actions.length ? `<h2>Entscheidungen und Bestätigungen</h2><table><thead><tr><th>Zeitpunkt</th><th>Aktion</th><th>Name</th><th>Grund/Hinweis</th></tr></thead><tbody>${actions.map((action) => `<tr><td>${escapeHtml(action.created_at)}</td><td>${escapeHtml(ACTION_LABELS[action.action_type])}</td><td>${escapeHtml(action.signer_name)}</td><td>${escapeHtml(action.reason ?? action.comment)}</td></tr>`).join('')}</tbody></table>` : '';
   const documentTable = documents.length ? `<h2>Verknüpfte Dokumente</h2><table><thead><tr><th>Bezug</th><th>Beschreibung</th><th>Dokument-ID</th></tr></thead><tbody>${documents.map((document) => `<tr><td>${escapeHtml(DOCUMENT_RELATION_LABELS[document.relation])}</td><td>${escapeHtml(document.description)}</td><td>${escapeHtml(document.document_id)}</td></tr>`).join('')}</tbody></table>` : '';
-  const sourceTable = sources.length ? `<h2>Quellen</h2><table><thead><tr><th>Art</th><th>Beschreibung</th><th>Quell-ID</th></tr></thead><tbody>${sources.map((source) => `<tr><td>${source.time_entry_id ? 'Zeiteintrag' : 'Bestandsbewegung'}</td><td>${escapeHtml(source.description)}</td><td>${escapeHtml(source.time_entry_id ?? source.inventory_movement_id)}</td></tr>`).join('')}</tbody></table>` : '';
+  const sourceTable = sources.length ? `<h2>Quellen</h2><table><thead><tr><th>Art</th><th>Beschreibung</th><th>Quell-ID</th></tr></thead><tbody>${sources.map((source) => `<tr><td>${source.time_segment_id ? 'Aktivitätsabschnitt' : source.time_entry_id ? 'Zeiteintrag' : 'Bestandsbewegung'}</td><td>${escapeHtml(source.description)}</td><td>${escapeHtml(source.time_segment_id ?? source.time_entry_id ?? source.inventory_movement_id)}</td></tr>`).join('')}</tbody></table>` : '';
   const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${escapeHtml(revision.title)}</title><style>@page{size:A4;margin:18mm}body{font:14px/1.5 system-ui,sans-serif;color:#222;max-width:180mm;margin:auto}header{border-bottom:2px solid #ff7900;margin-bottom:20px}h1{font-size:24px}h2{font-size:12px;text-transform:uppercase;color:#666;margin:18px 0 4px}p{white-space:pre-wrap;margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #bbb;padding:6px;text-align:left;vertical-align:top}.meta{font:11px ui-monospace,monospace;color:#555;overflow-wrap:anywhere}</style></head><body><header><h1>${escapeHtml(revision.title)}</h1><p class="meta">Artefakt ${escapeHtml(artifact.id)} · Revision ${revision.revision_number} (${escapeHtml(revision.id)}) · Status ${escapeHtml(artifact.status)} · Renderer ${WORK_ARTIFACT_EXPORT_RENDERER_VERSION} · Inhalts-Hash ${contentHash}</p></header>${rows(fields)}${measurementTable}${actionTable}${documentTable}${sourceTable}</body></html>`;
   return {
     html, bytes: Buffer.from(html, 'utf8'), contentHash,

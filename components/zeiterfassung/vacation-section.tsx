@@ -423,9 +423,12 @@ function VacationRequestDialog({
                   }
                   onChange={(date) => {
                     const next = date ? toLocalDateString(date) : '';
+                    const nextEnd =
+                      next && (!endDate || endDate < next) ? next : endDate;
+                    if (next === startDate && nextEnd === endDate) return;
                     invalidatePreview();
                     setStartDate(next);
-                    if (next && (!endDate || endDate < next)) setEndDate(next);
+                    if (nextEnd !== endDate) setEndDate(nextEnd);
                   }}
                   disabled={isSaving}
                 />
@@ -437,8 +440,10 @@ function VacationRequestDialog({
                   ariaLabel="Bis"
                   value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                   onChange={(date) => {
+                    const next = date ? toLocalDateString(date) : '';
+                    if (next === endDate) return;
                     invalidatePreview();
-                    setEndDate(date ? toLocalDateString(date) : '');
+                    setEndDate(next);
                   }}
                   disabled={isSaving}
                 />

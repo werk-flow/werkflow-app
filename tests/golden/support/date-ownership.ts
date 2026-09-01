@@ -47,6 +47,7 @@ const AUDIT_DATE_WINDOWS = {
   "p1-18": [{ from: 95, to: 99 }],
   "p1-19": [{ from: 100, to: 104 }],
   "p1-20": [{ from: 105, to: 109 }],
+  "p1-21": [{ from: 110, to: 114 }],
 } as const satisfies Record<string, readonly OffsetRange[]>;
 
 export type AuditSpecName = keyof typeof AUDIT_DATE_WINDOWS;

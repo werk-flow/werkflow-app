@@ -38,7 +38,8 @@ import {
   WORK_ARTIFACT_STATUS_LABELS, WORK_ARTIFACT_UNIT_LABELS,
   type MeasurementLineInput, type WorkArtifactActionType,
   type WorkArtifactContentInput, type WorkArtifactDetail, type WorkArtifactKind,
-  type WorkArtifactSummary, type WorkArtifactVisibility,
+  type WorkArtifactSummary, type WorkArtifactTimeSourceOption,
+  type WorkArtifactVisibility,
 } from '@/lib/work-artifacts/types';
 import { SignaturePad } from './signature-pad';
 import { toLocalDateString } from '@/lib/utils';
@@ -128,7 +129,7 @@ export function WorkArtifactsSection({
 }: Target & {
   initialArtifacts: WorkArtifactSummary[]; isManager: boolean; canApprove: boolean; currentUserId: string;
   documents: OrganizationDocument[]; evidenceRequirements?: EvidenceRequirement[];
-  timeEntryOptions?: Array<{ id: string; label: string }>;
+  timeEntryOptions?: WorkArtifactTimeSourceOption[];
   instructionOptions?: Array<{ id: string; label: string }>;
   defaultSiteId?: string;
   readOnly?: boolean;
@@ -227,7 +228,7 @@ function WorkArtifactDialog({
 }: Target & {
   artifactId: string | null; initialSummary: WorkArtifactSummary | null; isManager: boolean; canApprove: boolean;
   currentUserId: string; documents: OrganizationDocument[]; evidenceRequirements: EvidenceRequirement[];
-  timeEntryOptions: Array<{ id: string; label: string }>;
+  timeEntryOptions: WorkArtifactTimeSourceOption[];
   instructionOptions: Array<{ id: string; label: string }>;
   defaultSiteId?: string;
   hasRemoteUpdate: boolean;
@@ -253,7 +254,7 @@ function WorkArtifactDialog({
   const [pendingSignatureDocumentId, setPendingSignatureDocumentId] = useState<string | null>(null);
   const [documentId, setDocumentId] = useState('');
   const [documentRelation, setDocumentRelation] = useState<'supporting_evidence' | 'closure_proof'>('supporting_evidence');
-  const [timeEntryId, setTimeEntryId] = useState('');
+  const [timeSourceId, setTimeSourceId] = useState('');
   const draftArtifactIdRef = useRef(crypto.randomUUID());
   const [localFulfillments, setLocalFulfillments] = useState(
     () => new Map<string, { id: string; version: number }>()
@@ -423,13 +424,20 @@ function WorkArtifactDialog({
   }
 
   function linkTimeEntry() {
-    if (!detail || !currentRevision || !timeEntryId) return;
+    if (!detail || !currentRevision || !timeSourceId) return;
+    const selectedTimeSource = timeEntryOptions.find(
+      (option) => option.id === timeSourceId,
+    );
+    if (!selectedTimeSource) return;
     void runArtifactTask(async () => {
       const result = await linkWorkArtifactSource({ artifactId: detail.id, revisionId: currentRevision.id,
-        linkId: crypto.randomUUID(), expectedVersion: detail.version, timeEntryId,
+        linkId: crypto.randomUUID(), expectedVersion: detail.version,
+        ...(selectedTimeSource.sourceType === 'time_segment'
+          ? { timeSegmentId: selectedTimeSource.id }
+          : { timeEntryId: selectedTimeSource.id }),
         description: 'Arbeitszeitbezug' });
       if (await handleMutationFailure(result, 'Der Zeiteintrag konnte nicht verknüpft werden.')) return;
-      await load(detail.id); setTimeEntryId('');
+      await load(detail.id); setTimeSourceId('');
       showBanner({ variant: 'success', message: 'Zeiteintrag wurde mit dieser Version verknüpft.' });
     });
   }
@@ -542,8 +550,8 @@ function WorkArtifactDialog({
               {timeEntryOptions.length > 0 && (
                 <FormDisclosure label="Zeiteintrag verknüpfen">
                   <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_auto]">
-                    <Select value={timeEntryId} onValueChange={setTimeEntryId}><SelectTrigger aria-label="Zeiteintrag auswählen"><SelectValue placeholder="Zeiteintrag wählen" /></SelectTrigger><SelectContent>{timeEntryOptions.map((entry) => <SelectItem key={entry.id} value={entry.id}>{entry.label}</SelectItem>)}</SelectContent></Select>
-                    <Button type="button" variant="outline" onClick={linkTimeEntry} disabled={isPending || !timeEntryId}>Verknüpfen</Button>
+                    <Select value={timeSourceId} onValueChange={setTimeSourceId}><SelectTrigger aria-label="Zeiteintrag auswählen"><SelectValue placeholder="Zeiteintrag wählen" /></SelectTrigger><SelectContent>{timeEntryOptions.map((entry) => <SelectItem key={`${entry.sourceType}:${entry.id}`} value={entry.id}>{entry.label}</SelectItem>)}</SelectContent></Select>
+                    <Button type="button" variant="outline" onClick={linkTimeEntry} disabled={isPending || !timeSourceId}>Verknüpfen</Button>
                   </div>
                 </FormDisclosure>
               )}
@@ -627,7 +635,7 @@ function ArtifactDetail({ detail, currentRevision, currentUserId }: { detail: Wo
     {fields.map(([label, value]) => <div key={label}><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 whitespace-pre-wrap text-sm">{value}</p></div>)}
     {detail.measurementLines.filter((line) => line.revision_id === currentRevision.id).length > 0 && <div className="overflow-hidden rounded-md border"><div className="grid grid-cols-[1fr_auto_auto] gap-2 bg-muted/40 px-3 py-2 text-xs font-medium"><span>Position</span><span>Menge</span><span>Einheit</span></div>{detail.measurementLines.filter((line) => line.revision_id === currentRevision.id).map((line) => <div key={line.id} className="grid grid-cols-[1fr_auto_auto] gap-2 border-t px-3 py-2 text-sm"><span>{line.description}</span><span className="tabular-nums">{line.quantity}</span><span>{WORK_ARTIFACT_UNIT_LABELS[line.unit]}</span></div>)}</div>}
     {detail.documents.filter((document) => document.revision_id === currentRevision.id).length > 0 && <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Verknüpfte Dokumente</p><div className="mt-2 divide-y rounded-md border">{detail.documents.filter((document) => document.revision_id === currentRevision.id).map((document) => <p key={document.id} className="p-3 text-sm">{DOCUMENT_RELATION_LABELS[document.relation]} · {document.description ?? document.document_id}</p>)}</div></div>}
-    {detail.sources.filter((source) => source.revision_id === currentRevision.id).length > 0 && <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Quellen</p><div className="mt-2 divide-y rounded-md border">{detail.sources.filter((source) => source.revision_id === currentRevision.id).map((source) => <p key={source.id} className="p-3 text-sm">{source.time_entry_id ? 'Zeiteintrag' : 'Bestandsbewegung'} · {source.description ?? source.time_entry_id ?? source.inventory_movement_id}</p>)}</div></div>}
+    {detail.sources.filter((source) => source.revision_id === currentRevision.id).length > 0 && <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Quellen</p><div className="mt-2 divide-y rounded-md border">{detail.sources.filter((source) => source.revision_id === currentRevision.id).map((source) => <p key={source.id} className="p-3 text-sm">{source.time_segment_id ? 'Aktivitätsabschnitt' : source.time_entry_id ? 'Zeiteintrag' : 'Bestandsbewegung'} · {source.description ?? source.time_segment_id ?? source.time_entry_id ?? source.inventory_movement_id}</p>)}</div></div>}
     <FormDisclosure label={`Verlauf (${detail.revisions.length} Versionen, ${detail.actions.length} Aktionen)`}>
       <div className="space-y-3"><div className="divide-y rounded-md border">{detail.revisions.map((revision) => <div key={revision.id} className="p-3 text-sm"><p className="font-medium">Version {revision.revision_number} · {revision.title}</p><p className="text-xs text-muted-foreground">{displayDateTime(revision.created_at)}{revision.created_by === currentUserId ? ' · von dir' : ''}{revision.correction_reason ? ` · ${revision.correction_reason}` : ''}</p></div>)}</div>{detail.actions.length > 0 && <div className="divide-y rounded-md border">{detail.actions.map((action) => <div key={action.id} className="p-3 text-sm"><p className="font-medium">{ACTION_LABELS[action.action_type] ?? action.action_type}</p><p className="text-xs text-muted-foreground">{displayDateTime(action.created_at)}{action.signer_name ? ` · ${action.signer_name}` : ''}{action.reason ? ` · ${action.reason}` : ''}</p></div>)}</div>}</div>
     </FormDisclosure>

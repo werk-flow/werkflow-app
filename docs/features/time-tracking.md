@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-08-31
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
@@ -23,14 +23,14 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated through `P1-17`) includes:
+The implemented baseline (updated through `P1-21`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
-- Event-based time records using `clock_in`, `clock_out`, `break_start`, and `break_end`. Work and break sessions are derived from those events.
-- Live clocked-out, working, and on-break states; clock-in/out; manual break start/end; and current-day work/break totals.
+- Stable attendance sessions and factual activity segments for work, travel, break, standby, call-out, and fixed internal activities. Every switch is one version-checked, idempotent database operation with append-only attribution; existing `time_entries` remain unchanged compatibility facts and are not backfilled.
+- Live clocked-out, working, and on-break states; atomic activity and job switches; explicit end; current-day category totals; and Europe/Berlin display splitting without midnight writes.
 - An organization-level choice between manually stamped breaks and one automatic break threshold/duration. Admins can change the rule, Büro can view it, and policy history prevents later settings from silently rewriting closed history.
-- Job-linked clock-in, job switching during an active session, assigned-job selection for employees, and job/project time views.
-- Since `P1-16`, the assigned-worker job pack shows only the viewer's own job time history and exposes the existing start, stop and switch actions in context. It creates no job-local timer and does not build the P1-21 work/travel/break/standby segmentation early.
+- Work, call-out, and travel can be linked to an assigned job or explicitly unallocated; travel also captures route and driver/passenger role. Standby stays separate, and internal activity uses a bounded vocabulary.
+- Since `P1-16`, the assigned-worker job pack shows only the viewer's own job time history and uses the same global session to start or switch work to the current job. It creates no job-local timer.
 - Since `P1-17`, an office-handover release can include a bounded customer-safe time summary and its source fingerprint. An active clock is a non-overridable release blocker. Review and release never segment, approve, edit, copy or reclassify time, and the readiness result is not billability or payroll approval.
 - Protection against an employee being actively clocked in in more than one organization.
 - A current-week view with daily presence, work, break, and overtime display; since `P1-04` the overtime boundary and the weekly `Soll` come from each date's resolved schedule/holiday target instead of a fixed 480 minutes.
@@ -39,18 +39,18 @@ The implemented baseline (updated through `P1-17`) includes:
 - Manager history filters by date range, employee, and status.
 - Correction, deletion, reassignment, pending-state, review, and calendar-visualization infrastructure for time records.
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
-- Realtime refreshes for time entries and attention counts. Since `P1-07` the badge pipeline is unified: the Zeiterfassung sidebar badge and the Anträge tab badge count time **and** vacation approvals for the viewer (matching what the tab shows and resolving the P1-06 undercount), and pending time sessions/change requests additionally appear as attention items on `/aufgaben` for exactly the effective holders, deep-linking back into the Anträge tab. Decisions run only through the existing review actions.
-- Safeguards that close some stale prior-day open sessions and clock an active user out on sign-out or member removal.
+- Realtime refreshes for legacy entries, canonical sessions and segments, and attention counts. Since `P1-07` the badge pipeline is unified: the Zeiterfassung sidebar badge and the Anträge tab badge count time **and** vacation approvals for the viewer, and pending legacy time sessions/change requests additionally appear as attention items on `/aufgaben` for exactly the effective holders. Decisions run only through the existing review actions.
+- Visible recovery for sessions open longer than 24 hours, legacy-open bridging on the next canonical action, and attributable closure on sign-out or member removal.
 - Since `P1-06`: the dashboard's vacation area is a real balance and entry point (owned by employee management) — entitlement arithmetic or the labeled „Kein Urlaubsanspruch hinterlegt" exception, own requests with status and withdrawal, and the request dialog. Approved vacation reaches daily targets as a discriminated absence input on `resolveDailyTarget` (full day → 0, half day → half base target), so the Tagesziel, ring, weekly `Soll`, member detail, and member list all react through the one target contract; pending requests are provisional and never change targets. Clocking in on an own approved full-day vacation day is denied at the server action („Heute ist Urlaub genehmigt"); the correction path is an authorized cancellation of the vacation. The Anträge tab additionally shows pending vacation requests to effective `leave_approval` holders.
 - Since `P1-08`: the dashboard also carries the **Krankmeldung** section (owned by employee management) — self-report and own-report management. Active sickness reaches the same `resolveDailyTarget` absence input as a second discriminated type (`sickness`; open-ended reports clamped to the query window; on a day covered by both, vacation keeps the display attribution), so every target surface reacts through the one contract; the own dashboard says „Krankmeldung – heute keine Sollarbeitszeit." Clocking in on a sick day is deliberately NOT blocked: the action succeeds with a visible notice („Für heute liegt eine Krankmeldung vor …") because a recovered person clocking in early is reality — the end-date correction is the nudge, and the office sees the contradiction on the management surface.
 
 Important current limitations:
 
-- Travel time is shown as a disabled action and is not a distinct implemented time type.
+- Canonical segments are intentionally read-only in legacy edit/delete/change-request surfaces until `P1-22` owns one consistent correction workflow.
 - Resolved with `P1-06` (2026-08-06) and `P1-08` (2026-08-08): the former static „9 von 30" vacation widget is replaced by the real balance workflow, and sickness/privacy-sensitive absence landed as the second absence type. Absence remains owned by employee management; time tracking consumes its effect on targets exclusively through the extended `resolveDailyTarget` contract. Further absence vocabulary, hour-based absence, and paid/unpaid classification remain later scope (`P1-23`).
 - Resolved with `P1-04` (2026-08-05): daily and weekly targets no longer assume a fixed eight-hour day. The target for (person, date) is resolved per date from the work-schedule version effective on that date, else derived from the employment condition's weekly hours (labeled), else the legacy 8h shown as a visible „Kein Arbeitszeitmodell hinterlegt" exception; holidays of the organization's selected regional calendar and closure days set the day's target to 0 (`lib/personnel/targets.ts`). The dashboard Tagesziel/ring, the weekly chart's overtime split and `Soll` sum, the member-detail Tagesfortschritt, and the member-list progress bars all consume this contract. Since `P1-06` approved vacation reduces targets through the same contract; sickness follows with `P1-08`.
 - There is no complete monthly view, explainable long-term time account, carryover/expiry process, compensatory-time workflow, or period close.
-- On-call/standby time, deployments during on-call periods, night/Sunday/holiday supplements, paid/unpaid classifications, and explicit overtime approval are not implemented as complete product concepts.
+- Standby and call-out are captured as distinct facts, but schedules, credited/payroll treatment, night/Sunday/holiday supplements, and explicit overtime approval remain `P1-23` scope.
 - Employees can submit new manual records but do not yet have a complete self-service correction/history experience for their existing entries.
 - Four eyes is active for every pending time approval: a holder can never approve their own entry. Büro users' own new manual additions become pending and need another holder with sufficient scope. Existing Büro edit/delete behavior still does not create a change request, and the complete correction/request workflow remains `P1-22`.
 - Date-effective substitutes inherit only their base holder's approval scope for an inclusive Berlin-date window. Every approval action resolves current responsibility server-side; an ended or expired substitute is denied even if a stale browser still shows the old approval card.

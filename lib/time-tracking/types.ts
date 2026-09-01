@@ -18,6 +18,166 @@ export type OrgRole = Database['public']['Enums']['org_role'];
 export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode'];
 export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
+export type TimeSegmentKind =
+  | 'work'
+  | 'travel'
+  | 'break'
+  | 'standby'
+  | 'callout'
+  | 'internal_activity';
+
+export const TIME_ACTIVITY_LABELS = {
+  work: 'Arbeit',
+  travel: 'Fahrt',
+  break: 'Pause',
+  standby: 'Bereitschaft',
+  callout: 'Notdienst',
+  internal_activity: 'Intern',
+} as const satisfies Record<TimeSegmentKind, string>;
+
+export type TimeAllocationKind =
+  | 'job'
+  | 'internal_activity'
+  | 'unallocated'
+  | 'none';
+
+export type TimeInternalActivity =
+  | 'internal_work'
+  | 'meeting'
+  | 'training'
+  | 'other';
+
+export type TimeTravelRoute =
+  | 'company_to_site'
+  | 'home_to_site'
+  | 'site_to_site'
+  | 'site_to_company'
+  | 'other'
+  | 'unspecified';
+
+export type TimeTravelRole = 'driver' | 'passenger' | 'unspecified';
+export type TimeStandbyContext = 'on_site' | 'remote' | 'unspecified';
+
+export type TimeActivitySelection =
+  | {
+      kind: 'work' | 'callout';
+      allocationKind: 'job';
+      jobId: string;
+      internalType?: never;
+      travelRoute?: never;
+      travelRole?: never;
+      standbyContext?: never;
+    }
+  | {
+      kind: 'work' | 'callout';
+      allocationKind: 'unallocated';
+      jobId: null;
+      internalType?: never;
+      travelRoute?: never;
+      travelRole?: never;
+      standbyContext?: never;
+    }
+  | {
+      kind: 'travel';
+      allocationKind: 'job';
+      jobId: string;
+      travelRoute: TimeTravelRoute;
+      travelRole: TimeTravelRole;
+      internalType?: never;
+      standbyContext?: never;
+    }
+  | {
+      kind: 'travel';
+      allocationKind: 'unallocated';
+      jobId: null;
+      travelRoute: TimeTravelRoute;
+      travelRole: TimeTravelRole;
+      internalType?: never;
+      standbyContext?: never;
+    }
+  | {
+      kind: 'break';
+      allocationKind: 'none';
+      jobId?: never;
+      internalType?: never;
+      travelRoute?: never;
+      travelRole?: never;
+      standbyContext?: never;
+    }
+  | {
+      kind: 'standby';
+      allocationKind: 'none';
+      standbyContext: TimeStandbyContext;
+      jobId?: never;
+      internalType?: never;
+      travelRoute?: never;
+      travelRole?: never;
+    }
+  | {
+      kind: 'internal_activity';
+      allocationKind: 'internal_activity';
+      internalType: TimeInternalActivity;
+      jobId?: never;
+      travelRoute?: never;
+      travelRole?: never;
+      standbyContext?: never;
+    };
+
+export type TimeTransitionAction =
+  | 'start'
+  | 'switch'
+  | 'end'
+  | 'continue_legacy'
+  | 'end_legacy'
+  | 'recover_continue'
+  | 'recover_end';
+
+export const TIME_TRANSITION_ERROR_CODES = [
+  'time_transition_working_other_org',
+  'time_transition_stale_version',
+  'time_transition_idempotency_conflict',
+  'time_transition_not_authorized',
+  'time_transition_job_not_assigned',
+  'time_transition_job_unavailable',
+  'time_transition_break_mode_automatic',
+  'time_transition_recovery_ack_required',
+  'time_transition_legacy_state_changed',
+  'time_transition_job_terminal',
+  'time_transition_already_open',
+  'time_transition_legacy_open',
+  'time_transition_not_open',
+  'time_transition_employee_missing',
+  'time_transition_segment_required',
+  'time_transition_allocation_invalid',
+  'time_transition_travel_invalid',
+  'time_transition_standby_invalid',
+  'time_transition_recovery_state_changed',
+  'time_transition_invalid_input',
+  'time_transition_action_invalid',
+  'time_transition_failed',
+  'invalid_input',
+  'not_authenticated',
+  'not_a_member',
+  'no_active_org',
+  'on_approved_vacation',
+] as const;
+
+export type TimeTransitionError = (typeof TIME_TRANSITION_ERROR_CODES)[number];
+
+export type TimeTransitionResult =
+  | {
+      success: true;
+      outcome: 'active' | 'ended' | 'no_change' | 'recovery_required';
+      sessionId: string | null;
+      segmentId: string | null;
+      version: number | null;
+      recoveryReason: string | null;
+      replayed: boolean;
+      legacyBridged: boolean;
+      notice?: 'sickness_reported_today';
+    }
+  | { success: false; error: TimeTransitionError };
+
 /**
  * Application-level time entry type with camelCase properties
  */
@@ -34,6 +194,9 @@ export type TimeEntry = {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Present for P1-21 compatibility projections from canonical segments. */
+  activityKind?: TimeSegmentKind;
+  canonicalSegmentId?: string;
 };
 
 /**
@@ -136,6 +299,14 @@ export type WeeklyTimeDataPoint = {
   workMinutes: number;
   breakMinutes: number;
   overtimeMinutes: number;
+  /** Activity categories overlap totals; they are explanatory, not additive. */
+  travelMinutes?: number;
+  /** Included in totalMinutes but excluded from productive work minutes. */
+  standbyMinutes?: number;
+  /** Included in productive work minutes. */
+  calloutMinutes?: number;
+  /** Included in productive work minutes. */
+  internalMinutes?: number;
   /**
    * Resolved daily target (P1-04) for this day; absent when the caller did not
    * resolve targets, in which case the legacy 8h boundary applied.
@@ -170,6 +341,17 @@ export type LiveClockState = {
   timelineSegments: ClockTimelineSegment[];
   activeJobId: string | null;
   activeJobInfo: ClockJobInfo | null;
+  captureModel: 'canonical' | 'legacy' | 'none';
+  sessionId: string | null;
+  sessionVersion: number | null;
+  currentSegmentId: string | null;
+  currentActivity: TimeActivitySelection | null;
+  recoveryReason: string | null;
+  legacyOpen: boolean;
+  standbyMinutes: number;
+  travelMinutes: number;
+  calloutMinutes: number;
+  internalMinutes: number;
   fetchedAt: string;
 };
 

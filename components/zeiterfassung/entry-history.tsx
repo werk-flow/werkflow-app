@@ -81,6 +81,24 @@ function formatDateTime(timestamp: string): string {
   });
 }
 
+function getEntryTypeLabel(entry: TimeEntry): string {
+  const activityLabels = {
+    work: 'Arbeit',
+    travel: 'Fahrt',
+    break: 'Pause',
+    standby: 'Bereitschaft',
+    callout: 'Notdienst',
+    internal_activity: 'Interne Tätigkeit',
+  } as const;
+  const direction = entry.entryType === 'clock_in' || entry.entryType === 'break_start'
+    ? 'Start'
+    : 'Ende';
+  if (entry.activityKind) return `${activityLabels[entry.activityKind]} · ${direction}`;
+  if (entry.entryType === 'break_start') return 'Pause starten';
+  if (entry.entryType === 'break_end') return 'Pause beenden';
+  return entry.entryType === 'clock_in' ? 'Einstempeln' : 'Ausstempeln';
+}
+
 export function EntryHistory({
   organizationId,
   members = []
@@ -108,7 +126,7 @@ export function EntryHistory({
   };
 
   const view = useLiveView<EntryWithProfile[]>({
-    tables: ['time_entries'],
+    tables: ['time_entries', 'time_sessions', 'time_segments'],
     read: async (): Promise<LiveViewResult<EntryWithProfile[]>> => {
       // Without a complete date range there is nothing to read; keep whatever
       // was shown last.
@@ -285,9 +303,7 @@ export function EntryHistory({
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">
-                    {entry.entryType === 'clock_in'
-                      ? 'Einstempeln'
-                      : 'Ausstempeln'}
+                    {getEntryTypeLabel(entry)}
                   </span>
                   <span
                     className={cn(
@@ -331,9 +347,7 @@ export function EntryHistory({
                       {getDisplayName(entry)}
                     </TableCell>
                     <TableCell>
-                      {entry.entryType === 'clock_in'
-                        ? 'Einstempeln'
-                        : 'Ausstempeln'}
+                      {getEntryTypeLabel(entry)}
                     </TableCell>
                     <TableCell>{formatDateTime(entry.timestamp)}</TableCell>
                     <TableCell>

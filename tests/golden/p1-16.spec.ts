@@ -191,7 +191,8 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
       is_completed: true,
       last_status_changed_by: world.users.employee.id,
     });
-    expect(applied.timeEntries).toHaveLength(1);
+    expect(applied.timeSegments).toHaveLength(1);
+    expect(applied.timeEntries).toHaveLength(0);
     expect(applied.inventoryMovements).toHaveLength(2);
     expect(applied.documentLinks).toHaveLength(1);
     expect(artifacts.artifacts).toHaveLength(1);
@@ -228,6 +229,7 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
         .getByTestId('work-lifecycle-card')
         .locator('[data-slot="badge"]')
         .getByText('Ausführung abgeschlossen', { exact: true })
+        .filter({ visible: true })
     ).toBeVisible({ timeout: 20_000 });
     await expect(pack.getByTestId('field-primary-next-action')).toHaveCount(0);
     const readOnlyArtifacts = pack.getByTestId('work-artifacts-section');

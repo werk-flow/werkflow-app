@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:unit": "bun test lib",
+    "test:sql:p121": "bun scripts/run-sql-assertions.ts supabase/tests/p1_21_time_segments.sql",
     "test:golden": "bun scripts/run-playwright.ts certification golden",
     "test:golden:focused": "bun scripts/run-playwright.ts iteration golden",
     "test:golden:gg00": "bun scripts/run-playwright.ts iteration golden --grep @GG-00",

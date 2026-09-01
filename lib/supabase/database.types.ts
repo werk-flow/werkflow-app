@@ -6730,12 +6730,17 @@ export type Database = {
       };
       time_entries: {
         Row: {
+          capture_source:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
           created_at: string;
           entry_type: string;
           id: string;
           is_manual: boolean;
           job_id: string | null;
+          operation_id: string | null;
           organization_id: string;
+          recovery_reason: string | null;
           reviewed_at: string | null;
           reviewed_by: string | null;
           status: Database["public"]["Enums"]["time_entry_status"];
@@ -6744,12 +6749,17 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          capture_source?:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
           created_at?: string;
           entry_type: string;
           id?: string;
           is_manual?: boolean;
           job_id?: string | null;
+          operation_id?: string | null;
           organization_id: string;
+          recovery_reason?: string | null;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           status?: Database["public"]["Enums"]["time_entry_status"];
@@ -6758,12 +6768,17 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          capture_source?:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
           created_at?: string;
           entry_type?: string;
           id?: string;
           is_manual?: boolean;
           job_id?: string | null;
+          operation_id?: string | null;
           organization_id?: string;
+          recovery_reason?: string | null;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           status?: Database["public"]["Enums"]["time_entry_status"];
@@ -6780,7 +6795,343 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "time_entries_operation_fkey";
+            columns: ["operation_id"];
+            isOneToOne: false;
+            referencedRelation: "time_operations";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "time_entries_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      time_operations: {
+        Row: {
+          actor_id: string | null;
+          created_at: string;
+          employee_record_id: string;
+          expected_session_id: string | null;
+          expected_version: number | null;
+          id: string;
+          operation_kind: Database["public"]["Enums"]["time_operation_kind"];
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          resulting_segment_id: string | null;
+          resulting_session_id: string | null;
+          resulting_version: number | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          created_at?: string;
+          employee_record_id: string;
+          expected_session_id?: string | null;
+          expected_version?: number | null;
+          id: string;
+          operation_kind: Database["public"]["Enums"]["time_operation_kind"];
+          organization_id: string;
+          request_hash: string;
+          result_payload: Json;
+          resulting_segment_id?: string | null;
+          resulting_session_id?: string | null;
+          resulting_version?: number | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          created_at?: string;
+          employee_record_id?: string;
+          expected_session_id?: string | null;
+          expected_version?: number | null;
+          id?: string;
+          operation_kind?: Database["public"]["Enums"]["time_operation_kind"];
+          organization_id?: string;
+          request_hash?: string;
+          result_payload?: Json;
+          resulting_segment_id?: string | null;
+          resulting_session_id?: string | null;
+          resulting_version?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_operations_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_operations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_operations_result_segment_fkey";
+            columns: ["resulting_segment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_segments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_operations_result_session_fkey";
+            columns: ["resulting_session_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_sessions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_segment_events: {
+        Row: {
+          actor_id: string | null;
+          created_at: string;
+          event_payload: Json;
+          event_sequence: number;
+          event_type: Database["public"]["Enums"]["time_segment_event_type"];
+          id: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+          segment_id: string | null;
+          session_id: string | null;
+          source: Database["public"]["Enums"]["time_capture_source"];
+        };
+        Insert: {
+          actor_id?: string | null;
+          created_at?: string;
+          event_payload?: Json;
+          event_sequence?: never;
+          event_type: Database["public"]["Enums"]["time_segment_event_type"];
+          id?: string;
+          occurred_at: string;
+          operation_id: string;
+          organization_id: string;
+          segment_id?: string | null;
+          session_id?: string | null;
+          source: Database["public"]["Enums"]["time_capture_source"];
+        };
+        Update: {
+          actor_id?: string | null;
+          created_at?: string;
+          event_payload?: Json;
+          event_sequence?: never;
+          event_type?: Database["public"]["Enums"]["time_segment_event_type"];
+          id?: string;
+          occurred_at?: string;
+          operation_id?: string;
+          organization_id?: string;
+          segment_id?: string | null;
+          session_id?: string | null;
+          source?: Database["public"]["Enums"]["time_capture_source"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_segment_events_operation_fkey";
+            columns: ["operation_id"];
+            isOneToOne: false;
+            referencedRelation: "time_operations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_segment_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_segment_events_segment_fkey";
+            columns: ["segment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_segments";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_segment_events_session_fkey";
+            columns: ["session_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_sessions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_segments: {
+        Row: {
+          allocation_kind: Database["public"]["Enums"]["time_allocation_kind"];
+          created_at: string;
+          employee_record_id: string;
+          end_source: Database["public"]["Enums"]["time_capture_source"] | null;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          internal_type:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
+          job_id: string | null;
+          kind: Database["public"]["Enums"]["time_segment_kind"];
+          organization_id: string;
+          session_id: string;
+          standby_context:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          start_source: Database["public"]["Enums"]["time_capture_source"];
+          started_at: string;
+          started_by: string | null;
+          travel_role: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route: Database["public"]["Enums"]["time_travel_route"] | null;
+          updated_at: string;
+        };
+        Insert: {
+          allocation_kind: Database["public"]["Enums"]["time_allocation_kind"];
+          created_at?: string;
+          employee_record_id: string;
+          end_source?:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
+          job_id?: string | null;
+          kind: Database["public"]["Enums"]["time_segment_kind"];
+          organization_id: string;
+          session_id: string;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          start_source: Database["public"]["Enums"]["time_capture_source"];
+          started_at: string;
+          started_by?: string | null;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+          updated_at?: string;
+        };
+        Update: {
+          allocation_kind?: Database["public"]["Enums"]["time_allocation_kind"];
+          created_at?: string;
+          employee_record_id?: string;
+          end_source?:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          internal_type?:
+            | Database["public"]["Enums"]["planning_internal_type"]
+            | null;
+          job_id?: string | null;
+          kind?: Database["public"]["Enums"]["time_segment_kind"];
+          organization_id?: string;
+          session_id?: string;
+          standby_context?:
+            | Database["public"]["Enums"]["time_standby_context"]
+            | null;
+          start_source?: Database["public"]["Enums"]["time_capture_source"];
+          started_at?: string;
+          started_by?: string | null;
+          travel_role?: Database["public"]["Enums"]["time_travel_role"] | null;
+          travel_route?:
+            | Database["public"]["Enums"]["time_travel_route"]
+            | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_segments_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_segments_job_org_fkey";
+            columns: ["job_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_segments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_segments_session_org_fkey";
+            columns: ["session_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_sessions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      time_sessions: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          employee_record_id: string;
+          ended_at: string | null;
+          ended_by: string | null;
+          id: string;
+          organization_id: string;
+          recovery_reason: string | null;
+          started_at: string;
+          status: Database["public"]["Enums"]["time_session_status"];
+          updated_at: string;
+          user_id: string;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          organization_id: string;
+          recovery_reason?: string | null;
+          started_at: string;
+          status?: Database["public"]["Enums"]["time_session_status"];
+          updated_at?: string;
+          user_id: string;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id?: string;
+          ended_at?: string | null;
+          ended_by?: string | null;
+          id?: string;
+          organization_id?: string;
+          recovery_reason?: string | null;
+          started_at?: string;
+          status?: Database["public"]["Enums"]["time_session_status"];
+          updated_at?: string;
+          user_id?: string;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_sessions_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_sessions_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
@@ -7256,6 +7607,7 @@ export type Database = {
           organization_id: string;
           revision_id: string;
           time_entry_id: string | null;
+          time_segment_id: string | null;
         };
         Insert: {
           created_at?: string;
@@ -7266,6 +7618,7 @@ export type Database = {
           organization_id: string;
           revision_id: string;
           time_entry_id?: string | null;
+          time_segment_id?: string | null;
         };
         Update: {
           created_at?: string;
@@ -7276,6 +7629,7 @@ export type Database = {
           organization_id?: string;
           revision_id?: string;
           time_entry_id?: string | null;
+          time_segment_id?: string | null;
         };
         Relationships: [
           {
@@ -7305,6 +7659,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "time_entries";
             referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_revision_sources_time_segment_fkey";
+            columns: ["time_segment_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_segments";
+            referencedColumns: ["id", "organization_id"];
           },
         ];
       };
@@ -9168,6 +9529,15 @@ export type Database = {
         };
         Returns: number;
       };
+      close_time_session_for_member_removal: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_target_user_id: string;
+        };
+        Returns: boolean;
+      };
       complete_maintenance_due_work: {
         Args: {
           p_actor_id: string;
@@ -9961,6 +10331,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      link_work_artifact_time_segment: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_description: string;
+          p_expected_version: number;
+          p_link_id: string;
+          p_organization_id: string;
+          p_revision_id: string;
+          p_time_segment_id: string;
+        };
+        Returns: Json;
+      };
       link_work_dependency_artifact_approval: {
         Args: {
           p_action_id: string;
@@ -10206,6 +10589,15 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      remove_member_with_time_capture: {
+        Args: {
+          p_actor_id: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_target_user_id: string;
+        };
+        Returns: boolean;
       };
       remove_work_dependency: {
         Args: {
@@ -10970,6 +11362,26 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      transition_time_activity: {
+        Args: {
+          p_acknowledge_long?: boolean;
+          p_action: Database["public"]["Enums"]["time_operation_kind"];
+          p_actor_id: string;
+          p_allocation_kind?: Database["public"]["Enums"]["time_allocation_kind"];
+          p_expected_session_id?: string;
+          p_expected_version?: number;
+          p_internal_type?: Database["public"]["Enums"]["planning_internal_type"];
+          p_job_id?: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+          p_segment_kind?: Database["public"]["Enums"]["time_segment_kind"];
+          p_standby_context?: Database["public"]["Enums"]["time_standby_context"];
+          p_travel_role?: Database["public"]["Enums"]["time_travel_role"];
+          p_travel_route?: Database["public"]["Enums"]["time_travel_route"];
+        };
+        Returns: Json;
+      };
       transition_work_execution: {
         Args: {
           p_actor_id: string;
@@ -11576,8 +11988,53 @@ export type Database = {
         | "closed_without_visit"
         | "duplicate";
       subscription_status: "active" | "inactive" | "canceled" | "trialing";
+      time_allocation_kind:
+        | "job"
+        | "internal_activity"
+        | "unallocated"
+        | "none";
+      time_capture_source:
+        | "employee"
+        | "manager"
+        | "system_recovery"
+        | "legacy_compatibility";
       time_entry_status: "pending" | "approved" | "rejected" | "pending_delete";
+      time_operation_kind:
+        | "start"
+        | "switch"
+        | "end"
+        | "continue_legacy"
+        | "end_legacy"
+        | "recover_continue"
+        | "recover_end"
+        | "system_repair";
+      time_segment_event_type:
+        | "session_started"
+        | "segment_started"
+        | "segment_ended"
+        | "session_ended"
+        | "recovery_required"
+        | "recovery_acknowledged"
+        | "legacy_closed"
+        | "system_repair";
+      time_segment_kind:
+        | "work"
+        | "travel"
+        | "break"
+        | "standby"
+        | "callout"
+        | "internal_activity";
+      time_session_status: "open" | "closed" | "recovery_required";
+      time_standby_context: "on_site" | "remote" | "unspecified";
       time_tracking_break_mode: "manual" | "automatic";
+      time_travel_role: "driver" | "passenger" | "unspecified";
+      time_travel_route:
+        | "company_to_site"
+        | "home_to_site"
+        | "site_to_site"
+        | "site_to_company"
+        | "other"
+        | "unspecified";
       work_artifact_action_type:
         | "review_requested"
         | "review_withdrawn"
@@ -12021,8 +12478,54 @@ export const Constants = {
         "duplicate",
       ],
       subscription_status: ["active", "inactive", "canceled", "trialing"],
+      time_allocation_kind: ["job", "internal_activity", "unallocated", "none"],
+      time_capture_source: [
+        "employee",
+        "manager",
+        "system_recovery",
+        "legacy_compatibility",
+      ],
       time_entry_status: ["pending", "approved", "rejected", "pending_delete"],
+      time_operation_kind: [
+        "start",
+        "switch",
+        "end",
+        "continue_legacy",
+        "end_legacy",
+        "recover_continue",
+        "recover_end",
+        "system_repair",
+      ],
+      time_segment_event_type: [
+        "session_started",
+        "segment_started",
+        "segment_ended",
+        "session_ended",
+        "recovery_required",
+        "recovery_acknowledged",
+        "legacy_closed",
+        "system_repair",
+      ],
+      time_segment_kind: [
+        "work",
+        "travel",
+        "break",
+        "standby",
+        "callout",
+        "internal_activity",
+      ],
+      time_session_status: ["open", "closed", "recovery_required"],
+      time_standby_context: ["on_site", "remote", "unspecified"],
       time_tracking_break_mode: ["manual", "automatic"],
+      time_travel_role: ["driver", "passenger", "unspecified"],
+      time_travel_route: [
+        "company_to_site",
+        "home_to_site",
+        "site_to_site",
+        "site_to_company",
+        "other",
+        "unspecified",
+      ],
       work_artifact_action_type: [
         "review_requested",
         "review_withdrawn",

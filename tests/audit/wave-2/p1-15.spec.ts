@@ -668,8 +668,19 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await timeEntryOptions.click();
     await timeEntryDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();
     await expect
-      .poll(async () => (await getWorkArtifactState(world.orgId, { jobNumber })).sources.length)
-      .toBe(1);
+      .poll(async () => {
+        const sources = (await getWorkArtifactState(world.orgId, { jobNumber })).sources;
+        return sources.map((source) => ({
+          timeEntryId: source.time_entry_id,
+          timeSegmentId: source.time_segment_id,
+        }));
+      })
+      .toEqual([
+        {
+          timeEntryId: null,
+          timeSegmentId: expect.any(String),
+        },
+      ]);
     await expect(dialog.getByRole('button', { name: 'Export', exact: true })).toBeEnabled();
     await dialog.getByText('Nachweiserwartung erfüllen').click();
     await dialog.getByRole('button', { name: /Mit Version 1 erfüllen/ }).click();
@@ -738,7 +749,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     ).toBe(true);
     expect(state.documents.filter((row) => row.relation === 'rendered_export')).toHaveLength(1);
     expect(state.documents.find((row) => row.relation === 'rendered_export')).toMatchObject({
-      renderer_version: 'p1-15-html-v3',
+      renderer_version: 'p1-21-html-v4',
     });
     expect(state.documents.find((row) => row.relation === 'rendered_export')?.content_hash).toMatch(
       /^[0-9a-f]{64}$/

@@ -282,6 +282,8 @@ const eslintConfig = defineConfig([
     "tests/golden/.artifacts/**",
     "tests/audit/.report/**",
     "tests/audit/.results/**",
+    "tests/canary/.report/**",
+    "tests/canary/.results/**",
     ".agent-logs/**",
   ]),
   // Everything (scripts and tests included): auth scope discipline.

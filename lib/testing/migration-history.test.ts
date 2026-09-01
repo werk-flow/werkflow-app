@@ -4,6 +4,7 @@ import {
   compareMigrationVersions,
   migrationVersionFromFileName,
 } from './migration-history';
+import { validateSupabaseCliLink } from './dev-migration-history';
 
 describe('migration history parity', () => {
   test('extracts only committed SQL migration versions', () => {
@@ -34,5 +35,15 @@ describe('migration history parity', () => {
         remote: ['20260829120000', '20260829120100'],
       }),
     ).toEqual([]);
+  });
+
+  test('rejects a production-linked Supabase CLI before migration checks', () => {
+    const nonDevProjectRef = 'non-dev-project';
+
+    expect(validateSupabaseCliLink(null)).toEqual([]);
+    expect(validateSupabaseCliLink('mbkkzuqjbdvzelqvuzcn')).toEqual([]);
+    expect(validateSupabaseCliLink(nonDevProjectRef)).toEqual([
+      `Supabase CLI is linked to ${nonDevProjectRef}, not DEV mbkkzuqjbdvzelqvuzcn. Relink DEV before any CLI migration command.`,
+    ]);
   });
 });

@@ -29,6 +29,14 @@ describe('Playwright run inventory', () => {
     expect(retainedWorldState(runEntry())).toBe('none');
     expect(
       retainedWorldState(
+        runEntry({
+          world: null,
+          retainedAt: '2026-08-29T15:00:00.000Z',
+        }),
+      ),
+    ).toBe('none');
+    expect(
+      retainedWorldState(
         runEntry({ retainedAt: '2026-08-29T16:00:00.000Z' }),
       ),
     ).toBe('open');

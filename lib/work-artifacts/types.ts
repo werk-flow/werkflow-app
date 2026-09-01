@@ -125,6 +125,12 @@ export type WorkArtifactMutationResult =
   | { success: true; artifactId: string; version: number; status: WorkArtifactStatus; data?: Json }
   | { success: false; error: string };
 
+export type WorkArtifactTimeSourceOption = {
+  id: string;
+  label: string;
+  sourceType: 'time_entry' | 'time_segment';
+};
+
 export const WORK_ARTIFACT_KINDS = [
   'site_diary', 'work_report', 'measurement', 'defect', 'change_work',
 ] as const satisfies readonly WorkArtifactKind[];

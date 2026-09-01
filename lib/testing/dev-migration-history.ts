@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { z } from 'zod';
@@ -11,6 +11,36 @@ import { requireEnv } from '../../tests/golden/support/env';
 
 const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
 const migrationRowsSchema = z.array(z.object({ version: z.string() }));
+
+export function validateSupabaseCliLink(
+  linkedProjectRef: string | null,
+): string[] {
+  if (linkedProjectRef === null || linkedProjectRef === DEV_PROJECT_REF) {
+    return [];
+  }
+
+  return [
+    `Supabase CLI is linked to ${linkedProjectRef}, not DEV ${DEV_PROJECT_REF}. Relink DEV before any CLI migration command.`,
+  ];
+}
+
+function readLinkedProjectRef(repositoryRoot: string): string | null {
+  try {
+    return readFileSync(
+      resolve(repositoryRoot, 'supabase/.temp/project-ref'),
+      'utf8',
+    ).trim();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
 
 export function committedMigrationVersions(
   repositoryRoot = process.cwd(),
@@ -50,10 +80,13 @@ async function remoteDevMigrationVersions(): Promise<string[]> {
 export async function getDevMigrationHistoryProblems(
   repositoryRoot = process.cwd(),
 ): Promise<string[]> {
-  return compareMigrationVersions({
-    committed: committedMigrationVersions(repositoryRoot),
-    remote: await remoteDevMigrationVersions(),
-  });
+  return [
+    ...validateSupabaseCliLink(readLinkedProjectRef(repositoryRoot)),
+    ...compareMigrationVersions({
+      committed: committedMigrationVersions(repositoryRoot),
+      remote: await remoteDevMigrationVersions(),
+    }),
+  ];
 }
 
 export async function assertDevMigrationHistoryParity(

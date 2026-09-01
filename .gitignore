@@ -56,3 +56,4 @@ tests/canary/.report/
 
 # Agent working logs (review transcripts, server logs) — never Playwright-owned
 .agent-logs/
+.coderabbit-*.jsonl

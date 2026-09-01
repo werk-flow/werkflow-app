@@ -422,7 +422,7 @@ export function JobDetailContent({
       avatarPath: string | null;
     }>;
   }>({
-    tables: ['time_entries'],
+    tables: ['time_entries', 'time_sessions', 'time_segments'],
     read: async () => {
       const result = await getTimeEntriesForJob(liveJob.id);
       if (!result.success) return { ok: false };
@@ -652,7 +652,13 @@ export function JobDetailContent({
   );
   const artifactTimeEntryOptions = useMemo(
     () => timeEntries.filter((entry) => entry.jobId === liveJob.id && entry.entryType === 'clock_in')
-      .map((entry) => ({ id: entry.id, label: formatDateTime(entry.timestamp) })),
+      .map((entry) => ({
+        id: entry.canonicalSegmentId ?? entry.id,
+        label: formatDateTime(entry.timestamp),
+        sourceType: entry.canonicalSegmentId
+          ? ('time_segment' as const)
+          : ('time_entry' as const),
+      })),
     [liveJob.id, timeEntries]
   );
 

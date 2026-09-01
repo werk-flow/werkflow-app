@@ -44,6 +44,17 @@ function createDefaultClockState(
     timelineSegments: [],
     activeJobId: null,
     activeJobInfo: null,
+    captureModel: 'none',
+    sessionId: null,
+    sessionVersion: null,
+    currentSegmentId: null,
+    currentActivity: null,
+    recoveryReason: null,
+    legacyOpen: false,
+    standbyMinutes: 0,
+    travelMinutes: 0,
+    calloutMinutes: 0,
+    internalMinutes: 0,
     fetchedAt: new Date().toISOString(),
   };
 }

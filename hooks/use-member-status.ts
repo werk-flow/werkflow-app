@@ -57,7 +57,12 @@ export function useMemberStatus({
   refetch: () => Promise<void>;
 } {
   const view = useLiveView<MemberStatusMap>({
-    tables: ['time_entries', 'organization_settings'],
+    tables: [
+      'time_entries',
+      'time_sessions',
+      'time_segments',
+      'organization_settings',
+    ],
     read: async (): Promise<LiveViewResult<MemberStatusMap>> => {
       if (!organizationId || memberIds.length === 0) {
         return { ok: true, data: EMPTY_STATUS_MAP };

@@ -29,7 +29,7 @@ export function useActiveJobsProvider({
   const { activeOrgId } = useOrganization();
 
   const view = useLiveView<string[]>({
-    tables: ['time_entries'],
+    tables: ['time_entries', 'time_sessions', 'time_segments'],
     read: async (): Promise<LiveViewResult<string[]>> => {
       if (!activeOrgId) return { ok: true, data: [] };
       const result = await getActiveJobIdsForOrg(activeOrgId);

@@ -476,7 +476,9 @@ export function CalendarContainer({
       requestId: number,
       requestOrgId: string,
     ) => {
-      const entryIds = sourceEntries.map((e) => e.id);
+      const entryIds = sourceEntries
+        .filter((entry) => !entry.canonicalSegmentId)
+        .map((entry) => entry.id);
       if (entryIds.length === 0) {
         setChangeRequestMap({});
         return;
@@ -770,7 +772,12 @@ export function CalendarContainer({
     [],
   );
   useLiveView<null>({
-    tables: ["time_entries", "entry_change_requests"],
+    tables: [
+      "time_entries",
+      "time_sessions",
+      "time_segments",
+      "entry_change_requests",
+    ],
     read: async () => {
       await fetchEntries(true);
       return { ok: true, data: null };

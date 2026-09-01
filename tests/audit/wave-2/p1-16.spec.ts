@@ -519,7 +519,8 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       getInventoryLedgerState(world.orgId, world.inventory.itemId, world.inventory.locationId),
       getWorkLifecycleState(world.orgId, { jobNumber: mainNumber }),
     ]);
-    expect(applied.timeEntries).toHaveLength(1);
+    expect(applied.timeSegments).toHaveLength(1);
+    expect(applied.timeEntries).toHaveLength(0);
     expect(applied.inventoryMovements).toHaveLength(2);
     expect(applied.materials.some((line) => Number(line.planned_quantity) === 3)).toBe(true);
     expect(

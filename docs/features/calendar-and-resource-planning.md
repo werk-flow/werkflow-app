@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-08-30
+Status: living — last reviewed 2026-08-31
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations, and materials needed to deliver it.
 
@@ -51,6 +51,7 @@ The current `/kalender` implementation already includes:
 - since `P1-16`, the assigned-worker work pack projects the current planned window, dispatch acknowledgement/challenge and the same readiness dimensions around one next action. Opening or executing the pack never moves an occurrence, rewrites actual time, acknowledges dispatch automatically or changes a customer commitment; calendar and dispatch remain the authoritative planning sources.
 - since `P1-19`, reactive service reuses the normal job visit and dispatch path after a manager links the case to one existing job. The service case does not own a second appointment, assignment or dispatch state, and service-case updates never move the plan.
 - since `P1-20`, a service-owned due item can deliberately create one normal visit job and then one normal P1-11 occurrence. The maintenance plan owns cadence, due identity and next-due calculation; calendar owns the appointment, assignment, capacity/qualification assessment and one/future/series scheduling semantics. Moving or cancelling one appointment never rewrites the maintenance revision or unrelated due items.
+- since `P1-21`, actual attendance has a stable session and explicit work, travel, break, standby/on-call, call-out and internal-activity segments. Calendar working-time blocks use the same legacy-plus-canonical compatibility projection as every other time reader, split cross-midnight display by Europe/Berlin date without mutating the source, and keep job allocation visible. Planning occurrences, moves and dispatches never create or rewrite these actual facts; canonical projected rows remain read-only until `P1-22`.
 
 This is an operational scheduling foundation with recurring people-capacity planning and first-class dispatch, acknowledgement, parked-work context, and customer-commitment distinction. It is not yet the complete route/provider, tool/vehicle/material-reservation, external-calendar, or maintenance-contract product described below.
 

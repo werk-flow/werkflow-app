@@ -5,6 +5,8 @@
 // RealtimeTable type derives from this array so list and type cannot drift.
 export const REALTIME_TABLES = [
   "time_entries",
+  "time_sessions",
+  "time_segments",
   "entry_change_requests",
   "organization_invites",
   "organization_members",

@@ -50,7 +50,7 @@ export function useCurrentUserStatus({
   refetch: () => Promise<void>;
 } {
   const view = useLiveView<CurrentUserStatus>({
-    tables: ['time_entries'],
+    tables: ['time_entries', 'time_sessions', 'time_segments'],
     read: async (): Promise<LiveViewResult<CurrentUserStatus>> => {
       if (!organizationId || !userId) {
         return { ok: true, data: CLOCKED_OUT_STATUS };

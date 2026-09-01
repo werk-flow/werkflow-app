@@ -131,7 +131,10 @@ export async function FieldWorkPackPage({
   const timeEntryOptions = timeEntries
     .filter((entry) => entry.entryType === "clock_in" && entry.jobId === job.id)
     .map((entry) => ({
-      id: entry.id,
+      id: entry.canonicalSegmentId ?? entry.id,
+      sourceType: entry.canonicalSegmentId
+        ? ("time_segment" as const)
+        : ("time_entry" as const),
       label: new Intl.DateTimeFormat("de-DE", {
         dateStyle: "medium",
         timeStyle: "short",

@@ -62,7 +62,7 @@ export function detailActionsButton(page: Page): Locator {
 }
 
 export async function setJobStatus(page: Page, status: string): Promise<void> {
-  const card = page.getByTestId('work-lifecycle-card');
+  const card = page.getByRole('main').getByTestId('work-lifecycle-card');
   const transition = async (label: string): Promise<void> => {
     await card.getByRole('button', { name: label, exact: true }).click();
     const dialog = page.getByRole('dialog');
@@ -151,8 +151,10 @@ export function visibleMatchingText(page: Page, text: RegExp): Locator {
 }
 
 export function clockInConfirmationButton(page: Page): Locator {
-  // The confirmation button deliberately excludes the title-bearing clock trigger.
-  return page.locator('button:not([title])', { hasText: 'Einstempeln' });
+  return page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Zeiterfassung starten' }) })
+    .getByRole('button', { name: 'Starten', exact: true });
 }
 
 export function firstDailyTimeSummary(page: Page): Locator {

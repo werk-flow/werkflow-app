@@ -64,6 +64,8 @@ export function useWeeklyTimeData({
   const view = useLiveView<WeekSnapshot>({
     tables: [
       'time_entries',
+      'time_sessions',
+      'time_segments',
       // Targets change with schedules, conditions, the holiday region, and
       // closure days — refresh the week when any of them move.
       'work_schedules',

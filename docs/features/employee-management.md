@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-08-31
 
 Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
 
@@ -20,7 +20,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline (updated 8 August 2026 through slice `P1-09`) includes:
+The implemented baseline (updated through slice `P1-21`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -107,6 +107,10 @@ Dispatch acknowledgement (`P1-12`, 2026-08-14):
 
 - The distinction the assignment contract demands — planned assignment, accepted/acknowledged assignment, actual attendance, recorded time — now has its acknowledged leg: employees confirm or challenge the CURRENT revision of a dispatched work instruction through one simple action on the job detail and `/aufgaben`. Acknowledgement binds to (dispatch revision, employee record) with the acting user recorded separately; material schedule/reassignment changes invalidate it transactionally; personnel records without an active login show the labeled „nicht möglich" state instead of a fabricated confirmation. None of these facts stands in for attendance or recorded time. The dispatch model itself is calendar-owned (decision record 0002).
 
+Explicit time activities (`P1-21`, 2026-08-31):
+
+- Each active organization membership can own at most one stable attendance session with at most one open factual activity segment. Employees, Admin and Büro capture only their own work, travel, break, standby/on-call, call-out or fixed internal activity through the global clock; every switch is atomic, version-checked, idempotent and attributable. Removing a membership closes its canonical session and segment before the existing destructive cleanup continues, while the personnel record survives as before. Managers inspect the same compatibility projection but do not mutate another person's live session; correction and approval remain `P1-22`.
+
 Important current limitations:
 
 - Teams and operational qualification coverage are implemented through `P1-09`. Capacity conflicts, minimum staffing, team availability, shift rotations, seasonal patterns, and date-specific schedule overrides remain `P1-11`.
@@ -115,7 +119,7 @@ Important current limitations:
 - Capacity conflicts, minimum staffing, and availability planning that combines absence remain `P1-11`; the calendar shows minimal visible absence signals only.
 - Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents (`P1-24`).
 - There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, payroll profile, payroll export, or accounting handoff.
-- Current member removal remains destructive: it attempts to close an active session, deletes that member's organization time entries, and then deletes the membership. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
+- Current member removal remains destructive for legacy time: it closes an active canonical or legacy session, deletes that member's organization legacy `time_entries`, and then deletes the membership. Stable canonical sessions, segments, operations and events remain attached to the surviving personnel record so captured history is not erased. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
 - Custom roles, custom role names, and granular permission editing are intentionally not part of Phase 1; fixed roles plus scoped responsibilities are the accepted safe model.
 - Employees cannot yet view or propose corrections to their own personnel record; the self-service surface is later scope.
 
