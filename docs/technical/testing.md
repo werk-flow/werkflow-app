@@ -173,7 +173,7 @@ P1-13 adds `lib/work-templates/schemas.test.ts` for bounded drafts, blank normal
 
 ## What Is Not Covered Yet
 
-Playwright discovery finds **132 Golden tests in 22 files**, **117 audit tests in 16 files**, and **9 canary tests in 1 file**. `p1-21.spec.ts` is the last-sorting staged Golden spec with four persisted stage tags; its Wave 2 audit maps all 64 catalog flows and owns run-day +110 through +114. The unit suite contains **435 tests across 41 files**. The complete evidence record lives in `docs/plans/golden-gate-log.md`. Future specs must address dispatch, template/application, lifecycle, artifact, evidence, time, material, blocker, handover/package, installed-equipment, service-case, maintenance and canonical time records by run-owned identities rather than assume any domain is empty.
+Playwright discovery finds **132 Golden tests in 22 files**, **117 audit tests in 16 files**, and **9 canary tests in 1 file**. `p1-21.spec.ts` is the last-sorting staged Golden spec with four persisted stage tags; its Wave 2 audit maps all 64 catalog flows and owns run-day +110 through +114. The unit suite contains **454 tests across 42 files**. The complete evidence record lives in `docs/plans/golden-gate-log.md`. Future specs must address dispatch, template/application, lifecycle, artifact, evidence, time, material, blocker, handover/package, installed-equipment, service-case, maintenance and canonical time records by run-owned identities rather than assume any domain is empty.
 
 ### Live-provider limits after the deterministic/canary split
 
