@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "review": "bun scripts/run-coderabbit-review.ts",
+    "review:doctor": "bun scripts/run-coderabbit-review.ts --doctor",
     "test:unit": "bun test lib",
     "test:sql:p121": "bun scripts/run-sql-assertions.ts supabase/tests/p1_21_time_segments.sql",
     "test:golden": "bun scripts/run-playwright.ts certification golden",

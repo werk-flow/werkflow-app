@@ -8,9 +8,12 @@
 //  3. Status header — every doc declares a Status line within its first 6 lines.
 //  4. Skill mirror sync — every skill present in both .claude/skills/ and .agents/skills/
 //     is byte-identical in the two locations (the mirror is maintained by hand).
+//  5. CodeRabbit workflow — agent-facing instructions use the repository wrapper and
+//     cannot reintroduce installer, raw CLI, or direct WSL command examples.
 
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, resolve, relative, sep } from "node:path";
+import { findCodeRabbitInstructionViolations } from "../lib/testing/coderabbit-review-command";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const docsRoot = join(repoRoot, "docs");
@@ -112,6 +115,42 @@ if (existsSync(claudeSkillsRoot) && existsSync(agentsSkillsRoot)) {
       problems.push(`skills: ${skillName} exists only in .agents/skills — mirror it or record the exception in docs/README.md`);
     }
   }
+}
+
+// 5. CodeRabbit workflow
+const codeRabbitInstructionFiles = [
+  join(repoRoot, "AGENTS.md"),
+  join(repoRoot, ".claude", "skills", "coderabbit-review", "SKILL.md"),
+  join(docsRoot, "technical", "coderabbit.md"),
+];
+for (const file of codeRabbitInstructionFiles) {
+  if (!existsSync(file)) {
+    const relFile = relative(repoRoot, file).split(sep).join("/");
+    problems.push(`coderabbit: expected instruction file ${relFile} is missing`);
+    continue;
+  }
+  const content = readFileSync(file, "utf8");
+  const relFile = relative(repoRoot, file).split(sep).join("/");
+  if (!content.includes("bun run review")) {
+    problems.push(
+      `coderabbit: ${relFile} must route agents through bun run review`,
+    );
+  }
+  for (const violation of findCodeRabbitInstructionViolations(content)) {
+    problems.push(
+      `coderabbit: ${relFile} contains forbidden ${violation} instructions; use bun run review`,
+    );
+  }
+}
+
+const packageJsonContent = readFileSync(join(repoRoot, "package.json"), "utf8");
+if (!packageJsonContent.includes('"review": "bun scripts/run-coderabbit-review.ts"')) {
+  problems.push(
+    "coderabbit: package.json must expose bun scripts/run-coderabbit-review.ts as the review script",
+  );
+}
+if (!existsSync(join(repoRoot, "scripts", "run-coderabbit-review.ts"))) {
+  problems.push("coderabbit: scripts/run-coderabbit-review.ts is missing");
 }
 
 if (problems.length > 0) {

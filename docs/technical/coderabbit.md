@@ -1,6 +1,6 @@
-# CodeRabbit Reviews
+# CodeRabbit reviews
 
-Status: living — last reviewed 2026-08-27
+Status: living — last reviewed 2026-09-01
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -75,94 +75,53 @@ Do not rewrite `.coderabbit.yaml` for every feature review. Keep durable review 
 
 Use the CLI `-c` / `--config` option to attach the smallest set of feature documents that explains the current review. This keeps temporary or highly specific context out of the persistent YAML. Feature docs must clearly distinguish implemented behavior from future scope so CodeRabbit does not recommend building a future workflow or removing deliberate V1 infrastructure.
 
-## CLI Installation And Auth
+## CLI prerequisite and authentication
 
-Check whether the CLI exists:
-
-```bash
-coderabbit --version
-# or
-cr --version
-```
-
-`cr` is the official short alias for `coderabbit`; both commands are equivalent.
-
-Install using the official script when the CLI is missing:
+The CLI is installed in WSL Ubuntu at `/root/.local/bin/coderabbit` and authenticated with the `werk-flow` GitHub account. The repository wrapper is the only supported invocation path:
 
 ```bash
-curl -fsSL https://cli.coderabbit.ai/install.sh | sh
+bun run review:doctor
 ```
 
-On this Windows workstation the CLI is **already installed** in WSL Ubuntu at `~/.local/bin/coderabbit` and already authenticated with the `werk-flow` GitHub account. **Do not reinstall it.** Two traps that make it look missing:
+This command checks the exact configured binary and agent authentication. A failed native PowerShell or WSL PATH lookup is not an installation check and must never trigger an installer. Do not install or reinstall CodeRabbit. If the wrapper reports that the exact binary is missing or authentication is unavailable, report the host problem to the owner.
 
-1. The native PowerShell PATH contains no CodeRabbit binary — the install lives inside WSL only.
-2. Inside WSL, `command -v coderabbit` can fail in non-interactive shells because `~/.local/bin` is not on that PATH. This does **not** mean the CLI is absent. Always probe and invoke via the absolute path.
+The workstation also provides `coderabbit` and `cr` host shims for interactive convenience, plus a WSL PATH link. Those shims prevent familiar diagnostic commands from producing false negatives, but agents must still use the repository wrapper because it owns the distribution, absolute path, repository working directory, agent mode, and failure policy.
 
-The original installation also required workarounds for corporate network/admin restrictions, so a fresh `curl | sh` install may hang or fail here. If the CLI is genuinely broken, ask the user before attempting any reinstall.
+When capturing agent output to a file, write it inside the repository in a gitignored location. WSL temporary paths do not persist reliably across separate invocations. If output is lost, replay the stored findings through the wrapper instead of rerunning the review.
 
-Invoke it from Windows shells as:
-
-```bash
-wsl.exe bash -lc "cd '/mnt/c/Users/z0052ceu/Tamay Can - Siemens AG/WerkFlow/Code/werkflow-app' && ~/.local/bin/coderabbit review --agent --type uncommitted"
-```
-
-When capturing agent output to a file, write it INSIDE the repository (gitignored) — paths like `/tmp` do not survive between separate `wsl.exe` invocations, and a review's output was lost that way in the P1-09 cycle. If output is lost anyway, `coderabbit review findings` replays the last completed review without rerunning the multi-minute analysis.
-
-Claude Code note: there is no CodeRabbit plugin for Claude Code. The Codex review skill is mirrored at `.claude/skills/coderabbit-review/SKILL.md`; agents without that skill loaded should follow this document directly — the CLI workflow is identical.
-
-Authenticate interactively:
-
-```bash
-coderabbit auth login
-```
-
-For Codex/agent workflows, prefer the structured auth commands:
-
-```bash
-coderabbit auth status --agent
-coderabbit auth login --agent
-coderabbit auth org --agent
-```
-
-Use `coderabbit doctor` if setup, auth, repository detection, or backend connectivity behaves strangely.
+Claude Code note: there is no CodeRabbit plugin for Claude Code. Its repo-local skill is `.claude/skills/coderabbit-review/SKILL.md`; both Codex and Claude must follow the same wrapper-only workflow.
 
 The CLI sends local diff/context to CodeRabbit. Before reviewing unpushed local work, make sure the user has approved sending those diffs to CodeRabbit.
 
-## Running Reviews
+## Running reviews
 
 Common commands:
 
 ```bash
-# Agent-friendly structured output
-coderabbit --agent
-
-# Human-readable output
-coderabbit --plain
-
-# Lighter local review
-coderabbit --light
+# Default agent review of approved uncommitted changes
+bun run review -- --approve-uncommitted
 
 # Only committed or uncommitted changes
-coderabbit --agent --type committed
-coderabbit --agent --type uncommitted
+bun run review -- --type committed
+bun run review -- --approve-uncommitted --type uncommitted
 
 # Include files that are not yet tracked by git (new modules, new scripts).
 # Without this, brand-new files are invisible to an uncommitted-changes review.
-coderabbit --agent --type uncommitted --include-untracked
+bun run review -- --approve-uncommitted --type uncommitted --include-untracked
 
 # Uncommitted inventory review with durable repo and feature context
-coderabbit --agent --type uncommitted \
+bun run review -- --approve-uncommitted --type uncommitted \
   -c AGENTS.md .coderabbit.yaml docs/features/inventory.md docs/technical/realtime-and-caching.md
 
 # Review against a base branch or commit
-coderabbit --agent --base main
-coderabbit --agent --base-commit <sha>
+bun run review -- --base main
+bun run review -- --base-commit <sha>
 
 # Replay stored findings from the most recent local review
-coderabbit review findings
+bun run review -- findings
 
 # Inspect saved prompts from the most recent local review
-coderabbit review --show-prompts
+bun run review -- --show-prompts
 ```
 
 Use committed/uncommitted/base scopes to keep reviews focused. For a huge branch, prefer reviewing sensible commits or a focused PR-sized diff. Do not split work just for ceremony; split when it improves review signal and makes fixes safer.
@@ -171,7 +130,7 @@ The local Codex CodeRabbit skill expects agent mode and parses JSON-line output.
 
 ## Interpreting Agent Output
 
-`coderabbit --agent` emits one JSON object per line. Parse each line independently.
+`bun run review` emits one JSON object per line in agent mode. The wrapper-only `--approve-uncommitted` flag records that the owner approved sending a local diff and is removed before CodeRabbit runs. Parse each output line independently.
 
 Important event types:
 

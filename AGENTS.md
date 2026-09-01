@@ -181,6 +181,7 @@ These rules apply to every task in this repository. They originated as Cursor ru
 - Preserve Bun as the package manager of record and keep `bun.lock` / `bun.lockb` when present.
 - Do not introduce or regenerate `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
 - Documentation and shell examples should default to Bun commands.
+- Run CodeRabbit only through `bun run review` (or `bun run review:doctor` for a prerequisite check). Never infer that CodeRabbit is missing from a failed native PowerShell or WSL PATH lookup, and never install or reinstall it; the repository wrapper owns the configured WSL binary path and reports genuine host problems.
 - Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
 - Also important: this app uses bun for local development but is hosted on Vercel and uses the node runtime on Vercel so the existance of a package-lock.json file is completely fine.
 - Windows workstation note: the repository path contains spaces and Next.js route folders contain parentheses (`app/(app)/...`). In PowerShell, always quote such paths or use `-LiteralPath`; unquoted `(app)` is parsed as a subexpression and fails. Prefer Bash/`bunx` invocations for anything path-heavy.
