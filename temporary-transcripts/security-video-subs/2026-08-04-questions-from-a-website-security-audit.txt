@@ -1,0 +1,36 @@
+# Questions from a website security audit
+
+Source: https://www.instagram.com/reel/Dbod9q_pRq0/
+Creator: @arjay_the_dev (Arjay McCandless)
+Platform: Instagram
+Posted: 2026-08-04
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Cybersecurity Audit for Websites 
+
+Recently had to go through a very extensive audit for an application I’m working on. These are some of the actual questions on the audit. #coding #programming #cybersecurity #systemdesign
+
+## Transcript
+
+Let's make sure your website's secure.
+Do you use session cookies for your application?
+I do use cookies, but I make sure that I always have same sites set to LACs, which helps reduce
+cross-site request forgery.
+Okay, sounds good.
+Where do you handle access control?
+We have access control implemented and none of it happens in the client side.
+We enforce permissions on every single request within our API gateway.
+Good.
+Do you classify your data?
+We classify data into four levels, restricted, confidential, internal, and public.
+And depending on the classification, we have different standards for how long we keep that
+data around, how we store that data, the encryption, and all that stuff.
+Makes sense.
+We have anti-automation controls in place.
+We have rate limiting configured at the API level, which prevents attackers from extracting
+our data en masse.
+Okay, and does your website accept any kind of file uploads?
+We do handle file uploads, but we always scan all files from malware before executing them
+or doing anything with them at all.
