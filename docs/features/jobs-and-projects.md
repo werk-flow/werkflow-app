@@ -1,6 +1,6 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-08-31
+Status: living — last reviewed 2026-09-02
 
 Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central operational work objects. A job represents work that a team can plan, perform, document, and complete. A project groups related work when the business needs a larger delivery context, but it must never be required for a simple service visit or small order.
 
@@ -54,6 +54,7 @@ The following behavior exists today and is the baseline future work must preserv
 ### Assignment And Field Context
 
 - Managers assign one or more organization members to a job. Employees see work through their assignments; project access is reached through assigned work.
+- P1-24 inventories active job assignments before an employment transition and requires explicit reassignment through this existing owner. Organization access suspension immediately removes operational access without deleting assignments or historical participant identity; P1-33 owns final offboarding closure.
 - **Focused field work pack (P1-16):** assigned employees now receive one mobile-first composition on both standalone and project-child job routes. It orders pre-arrival customer/site/contact context, one dispatch-or-lifecycle next action, instructions, structured evidence, contextual documents, own time, operational material and unresolved issues. The projection excludes sibling/project-wide detail, coworker/internal drafts, document governance and commercial/valuation facts; all actions remain with their existing domain owners. Admin and Büro retain the full established detail composition.
 - Assigned employees can open the relevant job detail, see operational context, record job-linked time, complete instruction items, upload/view documents and photos, and book inventory take/return actions available to them.
 - Managers retain control over work creation, editing, assignment, cancellation, office handover, parking, dependencies, gate exceptions and project overrides. Assigned employees receive only start/interruption/resume/execution-complete actions plus their own blocker report/resolution path and the compact customer-safe current handover summary for their assigned job.

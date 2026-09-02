@@ -14,6 +14,7 @@
     "test:sql:p121": "bun scripts/run-sql-assertions.ts supabase/tests/p1_21_time_segments.sql",
     "test:sql:p122": "bun scripts/run-sql-assertions.ts supabase/tests/p1_22_time_corrections.sql",
     "test:sql:p123": "bun scripts/run-sql-assertions.ts supabase/tests/p1_23_time_accounts.sql",
+    "test:sql:p124": "bun scripts/run-sql-assertions.ts supabase/tests/p1_24_people_lifecycle.sql",
     "test:golden": "bun scripts/run-playwright.ts certification golden",
     "test:golden:focused": "bun scripts/run-playwright.ts iteration golden",
     "test:golden:gg00": "bun scripts/run-playwright.ts iteration golden --grep @GG-00",

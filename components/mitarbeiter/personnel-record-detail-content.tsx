@@ -22,12 +22,16 @@ import {
   PersonnelQualificationSummary,
   type PersonnelQualificationSummaryData,
 } from './personnel-qualification-summary';
+import { PersonnelLifecycleSection } from './personnel-lifecycle-section';
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 interface PersonnelRecordDetailContentProps {
   detail: PersonnelDetail;
   actorNames: Record<string, string>;
   canEdit: boolean;
   qualificationSummary: PersonnelQualificationSummaryData | null;
+  lifecycle: PersonnelLifecycleView | null;
+  canAdministerAccess: boolean;
 }
 
 /**
@@ -40,6 +44,8 @@ export function PersonnelRecordDetailContent({
   actorNames,
   canEdit,
   qualificationSummary,
+  lifecycle,
+  canAdministerAccess,
 }: PersonnelRecordDetailContentProps) {
   const { record, conditions, schedules, events, hasPendingInvite } = detail;
 
@@ -104,6 +110,13 @@ export function PersonnelRecordDetailContent({
           />
           <SicknessReportsSection recordId={record.id} />
           <PersonnelQualificationSummary data={qualificationSummary} />
+          {lifecycle ? (
+            <PersonnelLifecycleSection
+              data={lifecycle}
+              canManage={canEdit}
+              canAdministerAccess={canAdministerAccess}
+            />
+          ) : null}
           <PersonnelHistorySection events={events} actorNames={actorNames} />
         </div>
       </div>

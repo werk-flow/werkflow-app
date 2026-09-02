@@ -97,6 +97,8 @@ import {
   getMemberActionErrorMessage,
   getResponsibilityRemovalBlockMessage,
 } from '@/lib/members/errors';
+import { PersonnelLifecycleSection } from './personnel-lifecycle-section';
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 const ROLE_HIERARCHY: Record<OrgRole, number> = {
   admin: 1,
@@ -192,6 +194,8 @@ interface MitarbeiterDetailContentProps {
   autoBreakDurationMinutes: number;
   responsibilitySettings: ResponsibilitySettingsData | null;
   qualificationSummary: PersonnelQualificationSummaryData | null;
+  lifecycle: PersonnelLifecycleView | null;
+  canAdministerAccess: boolean;
 }
 
 export function MitarbeiterDetailContent({
@@ -217,6 +221,8 @@ export function MitarbeiterDetailContent({
   autoBreakDurationMinutes,
   responsibilitySettings,
   qualificationSummary,
+  lifecycle,
+  canAdministerAccess,
 }: MitarbeiterDetailContentProps) {
   const router = useRouter();
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
@@ -520,6 +526,14 @@ export function MitarbeiterDetailContent({
               <ResponsibilitySummarySection
                 employeeRecordId={personnel.record.id}
                 data={responsibilitySettings}
+              />
+            ) : null}
+
+            {personnel && lifecycle ? (
+              <PersonnelLifecycleSection
+                data={lifecycle}
+                canManage={isAdminOrManager}
+                canAdministerAccess={canAdministerAccess}
               />
             ) : null}
 

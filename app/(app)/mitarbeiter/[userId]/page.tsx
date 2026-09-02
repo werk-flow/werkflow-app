@@ -28,6 +28,7 @@ import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getPersonnelQualificationSummary } from '@/lib/qualifications/actions';
+import { getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import MitarbeiterDetailLoading from './loading';
 
 async function resolveActorNames(
@@ -128,6 +129,12 @@ async function MitarbeiterDetailData({
       qualificationSummaryResult.error
     );
   }
+  const lifecycleResult = personnelResult.success
+    ? await getPersonnelLifecycle(personnelResult.detail.record.id)
+    : null;
+  if (lifecycleResult && !lifecycleResult.success) {
+    console.error('Failed to load personnel lifecycle:', lifecycleResult.error);
+  }
 
   if (!memberResult.success) {
     // No active membership: personnel records without a login and exited
@@ -140,6 +147,8 @@ async function MitarbeiterDetailData({
           actorNames={actorNames}
           canEdit={isAdminOrManager}
           qualificationSummary={qualificationSummary}
+          lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}
+          canAdministerAccess={currentUserRole === 'admin'}
         />
       );
     }
@@ -245,6 +254,8 @@ async function MitarbeiterDetailData({
           : null
       }
       qualificationSummary={qualificationSummary}
+      lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}
+      canAdministerAccess={currentUserRole === 'admin'}
     />
   );
 }

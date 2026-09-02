@@ -29,6 +29,7 @@ import {
   endResponsibilityDelegationViaSettings,
   expectPendingTimeApprovalHidden,
   expectPendingTimeApprovalVisible,
+  expectTimeApprovalsUnavailable,
   openMemberDetailFromList,
   openTimeApprovals,
   previewResponsibilityChange,
@@ -813,8 +814,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
       'pending'
     );
-    await openTimeApprovals(employeePage);
-    await expectPendingTimeApprovalHidden(employeePage, world.users.buero.id);
+    await expectTimeApprovalsUnavailable(employeePage);
     await openTimeApprovals(bueroPage);
     await expectPendingTimeApprovalHidden(bueroPage, world.users.buero.id);
     await openTimeApprovals(adminPage);

@@ -41,6 +41,7 @@ import {
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
+import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
 
 const MARK_READ_ERROR =
   'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
@@ -204,6 +205,7 @@ export function AufgabenContent() {
   if (view.isLoading) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
+        <PersonnelOwnActionsSection />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
@@ -213,9 +215,12 @@ export function AufgabenContent() {
   // Settled without any data: the first load failed.
   if (!overview) {
     return (
-      <p role="alert" className="mx-auto max-w-3xl text-sm text-destructive">
-        Die Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
-      </p>
+      <div className="mx-auto max-w-3xl space-y-4">
+        <PersonnelOwnActionsSection />
+        <p role="alert" className="text-sm text-destructive">
+          Die Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
+        </p>
+      </div>
     );
   }
 
@@ -265,6 +270,7 @@ export function AufgabenContent() {
       data-testid="aufgaben-content"
       data-loaded="true"
     >
+      <PersonnelOwnActionsSection />
       <section className="space-y-4" aria-labelledby="aufgaben-heading">
         <h2 id="aufgaben-heading" className="text-sm font-semibold">
           Offene Aufgaben

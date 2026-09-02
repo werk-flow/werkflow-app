@@ -17,6 +17,15 @@ import type {
   DocumentUploadTarget,
   VersionResult,
 } from "./types";
+import {
+  cleanupPersonnelDocumentUpload,
+  createPersonnelDocumentUploadTicket,
+  finalizePersonnelDocumentUpload,
+} from "@/lib/personnel/lifecycle-actions";
+import type {
+  PersonnelDocumentAccessClass,
+  PersonnelDocumentEvidenceState,
+} from "@/lib/personnel/lifecycle";
 
 export type UploadProgressHandler = (fraction: number) => void;
 
@@ -123,6 +132,79 @@ export async function uploadDocumentVersionDirect({
     });
   } catch (error) {
     console.error("Direct version upload failed:", error);
+    return { success: false, error: "upload_failed" };
+  }
+}
+
+export async function uploadPersonnelDocumentDirect({
+  employeeRecordId,
+  file,
+  documentType,
+  accessClass,
+  evidenceState,
+  validUntil,
+  operationId,
+  onProgress,
+}: {
+  employeeRecordId: string;
+  file: File;
+  documentType: string;
+  accessClass: PersonnelDocumentAccessClass;
+  evidenceState: PersonnelDocumentEvidenceState;
+  validUntil: string | null;
+  operationId: string;
+  onProgress?: UploadProgressHandler;
+}): Promise<{ success: true; data: { documentId: string } } | { success: false; error: string }> {
+  let issuedTicket: { documentId: string; cleanupToken: string } | null = null;
+  try {
+    const ticket = await createPersonnelDocumentUploadTicket({
+      employeeRecordId,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      mimeType: file.type || null,
+      accessClass,
+      operationId,
+    });
+    if (!ticket.success) return ticket;
+    issuedTicket = {
+      documentId: ticket.data.documentId,
+      cleanupToken: ticket.data.cleanupToken,
+    };
+    await putFileWithProgress(ticket.data.uploadUrl, file, onProgress);
+    const finalized = await finalizePersonnelDocumentUpload({
+      employeeRecordId,
+      documentId: ticket.data.documentId,
+      fileName: file.name,
+      documentType,
+      accessClass,
+      evidenceState,
+      validUntil,
+      operationId,
+      cleanupToken: ticket.data.cleanupToken,
+    });
+    if (!finalized.success) {
+      await cleanupPersonnelDocumentUpload({
+        employeeRecordId,
+        documentId: ticket.data.documentId,
+        fileName: file.name,
+        accessClass,
+        operationId,
+        cleanupToken: ticket.data.cleanupToken,
+      }).catch(() => undefined);
+    }
+    return finalized;
+  } catch (error) {
+    console.error("Direct personnel document upload failed:", error);
+    if (issuedTicket) {
+      await cleanupPersonnelDocumentUpload({
+        employeeRecordId,
+        documentId: issuedTicket.documentId,
+        fileName: file.name,
+        accessClass,
+        operationId,
+        cleanupToken: issuedTicket.cleanupToken,
+      }).catch(() => undefined);
+    }
     return { success: false, error: "upload_failed" };
   }
 }

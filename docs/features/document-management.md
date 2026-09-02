@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-08-31
+Status: living — last reviewed 2026-09-02
 
 Document management gives SHK businesses a central digital place for job photos, contracts, invoices, offers, reports, and general business files. The goal is to reduce paper folders, scattered files, and disconnected customer/project documentation while staying practical for office staff and extremely simple for field workers.
 
@@ -36,6 +36,7 @@ Document management is **substantially implemented**, not a placeholder anymore.
 | Deterministic office-handover package document                    | Implemented (`P1-17`; internal access only, no delivery/public link)                                               |
 | Metadata links to installed equipment                             | Implemented (`P1-18`; manager-owned, no duplicate bytes)                                                           |
 | Metadata links to operational maintenance coverage                | Implemented (`P1-20`; manager-owned, no duplicate bytes or field-access widening)                                  |
+| Protected personnel-document metadata and releases               | Implemented (`P1-24`; stable personnel owner, stricter access classes, no duplicate bytes)                         |
 
 Since P1-13, a work-template item may declare an expected evidence description and one existing document category. Application copies that expectation onto the existing work instruction item; it does not create a file, folder, document link, approval, artifact revision or signature. Actual file capture remains owned by this document system.
 
@@ -46,6 +47,8 @@ Since P1-17, Büro/Admin can select exact accessible document versions as source
 Since P1-18, a document may also link to one installed-equipment record through the existing `document_links` owner. The link does not copy R2 bytes or grant an employee document access. Once an equipment-history event depends on that link, ordinary unlink and permanent document deletion are rejected so the immutable history cannot be erased; organization teardown remains a narrowly guarded exception.
 
 Since P1-20, a document may link to one operational maintenance-coverage root through the same typed `DocumentUploadTarget` and `document_links` owner. Existing files attach without copying bytes; direct uploads retain the private signed R2 path. The coverage link does not grant an assigned employee access to coverage terms, renewal dates, internal notes or the manager document library.
+
+Since P1-24, a protected personnel file is one existing `documents` row plus `personnel_documents` metadata keyed to `employee_records.id`. It is deliberately absent from `ordinary_documents`, cannot carry an ordinary `document_links` row or folder, and therefore supports a future starter without a login. Exact-version releases and acknowledgements let the affected employee access only expressly released content. Standard, Admin-only and health-evidence classes have separate server-action and RLS checks; operational consumers receive status rather than bytes. Existing employee links are not reclassified.
 
 Since P1-16, assigned employees reach contextual documents from the focused job work pack only. View, download and direct signed R2 upload remain the same document operations; the pack does not expose the central library, attach-existing, trash, version governance or audit history and creates no duplicate file. Completed direct uploads survive a recoverable metadata failure, retain synchronized names and expire after the bounded retention window if registration is abandoned.
 
@@ -166,6 +169,8 @@ Key principle: **Postgres holds organization, folder structure, links, categorie
 | `document_links`        | Links a document to exactly one of: `job_id`, `project_id`, `client_id`, `employee_id`, or `request_id` (P1-02) |
 | `document_audit_events` | Append-only operational history                                                                                 |
 | `document_versions`     | Previous file revisions for versioned business documents                                                        |
+| `personnel_documents`   | Protected class, document type, evidence state, validity, and stable personnel owner (`P1-24`)                  |
+| `personnel_document_releases` | Exact document-version releases to the affected person, including revocation (`P1-24`)                    |
 
 ### Important `documents` columns
 
@@ -197,6 +202,7 @@ Links are metadata only. They do **not** move Storage objects or change `folder_
 - **Path pattern:** `{organizationId}/{documentId}/{sanitizedFileName}`
 - **Version path pattern:** `{organizationId}/{documentId}/versions/{versionNumber}-{sanitizedFileName}`
 - **Upload flow (direct, two-phase):** `createDocumentUploadTicket` authorizes (user, organization, target, folder) and returns a document id plus a short-lived signed PUT URL with the content type pinned into the signature → the browser PUTs the bytes directly to R2 → `finalizeDocumentUpload` re-authorizes, recomputes the storage path server-side (a client can never register a foreign key), verifies the object via HEAD (existence, size limit, content type), then inserts metadata, links, and audit events. Failed finalizes delete the uploaded object. Versions use the same pattern with a version-number conflict check.
+- **Protected personnel upload:** `createPersonnelDocumentUploadTicket` and `finalizePersonnelDocumentUpload` reuse the same signed PUT, HEAD verification, bucket and path pattern. A short-lived signed cleanup capability binds actor, organization, personnel owner, document, filename, class and operation so a failed finalize can remove only its own orphan. The existing storage-cleanup report remains the recovery path for an interrupted browser that never returns.
 - **Environment variables:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` (plus optional `R2_JURISDICTION`, default `eu`).
 - **Bucket CORS** must allow `GET`, `PUT`, `HEAD` with the `content-type` header from the app origins (see `scripts/setup-r2-cors.ts`; applying it needs a bucket-admin token or the dashboard, the runtime object token deliberately cannot change bucket settings).
 - Orphaned uploads (PUT succeeded, finalize never ran) are invisible to users and are reconciled through the existing storage-cleanup report, which lists R2 objects against metadata.
@@ -256,6 +262,8 @@ Field employees access documents only when:
 2. The employee has a row in `job_assignments` for that job.
 
 Project-only, customer-only, or employee-only links do **not** grant field-worker access. Employee links are manager-facing records on employee detail pages; field access stays aligned with assigned work rather than broad org visibility.
+
+Protected personnel access is a separate path. The affected employee may read a current version only through an unrevoked exact-version release, or upload requested own health evidence through the bounded onboarding surface. Job assignment, planning authority, ordinary document access and scoped approval responsibility never broaden this access. Admin may read all protected classes; Büro may manage only `personnel_standard` and cannot read `admin_restricted` or `health_evidence` bytes.
 
 ---
 

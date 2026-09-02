@@ -2027,6 +2027,8 @@ export async function selectFromSearchable(
   const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
   const openPicker = async (): Promise<void> => {
     if (await listbox.isVisible().catch(() => false)) return;
+    await expect(stableTrigger).toBeVisible({ timeout: 15_000 });
+    await expect(stableTrigger).toBeEnabled({ timeout: 15_000 });
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {

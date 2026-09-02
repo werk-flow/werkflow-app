@@ -65,6 +65,10 @@ import { getOrgJobs } from "@/lib/jobs/actions";
 import { getOrgProjects } from "@/lib/projects/actions";
 import { getOrgMembersForUser } from "@/lib/members/actions";
 import type { Client, Job, ProjectWithDetails } from "@/lib/jobs/types";
+import {
+  buildDocumentStoragePath,
+  buildDocumentVersionStoragePath,
+} from "./storage-path";
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -72,7 +76,14 @@ type AuthorizedDocumentContext = {
   admin: SupabaseAdmin;
   orgId: string;
   userId: string;
+  role: "admin" | "buero" | "employee";
   isManagerOrAbove: boolean;
+};
+
+type ProtectedDocumentAccess = {
+  personnelDocumentId: string;
+  releasedVersionNumbers: number[] | null;
+  canInspectHistory: boolean;
 };
 
 type ProfileRow = {
@@ -324,18 +335,6 @@ function parseDocumentCategory(
   return DOCUMENT_CATEGORIES.includes(category) ? category : null;
 }
 
-function sanitizeStorageFileName(fileName: string): string {
-  const trimmed = trimName(fileName) || "document";
-  return (
-    trimmed
-      .normalize("NFKD")
-      .replace(/[^\w.\-]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 140) || "document"
-  );
-}
-
 function buildStoragePath({
   orgId,
   documentId,
@@ -345,7 +344,11 @@ function buildStoragePath({
   documentId: string;
   fileName: string;
 }): string {
-  return `${orgId}/${documentId}/${sanitizeStorageFileName(fileName)}`;
+  return buildDocumentStoragePath({
+    organizationId: orgId,
+    documentId,
+    fileName,
+  });
 }
 
 async function copyStorageObject({
@@ -376,7 +379,12 @@ function buildVersionStoragePath({
   versionNumber: number;
   fileName: string;
 }): string {
-  return `${orgId}/${documentId}/versions/${versionNumber}-${sanitizeStorageFileName(fileName)}`;
+  return buildDocumentVersionStoragePath({
+    organizationId: orgId,
+    documentId,
+    versionNumber,
+    fileName,
+  });
 }
 
 const UUID_PATTERN =
@@ -426,6 +434,7 @@ async function getAuthorizedDocumentContext(): Promise<
       admin: createSupabaseAdminClient(),
       orgId: auth.context.orgId,
       userId: auth.context.userId,
+      role: auth.context.role,
       isManagerOrAbove: auth.context.isManagerOrAbove,
     },
   };
@@ -1081,8 +1090,14 @@ async function getFolderBreadcrumbs({
 async function getAuthorizedDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
+  options: { protectedVersionNumber?: number } = {},
 ): Promise<
-  { success: true; document: DocumentRow } | { success: false; error: string }
+  | {
+      success: true;
+      document: DocumentRow;
+      protectedAccess: ProtectedDocumentAccess | null;
+    }
+  | { success: false; error: string }
 > {
   const { data: document } = await context.admin
     .from("documents")
@@ -1097,8 +1112,72 @@ async function getAuthorizedDocument(
   }
 
   const row = document as DocumentRow;
+  const { data: protectedDocument } = await context.admin
+    .from("personnel_documents")
+    .select(
+      "id, access_class, employee_record_id, personnel_document_releases(document_version_number, revoked_at)",
+    )
+    .eq("document_id", row.id)
+    .maybeSingle();
+  if (protectedDocument) {
+    if (context.role === "admin") {
+      return {
+        success: true,
+        document: row,
+        protectedAccess: {
+          personnelDocumentId: protectedDocument.id,
+          releasedVersionNumbers: null,
+          canInspectHistory: true,
+        },
+      };
+    }
+    if (
+      context.role === "buero" &&
+      protectedDocument.access_class === "personnel_standard"
+    ) {
+      return {
+        success: true,
+        document: row,
+        protectedAccess: {
+          personnelDocumentId: protectedDocument.id,
+          releasedVersionNumbers: null,
+          canInspectHistory: true,
+        },
+      };
+    }
+    const { data: employee } = await context.admin
+      .from("employee_records")
+      .select("user_id")
+      .eq("id", protectedDocument.employee_record_id)
+      .eq("organization_id", context.orgId)
+      .maybeSingle();
+    const releases = (protectedDocument.personnel_document_releases ?? []) as Array<{
+      document_version_number: number;
+      revoked_at: string | null;
+    }>;
+    const releasedVersionNumbers = releases
+      .filter((release) => release.revoked_at === null)
+      .map((release) => release.document_version_number);
+    if (
+      employee?.user_id !== context.userId ||
+      !releasedVersionNumbers.includes(
+        options.protectedVersionNumber ?? row.current_version_number,
+      )
+    ) {
+      return { success: false, error: "not_authorized" };
+    }
+    return {
+      success: true,
+      document: row,
+      protectedAccess: {
+        personnelDocumentId: protectedDocument.id,
+        releasedVersionNumbers,
+        canInspectHistory: false,
+      },
+    };
+  }
   if (context.isManagerOrAbove) {
-    return { success: true, document: row };
+    return { success: true, document: row, protectedAccess: null };
   }
 
   const { data: links } = await context.admin
@@ -1143,7 +1222,7 @@ async function getAuthorizedDocument(
     return { success: false, error: "not_authorized" };
   }
 
-  return { success: true, document: row };
+  return { success: true, document: row, protectedAccess: null };
 }
 
 async function getDeletedDocumentForManager(
@@ -1348,7 +1427,7 @@ export async function getDocumentLibrary(
   }
 
   let documentsQuery = context.admin
-    .from("documents")
+    .from("ordinary_documents")
     .select("*")
     .eq("organization_id", context.orgId);
 
@@ -1600,7 +1679,7 @@ export async function getAttachableDocuments(
   ).map((link) => link.document_id);
 
   let query = auth.context.admin
-    .from("documents")
+    .from("ordinary_documents")
     .select("*")
     .eq("organization_id", auth.context.orgId)
     .is("deleted_at", null);
@@ -3092,6 +3171,15 @@ export async function moveDocument(
   const existing = await getAuthorizedDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
 
+  const { data: protectedDocument } = await auth.context.admin
+    .from("personnel_documents")
+    .select("id")
+    .eq("document_id", existing.document.id)
+    .maybeSingle();
+  if (protectedDocument) {
+    return { success: false, error: "protected_document_boundary" };
+  }
+
   if ((existing.document.folder_id ?? null) === (input.folderId ?? null)) {
     return { success: false, error: "invalid_target" };
   }
@@ -3156,6 +3244,15 @@ export async function copyDocument(
 
   const existing = await getAuthorizedDocument(auth.context, input.documentId);
   if (!existing.success) return existing;
+
+  const { data: protectedDocument } = await auth.context.admin
+    .from("personnel_documents")
+    .select("id")
+    .eq("document_id", existing.document.id)
+    .maybeSingle();
+  if (protectedDocument) {
+    return { success: false, error: "protected_document_boundary" };
+  }
 
   const folderCheck = await ensureFolder(
     auth.context.admin,
@@ -3918,8 +4015,17 @@ export async function getDocumentVersionSignedUrl(
   const existing = await getAuthorizedDocument(
     auth.context,
     versionRow.document_id,
+    { protectedVersionNumber: versionRow.version_number },
   );
   if (!existing.success) return existing;
+  if (
+    existing.protectedAccess?.releasedVersionNumbers &&
+    !existing.protectedAccess.releasedVersionNumbers.includes(
+      versionRow.version_number,
+    )
+  ) {
+    return { success: false, error: "not_authorized" };
+  }
 
   try {
     const disposition = options.download
@@ -3949,20 +4055,31 @@ export async function getDocumentDetails(
   const existing = await getAuthorizedDocument(auth.context, documentId);
   if (!existing.success) return existing;
 
-  const [versionsResult, auditResult] = await Promise.all([
-    auth.context.admin
+  const releasedVersionNumbers =
+    existing.protectedAccess?.releasedVersionNumbers ?? null;
+
+  const baseVersionsQuery = auth.context.admin
       .from("document_versions")
       .select("*")
       .eq("document_id", existing.document.id)
-      .eq("organization_id", auth.context.orgId)
-      .order("version_number", { ascending: false }),
-    auth.context.admin
-      .from("document_audit_events")
-      .select("*")
-      .eq("document_id", existing.document.id)
-      .eq("organization_id", auth.context.orgId)
-      .order("created_at", { ascending: false })
-      .limit(50),
+      .eq("organization_id", auth.context.orgId);
+  const scopedVersionsQuery = releasedVersionNumbers
+    ? baseVersionsQuery.in("version_number", releasedVersionNumbers)
+    : baseVersionsQuery;
+  const versionsPromise = releasedVersionNumbers?.length === 0
+    ? Promise.resolve({ data: [], error: null })
+    : scopedVersionsQuery.order("version_number", { ascending: false });
+  const [versionsResult, auditResult] = await Promise.all([
+    versionsPromise,
+    existing.protectedAccess && !existing.protectedAccess.canInspectHistory
+      ? Promise.resolve({ data: [], error: null })
+      : auth.context.admin
+          .from("document_audit_events")
+          .select("*")
+          .eq("document_id", existing.document.id)
+          .eq("organization_id", auth.context.orgId)
+          .order("created_at", { ascending: false })
+          .limit(50),
   ]);
 
   const [document] = await hydrateDocuments(auth.context.admin, [
@@ -4003,12 +4120,12 @@ export async function getDeletedDocuments(): Promise<DocumentListResult> {
   const manager = requireManager(auth.context);
   if (!manager.success) return manager;
 
-  const { data, error } = await auth.context.admin
-    .from("documents")
+  const query = auth.context.admin
+    .from("ordinary_documents")
     .select("*")
     .eq("organization_id", auth.context.orgId)
-    .not("deleted_at", "is", null)
-    .order("deleted_at", { ascending: false });
+    .not("deleted_at", "is", null);
+  const { data, error } = await query.order("deleted_at", { ascending: false });
 
   if (error) {
     console.error("Failed to load deleted documents:", error);

@@ -3931,3 +3931,81 @@ export async function getP123CountsAs(
     return Object.fromEntries(counts) as Record<(typeof tableNames)[number], number>;
   });
 }
+
+export async function getP124State(organizationId: string) {
+  const admin = createAdminClient();
+  const [access, accessTransitions, employment, employmentTransitions, plans, requirements,
+    protectedDocuments, releases, acknowledgements, operations, events] = await Promise.all([
+      admin.from("personnel_access_lifecycles").select("*").eq("organization_id", organizationId).order("created_at"),
+      admin.from("personnel_access_transitions").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+      admin.from("personnel_employment_lifecycles").select("*").eq("organization_id", organizationId).order("created_at"),
+      admin.from("personnel_employment_transitions").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+      admin.from("personnel_onboarding_plans").select("*").eq("organization_id", organizationId).order("created_at"),
+      admin.from("personnel_onboarding_requirements").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+      admin.from("personnel_documents").select("*, documents!inner(display_name)").eq("organization_id", organizationId).order("classified_at").order("id"),
+      admin.from("personnel_document_releases").select("*").eq("organization_id", organizationId).order("released_at").order("id"),
+      admin.from("personnel_acknowledgements").select("*").eq("organization_id", organizationId).order("acknowledged_at"),
+      admin.from("personnel_lifecycle_operations").select("*").eq("organization_id", organizationId).order("created_at"),
+      admin.from("employee_record_events").select("*").eq("organization_id", organizationId).order("created_at").order("id"),
+    ]);
+  const results = [access, accessTransitions, employment, employmentTransitions, plans, requirements,
+    protectedDocuments, releases, acknowledgements, operations, events];
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw new Error(`P1-24 state lookup failed: ${failed.error.message}`);
+  return {
+    access: access.data ?? [],
+    accessTransitions: accessTransitions.data ?? [],
+    employment: employment.data ?? [],
+    employmentTransitions: employmentTransitions.data ?? [],
+    plans: plans.data ?? [],
+    requirements: requirements.data ?? [],
+    protectedDocuments: protectedDocuments.data ?? [],
+    releases: releases.data ?? [],
+    acknowledgements: acknowledgements.data ?? [],
+    operations: operations.data ?? [],
+    events: events.data ?? [],
+  };
+}
+
+export async function getP124CountsAs(
+  user: { email: string; password: string },
+  organizationId: string,
+) {
+  const tables = [
+    "personnel_access_lifecycles",
+    "personnel_employment_lifecycles",
+    "personnel_onboarding_plans",
+    "personnel_onboarding_requirements",
+    "personnel_documents",
+    "personnel_document_releases",
+    "personnel_acknowledgements",
+  ] as const;
+  return withRoleClient(user, async (client) => {
+    const entries = await Promise.all(tables.map(async (table) => {
+      const { count, error } = await client.from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId);
+      if (error) throw new Error(`P1-24 ${table} RLS lookup failed: ${error.message}`);
+      if (count === null) throw new Error(`P1-24 ${table} RLS lookup returned no count`);
+      return [table, count] as const;
+    }));
+    return Object.fromEntries(entries) as Record<(typeof tables)[number], number>;
+  });
+}
+
+export async function getP124NoLoginRecordId(
+  organizationId: string,
+  lastName: string,
+): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .from("employee_records")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("last_name", lastName)
+    .is("user_id", null)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`P1-24 no-login personnel lookup failed: ${error.message}`);
+  return data?.id ?? null;
+}

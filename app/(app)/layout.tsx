@@ -27,7 +27,7 @@ import {
 import { getAttentionCounts } from '@/lib/attention/actions';
 import type { AttentionCounts } from '@/lib/attention/types';
 import type { LiveClockState } from '@/lib/time-tracking/types';
-import { ONBOARDING_START_PATH } from '@/lib/auth/redirects';
+import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 
 async function getInitialAppRuntimeState({
@@ -83,7 +83,7 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   ]);
 
   if (memberships.length === 0) {
-    redirect(ONBOARDING_START_PATH);
+    redirect(await getAuthenticatedRedirectPath(user.id));
   }
 
   const initialRuntimeState = await getInitialAppRuntimeState({

@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-02
 
 Employee management covers the complete operational relationship between an organization and the people who work in it: membership, access, personnel information, employment conditions, availability, qualifications, assignments, leave, personnel documents, and controlled handoffs to time tracking and payroll.
 
@@ -20,7 +20,7 @@ The product should replace personnel spreadsheets, paper folders, scattered cert
 
 ## Current Product Baseline
 
-The implemented baseline (updated through slice `P1-23`) includes:
+The implemented baseline (updated through slice `P1-24`) includes:
 
 - Organization-scoped membership and active-organization switching.
 - The fixed roles `admin`, `buero`, and `employee`, shown as `Admin`, `Büro`, and `Handwerker/in`.
@@ -111,6 +111,14 @@ Explicit time activities (`P1-21`, 2026-08-31):
 
 - Each active organization membership can own at most one stable attendance session with at most one open factual activity segment. Employees, Admin and Büro capture only their own work, travel, break, standby/on-call, call-out or fixed internal activity through the global clock; every switch is atomic, version-checked, idempotent and attributable. Removing a membership closes its canonical session and segment before the existing destructive cleanup continues, while the personnel record survives as before. Managers inspect the same compatibility projection and never impersonate another person's live capture. Since `P1-22`, later corrections retain the stable `employee_record_id`, original and accepted person, exact source and full request/decision/application history; direct manager correction requires explicit scope, and every self-correction requires a second `time_approval` holder.
 
+Controlled people lifecycle (`P1-24`, 2026-09-02):
+
+- `employee_records.id` remains the stable organization-specific person identity. Separate versioned access and employment lifecycles add planned, active, suspended, notice, inactive, exited and reversed transitions without deleting membership, global Auth identity or historical operational references. A missing lifecycle preserves legacy access and is labeled as not controlled inside the new workflow.
+- Admin can plan activation, suspend immediately or later, cancel a pending change, reactivate, or end organization access. Effective authorization is enforced through the shared membership helpers at request time; a future starter receives only `/onboarding/meine-aufgaben`. The organization owner and last effective Admin are protected. A suspension never disables the same Auth user in another organization.
+- Organization-scoped onboarding templates have immutable published versions. A deliberately instantiated plan copies editable typed requirements that may reference existing documents, qualifications, conditions, schedules, teams, access or exact acknowledgements. Only an explicit unresolved `blocks_access` requirement delays activation; absent configuration is never presented as complete.
+- Protected personnel files add strict metadata keyed to `employee_records.id` over the existing document/version/R2 foundation. `personnel_standard`, `admin_restricted` and `health_evidence` stay separate from ordinary employee links. Admin sees all classes; Büro manages standard files and receives no restricted bytes; an affected employee sees only explicitly released versions or uploads their own requested health evidence. No diagnosis field or signature claim exists.
+- `/aufgaben` includes the affected person's bounded confirmations and released personnel files. Exact-version acknowledgements, lifecycle transitions, template versions and operation receipts remain attributable history. The transition inventory reuses P1-05 responsibilities, attention and job assignments; P1-33 still owns full offboarding, physical return, final settlement and destructive-removal replacement.
+
 Important current limitations:
 
 - P1-23 adds explicitly opened time accounts for every in-scope personnel record, including records without a login; dated default/employee-specific time policies; employee payroll references in a versioned export mapping; and own-account/monthly-statement visibility. These are operational time/payroll handoff facts, not compensation, payroll profiles, payslips or employment-contract data.
@@ -119,11 +127,11 @@ Important current limitations:
 - Vacation and sickness/privacy-sensitive absence are the implemented absence types; further vocabulary (training, special leave, compensatory time) and hour-based absence remain later scope. P1-23 classifies each type as paid, unpaid or informational in the confirmed time policy without rewriting the absence. Time-account adjustments, expiry and payout are manual, four-eyes minute events; there is no automatic carryover, expiry or money calculation.
 - The shared attention pattern (`P1-07`) covers approvals, open requests, and decision notifications in-app only: no reminders, snooze, or escalation engine, no per-user notification preferences yet (the smallest honest step was quiet-by-default; configurability grows with real usage), and no external delivery (`P1-46`).
 - Capacity conflicts, minimum staffing, and availability planning that combines absence remain `P1-11`; the calendar shows minimal visible absence signals only.
-- Personnel-document privacy, document requirements, acknowledgements, and expiry workflows are not yet separate from general employee-linked documents (`P1-24`).
-- There is no structured onboarding/offboarding checklist, access-suspension state, equipment-return flow, compensation/payroll profile, provider-specific payroll integration or accounting handoff. P1-23 supplies only a generic payroll-ready ZIP and employee/code mapping.
+- P1-24 implements bounded onboarding requirements, acknowledgements, protected-document classes, organization access suspension and employment transitions. It does not implement a generic workflow, electronic signature, legal retention, complete organization export or automatic inference from old rows.
+- There is no full offboarding checklist, physical equipment-return flow, final time/leave settlement, compensation/payroll profile, provider-specific payroll integration or accounting handoff. P1-33 owns the offboarding completion boundary; P1-23 supplies only a generic payroll-ready ZIP and employee/code mapping.
 - Current member removal remains destructive for legacy time: it closes an active canonical or legacy session, deletes that member's organization legacy `time_entries`, and then deletes the membership. Stable canonical sessions, segments, operations and events remain attached to the surviving personnel record so captured history is not erased. Since `P1-03` the personnel record survives the removal and is marked `Ausgeschieden` with an exit date and audit event, but the flow is still not the intended offboarding behavior (`P1-33` replaces it) and must not be treated as an archive workflow.
 - Custom roles, custom role names, and granular permission editing are intentionally not part of Phase 1; fixed roles plus scoped responsibilities are the accepted safe model.
-- Employees cannot yet view or propose corrections to their own personnel record; the self-service surface is later scope.
+- Employees cannot yet propose corrections to their own personnel master data. Their P1-24 self-service is deliberately limited to assigned requirements, exact acknowledgements, released documents and requested evidence.
 
 Current application code and live database state remain authoritative if this baseline drifts.
 

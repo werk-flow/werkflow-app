@@ -1,6 +1,6 @@
 # Browser-Test Incident Log
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-02
 
 This is the durable record for browser failures that consume a full-run retry or expose a reusable product, harness or environment lesson. Raw artifacts stay gitignored under `.agent-logs/playwright-runs/<run-key>/`; this log keeps the small explanation future work needs.
 
@@ -21,6 +21,21 @@ Record each failed certification and any focused failure that changes shared har
 | Cleanup        | Retained-world cleanup result and whether another full certification is authorized                                                                                                                                                                             |
 
 The run manifest receives the classification, cause and prevention through `bun run test:runs classify`. Add the concise durable entry here before closing the slice. Do not call an unexplained retry a transient.
+
+## P1-24 campaign (2026-09-02)
+
+The campaign closed on fingerprint `b0be4201…7c4e` with final focused P1-24 audit 2/2, focused Golden 4/4, expanded `GG-07` 8/8, complete Golden 142/142 and DEV canary 9/9. Affected Wave 1 A1/A3/A4/A5 passed 43/43. Every retained world was classified and cleaned; final inventory reported `Open retained worlds: 0`.
+
+| Run | Failure and evidence | Correction and durable prevention | Focused proof and cleanup |
+| --- | --- | --- | --- |
+| `2026-09-02T095707177Z-d42332`, focused P1-24, world `mtjx9oql` | Harness; the read-only P1-24 helper ordered `personnel_documents` by a nonexistent `created_at` column. PostgREST returned the exact missing-column error before the first assertion. | The query uses generated `classified_at` plus `id`. Tier 2: the staged setup and read-only helper exercise the actual select/order contract; generated types remain the schema source even though string queries are not compiler-checked. | Retained setup diagnostic `2026-09-02T095944016Z-28201f` passed; subsequent focused P1-24 passed 4/4; world cleaned. |
+| `2026-09-02T100106985Z-6507f9`, retained P1-24 document diagnostic, world `mtjx9oql` | Product; protected-upload cleanup read an unused service-role environment variable, so cleanup-ticket signing failed. The retained trace and server error isolated the credential boundary after the upload flow began. | Cleanup now uses the validated shared `getSupabaseSecretKey()` boundary. Tier 1: the P1-24 path cannot name a second credential source. Tier 2: focused direct-upload coverage retains cleanup failure visibility. | Retained document diagnostic `2026-09-02T100339601Z-a72e8a` passed; later P1-24 and `GG-07` proof passed; world cleaned. |
+| `2026-09-02T125252391Z-bae19e`, focused A3, world `mtk3jmpw`, 4/5 | Harness; A3 required the time-approval panel from an employee who held only delegated leave approval. The retained DOM showed the correct unified approvals entry without time-approval authority. | The assertion uses `expectTimeApprovalsUnavailable` for the leave-only holder. Tier 2: A3 now distinguishes aggregate task visibility from the narrower authority surface. | Final A3 `2026-09-02T131632349Z-67fd1a` passed 5/5; world cleaned. |
+| `2026-09-02T130715326Z-6f9f19`, focused A3, world `mtk424to`, 2/5 | Harness; the shared searchable-select helper started click retries while the settings page still showed its loading skeleton. Screenshot and trace showed that the semantic trigger had not become actionable. | The helper waits for the trigger to be visible and enabled before its bounded remount retries. Tier 2: every Golden/audit caller inherits the readiness assertion. | Final A3 passed 5/5 and A1 passed 28/28 (`2026-09-02T132004783Z-12cc6a`); diagnostic attempts were classified; world cleaned. |
+| `2026-09-02T134325720Z-75ff57`, complete Golden, world `mtk5cn3h`, 140/142 | Harness; the access stage read transition history while the successful reactivation Server Action was still pending. The screenshot showed the success banner, open dialog and saving spinner; the persisted read lacked only the final transition. | Each lifecycle submission waits for its dialog to close before reading persisted state. Tier 2: the Golden stage asserts completion at the action boundary instead of relying on unrelated visible „Aktiv“ text. | Exact current-source P1-24 passed 4/4 (`2026-09-02T142239588Z-b1f4bc`); complete Golden passed 142/142 (`2026-09-02T142405848Z-0f71ea`); world cleaned. |
+| `2026-09-02T141433581Z-7cb5a5`, retained access diagnostic, world `mtk5cn3h` | Harness; the isolated persisted stage retained an empty module-level `employeeRecordId` because it did not rehydrate the target. The database filter therefore found zero rows even though the UI operated on the intended person. | Every later P1-24 stage reloads the stable personnel ID and asserts a persisted predecessor fact. Tier 2: isolated diagnostics now fail at a named precondition or address the correct employee. | Exact current-source P1-24 and complete Golden passed as above; world cleaned. |
+
+Other classified iteration events were development-only HMR, memory, stale-client or retained-replay effects. The required fresh-production-build rule already removes those classes from acceptance. One audit-only missing import was caught by the existing Tier 2 type checker; running it before the next browser world was sufficient, so no duplicate rule was added. The full-retry preflight also correctly refused a certification before the exact failed-spec focus existed. Testing rule 14 remains the P1-23 Tier 3 boundary: local reset, checked SQL and unit runs stayed serial because repository code cannot control another host process.
 
 ## P1-23 campaign (2026-09-01)
 

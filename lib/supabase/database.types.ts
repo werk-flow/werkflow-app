@@ -930,6 +930,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "document_audit_events_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "document_audit_events_folder_id_fkey";
             columns: ["folder_id"];
             isOneToOne: false;
@@ -1069,6 +1076,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "document_links_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "document_links_employee_id_fkey";
             columns: ["employee_id"];
             isOneToOne: false;
@@ -1175,6 +1189,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "document_versions_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "document_versions_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
@@ -1260,6 +1281,13 @@ export type Database = {
             columns: ["copied_from_document_id"];
             isOneToOne: false;
             referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_copied_from_document_id_fkey";
+            columns: ["copied_from_document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
             referencedColumns: ["id"];
           },
           {
@@ -1933,6 +1961,13 @@ export type Database = {
             columns: ["document_id", "organization_id"];
             isOneToOne: false;
             referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "installed_equipment_event_link_document_id_organization_id_fkey";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
             referencedColumns: ["id", "organization_id"];
           },
           {
@@ -3202,6 +3237,13 @@ export type Database = {
             columns: ["document_id"];
             isOneToOne: false;
             referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "job_instruction_item_evidence_fulfillments_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
             referencedColumns: ["id"];
           },
           {
@@ -5202,6 +5244,13 @@ export type Database = {
             referencedColumns: ["id", "organization_id"];
           },
           {
+            foreignKeyName: "payroll_exports_document_org_fkey";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
             foreignKeyName: "payroll_exports_mapping_org_fkey";
             columns: ["mapping_version_id", "organization_id"];
             isOneToOne: false;
@@ -5324,6 +5373,1003 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "payroll_mapping_profiles";
             referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      personnel_access_lifecycles: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          employee_record_id: string;
+          id: string;
+          organization_id: string;
+          scheduled_for: string | null;
+          scheduled_state:
+            | Database["public"]["Enums"]["personnel_access_state"]
+            | null;
+          state: Database["public"]["Enums"]["personnel_access_state"];
+          state_effective_at: string;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id: string;
+          id?: string;
+          organization_id: string;
+          scheduled_for?: string | null;
+          scheduled_state?:
+            | Database["public"]["Enums"]["personnel_access_state"]
+            | null;
+          state: Database["public"]["Enums"]["personnel_access_state"];
+          state_effective_at: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id?: string;
+          id?: string;
+          organization_id?: string;
+          scheduled_for?: string | null;
+          scheduled_state?:
+            | Database["public"]["Enums"]["personnel_access_state"]
+            | null;
+          state?: Database["public"]["Enums"]["personnel_access_state"];
+          state_effective_at?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_access_lifecycles_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_access_lifecycles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_access_transitions: {
+        Row: {
+          access_lifecycle_id: string;
+          actor_id: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          effective_at: string;
+          employee_record_id: string;
+          from_state: Database["public"]["Enums"]["personnel_access_state"];
+          id: string;
+          lifecycle_version: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          to_state: Database["public"]["Enums"]["personnel_access_state"];
+          transition_kind: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Insert: {
+          access_lifecycle_id: string;
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          effective_at: string;
+          employee_record_id: string;
+          from_state: Database["public"]["Enums"]["personnel_access_state"];
+          id?: string;
+          lifecycle_version: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          to_state: Database["public"]["Enums"]["personnel_access_state"];
+          transition_kind: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Update: {
+          access_lifecycle_id?: string;
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          effective_at?: string;
+          employee_record_id?: string;
+          from_state?: Database["public"]["Enums"]["personnel_access_state"];
+          id?: string;
+          lifecycle_version?: number;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string;
+          request_hash?: string;
+          to_state?: Database["public"]["Enums"]["personnel_access_state"];
+          transition_kind?: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_access_transitions_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_access_transitions_lifecycle_org_fkey";
+            columns: ["access_lifecycle_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_access_lifecycles";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_access_transitions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_acknowledgements: {
+        Row: {
+          acknowledged_at: string;
+          acknowledged_by: string;
+          acknowledgement_kind: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
+          document_version_number: number | null;
+          employee_record_id: string;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          personnel_document_id: string | null;
+          request_hash: string;
+          requirement_id: string | null;
+          requirement_version: number | null;
+          statement: string;
+        };
+        Insert: {
+          acknowledged_at?: string;
+          acknowledged_by: string;
+          acknowledgement_kind: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
+          document_version_number?: number | null;
+          employee_record_id: string;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          personnel_document_id?: string | null;
+          request_hash: string;
+          requirement_id?: string | null;
+          requirement_version?: number | null;
+          statement: string;
+        };
+        Update: {
+          acknowledged_at?: string;
+          acknowledged_by?: string;
+          acknowledgement_kind?: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
+          document_version_number?: number | null;
+          employee_record_id?: string;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          personnel_document_id?: string | null;
+          request_hash?: string;
+          requirement_id?: string | null;
+          requirement_version?: number | null;
+          statement?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_acknowledgements_document_org_fkey";
+            columns: ["personnel_document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_acknowledgements_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_acknowledgements_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_acknowledgements_requirement_org_fkey";
+            columns: ["requirement_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_requirements";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      personnel_document_releases: {
+        Row: {
+          document_version_number: number;
+          employee_record_id: string;
+          id: string;
+          operation_id: string;
+          organization_id: string;
+          personnel_document_id: string;
+          released_at: string;
+          released_by: string | null;
+          request_hash: string;
+          revoke_reason: string | null;
+          revoked_at: string | null;
+          revoked_by: string | null;
+        };
+        Insert: {
+          document_version_number: number;
+          employee_record_id: string;
+          id?: string;
+          operation_id: string;
+          organization_id: string;
+          personnel_document_id: string;
+          released_at?: string;
+          released_by?: string | null;
+          request_hash: string;
+          revoke_reason?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+        Update: {
+          document_version_number?: number;
+          employee_record_id?: string;
+          id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          personnel_document_id?: string;
+          released_at?: string;
+          released_by?: string | null;
+          request_hash?: string;
+          revoke_reason?: string | null;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_document_releases_document_org_fkey";
+            columns: ["personnel_document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_document_releases_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_document_releases_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_documents: {
+        Row: {
+          access_class: Database["public"]["Enums"]["personnel_document_access_class"];
+          classified_at: string;
+          classified_by: string | null;
+          document_id: string;
+          document_type: string;
+          employee_record_id: string;
+          evidence_state: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          id: string;
+          organization_id: string;
+          updated_at: string;
+          updated_by: string | null;
+          valid_until: string | null;
+          version: number;
+        };
+        Insert: {
+          access_class: Database["public"]["Enums"]["personnel_document_access_class"];
+          classified_at?: string;
+          classified_by?: string | null;
+          document_id: string;
+          document_type: string;
+          employee_record_id: string;
+          evidence_state?: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          id?: string;
+          organization_id: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until?: string | null;
+          version?: number;
+        };
+        Update: {
+          access_class?: Database["public"]["Enums"]["personnel_document_access_class"];
+          classified_at?: string;
+          classified_by?: string | null;
+          document_id?: string;
+          document_type?: string;
+          employee_record_id?: string;
+          evidence_state?: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          id?: string;
+          organization_id?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          valid_until?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_documents_document_org_fkey";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_documents_document_org_fkey";
+            columns: ["document_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_documents_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_documents_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_employment_lifecycles: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          employee_record_id: string;
+          id: string;
+          organization_id: string;
+          scheduled_for: string | null;
+          scheduled_state:
+            | Database["public"]["Enums"]["personnel_employment_state"]
+            | null;
+          state: Database["public"]["Enums"]["personnel_employment_state"];
+          state_effective_on: string;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id: string;
+          id?: string;
+          organization_id: string;
+          scheduled_for?: string | null;
+          scheduled_state?:
+            | Database["public"]["Enums"]["personnel_employment_state"]
+            | null;
+          state: Database["public"]["Enums"]["personnel_employment_state"];
+          state_effective_on: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id?: string;
+          id?: string;
+          organization_id?: string;
+          scheduled_for?: string | null;
+          scheduled_state?:
+            | Database["public"]["Enums"]["personnel_employment_state"]
+            | null;
+          state?: Database["public"]["Enums"]["personnel_employment_state"];
+          state_effective_on?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_employment_lifecycles_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_employment_lifecycles_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_employment_transitions: {
+        Row: {
+          actor_id: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          effective_on: string;
+          employee_record_id: string;
+          employment_lifecycle_id: string;
+          from_state: Database["public"]["Enums"]["personnel_employment_state"];
+          id: string;
+          lifecycle_version: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          to_state: Database["public"]["Enums"]["personnel_employment_state"];
+          transition_kind: Database["public"]["Enums"]["personnel_employment_transition_kind"];
+          unresolved_work: Json;
+        };
+        Insert: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          effective_on: string;
+          employee_record_id: string;
+          employment_lifecycle_id: string;
+          from_state: Database["public"]["Enums"]["personnel_employment_state"];
+          id?: string;
+          lifecycle_version: number;
+          operation_id: string;
+          organization_id: string;
+          reason: string;
+          request_hash: string;
+          to_state: Database["public"]["Enums"]["personnel_employment_state"];
+          transition_kind: Database["public"]["Enums"]["personnel_employment_transition_kind"];
+          unresolved_work?: Json;
+        };
+        Update: {
+          actor_id?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          effective_on?: string;
+          employee_record_id?: string;
+          employment_lifecycle_id?: string;
+          from_state?: Database["public"]["Enums"]["personnel_employment_state"];
+          id?: string;
+          lifecycle_version?: number;
+          operation_id?: string;
+          organization_id?: string;
+          reason?: string;
+          request_hash?: string;
+          to_state?: Database["public"]["Enums"]["personnel_employment_state"];
+          transition_kind?: Database["public"]["Enums"]["personnel_employment_transition_kind"];
+          unresolved_work?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_employment_transitions_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_employment_transitions_lifecycle_org_fkey";
+            columns: ["employment_lifecycle_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_employment_lifecycles";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_employment_transitions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_lifecycle_operations: {
+        Row: {
+          actor_id: string | null;
+          created_at: string;
+          id: string;
+          operation_id: string;
+          operation_kind: string;
+          organization_id: string;
+          request_hash: string;
+          result_id: string | null;
+        };
+        Insert: {
+          actor_id?: string | null;
+          created_at?: string;
+          id?: string;
+          operation_id: string;
+          operation_kind: string;
+          organization_id: string;
+          request_hash: string;
+          result_id?: string | null;
+        };
+        Update: {
+          actor_id?: string | null;
+          created_at?: string;
+          id?: string;
+          operation_id?: string;
+          operation_kind?: string;
+          organization_id?: string;
+          request_hash?: string;
+          result_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_lifecycle_operations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_onboarding_plans: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          employee_record_id: string;
+          id: string;
+          name: string;
+          organization_id: string;
+          state: Database["public"]["Enums"]["personnel_onboarding_plan_state"];
+          target_start_date: string | null;
+          template_version_id: string | null;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id: string;
+          id?: string;
+          name: string;
+          organization_id: string;
+          state?: Database["public"]["Enums"]["personnel_onboarding_plan_state"];
+          target_start_date?: string | null;
+          template_version_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          employee_record_id?: string;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          state?: Database["public"]["Enums"]["personnel_onboarding_plan_state"];
+          target_start_date?: string | null;
+          template_version_id?: string | null;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_onboarding_plans_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_plans_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_plans_template_org_fkey";
+            columns: ["template_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_template_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      personnel_onboarding_requirements: {
+        Row: {
+          blocker_reason: string | null;
+          blocks_access: boolean;
+          created_at: string;
+          created_by: string | null;
+          description: string | null;
+          due_date: string | null;
+          employee_record_id: string;
+          id: string;
+          is_required: boolean;
+          organization_id: string;
+          owner_employee_record_id: string | null;
+          plan_id: string;
+          requirement_type: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order: number;
+          source_template_item_id: string | null;
+          state: Database["public"]["Enums"]["personnel_requirement_state"];
+          title: string;
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          blocker_reason?: string | null;
+          blocks_access?: boolean;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          due_date?: string | null;
+          employee_record_id: string;
+          id?: string;
+          is_required?: boolean;
+          organization_id: string;
+          owner_employee_record_id?: string | null;
+          plan_id: string;
+          requirement_type: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order: number;
+          source_template_item_id?: string | null;
+          state?: Database["public"]["Enums"]["personnel_requirement_state"];
+          title: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          blocker_reason?: string | null;
+          blocks_access?: boolean;
+          created_at?: string;
+          created_by?: string | null;
+          description?: string | null;
+          due_date?: string | null;
+          employee_record_id?: string;
+          id?: string;
+          is_required?: boolean;
+          organization_id?: string;
+          owner_employee_record_id?: string | null;
+          plan_id?: string;
+          requirement_type?: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order?: number;
+          source_template_item_id?: string | null;
+          state?: Database["public"]["Enums"]["personnel_requirement_state"];
+          title?: string;
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_onboarding_requirements_employee_org_fkey";
+            columns: ["employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_requirements_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_requirements_owner_org_fkey";
+            columns: ["owner_employee_record_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_records";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_requirements_plan_org_fkey";
+            columns: ["plan_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_plans";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_requirements_source_template_item_id_fkey";
+            columns: ["source_template_item_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_template_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_onboarding_template_items: {
+        Row: {
+          blocks_access: boolean;
+          created_at: string;
+          description: string | null;
+          due_offset_days: number | null;
+          id: string;
+          is_required: boolean;
+          organization_id: string;
+          requirement_type: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order: number;
+          template_version_id: string;
+          title: string;
+        };
+        Insert: {
+          blocks_access?: boolean;
+          created_at?: string;
+          description?: string | null;
+          due_offset_days?: number | null;
+          id?: string;
+          is_required?: boolean;
+          organization_id: string;
+          requirement_type: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order: number;
+          template_version_id: string;
+          title: string;
+        };
+        Update: {
+          blocks_access?: boolean;
+          created_at?: string;
+          description?: string | null;
+          due_offset_days?: number | null;
+          id?: string;
+          is_required?: boolean;
+          organization_id?: string;
+          requirement_type?: Database["public"]["Enums"]["personnel_requirement_type"];
+          sort_order?: number;
+          template_version_id?: string;
+          title?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_onboarding_template_items_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_template_items_version_org_fkey";
+            columns: ["template_version_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_template_versions";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      personnel_onboarding_template_versions: {
+        Row: {
+          description: string | null;
+          id: string;
+          name: string;
+          operation_id: string;
+          organization_id: string;
+          published_at: string;
+          published_by: string | null;
+          request_hash: string;
+          template_id: string;
+          version_number: number;
+        };
+        Insert: {
+          description?: string | null;
+          id?: string;
+          name: string;
+          operation_id: string;
+          organization_id: string;
+          published_at?: string;
+          published_by?: string | null;
+          request_hash: string;
+          template_id: string;
+          version_number: number;
+        };
+        Update: {
+          description?: string | null;
+          id?: string;
+          name?: string;
+          operation_id?: string;
+          organization_id?: string;
+          published_at?: string;
+          published_by?: string | null;
+          request_hash?: string;
+          template_id?: string;
+          version_number?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_onboarding_template_versions_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_onboarding_template_versions_template_org_fkey";
+            columns: ["template_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_templates";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
+      personnel_onboarding_templates: {
+        Row: {
+          created_at: string;
+          created_by: string | null;
+          current_version_number: number;
+          description: string | null;
+          id: string;
+          name: string;
+          organization_id: string;
+          state: Database["public"]["Enums"]["personnel_template_state"];
+          updated_at: string;
+          updated_by: string | null;
+          version: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by?: string | null;
+          current_version_number?: number;
+          description?: string | null;
+          id?: string;
+          name: string;
+          organization_id: string;
+          state?: Database["public"]["Enums"]["personnel_template_state"];
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string | null;
+          current_version_number?: number;
+          description?: string | null;
+          id?: string;
+          name?: string;
+          organization_id?: string;
+          state?: Database["public"]["Enums"]["personnel_template_state"];
+          updated_at?: string;
+          updated_by?: string | null;
+          version?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_onboarding_templates_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      personnel_requirement_references: {
+        Row: {
+          access_lifecycle_id: string | null;
+          acknowledgement_id: string | null;
+          added_by: string | null;
+          created_at: string;
+          employee_capability_id: string | null;
+          employment_condition_id: string | null;
+          id: string;
+          organization_id: string;
+          personnel_document_id: string | null;
+          requirement_id: string;
+          team_membership_id: string | null;
+          work_schedule_id: string | null;
+        };
+        Insert: {
+          access_lifecycle_id?: string | null;
+          acknowledgement_id?: string | null;
+          added_by?: string | null;
+          created_at?: string;
+          employee_capability_id?: string | null;
+          employment_condition_id?: string | null;
+          id?: string;
+          organization_id: string;
+          personnel_document_id?: string | null;
+          requirement_id: string;
+          team_membership_id?: string | null;
+          work_schedule_id?: string | null;
+        };
+        Update: {
+          access_lifecycle_id?: string | null;
+          acknowledgement_id?: string | null;
+          added_by?: string | null;
+          created_at?: string;
+          employee_capability_id?: string | null;
+          employment_condition_id?: string | null;
+          id?: string;
+          organization_id?: string;
+          personnel_document_id?: string | null;
+          requirement_id?: string;
+          team_membership_id?: string | null;
+          work_schedule_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "personnel_requirement_references_access_lifecycle_id_fkey";
+            columns: ["access_lifecycle_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_access_lifecycles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_acknowledgement_id_fkey";
+            columns: ["acknowledgement_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_acknowledgements";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_employee_capability_id_fkey";
+            columns: ["employee_capability_id"];
+            isOneToOne: false;
+            referencedRelation: "employee_capabilities";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_employment_condition_id_fkey";
+            columns: ["employment_condition_id"];
+            isOneToOne: false;
+            referencedRelation: "employment_conditions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_personnel_document_id_fkey";
+            columns: ["personnel_document_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_requirement_org_fkey";
+            columns: ["requirement_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "personnel_onboarding_requirements";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_team_membership_id_fkey";
+            columns: ["team_membership_id"];
+            isOneToOne: false;
+            referencedRelation: "team_memberships";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "personnel_requirement_references_work_schedule_id_fkey";
+            columns: ["work_schedule_id"];
+            isOneToOne: false;
+            referencedRelation: "work_schedules";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -9298,6 +10344,13 @@ export type Database = {
             referencedRelation: "documents";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "work_artifact_actions_signature_document_id_fkey";
+            columns: ["signature_document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
         ];
       };
       work_artifact_change_details: {
@@ -9515,6 +10568,13 @@ export type Database = {
             columns: ["document_id"];
             isOneToOne: false;
             referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_revision_documents_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
             referencedColumns: ["id"];
           },
           {
@@ -10327,6 +11387,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "work_handover_draft_items_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "work_handover_draft_items_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
@@ -10571,6 +11638,13 @@ export type Database = {
             referencedColumns: ["id"];
           },
           {
+            foreignKeyName: "work_handover_release_items_document_id_fkey";
+            columns: ["document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
             foreignKeyName: "work_handover_release_items_organization_id_fkey";
             columns: ["organization_id"];
             isOneToOne: false;
@@ -10679,6 +11753,13 @@ export type Database = {
             columns: ["package_document_id"];
             isOneToOne: false;
             referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_handover_releases_package_document_id_fkey";
+            columns: ["package_document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
             referencedColumns: ["id"];
           },
           {
@@ -11351,9 +12432,147 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      ordinary_documents: {
+        Row: {
+          category: string | null;
+          copied_from_document_id: string | null;
+          created_at: string | null;
+          current_version_number: number | null;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string | null;
+          folder_id: string | null;
+          id: string | null;
+          metadata: Json | null;
+          mime_type: string | null;
+          organization_id: string | null;
+          original_file_name: string | null;
+          size_bytes: number | null;
+          storage_bucket: string | null;
+          storage_path: string | null;
+          updated_at: string | null;
+          uploaded_by: string | null;
+        };
+        Insert: {
+          category?: string | null;
+          copied_from_document_id?: string | null;
+          created_at?: string | null;
+          current_version_number?: number | null;
+          delete_reason?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          display_name?: string | null;
+          folder_id?: string | null;
+          id?: string | null;
+          metadata?: Json | null;
+          mime_type?: string | null;
+          organization_id?: string | null;
+          original_file_name?: string | null;
+          size_bytes?: number | null;
+          storage_bucket?: string | null;
+          storage_path?: string | null;
+          updated_at?: string | null;
+          uploaded_by?: string | null;
+        };
+        Update: {
+          category?: string | null;
+          copied_from_document_id?: string | null;
+          created_at?: string | null;
+          current_version_number?: number | null;
+          delete_reason?: string | null;
+          deleted_at?: string | null;
+          deleted_by?: string | null;
+          display_name?: string | null;
+          folder_id?: string | null;
+          id?: string | null;
+          metadata?: Json | null;
+          mime_type?: string | null;
+          organization_id?: string | null;
+          original_file_name?: string | null;
+          size_bytes?: number | null;
+          storage_bucket?: string | null;
+          storage_path?: string | null;
+          updated_at?: string | null;
+          uploaded_by?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "documents_copied_from_document_id_fkey";
+            columns: ["copied_from_document_id"];
+            isOneToOne: false;
+            referencedRelation: "documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_copied_from_document_id_fkey";
+            columns: ["copied_from_document_id"];
+            isOneToOne: false;
+            referencedRelation: "ordinary_documents";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_deleted_by_fkey";
+            columns: ["deleted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_folder_id_fkey";
+            columns: ["folder_id"];
+            isOneToOne: false;
+            referencedRelation: "document_folders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_uploaded_by_fkey";
+            columns: ["uploaded_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Functions: {
+      acknowledge_personnel_item: {
+        Args: {
+          p_acknowledgement_kind: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
+          p_actor_id: string;
+          p_document_version_number: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_personnel_document_id: string;
+          p_request_hash: string;
+          p_requirement_id: string;
+          p_requirement_version: number;
+          p_statement: string;
+        };
+        Returns: string;
+      };
+      acknowledge_personnel_item_review_base: {
+        Args: {
+          p_acknowledgement_kind: Database["public"]["Enums"]["personnel_acknowledgement_kind"];
+          p_actor_id: string;
+          p_document_version_number: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_personnel_document_id: string;
+          p_request_hash: string;
+          p_requirement_id: string;
+          p_requirement_version: number;
+          p_statement: string;
+        };
+        Returns: string;
+      };
       acknowledge_planning_dispatch: {
         Args: {
           p_actor_id: string;
@@ -11468,6 +12687,22 @@ export type Database = {
           user_exists: boolean;
           user_id: string;
         }[];
+      };
+      classify_personnel_document: {
+        Args: {
+          p_access_class: Database["public"]["Enums"]["personnel_document_access_class"];
+          p_actor_id: string;
+          p_document_id: string;
+          p_document_type: string;
+          p_employee_record_id: string;
+          p_evidence_state: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+          p_valid_until: string;
+        };
+        Returns: string;
       };
       clear_project_execution_override: {
         Args: {
@@ -11788,6 +13023,19 @@ export type Database = {
         };
         Returns: string;
       };
+      create_personnel_onboarding_plan: {
+        Args: {
+          p_actor_id: string;
+          p_employee_record_id: string;
+          p_name: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+          p_target_start_date: string;
+          p_template_version_id: string;
+        };
+        Returns: string;
+      };
       create_planning_entry_materialized: {
         Args: {
           p_actor_id: string;
@@ -12037,6 +13285,50 @@ export type Database = {
           p_organization_id: string;
           p_size_bytes: number;
           p_zip_sha256: string;
+        };
+        Returns: string;
+      };
+      finalize_personnel_document_metadata: {
+        Args: {
+          p_access_class: Database["public"]["Enums"]["personnel_document_access_class"];
+          p_actor_id: string;
+          p_category: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_document_type: string;
+          p_employee_record_id: string;
+          p_evidence_state: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          p_mime_type: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_original_file_name: string;
+          p_request_hash: string;
+          p_size_bytes: number;
+          p_storage_bucket: string;
+          p_storage_path: string;
+          p_valid_until: string;
+        };
+        Returns: string;
+      };
+      finalize_personnel_document_metadata_base: {
+        Args: {
+          p_access_class: Database["public"]["Enums"]["personnel_document_access_class"];
+          p_actor_id: string;
+          p_category: string;
+          p_display_name: string;
+          p_document_id: string;
+          p_document_type: string;
+          p_employee_record_id: string;
+          p_evidence_state: Database["public"]["Enums"]["personnel_document_evidence_state"];
+          p_mime_type: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_original_file_name: string;
+          p_request_hash: string;
+          p_size_bytes: number;
+          p_storage_bucket: string;
+          p_storage_path: string;
+          p_valid_until: string;
         };
         Returns: string;
       };
@@ -12561,6 +13853,34 @@ export type Database = {
         };
         Returns: string;
       };
+      publish_personnel_onboarding_template: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_expected_version: number;
+          p_items: Json;
+          p_name: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+          p_template_id: string;
+        };
+        Returns: string;
+      };
+      publish_personnel_onboarding_template_base: {
+        Args: {
+          p_actor_id: string;
+          p_description: string;
+          p_expected_version: number;
+          p_items: Json;
+          p_name: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_request_hash: string;
+          p_template_id: string;
+        };
+        Returns: string;
+      };
       publish_work_template: {
         Args: {
           p_actor_id: string;
@@ -13066,6 +14386,27 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      save_personnel_onboarding_requirement: {
+        Args: {
+          p_actor_id: string;
+          p_blocker_reason: string;
+          p_blocks_access: boolean;
+          p_description: string;
+          p_due_date: string;
+          p_expected_version: number;
+          p_is_required: boolean;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_owner_employee_record_id: string;
+          p_plan_id: string;
+          p_request_hash: string;
+          p_requirement_id: string;
+          p_requirement_type: Database["public"]["Enums"]["personnel_requirement_type"];
+          p_state: Database["public"]["Enums"]["personnel_requirement_state"];
+          p_title: string;
+        };
+        Returns: string;
+      };
       save_work_handover_draft: {
         Args: {
           p_actor_id: string;
@@ -13413,6 +14754,76 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      set_personnel_access_transition: {
+        Args: {
+          p_actor_id: string;
+          p_effective_at: string;
+          p_employee_record_id: string;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+          p_transition_kind: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Returns: string;
+      };
+      set_personnel_access_transition_p1_24_base: {
+        Args: {
+          p_actor_id: string;
+          p_effective_at: string;
+          p_employee_record_id: string;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+          p_transition_kind: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Returns: string;
+      };
+      set_personnel_access_transition_review_base: {
+        Args: {
+          p_actor_id: string;
+          p_effective_at: string;
+          p_employee_record_id: string;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+          p_transition_kind: Database["public"]["Enums"]["personnel_access_transition_kind"];
+        };
+        Returns: string;
+      };
+      set_personnel_document_release: {
+        Args: {
+          p_actor_id: string;
+          p_document_version_number: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_personnel_document_id: string;
+          p_reason: string;
+          p_release: boolean;
+          p_request_hash: string;
+        };
+        Returns: string;
+      };
+      set_personnel_employment_transition: {
+        Args: {
+          p_actor_id: string;
+          p_effective_on: string;
+          p_employee_record_id: string;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+          p_transition_kind: Database["public"]["Enums"]["personnel_employment_transition_kind"];
+          p_unresolved_work: Json;
+        };
+        Returns: string;
       };
       set_planning_occurrence_status: {
         Args: {
@@ -14182,6 +15593,70 @@ export type Database = {
         | "payout"
         | "opening_balance"
         | "closing_balance";
+      personnel_access_state:
+        | "not_configured"
+        | "scheduled"
+        | "active"
+        | "suspended"
+        | "ended";
+      personnel_access_transition_kind:
+        | "schedule_activation"
+        | "activate_now"
+        | "suspend_now"
+        | "schedule_suspension"
+        | "cancel_scheduled"
+        | "reactivate"
+        | "end_access";
+      personnel_acknowledgement_kind:
+        | "document_received"
+        | "requirement_completed";
+      personnel_document_access_class:
+        | "personnel_standard"
+        | "admin_restricted"
+        | "health_evidence";
+      personnel_document_evidence_state:
+        | "pending"
+        | "valid"
+        | "expiring"
+        | "superseded";
+      personnel_employment_state:
+        | "planned"
+        | "active"
+        | "notice"
+        | "inactive"
+        | "exited";
+      personnel_employment_transition_kind:
+        | "plan_start"
+        | "start"
+        | "record_notice"
+        | "plan_exit"
+        | "mark_inactive"
+        | "exit"
+        | "cancel_scheduled"
+        | "reverse"
+        | "reactivate";
+      personnel_onboarding_plan_state:
+        | "in_progress"
+        | "blocked"
+        | "ready"
+        | "cancelled";
+      personnel_requirement_state:
+        | "missing"
+        | "pending"
+        | "fulfilled"
+        | "blocked"
+        | "waived"
+        | "cancelled";
+      personnel_requirement_type:
+        | "document"
+        | "qualification"
+        | "employment_condition"
+        | "work_schedule"
+        | "team"
+        | "access"
+        | "acknowledgement"
+        | "manual";
+      personnel_template_state: "draft" | "published" | "archived";
       planning_entry_kind: "job_visit" | "internal";
       planning_internal_type:
         | "internal_work"
@@ -14770,6 +16245,80 @@ export const Constants = {
         "opening_balance",
         "closing_balance",
       ],
+      personnel_access_state: [
+        "not_configured",
+        "scheduled",
+        "active",
+        "suspended",
+        "ended",
+      ],
+      personnel_access_transition_kind: [
+        "schedule_activation",
+        "activate_now",
+        "suspend_now",
+        "schedule_suspension",
+        "cancel_scheduled",
+        "reactivate",
+        "end_access",
+      ],
+      personnel_acknowledgement_kind: [
+        "document_received",
+        "requirement_completed",
+      ],
+      personnel_document_access_class: [
+        "personnel_standard",
+        "admin_restricted",
+        "health_evidence",
+      ],
+      personnel_document_evidence_state: [
+        "pending",
+        "valid",
+        "expiring",
+        "superseded",
+      ],
+      personnel_employment_state: [
+        "planned",
+        "active",
+        "notice",
+        "inactive",
+        "exited",
+      ],
+      personnel_employment_transition_kind: [
+        "plan_start",
+        "start",
+        "record_notice",
+        "plan_exit",
+        "mark_inactive",
+        "exit",
+        "cancel_scheduled",
+        "reverse",
+        "reactivate",
+      ],
+      personnel_onboarding_plan_state: [
+        "in_progress",
+        "blocked",
+        "ready",
+        "cancelled",
+      ],
+      personnel_requirement_state: [
+        "missing",
+        "pending",
+        "fulfilled",
+        "blocked",
+        "waived",
+        "cancelled",
+      ],
+      personnel_requirement_type: [
+        "document",
+        "qualification",
+        "employment_condition",
+        "work_schedule",
+        "team",
+        "access",
+        "acknowledgement",
+        "manual",
+      ],
+      personnel_template_state: ["draft", "published", "archived"],
       planning_entry_kind: ["job_visit", "internal"],
       planning_internal_type: ["internal_work", "meeting", "training", "other"],
       planning_occurrence_status: ["scheduled", "skipped", "cancelled"],

@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-02
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job/project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll/accounting handoffs.
 
@@ -23,7 +23,7 @@ The product must reduce timesheets and repeated office reconciliation without hi
 
 ## Current Product Baseline
 
-The implemented baseline (updated through `P1-23`) includes:
+The implemented baseline (updated through `P1-24`) includes:
 
 - A `/zeiterfassung` route available to all organization roles and a global live clock experience.
 - Stable attendance sessions and factual activity segments for work, travel, break, standby, call-out, and fixed internal activities. Every switch is one version-checked, idempotent database operation with append-only attribution; existing `time_entries` remain unchanged compatibility facts and are not backfilled.
@@ -46,6 +46,7 @@ The implemented baseline (updated through `P1-23`) includes:
 - Calendar visualization and correction flows, plus time visibility in job and project contexts.
 - Realtime refreshes for legacy entries, canonical sessions and segments, and attention counts. Since `P1-07` the badge pipeline is unified: the Zeiterfassung sidebar badge and the Anträge tab badge count time **and** vacation approvals for the viewer, and pending legacy time sessions/change requests additionally appear as attention items on `/aufgaben` for exactly the effective holders. Decisions run only through the existing review actions.
 - Visible recovery for sessions open longer than 24 hours, legacy-open bridging on the next canonical action, and attributable closure on sign-out or member removal.
+- P1-24 organization-scoped access suspension removes the affected membership from every current server-side authorization result without deleting time rows, canonical sessions, account statements or closed-period history. Full final settlement and replacement of legacy destructive member removal remain P1-33.
 - Since `P1-06`: the dashboard's vacation area is a real balance and entry point (owned by employee management) — entitlement arithmetic or the labeled „Kein Urlaubsanspruch hinterlegt" exception, own requests with status and withdrawal, and the request dialog. Approved vacation reaches daily targets as a discriminated absence input on `resolveDailyTarget` (full day → 0, half day → half base target), so the Tagesziel, ring, weekly `Soll`, member detail, and member list all react through the one target contract; pending requests are provisional and never change targets. Clocking in on an own approved full-day vacation day is denied at the server action („Heute ist Urlaub genehmigt"); the correction path is an authorized cancellation of the vacation. The Anträge tab additionally shows pending vacation requests to effective `leave_approval` holders.
 - Since `P1-08`: the dashboard also carries the **Krankmeldung** section (owned by employee management) — self-report and own-report management. Active sickness reaches the same `resolveDailyTarget` absence input as a second discriminated type (`sickness`; open-ended reports clamped to the query window; on a day covered by both, vacation keeps the display attribution), so every target surface reacts through the one contract; the own dashboard says „Krankmeldung – heute keine Sollarbeitszeit." Clocking in on a sick day is deliberately NOT blocked: the action succeeds with a visible notice („Für heute liegt eine Krankmeldung vor …") because a recovered person clocking in early is reality — the end-date correction is the nudge, and the office sees the contradiction on the management surface.
 

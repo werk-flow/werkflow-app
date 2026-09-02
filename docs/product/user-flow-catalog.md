@@ -1009,6 +1009,77 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 **Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).
 
+### `P1-24` — Kontrollierter Personenlebenszyklus (2026-09-02)
+
+- `P1-24-F01` — Eine Organisation ohne P1-24-Konfiguration sieht „Bisheriger Zugang – nicht gesteuert“ und „Kein Onboardingplan“, niemals einen erfundenen vollständigen oder regelkonformen Zustand.
+- `P1-24-F02` — Unvollständige Anforderungen zeigen ihren konkreten fehlenden, ausstehenden oder blockierten Zustand mit verantwortlicher Person, Termin und Grund, soweit diese Angaben erfasst wurden.
+- `P1-24-F03` — Admin und Büro öffnen den kontrollierten Lebenszyklus einer verknüpften Person aus derselben Mitarbeiterdetailansicht wie deren vorhandene Stammdaten.
+- `P1-24-F04` — Admin und Büro verwalten Onboarding und geschützte Unterlagen auch für einen Personalstammsatz ohne Login; ein Benutzerkonto ist keine Voraussetzung.
+- `P1-24-F05` — Eine verknüpfte Person sieht in „Meine Aufgaben“ nur die eigenen freigegebenen Unterlagen und erforderlichen Bestätigungen, einschließlich eines klaren Leerzustands.
+- `P1-24-F06` — Ein fremdes Organisationsmitglied und eine nicht berechtigte Person erhalten weder Detailansicht noch P1-24-Daten über direkte URL- oder Datenzugriffe.
+- `P1-24-F07` — Eine berechtigte Person lädt eine geschützte Personalunterlage direkt in den bestehenden privaten Dateispeicher; der Server übernimmt keine Dateibytes.
+- `P1-24-F08` — Eine geschützte Personalunterlage gehört dauerhaft zum organisationsbezogenen Personalstammsatz und funktioniert deshalb auch vor der Kontoerstellung.
+- `P1-24-F09` — Eine geschützte Personalunterlage kann nicht zugleich als gewöhnliche Mitarbeiter-, Auftrags-, Projekt- oder Kundendatei verknüpft werden.
+- `P1-24-F10` — Gewöhnliche vorhandene Mitarbeiterdokumente bleiben unverändert sichtbar und werden weder automatisch geschützt noch neu klassifiziert.
+- `P1-24-F11` — Eine neue Fassung nutzt die vorhandene Dokumentversionierung, den vorhandenen R2-Pfadraum und die vorhandene Dokumenthistorie, ohne eine Dateikopie anzulegen.
+- `P1-24-F12` — Ersetzen einer Unterlage bewahrt frühere Fassungen und gibt eine neue Fassung nicht still an die betroffene Person frei.
+- `P1-24-F13` — Standard-Personalunterlagen sind für Admin sichtbar und von Büro verwaltbar; ihre Freigabe an die betroffene Person bleibt ausdrücklich.
+- `P1-24-F14` — Admin-beschränkte Unterlagen sind nur für Admin einsehbar; Büro erhält höchstens den für die Arbeitssteuerung erforderlichen Status.
+- `P1-24-F15` — Gesundheitsnahe Nachweise bleiben für Admin und die betroffene Person auf ihren vorgesehenen Wegen zugänglich; Büro erhält keinen Dateiinhalt und WerkFlow erfasst keine Diagnose.
+- `P1-24-F16` — Die betroffene Person kann einen eigenen angeforderten gesundheitsnahen Nachweis hochladen, ohne Zugriff auf andere Personalunterlagen oder die Dokumentbibliothek zu erhalten.
+- `P1-24-F17` — Admin gibt genau die aktuelle Fassung einer zulässigen Unterlage an die betroffene Person frei und kann diese Freigabe mit nachvollziehbarem Grund widerrufen.
+- `P1-24-F18` — Eine Mitarbeiterbestätigung belegt nur Person, genaue Fassung, Aussage und Zeitpunkt; sie wird weder als Unterschrift noch als rechtliche Wirksamkeit ausgegeben.
+- `P1-24-F19` — Berechtigte Personen sehen Klassifikation, Fassung, Freigabe, Bestätigung und Änderungshistorie, ohne unveränderliche Ereignisse umzuschreiben.
+- `P1-24-F20` — Planung, Qualifikationsprüfung und andere operative Flächen können einen fehlenden, gültigen oder ablaufenden Nachweisstatus nutzen, erhalten aber weder Datei noch sensible Klassifikation.
+- `P1-24-F21` — Papierkorb, Wiederherstellung und dauerhafte Löschung bewahren die strengere Schutzgrenze; gesperrte Aufbewahrungsfälle bleiben als Ausnahme sichtbar und der Export behauptet keine revisionssichere Archivierung.
+- `P1-24-F22` — Nach der Bereitstellung existiert keine automatisch angelegte Onboardingvorlage; die Vorlagenverwaltung zeigt einen ehrlichen Leerzustand.
+- `P1-24-F23` — Admin veröffentlicht eine wiederverwendbare organisationsbezogene Vorlage mit verständlichem Namen und geordneten Anforderungen.
+- `P1-24-F24` — Eine veröffentlichte Vorlagenfassung bleibt unveränderlich; eine Änderung erzeugt eine neue Fassung, ohne bestehende Pläne umzuschreiben.
+- `P1-24-F25` — Ein Onboardingplan wird bewusst für genau einen Personalstammsatz erzeugt und bleibt nach der Erzeugung unabhängig von späteren Vorlagenänderungen bearbeitbar.
+- `P1-24-F26` — Ein Plan ohne Vorlage ist möglich und wird nicht als automatisch vollständig dargestellt.
+- `P1-24-F27` — Eine Anforderung besitzt genau einen Typ aus Dokument, Qualifikation, Beschäftigungsbedingung, Arbeitszeitmodell, Team, Zugang, Bestätigung oder manuellem Punkt.
+- `P1-24-F28` — Eine Anforderung unterscheidet verpflichtend und optional; nur eine ausdrücklich als Zugangssperre markierte offene Anforderung verhindert die Aktivierung.
+- `P1-24-F29` — Eine Anforderung kann eine verantwortliche Person, ein Fälligkeitsdatum und einen verständlichen Blockierungsgrund tragen, ohne diese Angaben zu erfinden.
+- `P1-24-F30` — Nachweise verweisen auf vorhandene Dokumente, Qualifikationen, Beschäftigungsbedingungen, Arbeitszeitmodelle, Teams, Zugänge oder Bestätigungen, statt deren Daten zu kopieren.
+- `P1-24-F31` — Dokumentanforderungen unterscheiden fehlend, ausstehend, gültig, ablaufend und ersetzt; fehlende Konfiguration wird nicht als gültig ausgegeben.
+- `P1-24-F32` — Jede Anforderungsänderung erhöht eine erwartete Version; ein veralteter Stand überschreibt keine neuere Bearbeitung.
+- `P1-24-F33` — Derselbe Wiederholungsauftrag mit gleichem Inhalt liefert dasselbe Ergebnis; dieselbe Anfrage-ID mit anderem Inhalt wird ohne Teilmutation abgewiesen.
+- `P1-24-F34` — Die betroffene Person erledigt eine eigene Bestätigungsanforderung in „Meine Aufgaben“; der Manager sieht den aktualisierten Zustand über den vorhandenen Live-Abgleich.
+- `P1-24-F35` — Ein Personalstammsatz ohne Login behält seinen Plan und seine Nachweise, zeigt aber keine fingierte eigene Erledigung oder Bestätigung.
+- `P1-24-F36` — Admin plant den Organisationszugang einer eingeladenen zukünftigen Person für einen genauen Zeitpunkt, ohne das globale Auth-Konto zu verändern.
+- `P1-24-F37` — Vor dem Aktivierungszeitpunkt sieht die Person ausschließlich die begrenzte eigene Onboardingfläche und keine operativen Organisationsdaten.
+- `P1-24-F38` — Nach Fälligkeit wird der Zugang anhand der Datenbankzeit wirksam, sofern keine ausdrücklich sperrende Anforderung offen ist.
+- `P1-24-F39` — Eine fällige Aktivierung mit offener Zugangssperre bleibt im Vorstartzustand und nennt die fehlende Voraussetzung statt Zugriff zu gewähren.
+- `P1-24-F40` — Abgelaufene, widerrufene oder ersetzte Einladungen bleiben von einem geplanten Zugang getrennt; keine Einladung erzeugt still eine Zugangsentscheidung.
+- `P1-24-F41` — Admin sperrt den Zugang zu dieser Organisation sofort; offene Sitzungen verlieren bei der nächsten serverseitig autorisierten Anfrage den Organisationszugriff.
+- `P1-24-F42` — Admin plant eine spätere Sperre, sieht bis dahin den wirksamen Zugang und kann die Planung vor Fälligkeit nachvollziehbar zurücknehmen.
+- `P1-24-F43` — Eine organisationsbezogene Sperre lässt denselben globalen Auth-Benutzer in einer anderen berechtigten Organisation unverändert aktiv.
+- `P1-24-F44` — Admin reaktiviert einen gesperrten Zugang ausdrücklich mit Grund und neuer Version; die frühere Sperre bleibt in der Historie.
+- `P1-24-F45` — Organisationsinhaber und letzter wirksamer Admin können nicht gesperrt oder beendet werden, solange kein sicherer Nachfolger wirksam ist.
+- `P1-24-F46` — Admin erfasst einen geplanten Beschäftigungsbeginn mit Datum und Grund, ohne daraus automatisch Login, Mitgliedschaft oder Onboarding abzuleiten.
+- `P1-24-F47` — Eine aktive Beschäftigung und eine vorgemerkte Beendigung bleiben als gegenwärtiger Zustand und zukünftiger Übergang getrennt sichtbar.
+- `P1-24-F48` — Admin erfasst Inaktivität oder Austritt als versionierten Übergang; Eintritts- und Austrittsdaten widersprechen sich nicht und alte Bedingungen bleiben erhalten.
+- `P1-24-F49` — Ein geplanter Beschäftigungsübergang kann vor Wirksamkeit begründet zurückgenommen werden; eine spätere Reaktivierung erzeugt einen neuen Übergang statt Historie zu löschen.
+- `P1-24-F50` — Vor Inaktivität oder Austritt zeigt WerkFlow direkte und delegierte Zeit- und Urlaubsfreigaben anhand der wirksamen P1-05-Auflösung.
+- `P1-24-F51` — Die Übergangsvorschau nennt offene Freigaben, persönliche Aufmerksamkeitspunkte und aktive zugewiesene Aufträge, ohne deren Fachdaten zu kopieren.
+- `P1-24-F52` — Verantwortlichkeiten werden über die vorhandene P1-05-Vorschau ausdrücklich neu konfiguriert; der frühere Halter bleibt historisch nachvollziehbar.
+- `P1-24-F53` — Aktive Arbeit wird nur über den vorhandenen Auftragszuweisungsweg ausdrücklich neu zugeordnet; P1-24 erzeugt kein zweites Zuweisungsmodell.
+- `P1-24-F54` — Der letzte wirksame Verantwortungshalter blockiert den Beschäftigungsabschluss; andere ungeklärte Arbeit bleibt als begründete sichtbare Ausnahme erhalten.
+- `P1-24-F55` — Eine notwendige sofortige Zugangssperre bleibt trotz ungeklärter Übergabearbeit möglich; die offenen Punkte werden nicht als erledigt ausgegeben.
+- `P1-24-F56` — Nach Inaktivität oder Austritt bleibt die Person auf Aufträgen, Zeiten, Beständen, Dokumenten, Qualifikationen, Kontonachweisen und Auditereignissen historisch benannt und verschwindet aus aktiver Planung.
+- `P1-24-F57` — Büro verwaltet Standard-Onboarding und Standard-Personalunterlagen, kann aber weder Zugang steuern noch eingeschränkte oder gesundheitsnahe Dateien öffnen.
+- `P1-24-F58` — Eine Person mit Zeit- oder Urlaubsfreigabeverantwortung erhält daraus keinen Zugriff auf geschützte Personalunterlagen oder Übergangshistorie.
+- `P1-24-F59` — Jede Serveraktion prüft aktuelle Authentifizierung, Organisation, Rolle, stabile Personalidentität, erwartete Version und Anfrageidentität erneut; versteckte UI-Elemente sind keine Autorisierung.
+- `P1-24-F60` — RLS trennt Organisationen und Schutzklassen auch bei direkten Tabellen-, View-, Versions-, Freigabe- und Historienzugriffen.
+- `P1-24-F61` — Gleichzeitige Klassifikation, Verknüpfung oder Ordnerzuweisung derselben Datei sowie gleichzeitige Lebenszyklusänderungen werden serialisiert und enden in genau einem gültigen Zustand.
+- `P1-24-F62` — Offene Ansichten erhalten Änderungen an den veränderlichen Lebenszykluswurzeln über den zentralen Realtime-Abgleich; Dialoge bleiben während Eingaben stabil und holen danach den Serverstand nach.
+- `P1-24-F63` — Lade-, Fehler-, veraltete, geplante, gesperrte und abgelaufene Zustände bleiben sichtbar, melden keinen falschen Erfolg und bieten einen verständlichen Wiederholungs- oder Korrekturweg.
+- `P1-24-F64` — Die Bereitstellung verändert keine vorhandene Mitgliedschaft, Einladung, Rolle, Verantwortung, Arbeit, Zeit, Periode, Unterlage, Verknüpfung, Version oder Datei und erzeugt keine P1-24-Geschäftszeile.
+- `P1-24-F65` — Der Personenexport liefert ein begrenztes nachvollziehbares Manifest und vorhandene autorisierte Downloads, aber keine Behauptung zu Signatur, Rechtskonformität, Aufbewahrungsfrist, Legal Hold oder vollständiger Portabilität.
+- `P1-24-F66` — P1-24 deaktiviert kein globales Auth-Konto, nutzt keinen neuen externen Dienst und erzeugt kein zweites Dokument-, Qualifikations-, Verantwortungs-, Aufgaben-, Auftrags-, Zeit-, Lohn-, Anlagenrückgabe- oder Aufbewahrungssystem.
+
+**Acceptance invariant:** `66/66 mapped; 66/66 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-02).
+
 ### `P1-23` — Zeitkonten, Periodenabschluss und Lohnexport (2026-09-01)
 
 - `P1-23-F01` — Die Organisation verwendet zunächst vollständige Kalendermonate in `Europe/Berlin`; jede Periode bewahrt ihre ausdrücklichen Grenzen für eine spätere, separat entschiedene Stichtagslogik.

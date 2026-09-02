@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getProfileAvatarUrl } from "@/lib/profile-avatar";
 import type { User } from "@supabase/supabase-js";
 import type { UserOrg } from "@/components/organization/organization-context";
-import type { Json } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import {
   getAuftraegePreferencesFromJson,
   type AuftraegeColumnId,
@@ -20,6 +20,7 @@ import {
   parseHolidayRegionHistory,
   type OrganizationHolidayCalendar,
 } from "@/lib/personnel/targets";
+import { getMembershipAccessMode } from "@/lib/personnel/lifecycle";
 
 type OrganizationData = {
   id: string;
@@ -99,54 +100,164 @@ export const getAuthenticatedUser = cache(async (): Promise<User | null> => {
  * Uses unstable_cache with the admin client (no cookies needed) so results
  * persist across navigations. Tagged for on-demand revalidation.
  */
-export const getCachedMemberships = cache(
-  async (userId: string): Promise<UserOrg[]> => {
-    const fetchMemberships = unstable_cache(
-      async (uid: string): Promise<UserOrg[]> => {
-        const admin = createSupabaseAdminClient();
+type MembershipCandidate = UserOrg & {
+  hasAccessBlocker: boolean;
+  accessLifecycle: {
+    state: Database["public"]["Enums"]["personnel_access_state"];
+    scheduledState:
+      | Database["public"]["Enums"]["personnel_access_state"]
+      | null;
+    scheduledFor: string | null;
+  } | null;
+};
 
-        const { data, error } = await admin
+async function loadMembershipCandidates(userId: string): Promise<MembershipCandidate[]> {
+  const fetchMemberships = unstable_cache(
+    async (uid: string): Promise<MembershipCandidate[]> => {
+      const admin = createSupabaseAdminClient();
+      const [membersResult, employeesResult] = await Promise.all([
+        admin
           .from("organization_members")
           .select(
-            `
-          organization_id,
-          role,
-          joined_at,
-          organizations (
-            id,
-            name,
-            unique_code
+            `organization_id, role, joined_at, organizations (id, name, unique_code)`,
           )
-        `,
+          .eq("user_id", uid),
+        admin
+          .from("employee_records")
+          .select("id, organization_id")
+          .eq("user_id", uid),
+      ]);
+
+      if (membersResult.error || employeesResult.error) {
+        console.error(
+          "Error fetching memberships:",
+          membersResult.error ?? employeesResult.error,
+        );
+        throw membersResult.error ?? employeesResult.error;
+      }
+
+      const employeeByOrganization = new Map(
+        (employeesResult.data ?? []).map((employee) => [
+          employee.organization_id,
+          employee.id,
+        ]),
+      );
+      const employeeIds = Array.from(employeeByOrganization.values());
+      const organizationIds = Array.from(employeeByOrganization.keys());
+      const organizationByEmployee = new Map(
+        Array.from(employeeByOrganization, ([organizationId, employeeId]) => [
+          employeeId,
+          organizationId,
+        ]),
+      );
+      const [lifecyclesResult, blockersResult] = await Promise.all([
+        employeeIds.length > 0
+          ? admin
+              .from("personnel_access_lifecycles")
+              .select("employee_record_id, organization_id, state, scheduled_state, scheduled_for")
+              .in("employee_record_id", employeeIds)
+              .in("organization_id", organizationIds)
+          : Promise.resolve({ data: [], error: null }),
+        employeeIds.length > 0
+          ? admin
+              .from("personnel_onboarding_requirements")
+              .select("employee_record_id, organization_id")
+              .in("employee_record_id", employeeIds)
+              .in("organization_id", organizationIds)
+              .eq("blocks_access", true)
+              .not("state", "in", "(fulfilled,waived,cancelled)")
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+      if (lifecyclesResult.error || blockersResult.error) {
+        console.error(
+          "Error fetching membership access state:",
+          lifecyclesResult.error ?? blockersResult.error,
+        );
+        throw lifecyclesResult.error ?? blockersResult.error;
+      }
+      const lifecycleByEmployee = new Map(
+        (lifecyclesResult.data ?? [])
+          .filter(
+            (lifecycle) =>
+              organizationByEmployee.get(lifecycle.employee_record_id) ===
+              lifecycle.organization_id,
           )
-          .eq("user_id", uid);
+          .map((lifecycle) => [
+            lifecycle.employee_record_id,
+            {
+              state: lifecycle.state,
+              scheduledState: lifecycle.scheduled_state,
+              scheduledFor: lifecycle.scheduled_for,
+            },
+          ]),
+      );
+      const blockedEmployeeIds = new Set(
+        (blockersResult.data ?? [])
+          .filter(
+            (requirement) =>
+              organizationByEmployee.get(requirement.employee_record_id) ===
+              requirement.organization_id,
+          )
+          .map((requirement) => requirement.employee_record_id),
+      );
 
-        if (error) {
-          console.error("Error fetching memberships:", error);
-          return [];
-        }
+      return (membersResult.data ?? [])
+        .filter((membership) => membership.organizations !== null)
+        .map((membership) => {
+          const organization = membership.organizations as unknown as OrganizationData;
+          const employeeId = employeeByOrganization.get(membership.organization_id);
+          return {
+            orgId: membership.organization_id,
+            name: organization.name,
+            uniqueCode: organization.unique_code,
+            role: membership.role,
+            joinedAt: membership.joined_at,
+            hasAccessBlocker: employeeId
+              ? blockedEmployeeIds.has(employeeId)
+              : false,
+            accessLifecycle: employeeId
+              ? (lifecycleByEmployee.get(employeeId) ?? null)
+              : null,
+          };
+        });
+    },
+    [`memberships-${userId}`],
+    {
+      tags: [CACHE_TAGS.memberships(userId)],
+      revalidate: REVALIDATE_SECONDS,
+    },
+  );
 
-        return (data ?? [])
-          .filter((m) => m.organizations !== null)
-          .map((m) => {
-            const org = m.organizations as unknown as OrganizationData;
-            return {
-              orgId: m.organization_id,
-              name: org.name,
-              uniqueCode: org.unique_code,
-              role: m.role,
-              joinedAt: m.joined_at,
-            };
-          });
-      },
-      [`memberships-${userId}`],
-      {
-        tags: [CACHE_TAGS.memberships(userId)],
-        revalidate: REVALIDATE_SECONDS,
-      },
-    );
+  return fetchMemberships(userId);
+}
 
-    return fetchMemberships(userId);
+function toUserOrg(membership: MembershipCandidate): UserOrg {
+  return {
+    orgId: membership.orgId,
+    name: membership.name,
+    uniqueCode: membership.uniqueCode,
+    role: membership.role,
+    joinedAt: membership.joinedAt,
+  };
+}
+
+export const getCachedMemberships = cache(
+  async (userId: string): Promise<UserOrg[]> => {
+    const candidates = await loadMembershipCandidates(userId);
+    const now = Date.now();
+    return candidates
+      .filter((membership) => getMembershipAccessMode(membership, now) === "operational")
+      .map(toUserOrg);
+  },
+);
+
+export const getCachedPrestartMemberships = cache(
+  async (userId: string): Promise<UserOrg[]> => {
+    const candidates = await loadMembershipCandidates(userId);
+    const now = Date.now();
+    return candidates
+      .filter((membership) => getMembershipAccessMode(membership, now) === "prestart")
+      .map(toUserOrg);
   },
 );
 
