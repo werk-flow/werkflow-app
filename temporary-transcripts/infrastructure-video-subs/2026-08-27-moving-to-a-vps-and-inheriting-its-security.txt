@@ -1,0 +1,72 @@
+# Moving to a VPS means inheriting everything the platform did for you
+
+Source: https://www.instagram.com/reel/Dci-Qq_j9EL/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-27
+Topic: infrastructure-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You moved to a VPS for more control. 
+
+You left the front door wide open. 
+
+Your managed platform handled security invisibly. Now you own the server and every vulnerability on it. SSH is accepting passwords on the default port. Every port is open. Security updates are not running. 
+
+Three fixes. Five minutes each. Direct your AI to lock it down before someone else walks in.
+
+-MM
+
+#vibecoding #aidirectedengineering #vps #serversecurity #production
+
+## Transcript
+
+You moved to a VPS for more control and I can't blame you, but you accidentally left
+the front door wide open when you did it.
+Your managed platform is handling security invisibly.
+So firewall rules, SSH hardening, automatic patching, you never thought about any of it
+because someone else's platform was doing it for you.
+Now you own that server in every vulnerability that lives on it.
+So here's what your AI never configured when you set up your VPS.
+Number one, SSH hardening.
+Right now your server is accepting password authentication on a default port.
+Every bot on the internet is trying root passwords against port 22 around the clock.
+So your server is being attacked right now, you don't even know it.
+So disable password authentication entirely, switch to key based access only and change
+the default SSH port.
+Disable root login while you're there.
+These are four commands that take five minutes and stop 99% of automated attacks before they
+start.
+So direct your AI to harden your SSH configuration before you do anything else on that server.
+That's a win.
+Step two, a firewall that blocks everything you did not explicitly allow.
+Your managed platform had invisible firewall rules.
+Your VPS has none.
+So every port wide open, every service fully reachable and your database port is exposed
+to the public internet.
+So direct your AI to configure UFW or IP tables to deny all inbound traffic by default and
+allow only specific ports your application needs like SSH, HTTP or HTTPS.
+Nothing else gets through.
+And step three, automatic security updates.
+Your managed platform patched itself.
+Your VPS does not.
+So every unpatched vulnerability is a door someone will eventually walk through and you
+don't know about it.
+The longer you wait, the more doors that are open.
+So direct your AI to configure unattended security updates so critical patches apply
+automatically without you having to remember to check.
+More control means more responsibility.
+No doubt about it.
+Your managed platform protected you from yourself.
+Your VPS is not going to.
+You got to handle it.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Stop SSH from accepting passwords, and move it off the default port.
+2. Close every port that does not need to be open.
+3. Turn on automatic security updates.

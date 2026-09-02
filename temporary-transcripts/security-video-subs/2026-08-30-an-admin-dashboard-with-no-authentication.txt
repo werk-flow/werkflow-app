@@ -1,0 +1,67 @@
+# An admin dashboard the AI assumed nobody would find
+
+Source: https://www.instagram.com/reel/DcrQPBHG0_I/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-30
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your admin dashboard has no authentication. 
+
+Your AI assumed only you would know the URL. Every scanner on the internet already found it. Anyone who types /admin can see every user and every transaction. Add authentication to every admin route. Move to a non-guessable path. Log every action. 
+
+Your admin panel is the keys to your business. Right now those keys are on the sidewalk.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #admin #production
+
+## Transcript
+
+Your admin dashboard has no authentication because your AI assumed it was internal only.
+Well, it's not.
+It is on the public internet.
+So your AI built an admin panel so you could manage your users, view orders, and update
+the settings, right?
+Well it put it at backslash admin or backslash dashboard, whatever it is.
+No login screen, no access control.
+It assumed only you would know the URL.
+Well, every automated scanner on the internet has already found it.
+Right now, anyone who types domain followed by backslash admin can see every user in your
+system, every transaction in your database, and every setting you can change.
+Some of them, they can even change them themselves.
+So we need to shut it down.
+Step one, your admin panel is accessible to anyone who can guess the URL.
+There's no authentication between the public internet and most of your sensitive controls.
+So direct your AI to add authentication to every admin route immediately.
+No admin page should render without a verified session from a user with explicit admin privileges.
+Period.
+Not a regular user session, an admin session with role-based verification.
+That's definitely a win.
+Step two, your admin routes are a predictable pass, right?
+Every scanner on earth is checking for backslash admin, backslash dashboard, backslash manage,
+or backslash backend or admin, right?
+So if your admin panel is at any of those, it's already been found.
+Direct your AI to move your admin routes to a non-guessable path and implement rate limiting
+on login attempts to block brute force attacks on those.
+That's a win.
+And step three, your admin panel has no audit trail.
+You do not know who's accessed it, when they accessed it, or what they changed.
+If someone has already been in your admin panel, you have no way to know what they saw
+or what they modified.
+So direct your AI to implement an audit log that records every admin action, every login
+attempt, every data change with timestamps and user identification.
+That's definitely a win.
+Your admin panel is the keys to your entire business.
+Right now, you left those keys sitting on the sidewalk for anyone to pick up.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Add authentication to every admin route.
+2. Move the panel to a path that cannot be guessed.
+3. Log every action taken in it.

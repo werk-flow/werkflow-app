@@ -1,0 +1,75 @@
+# Your signup converts, your product does not
+
+Source: https://www.instagram.com/reel/DcUFF39Eu04/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-21
+Topic: product-growth-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your app got featured on Product Hunt. 4,000 signups in 48 hours. 
+
+By day seven, 91% were gone. 
+
+Your signup converts. Your product does not. Time-to-value in 60 seconds, not days. Progressive disclosure that gates complexity behind achievement. Re-engagement triggers tied to something the user actually created. 
+
+Your signup converts. Make your product convert too.
+
+-MM
+
+#vibecoding #aidirectedengineering #onboarding #retention #production
+
+## Transcript
+
+Your app just got featured on Product Hunt, 4,000 signups in the last 48 hours.
+By day 7 though, 90% of them were gone.
+So your signup page is converting, but your product isn't.
+Somewhere between account creation and the moment your app is supposed to become indispensable,
+3,640 people decide it was not worth opening again.
+So you do not have a marketing problem.
+You do not even have a traffic problem.
+You have an onboarding architecture that never gave them a reason to come back after the
+first time.
+So your AI built the signup flow and never built a reason to stay.
+Here's what we're going to do.
+Step 1.
+A time to value target measured in seconds, not days.
+The user should experience the core value of your product within 60 seconds of signup.
+Not watch a tour, not read documentation, but do the thing.
+If your app is a project tracker, they should have a project with tasks in it before the
+onboarding is finished.
+So direct your AI to implement a guided first run experience that delivers the core action
+within 60 seconds using pre-filled templates or smart defaults.
+That's a win.
+Step 2.
+Progressive disclosure that gates complexity behind achievements.
+So do not show every feature on the first session.
+Unlock capabilities as the user demonstrates readiness.
+So first session, core workflow.
+Second session, customization.
+Third session, all the integrations.
+So direct your AI to implement a progressive disclosure system that tracks user milestones
+and reveals features incrementally based on their usage.
+That's going to work.
+And step 3.
+A day one and day seven re-engagement trigger tied to something the user created.
+Not a generic come back please email.
+A notification about the thing that they built.
+Your project has three tasks due tomorrow.
+That's a reason to open the app.
+It's personal, right?
+So direct your AI to implement event based re-engagement that references the user's
+own data.
+Triggered at day one and day seven post sign up.
+So your sign up, it's converting.
+Now it's time to make that product convert.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Get the user to value in 60 seconds, not days.
+2. Use progressive disclosure so complexity unlocks behind what the user has achieved.
+3. Tie re-engagement triggers to something the user actually created.

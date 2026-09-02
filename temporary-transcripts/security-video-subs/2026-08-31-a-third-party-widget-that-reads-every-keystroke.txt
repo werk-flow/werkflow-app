@@ -1,0 +1,80 @@
+# A chat widget running with the same privileges as your code
+
+Source: https://www.instagram.com/reel/Dct1A_WDsrP/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-31
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You added a chat widget to your site. It can read every password your users type on every page. 
+
+That one script tag runs with the same privileges as your own code. It can read every form field, every keystroke, every cookie, every session token. On every page. Audit every third-party script. Remove them from login, checkout, and admin pages. 
+
+Implement a Content Security Policy. You control your code. Control who else gets to run theirs next to it.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #thirdparty #production
+
+## Transcript
+
+Your AI added a chat widget to your site during your build.
+Not uncommon.
+But now it can read every password your users are typing
+on every single page.
+So your AI dropped in a script tag, one line,
+instant customer support widget in the corner of every page.
+But that script runs with the same privileges
+as your own code.
+It can read every form field, every keystroke,
+every cookie, every session token.
+Guess what?
+On every page, including your login page, your checkout page,
+your admin panel.
+So you didn't install a chat widget.
+Your AI gave a third party full access
+to your entire application.
+Let's get it fixed.
+Step one, audit every third party script on your site
+and what it can access.
+Most teams cannot even list how many external scripts
+are loaded in their system.
+Analytics, chat, reviews, retargeting, A-B testing.
+Every one of them has full DOM access by default.
+So direct your AI to inventory every third party script,
+identify what data each can access,
+and then document which pages each script loads on.
+That's a win.
+Step two, remove third party scripts
+from every sensitive page.
+Your login page, your checkout page,
+your account settings page, your admin panel.
+No analytics tag needs to watch your users
+type their passwords.
+No chat widget needs to load on your payment form.
+So direct your AI to implement page level script loading.
+That excludes third party scripts from any page
+that handles credentials, payment data,
+or administrative functions.
+And step three, implement a content security policy
+that restricts what external scripts can do.
+A CSP tells the browser which domains
+are allowed to execute scripts on your page.
+Any script not on that list gets blocked.
+So direct your AI to build a content security policy
+that whitelists only approve script sources
+and blocks inline script injection
+from any unauthorized origin.
+You control your code, control who else
+gets to run theirs next to it.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Audit every third-party script.
+2. Remove them from login, checkout, and admin pages.
+3. Add a Content Security Policy.

@@ -1,0 +1,40 @@
+# Episode 26: optimistic rendering
+
+Source: https://www.instagram.com/reel/Dbq1-BjoMyf/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-05
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 26
+
+## Caption
+
+Explaining optimistic rendering to vibecoders so they can make better apps #claudecode #vibecoder #vibecoding #uidesign #startuphacks
+
+## Transcript
+
+Welcome back to episode 26 of teaching technical terms to non-technical vibe coders because
+nobody else will.
+Today's term is optimistic rendering.
+I'm going to explain three things.
+One, what optimistic rendering is.
+Two, why you should care as a vibe coder.
+And three, how to easily implement it in your application.
+In plain English, optimistic rendering is when the user interface updates before the
+backend responds.
+But let's make it real with an example.
+So let's say somewhere within your application, users can delete a file.
+Unless your app is horribly buggy, deleting a file usually succeeds well over 99% of the
+time.
+Of course, what's happening in the backend is that the user clicks a button, the backend
+receives the request, does the operations, and in the front end updates the UI.
+At least that's how it would happen normally.
+But the issue is all of this takes time.
+But for an operation like this, when we can be fairly certain that it's not going to
+have any issues, the user doesn't need to wait for that.
+So to make your app feel significantly faster, what you can do is update the UI immediately,
+have the backend process it in the background, and whenever it finishes, cool.
+So whether you use clod code, codecs, or something else entirely, you can just ask your coding
+agent of choice to audit your front end and find any opportunities for optimistic rendering
+and then to implement them.
+And learning technical terms just makes you better at prompting, so follow for more.

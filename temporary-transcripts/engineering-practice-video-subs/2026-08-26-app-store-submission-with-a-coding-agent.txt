@@ -1,0 +1,40 @@
+# App Store submission handled by the coding agent
+
+Source: https://www.instagram.com/reel/DcfbX40xT3I/
+Creator: @ayoships (Ayo O)
+Platform: Instagram
+Posted: 2026-08-26
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+If you found this helpful please like and follow for more🧍🏾‍♂️
+
+## Transcript
+
+Most people who finish coding their app
+never actually get it published on the App Store.
+And if you're building one right now,
+there's a good chance that it's going to be YouTube.
+And in my experience, it's always the same dumb reason.
+Apple asks you a lot of questions
+before your app can go live.
+What it does, what data it collects,
+whether it uses encryptions,
+whether the reviewer can log in.
+And if you use AI to code it,
+you'll probably either guess for all of these
+and get rejected or just not even do it at all.
+Thankfully, the AI that wrote the code
+can actually answer all of these questions.
+So instead of guessing, just connect your coding agent
+to your App Store Connect account through a tool like Lance.
+Then you can just tell your AI
+to get it ready for submission.
+It'll fill out the listing, write the reviewer notes,
+get the build ready, and then just submit.
+Additionally, if your app gets rejected by Apple,
+you can now directly ask your AI why
+and ask it to fix and resubmit.
+So if your app is finished and just sitting there waiting,
+I recommend you just talk to your AI and get it finished.

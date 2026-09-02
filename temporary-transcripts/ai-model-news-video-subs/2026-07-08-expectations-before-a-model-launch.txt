@@ -1,0 +1,28 @@
+# Expectations the day before a model launch
+
+Source: https://www.instagram.com/reel/Dai-XFOIpZy/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-08
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+GPT 5.6 releases tomorrow #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+we are getting GPT 5.6 sold tomorrow.
+And I gotta be honest, I really don't know what to expect here
+because you see benchmarks like this and you think,
+okay, it's gotta be pretty good.
+But historically speaking,
+OpenAI models have always been better
+on the terminal benchmarks,
+but I still have always preferred using
+anthropic models day to day.
+And it seems to be pretty good at doing cybersecurity stuff,
+using far less tokens to get to the same result
+as a Fable 5.
+But you know what?
+I'm gonna find out tomorrow.

@@ -1,0 +1,31 @@
+# Episode 20: webhooks
+
+Source: https://www.instagram.com/reel/Da00JEtoiQz/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-15
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 20
+
+## Caption
+
+Explaining web hooks and other technical terms to non-technical vibe coders because nobody else will. Today is episode 20. In short, web hooks are URLs within your app that other services can use to update your app when something happens on their side. This is especially useful for interactions between two servers that require back-and-forth updates asynchronously #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 20 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term, webhooks.
+So what is a webhook and why should you care?
+If you've built an app, chances are it's communicating with third-party APIs.
+It's a way for your app to tell other computers to do stuff on your behalf.
+But what do you do if another server needs to get a hold of your server?
+Needs to update your server for some reason.
+Well, that is what webhooks are for.
+A webhook is effectively a URL in your app that another service calls
+the moment that something happens on their side.
+You can kind of think of your app like a house and a webhook being like the paper boy.
+The newspaper is the actual data that is within that webhook.
+It is the thing that needs to be updated.
+If your app has any payment system with Stripe,
+you're probably using webhook for your checkout sessions.
+And learning technical terms just makes you better at prompting, so follow for more.

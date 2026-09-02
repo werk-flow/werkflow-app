@@ -1,0 +1,33 @@
+# Episode 21: CDN and edge
+
+Source: https://www.instagram.com/reel/Da3RgYRIbtn/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-16
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 21
+
+## Caption
+
+A CDN is a worldwide network of servers that keep cashed copies of your apps files, so each chooser downloads from a server in their city instead of one origin server in ocean away edge means serving content (or small bits of code) from those nearby servers instead of from one central machine. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 21 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is CDN and Edge.
+So, what is a CDN and why should you care?
+A CDN is a worldwide network of servers.
+And these servers keep cached copies of your app's files.
+This means that each user downloads from a server that's in their city instead of
+perhaps halfway across the world.
+And Edge means serving that content from those local servers instead of from one big machine.
+So, how can you use a CDN and caching to make your vibe coded app faster?
+The first step is to push all of your static assets like fonts and images to a CDN.
+If you have your app deployed on Netlify, Vercel, or Cloudflare, this happens automatically.
+And the second step is to confirm that that is happening.
+So, open DevTools, go to the Network tab, and confirm these two things.
+Your assets should be returning this.
+So, look for this.
+And your cache header needs to read this.
+And not miss.
+And learning technical terms just makes you better at prompting, so follow for more.

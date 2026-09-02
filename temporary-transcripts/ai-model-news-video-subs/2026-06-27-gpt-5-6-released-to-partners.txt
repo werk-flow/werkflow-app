@@ -1,0 +1,35 @@
+# GPT 5.6 released to trusted partners
+
+Source: https://www.instagram.com/reel/DaE2_stI6sW/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-27
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+GPT 5.6 has officially been released for testing by trusted industry partners and there’s a few important shakeups #claudecode #vibecoder #vibecoding #gpt56 #codex
+
+## Transcript
+
+OpenAI just released GPT 5.6 and things are getting spicy.
+First big change is the naming convention of their models.
+They have gone away from the Pro and Codex and Mini and Spark naming conventions and
+are now going for something more anthropic like with Sol, Terra, and Luna.
+With Sol being the most powerful of the three.
+So here's the scores for Terminal Bench 2.1.
+You can see that GPT 5.6 Sol Ultra is sitting in first place with a score of 91.9%.
+This isn't particularly surprising because OpenAI models tend to do better on Terminal
+Bench historically.
+This is a chart that shows the relationship between output tokens and benchmark scores.
+Long story short, it's better to be on the left top quadrant of the graph and you can
+see that that spot is now pretty cleanly taken by GPT 5.6 Sol.
+Effectively, it's just a more token efficient model.
+Now let's talk pricing.
+It looks like per 1 million tokens, the top tier model Sol is $5 in, $30 out.
+Terra is $2.50 in and $15 out and Luna is $1 and $6 out.
+So let's compare these with some anthropic models.
+It looks like Mythos class models are currently priced at $10 and $50 out per 1 million tokens.
+As always, vibes are way more important than benchmark scores, but if OpenAI does actually
+pull this off and the benchmarks are representative of the actual intelligence while using the
+model, this could be a pretty big win for OpenAI.

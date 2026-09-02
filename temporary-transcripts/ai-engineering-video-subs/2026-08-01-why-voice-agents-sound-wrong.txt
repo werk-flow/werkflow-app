@@ -1,0 +1,56 @@
+# Why voice agents sound wrong, and it is not the model
+
+Source: https://www.instagram.com/reel/DbgdN5wIclY/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-01
+Transcript: Whisper small.en, transcribed from the video audio
+Note: a sponsored post for a text-to-speech provider.
+
+## Caption
+
+Here’s how I build my voice agents using Fish Audio’s S2.1 Pro API, which they’re offering for free through August in addition to 50% off all paid plans. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Everybody's building voice AI completely wrong
+and the problem actually isn't your language model,
+it's your audio.
+Okay, so check this out.
+I want you to compare the difference in sound
+between these two generations.
+So listen up.
+I'll raise a PR.
+Oh, yeah, I'll get that PR raised.
+That's my bad.
+Sorry about that.
+That is what you want.
+You want it to sound realistic.
+So what you just heard there was me using
+fish audio's emotion tags in my generations.
+So in effect, you just dictate the emotion you want.
+So check this out.
+I can do it all.
+I'm actually pretty cool.
+And the second thing that matters is latency.
+Because if you ask your assistant something,
+hey, what's up?
+What's up?
+Sorry, my bad.
+And it takes forever to respond.
+No one's gonna wanna use it.
+My text stack is actually pretty simple.
+First, I transcribe my spoken words
+and receive those as chunks of text.
+Next, it kicks off the LLM,
+which of course has the internal tool call loop.
+The final response from the language model
+includes those emotion tags.
+Those are sent directly to fish audio's API
+and that is the spoken audio that you hear.
+I really don't think that voice is just another feature.
+I see it as the interface of the future.
+So if you wanna build something like this for yourself,
+comment fish and I will DM you a link
+to get free access to fish audio's S2.1 model
+all the way through the end of August.

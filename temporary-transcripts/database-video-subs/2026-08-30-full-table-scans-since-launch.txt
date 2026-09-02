@@ -1,0 +1,88 @@
+# A full table scan on every request since launch
+
+Source: https://www.instagram.com/reel/DcqspRtHPGB/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-30
+Topic: database-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your database has been doing a full table scan on every request since launch. 
+
+You did not notice until your hosting provider throttled you. Your AI never added indexes. Every query reads every row to find one result. At 100,000 rows your server is on fire. Add indexes. Restrict query fields. Enable slow query logging. 
+
+Fix it before your hosting provider fixes it for you.
+
+-MM
+
+#vibecoding #aidirectedengineering #database #performance #production
+
+## Transcript
+
+Your database has been doing a full table scan
+on every single request since you launched it.
+You didn't even notice until your hosting provider
+throttled you for excessive resource usage
+on their platform.
+So your AI wrote the queries, right?
+They worked, pages loaded, data showed up.
+What you did not see is that every query
+was reading every row in the table
+to find the one row it needed.
+So at 500 rows, that takes milliseconds, no biggie.
+At 100,000 rows, your server is doing
+the computational equivalent of reading every book
+in a library to find one title.
+So your hosting provider noticed before you did,
+started charging you for it.
+So your app is slow, your bill's climbing,
+and your users, they're leaving.
+Let's get it fixed.
+Step one, your AI never added indexes to your database.
+An index tells the database exactly where to find the data
+instead of scanning every single row.
+Without one, every query is a full table scan.
+The larger the table, the slower the request.
+So direct your AI to identify every query
+your application is running.
+And then determine which columns are used
+in filters and lookups,
+and add those indexes to those columns.
+Test this before and after query speed,
+which is definitely gonna increase,
+test your actual data.
+Step two, your queries are pulling more data
+than your pages actually need.
+Your AI wrote queries that return every column
+on every matching row,
+even when the page only displays three fields.
+So every unnecessary column is data your server processes
+and your network transmits for no reason at all.
+What you need to do is direct your AI to audit every query
+and restrict the selected fields
+to only what the requesting page
+or features are actually using.
+That's a win.
+And step three, you have no visibility
+into which queries are slow.
+Your database has been running expensive queries
+since day one and you have no way to see them, right?
+Well, direct your AI to enable slow query logging,
+set a threshold and build a dashboard
+that will show you which queries exceeded that threshold,
+how often they are running
+and how much resource each one is consuming.
+Your database is working 10 times harder
+than it ever needed to.
+So let's make sure we index it
+before your hosting provider shuts you down.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Add indexes for the columns you filter on.
+2. Restrict the fields each query returns.
+3. Enable slow query logging.

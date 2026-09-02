@@ -1,0 +1,38 @@
+# Opus 5 first impressions
+
+Source: https://www.instagram.com/reel/DbL5BdRIGSJ/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-24
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Anthropic and just released, Opus 5, their latest model in the opus family. Although it generally beats fable five in most benchmarks, it is still trailing and its ability for agentic development. On top of that, GPT 5.6 Sol still outperforms, Opus 5 for genetic development while being just as token, efficient and with higher usage limits. #claudecode #vibecoder #vibecoding #startuphacks #opus5
+
+## Transcript
+
+Alright, Anthropic, what now?
+Looks like we got Opus 5, so let's go ahead and check it out.
+Opus 5 seems to pretty consistently be on par,
+if not beating, Fable 5.
+But if you use this for development,
+there's really only one benchmark you need
+to pay attention to, and that is Deep SWE.
+For this benchmark, Fable 5 still beats Opus 5,
+but you know what beats both of them?
+GPT 5.6 Soul.
+So this chart effectively shows the cost per task,
+and you want to be in that top left quadrant.
+So you can see that Opus 5 is more efficient
+than the other models that Anthropic recently has released,
+but go ahead and take a look at that dim light gray line.
+What model is that?
+It's GPT 5.6 Soul.
+And as far as their scores go,
+it's effectively the exact same.
+So Opus 5 is not quite as performant
+at agentic development as GPT 5.6.
+It's roughly the same level of token efficient,
+and unfortunately, Codex does have much better usage limits.
+So I am probably sticking to Codex.

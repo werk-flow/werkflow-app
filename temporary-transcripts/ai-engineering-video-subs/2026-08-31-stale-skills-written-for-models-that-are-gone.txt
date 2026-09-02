@@ -1,0 +1,48 @@
+# Half your loaded skills were written for a model that no longer exists
+
+Source: https://www.instagram.com/reel/DctRagnk9uk/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-31
+Topic: ai-engineering-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You have 47 skills loaded into your AI right now. Half of them were written for a model that no longer exists. 
+
+That skill from four months ago is anchored to a model that has been updated dozens of times since. Every stale skill is competing for attention with the instruction you are giving it right now. Audit your skills. Treat them as prescriptions, not assets. 
+
+Apply. Verify. Dispose. Your AI got smarter every month. Your skills did not.
+
+-MM
+
+#vibecoding #aidirectedengineering #skills #contextwindow #production
+
+## Transcript
+
+You have 47 stale skills loaded in your AI assistant right now, and more than half of them were written for a model that no longer exists.
+I'm referring to a skill that you saved four months ago. It was written for a model that has been updated dozens of times since then.
+So the syntax it references has all changed, and the capabilities it accounts for is totally outdated.
+Not to mention the guardrails it works around have been removed or even replaced.
+So your AI is not leveraging the model it's running on today. It's anchored to where the model was when you wrote that skill four months ago.
+So that's no longer optimization, that's a drag. And here's how we're going to address it.
+Step one. Audit every skill in your system against the current model version.
+If the skill references capabilities, syntax or workarounds that no longer apply, it's a dead weight, it's time to remove it.
+So direct your AI to inventory every loaded skill and flag any that reference be it deprecated patterns or outdated model behaviors.
+That, that's a win.
+Step two. Treat skills as prescriptions, not assets. A skill should solve one problem in one moment for your build and move on.
+So you apply it, verify the fix, completely dispose of it.
+So direct your AI to implement a skill lifecycle that loads only what your current build needs right then and removes it after that fix is verified.
+And step three. Measure the performance differences. Sure. Run your build with every skill loaded.
+Then run it only with the skills that apply to your current task. Direct your AI to benchmark it, response quality, speed and accuracy and run it between a full context load and a scoped context load.
+It's going to blow you away. So your AI gets smarter every month, but your skills don't.
+So stop anchoring your best tool to your oldest instructions and let it rock.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Audit the skills currently loaded.
+2. Treat a skill as a prescription rather than an asset you keep.
+3. Apply, verify, then dispose.

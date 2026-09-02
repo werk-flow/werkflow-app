@@ -1,0 +1,22 @@
+# An open source alternative to paid dictation tools
+
+Source: https://www.instagram.com/reel/DbJ5kZUIe1i/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-23
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+OpenWhispr > Wisprflow #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+I want to thank everybody who's been recommending WhisperFlow for like the last month.
+There is literally zero reason to use WhisperFlow because there is an open source and free alternative
+that is in my opinion even better.
+It's called Open Whisper and you can just get it directly from their website.
+They have a ton of super advanced features too but the basic premise is that it installs
+a speech dictation model on your machine.
+I totally agree that speech to text is the way to do it but don't use WhisperFlow.
+Use Open Whisper.

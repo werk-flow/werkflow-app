@@ -1,0 +1,43 @@
+# HTTP status and error codes
+
+Source: https://www.instagram.com/reel/DbGf9WGIJ6I/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-22
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode number not stated on camera.
+
+## Caption
+
+If you are a non-technical vibe coder using Claude or ChatGPT to code for you, then learning and understanding the different status codes that your client and server can inform you of will shorten your debugging sessions and make your app more performant #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Clutter Codex writes all of your code, knowing these magical numbers will save you
+days of debugging.
+When something goes wrong in your application, it usually at least tries to tell you what's
+going wrong, and one of the ways it does this is with status and error codes.
+You're likely already familiar with the most popular one being 404, meaning that a
+resource is not found.
+But perhaps what you didn't know is that there's a whole system of these codes and
+I'm about to teach you.
+All of these are three-digit numbers, but the first digit tells you the category of
+response.
+If it starts with a 1, it's informational.
+2, a success message.
+3, a redirect.
+4, a client error, and 5, a server error.
+But we're going to focus on 400 and 500 level codes because those are the ones that are
+problematic.
+More concretely, if a response code comes back starting with a 4, it indicates that
+the client has an issue in the way that it sent the request to the backend server.
+Conversely, if the error starts with a 5, it means there was some internal processing
+issue with the backend server that caused an error.
+This is a big old grid of all of the 400 series errors that you can get.
+I could go through the full list, but you can just ask chattpt.
+And here is a grid of all of the 500 series errors.
+Okay, so that's cool, but why should you care?
+If you can develop a mental model of these different error codes and understanding what
+they actually mean under the hood, you can more effectively steer the model that you
+are coding with.
+And if you want to learn more cool, techy stuff, you should follow me.

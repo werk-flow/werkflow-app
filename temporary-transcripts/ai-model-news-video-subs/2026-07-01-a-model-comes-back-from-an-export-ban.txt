@@ -1,0 +1,37 @@
+# A model comes back from an export ban
+
+Source: https://www.instagram.com/reel/DaQ2OlpoQ-u/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+FABLE 5 IS BACK #claudecode #vibecoder #vibecoding #startuphacks #fable5
+
+## Transcript
+
+Finally, oh my god.
+Ladies and gentlemen, it is officially back.
+As of yesterday, the US government officially lifted the export ban on Fable 5.
+And I just want to experience Fable 5 again, so let's test it.
+Actually, I'll do you one better.
+Let's compare Fable 5 to Sonnet 5, the only other existing 5 series model that is now generally available.
+Alright, so here's the setup. We have Sonnet 5 Low, Fable 5 Low, Sonnet 5 Extra, and Fable 5 Extra.
+And they've all been tasked to create a single HTML file Minecraft clone.
+Up first, we have Sonnet 5 on Low. I can't get the game to run.
+This is interesting. Fable 5 on Low also seemingly generated the game, but I can't click to play no matter what I do.
+Sonnet 5 on Extra is the first working game we've seen, although it doesn't look very good.
+You can see there's bricks everywhere.
+And Fable 5 is going crazy with the reasoning on Extra.
+It's literally compacting before it's even output anything.
+We are at the 10 minute mark and it's still just thinking.
+And this is Fable 5 on Extra, so it has sprinting, jumping.
+Let's see if I can press anything else here.
+I can switch here. I can break.
+It actually has physics animations and I can place blocks down. That's awesome.
+It looks like swimming works too, so that has separate physics.
+Alright, so there you have it.
+Obviously, Sonnet 5 is nowhere close to Fable 5, but I hope you enjoyed the comparison.
+Follow for more.

@@ -1,0 +1,84 @@
+# A vendor deprecation that reroutes your compliance path
+
+Source: https://www.instagram.com/reel/DcbP4U7G6QK/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-24
+Topic: compliance-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+AWS just killed Bedrock Agents. Renamed it to Classic. Closed to new customers. 
+
+If you built your healthcare app on it for the BAA, your compliance path just got rerouted. Abstraction layer between your app and any vendor SDK. BAA audit after any provider migration. 
+
+A migration runway, not a migration emergency. 
+
+Your cloud provider will always build the next thing. Architect so it does not break yours.
+
+-MM
+
+#vibecoding #aidirectedengineering #aws #healthcare #production
+
+## Transcript
+
+AWS just killed Bedrock agents.
+Now everyone who built on it for the healthcare BAA
+has a migration path they did not plan for.
+And if you built your healthcare app on Bedrock agents,
+your compliance path just got rerouted.
+So Agent Core is the replacement,
+but it's a different architecture, a different runtime,
+and different integration surface altogether.
+So your existing deployment does not migrate itself.
+Here's how you're gonna handle it.
+Step one, an abstraction layer between your application
+and any cloud provider's agent framework.
+Your business logic should never be hardwired
+to a vendor's SDK.
+If your agent orchestration is built directly
+on Bedrock's API surface,
+every line of that code is now migration liability.
+So direct your AI to refactor your agent orchestration
+behind an internal interface.
+That way the underlying framework can be swapped
+without rewriting your application.
+That's a win.
+Step two, a BAA audit on every service in your stack
+after any provider migration.
+So your BAA covers specific services by name.
+When the service changes,
+the BAA coverage may not follow it automatically.
+So moving from Bedrock agents classic to Agent Core means
+you need to re-verify that every service
+in your healthcare data path is covered
+under the current agreement.
+Direct your AI to map every service that touches PHI
+and verify the BAA coverage
+against the current AWS service list.
+That's a win.
+And step three, a migration runway,
+not a migration emergency.
+Classic is not shutting down tomorrow.
+So it's also no longer receiving any of the new features,
+which means every month you stay on it,
+you fall a little further behind the platform providers
+actually investing in.
+So direct your AI to build a migration timeline
+that moves your agent orchestration
+to the supported framework.
+That way before classic becomes a liability,
+instead of a convenience, you're already ahead of it.
+This way your cloud provider will always build
+the next thing, we hear it,
+but architect your system so the next thing
+doesn't break what you built.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Keep an abstraction layer between your app and any vendor SDK.
+2. Re-audit the BAA after any provider migration.
+3. Plan a migration runway rather than a migration emergency.

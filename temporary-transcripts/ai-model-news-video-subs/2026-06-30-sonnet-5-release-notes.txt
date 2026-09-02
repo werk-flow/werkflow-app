@@ -1,0 +1,26 @@
+# Sonnet 5 release, the short version
+
+Source: https://www.instagram.com/reel/DaOUUlFoV8p/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-30
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+anthropic just released Sonnet 5, their latest large language model. This video goes over all of the key facts and features regarding the release from Anthropic. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Claude Sonnet 5 just dropped, here's everything you need to know.
+Looking at the benchmarks, it looks like Sonnet 5 is a meaningful improvement over Sonnet
+4.6, but still doesn't beat Opus 4.8 in anything, with the exception of knowledge
+work where it scores 3 points higher.
+This is really interesting, so it looks like Sonnet 5 is immediately generally available
+and will currently cost $2 per million input tokens and $10 per million output tokens.
+But after the date of August 31st of this year, it will be priced at $3 per million
+input tokens and $15 per million output tokens.
+I don't remember Anthropic ever having done this before.
+But here you can see Sonnet 5 is within the web interface.
+And you should follow along because I'm going to try out this model later today and post
+a follow up video comparing Sonnet 5 to Opus 4.8.

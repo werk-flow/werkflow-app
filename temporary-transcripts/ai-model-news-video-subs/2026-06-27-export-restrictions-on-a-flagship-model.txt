@@ -1,0 +1,24 @@
+# Export restrictions on a flagship model loosened
+
+Source: https://www.instagram.com/reel/DaEgAJyo91-/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-27
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Claude mythos 5 is kind of back as a result of Trump lightening the restrictions on Anthropics new flagship model #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Yo, Claude Mythos is back, kind of.
+And this is a pretty huge update in the whole Mythos debacle.
+And if you don't know, there was an export control put on Anthropic by the US government
+to restrict access to its Fable and Mythos 5 models to only include US citizens,
+which Anthropic had no way of doing, so they had to shut it down.
+But just a couple hours ago, it looks like the White House has allowed Anthropic to release Mythos
+and Fable 5 models to a select number of government and private corporations.
+This news, along with the interview from Trump saying that he no longer considers Anthropic to
+be a national security threat, is very promising. Obviously, it's not generally available again,
+and it probably won't be for quite some time, but hey, this is good progress.

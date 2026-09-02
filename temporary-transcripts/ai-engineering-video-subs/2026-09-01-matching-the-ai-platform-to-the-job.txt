@@ -1,0 +1,60 @@
+# Matching the AI platform to the job it is good at
+
+Source: https://www.instagram.com/reel/Dcv2OyCiGkc/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-01
+Topic: ai-engineering-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You are using the same AI to build and review your code. Here is what each platform actually catches that the others miss. 
+
+Claude excels at adversarial reasoning and security review. Codex and Gemini catch implementation errors across your full codebase. Lovable, Bolt, and Cursor surface architecture decisions your first platform made silently. Your community is already running these combos. 
+
+The ones getting the best results know which platform to assign to which job. Same build. Different eyes. Better product.
+
+-MM
+
+#vibecoding #aidirectedengineering #aitools #security #production
+
+## Transcript
+
+This is for you if you're using the same AI to build and review your code.
+This is a follow-up to last week's cross-platform testing reel because every single platform has a training bias,
+and every model out there defaults to a pattern and has a blind spot it cannot see in its own output.
+So the builders that are getting the best results know exactly which platform to match to which job.
+Here is what each platform actually catches that the others will miss.
+Number one is Claude.
+It excels at adversarial reasoning, security reviews, and deep architectural analysis.
+So when you need to break your own system, Claude is the one.
+It thinks like an attacker.
+It finds injection pass, authentication bypasses, and logic flaws like a pro.
+That and the AI building platform will always defend itself.
+So Claude is the one to sick on it.
+If you built in cursor lovable or bolt, I'd bring your security review to Claude and frame it as a penetration test.
+So direct your AI to run security critical reviews on a platform with demonstrated adversarial depth.
+I think someone on here actually named their adversarial audit the Murphy.
+That's a win.
+Step two is Codex and Gemini are strongest at catching implementation errors and reviewing code they did not write.
+So Codex reads your code base cold and flags what does not belong.
+Gemini brings a giant context window that lets you hold your entire project in one view.
+And it'll spot patterns across files that a single file reviewer will miss.
+So if you built in Claude code, I'd take your logic verification to Codex or Gemini for a second opinion with no attachment to the original implementation.
+So direct your AI to run a full code base review on a platform that did not generate the code.
+And number three lovable bolt and cursor.
+They are super strong at full stack builds and rapid prototyping.
+So if you built your back end and Claude code, I'd hand the same requirements to lovable or bolt and compare how a different platform interprets the same specs.
+Where the implementations differ is where your assumptions live and where the opportunity lives.
+So those differences always surface architecture decisions in your first platform made silently for you.
+So direct your AI to rebuild one critical module on a second platform and document every different approach it took.
+Same build, different eyes, better product every single time.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Use a platform strong at adversarial reasoning for security review.
+2. Use a second one to catch implementation errors across the whole codebase.
+3. Use a third to surface architecture decisions the first made silently.

@@ -1,0 +1,23 @@
+# Build in public day 1: scoping and repos
+
+Source: https://www.instagram.com/reel/DaQjkozIT_t/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Day 1/10 of vibecoding a startup in 10 days without writing a single line of code #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+10 days. That's all I'm giving myself to make an app completely from scratch without writing a single line of code to show you exactly what you need to do to start vibe coding effectively and today is day one.
+I think I got a really good idea of what to build.
+Okay, so I've been doing software development for businesses for over six years now.
+And if there's one thing I've seen time and time again that new startup founders suck at doing,
+it's a gentec harness development for the AI features inside of their applications.
+So my grand idea is to make a free resource that vibe coders can use to explain exactly what the AI features in their application should do or if they already have code to provide they can upload that as well in this system based on all of my experience and knowledge will scaffold exactly what the agent to harness ought to be to optimize for latency cost and performance.
+So let's kick off day one for today. I have two objectives. One is to make a solidified spec document and two is to find a place to upload and host all of the code for this project to start.
+I just brain dumped exactly what I wanted the app to do and threw it all into a Google Doc. I went back and forth with Claude to clarify the requirements and it came up with a full PRD document. Quick side note PRD stands for project requirements doc.
+The next thing I did was went to GitHub and I made GitHub repos for this project. If you want to follow along with my tech stack, we are going to need a repo for the back end and a repo for the front end. And if you want to build a startup in the next 10 days, make sure you follow along because tomorrow we are going to be setting up and configuring a deployed database on AWS. Peace out.

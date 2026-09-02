@@ -1,0 +1,41 @@
+# Episode 19: memory leaks
+
+Source: https://www.instagram.com/reel/DavoMPCocnk/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-13
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 19
+
+## Caption
+
+Explaining memory leaks to non-technical vibe coders so they can make better apps #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Are you a vibe coder?
+Well then you need to know this technical term.
+Welcome to episode 19 of teaching technical terms
+to non-technical vibe coders because nobody else will.
+Today's term is an important one, it is memory leaks.
+So let's cover what a memory leak is,
+why you should care and how to stop your app
+from having them.
+For your applications, memory is a limited resource.
+Different processes within your application
+each require memory.
+So a memory leak is when your app keeps taking memory
+to complete tasks, but it never gives it back.
+It never gives the go ahead for that memory
+to be freed up and then used for something else.
+And eventually your memory usage tops out at 100%
+and your process times out and crashes.
+And it should be pretty clear why that isn't
+a desirable outcome.
+Make it sense, cool, so how do you stop it from happening?
+On the screen here are six purely copy pastable prompts
+that you can throw directly into Cloud Code or chat TPT
+to audit and hopefully resolve any existing memory leaks
+in your application.
+And knowing technical terms just makes you better
+at prompting, so follow for more.

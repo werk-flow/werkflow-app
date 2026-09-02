@@ -1,0 +1,31 @@
+# Five reasons your app is slow when it does not need to be
+
+Source: https://www.instagram.com/reel/Dadh4zcoYH4/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-06
+Transcript: Whisper small.en, transcribed from the video audio
+Note: overlaps heavily with the 2026-06-21 and 2026-07-03 videos in this folder.
+
+## Caption
+
+5 ways your vibecoded app is slow even though it doesn’t need to be #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Cloud writes all of your code, your app is painfully slow and you don't even realize
+it.
+Don't worry, all of these are purely vibe-codable changes you just needed to know to ask for
+them.
+Number one, your pages take forever to load because you're not caching anything, not even
+in the browser.
+Number two, if an API call does need to be made, you're not rendering skeleton loaders
+in your user interface.
+Number three, you're loading data in a table and not using pagination.
+So instead of fetching the first 20 rows of your table, you're fetching all 5,000, even
+if you're only displaying 20.
+Number four, your backend is full of N plus one queries.
+And I'll link a video explaining what those are and how to fix them.
+And number five, everything in your backend is running on the same main thread with no
+asynchronicity.
+Learning technical terms makes you better at vibe coding, so follow for more.

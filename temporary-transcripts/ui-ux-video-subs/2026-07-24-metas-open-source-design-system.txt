@@ -1,0 +1,23 @@
+# Meta's open source design system for AI-built UIs
+
+Source: https://www.instagram.com/reel/DbJ7IIHoLPG/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-24
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Meta open sourced a new UI design system built specifically for five coders. It contains over 160 prebuilt components, a token based color and style system, and a collection of components built specifically for agent driven application applications. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Cloud writes all of your code, there's a new player in town for making your user
+interfaces not look like vibe-coded slop, and weirdly it's coming from Meta.
+Meta released Asterix, a fully open source design system that's fully customizable and
+most importantly, Agent Ready.
+It already has over 160 components.
+My favorite part are their pre-made components for Agents.
+They handle markdown streaming, tool calls, thinking tokens, all of it.
+I'm not gonna ask you to comment anything, so if you want to check them out, just go
+to their website.

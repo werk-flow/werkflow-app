@@ -1,0 +1,18 @@
+# Model availability extended by five days
+
+Source: https://www.instagram.com/reel/DagbXvAomLL/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-07
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Breaking: Anthropic just announced Fable 5 access extended to July 12th #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+And Froppig just extended Fable 5's general availability until July 12th, which is cool,
+but I don't think anyone has any usage limits remaining because we all thought it was gonna
+be today.
+But hey, good news!

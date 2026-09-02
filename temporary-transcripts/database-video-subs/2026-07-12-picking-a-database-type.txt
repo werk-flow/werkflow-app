@@ -1,0 +1,49 @@
+# Picking the right type of database
+
+Source: https://www.instagram.com/reel/DarGUXtI5nk/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-12
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+A vibecoders guide to picking the right type of database #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+It can feel like there are a million and one
+different types of databases out there.
+So which one does your app actually need?
+Well, this is the No BS Vibecoders Guide to Databases.
+Also, side note, I ate some weird like hint of lime
+Lays chips and I rubbed my eyes and now my face looks weird.
+So just please ignore that.
+Number one, Old Faithful Battle Tested
+the Relational Database.
+A relational database has different tables
+and each table is comprised of rows and columns.
+Those intersections make observations
+and that is what your app uses.
+For most small applications, nine times out of 10,
+this is really all you need.
+Next up, let's talk about vector databases.
+You'll commonly find vector databases in applications
+that need knowledge bases or some way to semantically
+search through data.
+This can be text, images, video, audio, you name it.
+Next up is my personal favorite, the graph database.
+Graph databases are especially cool because they let you
+organize information in terms of nodes and edges.
+Nodes represent actual objects, actual things
+and the edges represent the relationships
+between those things.
+It's really, really common to find usage here
+in social networks like Facebook or even Instagram.
+And while you can use graph type databases
+to represent the data in more traditional applications,
+my personal recommendation would just be using
+a relational database because that's easier
+and the AI is probably going to do a better job coding.
+So hope that helps follow for more
+and I am going to rinse out my eyes.

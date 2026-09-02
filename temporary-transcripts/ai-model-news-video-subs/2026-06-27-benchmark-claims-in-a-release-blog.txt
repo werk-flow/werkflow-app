@@ -1,0 +1,28 @@
+# What a release blog chose to brag about
+
+Source: https://www.instagram.com/reel/DaE5EzIINvs/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-27
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+I’m convinced they want to get GPT 5.6 banned so they can feel cool #gpt56 #claudecode #vibecoder #vibecoding #startuphacks
+
+## Transcript
+
+Does OpenAI want GPT 5.6 to get banned?
+Because this makes zero sense.
+This is from the release blog.
+It says, on exploit bench, GPT 5.6 sole is competitive with mythos preview
+using only one third of the output token.
+Bro, that's like the whole reason that Fable 5 got banned.
+Like what do you do?
+There's got to be an angle here.
+I don't see any logical reason, at least on its surface,
+to promote something like this about your model.
+Unless OpenAI has some like crazy deals with the government behind closed doors,
+I don't know.
+Because if they can release a model like this and give it general access
+and not have it restricted to US citizens, there is 110% some favors going on.

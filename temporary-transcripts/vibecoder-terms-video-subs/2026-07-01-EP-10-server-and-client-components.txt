@@ -1,0 +1,43 @@
+# Episode 10: server and client components
+
+Source: https://www.instagram.com/reel/DaQTP5HoOH6/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 10
+
+## Caption
+
+Day 10 of teaching technical terms to non-technical vibe voters because nobody else will: today’s episode is the difference between client and server components #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Day 10 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is the difference between server and client components.
+You can think of your app like a restaurant where the server is the back kitchen.
+It has the ingredients, all of the food, and a safe with all of the money.
+So the client is like the dining room.
+It's where people eat all the food with a fork.
+And this is the part that is incredibly important.
+When you have a client side component, all of the code associated with that component
+gets shipped out to the user's browser.
+That includes all of your logic and potentially all of your secrets.
+If you're building a web app using TypeScript or React,
+you can tell if you have client components because at the top of the code file will be use client.
+It begs the question, which components should be on the client side
+and which one should be on the server side?
+Well, the rule of thumb is pretty simple.
+All components should start out as server components.
+And only the ones that require interaction with a user,
+like a button or a form or something that needs to be toggled.
+Those are the candidates for turning them into client side components.
+So if you're a vibe coder, there's a very simple and easy prompt that you can use
+to make sure that you're all good to go here.
+You can just say, hey, audit my front end application
+and look for all components that are client components
+and ensure and verify that they deserve to be client components.
+They have the need for it.
+Anyway, hope that helps.
+And learning technical terms makes you better at prompting.
+So follow for more.

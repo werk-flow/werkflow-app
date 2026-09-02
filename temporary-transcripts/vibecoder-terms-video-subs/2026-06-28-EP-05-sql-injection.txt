@@ -1,0 +1,40 @@
+# Episode 5: SQL injection
+
+Source: https://www.instagram.com/reel/DaI7wtoIRI3/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-28
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 5
+
+## Caption
+
+Day, five of teaching technical terms to non-technical vibe coders because nobody else will. Today’s term is SQL injection. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Welcome back to day five of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is SQL injection.
+But if you want to understand what an SQL injection is, there's a few other terms you also need to know.
+If you want to read from or write to a database, generally you write those commands in something called SQL.
+This stands for Structured Query Language.
+I put an example up here.
+It's just a bunch of keywords that construct what are called queries.
+And then these queries get processed by the database management system and applied to the database.
+Whether that's updating data, deleting stuff, adding stuff, you get the idea.
+All right, cool. But why does this matter?
+All right, so check it out.
+Let's say you have an app and as part of your signup flow, you take in the user's first name as part of a form.
+And instead of their name, the person puts in something like this.
+Uh oh, that's going to be kind of a problem, because if that counts as their first name and the query that's constructed to go to the database includes that statement,
+it's going to run that nested statement as its own command, at least in some instances.
+All right, so now you know what an SQL injection attack is.
+How do you defend against that?
+I'm going to make it really simple for you because you probably vibe code.
+Just ask Claude or Codex to make sure that all of your queries are parameterized.
+Parameterized.
+That is the the key word there.
+Also, as a bonus, I would stray away from using direct SQL statements and moving to something called an ORM.
+That just stands for an object relational mapper.
+It's just a way to further protect yourself against those types of attacks.
+But yeah, known technical terms makes you better at prompting, so follow for more.

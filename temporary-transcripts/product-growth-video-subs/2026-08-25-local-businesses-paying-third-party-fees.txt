@@ -1,0 +1,66 @@
+# Local businesses already paying to have a problem solved
+
+Source: https://www.instagram.com/reel/Dcd0uMTCHsl/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-25
+Topic: product-growth-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+There are 10,000 business owners within 50 miles of you bleeding money on third-party fees. 
+
+A bakery paying DoorDash 22% on every order could lease a vehicle, hire a driver, and build a custom app for less. She needs a builder. The math is the sales pitch. You build one, you sell it to every bakery in town. The operator owns the asset. 
+
+Stop building platforms nobody asked for. Start solving problems people are already paying to have solved.
+
+-MM
+
+ #vibecoding #aidirectedengineering #founders #operators #production
+
+## Transcript
+
+There are 10,000 business owners within 50 miles of you right now bleeding money on third
+party delivery fees.
+A bakery owner gives Uber and DoorDash over 22% of her profits on every delivery order.
+All year long, hundreds of orders a month at 22% going to someone else.
+So she added up the annual fees and realized she could lease a delivery vehicle, hire a
+dedicated driver, build a custom delivery app for less than she's paying the delivery
+platforms today.
+This would result in better service, her own customer data, her own branding and a direct
+channel to her customers that she actually owns.
+The problem is, she can't build it herself.
+She has a bakery to run.
+She needs an AI directed builder.
+Here's how you go close that business.
+Number one, the math is in the sales pitch.
+Add up the annual third party fees compared to the cost of a custom solution.
+So when a bakery is paying $40,000 a year for delivery fees and you can build and maintain
+a delivery system for $15,000, the product sells itself.
+They can't build it fast enough.
+You're not selling technology, you're selling savings with a receipt.
+So direct your AI to build a cost comparison model that calculates annual third party fees
+against the total cost of a custom solution for a specific business type.
+That is a win.
+Step two, build one and sell it to every bakery in town individually, not as a multi-tenant
+SaaS subscription.
+That's crazy.
+The delivery system you build for one bakery works for every bakery down the street, right?
+Same problem, same economic, same solution, different logos.
+One build becomes repeatable product you can deploy to every operator in the same vertical.
+That is not freelancing folks, that is a business model.
+And step three, the operator owns the asset.
+That's the win.
+When you build a custom solution for a business owner, they own their customer data, their
+delivery channel, their communications with their customers.
+They are no longer renting access to their own customers through a platform that takes
+a huge cut of every transaction.
+So you're not just saving them money, you are giving them control of their business.
+So stop building platforms for things nobody asked for and nobody's paying for.
+Start solving problems for people who are already paying to have them solved.
+That is the win.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.

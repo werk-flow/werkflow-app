@@ -1,0 +1,49 @@
+# Episode 2: environment variables
+
+Source: https://www.instagram.com/reel/DaBE1GKIYmT/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-25
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 2
+
+## Caption
+
+Day 2 of teaching technical terms to nontechnical vibecoders - today’s term is environment variables, and why that matters for your apps security #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Day two of teaching technical terms
+to non-technical vibe coders because nobody else will.
+Today's term is environment variables
+and the difference between ones that live on the client
+and ones that live on the server.
+Really environment variables are just configuration data
+that you wanna keep secret.
+And so you store them in what's called the .env file
+instead of hard coding them.
+Now some environment variables
+stay within your backend server.
+So nobody ever sees them,
+but some actually get shipped out with your client code.
+Crucially, if you end up shipping
+a backend environment variable on your client side code,
+that's a pretty big security issue.
+The standard practice here
+is to prefix client safe environment variables
+with a public prefix.
+So public underscore, bind the secret name.
+As a general rule of thumb,
+the ones that don't receive that public prefix
+are external connectors for third party services
+or your database.
+So if somebody gets those secrets,
+they can interface with your database
+or third party APIs directly
+as if they were your backend server.
+That's a huge problem.
+Long story short,
+if you are working with environment variables,
+make sure you add that public prefix to the public ones.
+Knowing technical terms makes you better at prompting.
+So follow for more.

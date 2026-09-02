@@ -1,0 +1,42 @@
+# Correcting a rumour about silent model routing
+
+Source: https://www.instagram.com/reel/DaQ46CwIPdZ/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Setting the record straight on Fable 5 #claudecode #vibecoder #vibecoding #startuphacks #fable5
+
+## Transcript
+
+All the people saying that Fable 5 is now just defaulting
+to Opus 4.8 for all coding related tasks
+are either just very misinformed or straight up lying.
+I have no idea why this keeps getting shared,
+so let me set the record straight.
+Fable 5 does fall back to Opus 4.8,
+but only on specific types of tasks.
+And to identify what those tasks are,
+Anthropic uses something called classifiers.
+These are just small AI models that effectively
+assess the danger level of a user input.
+And as part of Fable 5's re-release,
+they're doing the same thing,
+except now the threshold for what is considered dangerous
+has been lowered.
+During the initial launch of Fable 5,
+Anthropic said that 5% of sessions
+were affected for degradation.
+So let's say that doubles to 10%.
+That's still 10% of all sessions, not messages.
+So to say that Fable 5 just defaults to Opus 4.8
+for all coding tasks when that's not even
+a classification gate,
+nor has it been historically that much of a problem
+is kind of ridiculous.
+Anyway, I'm not saying that Fable 5
+doesn't fall back to Opus 4.8,
+but Fable 5 certainly doesn't default to Opus 4.8.

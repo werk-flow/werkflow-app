@@ -1,0 +1,25 @@
+# Nobody has built a to-do app that does not annoy you
+
+Source: https://www.instagram.com/reel/DbEu7VUIK9a/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-23
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Software engineers, as smart as they are, have yet to create an intuitive to-do list app #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+It's always been kind of funny to me that a to-do list app is colloquially known as
+the starter application for software engineers and developers, and yet I still don't feel
+like there's a to-do app out there that doesn't suck.
+Listen, I've tried everything from the Notes app to Notion, and everything in between,
+it's either not complex enough, way too complex, or if it is the right level of complexity,
+the ontology of the system, like the way the tasks are structured and everything, just
+doesn't make sense to me and it's a pain to use.
+I feel like I've got to be missing one.
+If there's one that has actually made you more productive and isn't just productivity
+theater, please let me know.
+This is a genuine cry for help.

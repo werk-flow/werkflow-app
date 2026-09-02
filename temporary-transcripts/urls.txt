@@ -1,0 +1,3 @@
+# Inbox for new transcript sources.
+# Drop links here; delete a line once its transcript exists.
+# Empty right now: everything handed over so far has been transcribed.

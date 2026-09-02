@@ -1,0 +1,36 @@
+# How hashing actually works, revisited
+
+Source: https://www.instagram.com/reel/DcoaYR2IPPp/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-29
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, unnumbered. Covers the same ground as episode 9.
+
+## Caption
+
+explaining hashing to vibecoders #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If you've been vibe-coding for any serious amount of time, you probably understand that hashing is incredibly important,
+but how does it actually work and why is it so important?
+Hashing falls under the broader umbrella of cryptography, which helps to make your app secure.
+It's the process of taking some input data and converting it into a fixed-size value called a hash.
+And the important part with this is that hashing is generally one way.
+For example, if you started out with the word hello, you can throw that into a hashing function
+and get something out that looks like this, and that's pretty easy.
+But it's really difficult to go the other direction.
+And that implied difficulty of going backwards from the hashed value to the original input value is why it's helpful for security.
+If you have the hashing function and you understand how it works as someone that has the server code,
+then you can easily verify that the hash actually represents the value that it's hashed from.
+But if you're a hacker or an adversary and you got this hashed value,
+if you don't actually have the source code to understand how the hashing works,
+it is almost impossible to go back to the original input value.
+And these hash functions, these pieces of logic that take you from inputs to outputs,
+are specifically designed to have a minimal amount of what are called collisions.
+And a collision is when you can have two separate unique inputs and they result in the same hash.
+So let's say that your Vibecoded app gets hacked,
+and now the hacker has all of those hashed passwords within the database.
+Your server can still use them fine, but they're far less usable to the attacker
+because it is unreasonable for them to be able to uncover the original values that they represented.

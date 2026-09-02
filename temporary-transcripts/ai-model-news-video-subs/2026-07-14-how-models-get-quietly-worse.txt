@@ -1,0 +1,54 @@
+# How a model gets quietly worse after launch
+
+Source: https://www.instagram.com/reel/Dax3sxlIjk_/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-14
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+how companies like Anthropic and OpenAI make their models dumber #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+People have long accused OpenAI and Anthropic of making their models dumber, but what does
+that actually mean?
+What does it mean to make a model dump?
+Well, there's a couple ways we know for sure, and then I have my own hot take conspiracy
+theory at the end.
+The first way this happens, and we just saw this this week with GPT 5.6, is keeping the
+same labels for the reasoning budgets, but decreasing the underlying tokens that they
+represent.
+As a general rule of thumb, the longer you let a model think about a problem, the better
+results you're going to get from that model.
+Using hypothetical numbers here, let's say you had 50,000 reasoning tokens, and that
+was labeled as high, and then the next day, you kept it labeled as high, but changed the
+underlying value to 30,000.
+Users are now thinking they're getting a certain level of intelligence, but are actually getting
+less than that.
+And they're allowed to do this because they're not technically changing the underlying model,
+although it is a little bit slimy.
+Another way this happens is by having infrastructure that isn't configured correctly.
+For example, in August of 2025, everyone on Twitter was saying that Anthropic was purposely
+making their models more stupid.
+In reality, it was a routing bug, an XLA compiler bug, and a TPU configuration that wasn't
+quite right.
+And now we get into my conspiracy theories.
+In my experience, every time we are preparing for a big model launch, the frontier model
+that's currently being served always feels a bit more stupid.
+And my theory is that leading up to the launch of a new frontier model, let's say like a
+GPT 6, for example, they take the existing frontier models and served slightly quantized
+versions of them.
+And if you don't know what quantization means, these models are made up of billions and billions,
+trillions of these floating point numbers, these very long running decimal numbers.
+And that is what makes them intelligent, these very exact values.
+So if you round them, also known as quantization, you can make a model that is more efficient
+and it's technically the same model, but it is a dumber version of the model that takes
+less hardware to run.
+And my theory is that they're doing this so that way they can reallocate hardware to start
+spinning up and serving early red teaming versions of the models that they are about
+to generally release.
+And like it makes sense.
+I wouldn't even really be mad at that business practice if that is in fact what's going on.
+I just wish that if that is what's happening, it would be communicated.

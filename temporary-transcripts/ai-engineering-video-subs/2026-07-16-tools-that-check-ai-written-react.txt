@@ -1,0 +1,36 @@
+# Giving the model tools that check its React
+
+Source: https://www.instagram.com/reel/Da27kv7pvGL/
+Creator: @aikhanjum (aikhan)
+Platform: Instagram
+Posted: 2026-07-16
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+the fix isn’t a bigger model, that scored worse. it’s giving the model tools that check its react. these 5 are the ones i use: live docs in context, the official hooks linter, the benchmark’s own verifier, a re-render scanner, and real browser verification.
+
+the best ai model passes 44% of real react tasks. that’s the ceiling right now.
+
+a new benchmark (reactbench) ran the top models on real prs from 50+ open-source repos. what they break is always the same — hooks and list rendering. useEffect misuse, bad keys, re-renders you don’t catch in a diff.
+
+drop a comment "react" and i’ll send you the doc with all 5 + setup
+
+#reactjs #aicoding #reacthooks #reactbench #vibecoding
+
+## Transcript
+
+New benchmark just dropped. It's currently 2am and the best model performed at only 44%.
+And what models break is always the same. Hooks and list rendering.
+Your vibe coder ass probably doesn't know what the fuck that means so you just throw a bigger model at the end.
+But the data says that's backwards. One model was 6 times more expensive and scored lower.
+The fix that worked for me is stupidly simple.
+Give the model tools that check its React. These are the top 5 I actually use.
+Number 5 is React Doctor. It's the same team that built the benchmark and it runs on 400 rules.
+All you have to do is install it as a skill.
+Number 4, and I don't have to explain why, is contact 7.
+Number 3 is so stupid that it's just the official React hooks, the S-Link plugin.
+It literally just scans during your lint stuff.
+Speaking of scanners, number 2 is React Scan. It shows the re-renders that you can't see in a diff.
+And number 1 is Playwright MCP. It lets the agent open a real browser in QA test.
+Comet React will send you the full dock with all of the links.

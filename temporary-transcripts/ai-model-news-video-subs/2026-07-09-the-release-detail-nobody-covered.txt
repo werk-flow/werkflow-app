@@ -1,0 +1,51 @@
+# The release detail nobody was covering
+
+Source: https://www.instagram.com/reel/DajArujI6c5/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-09
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+GPT 5.6 Sol Might solo Fable 5 #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+The most important aspect of GPT 5.6 Sol's release
+is not being talked about anywhere.
+This is important enough to make GPT 5.6 Sol
+the default winner, best model in the world,
+regardless of if it is as smart or even smarter
+than Fable 5.
+So what is this incredibly important component?
+Say it with me now, tokens per second.
+On average, Cloud Fable 5 outputs
+between 60 to 63 tokens per second.
+That's a respectable speed.
+It's pretty much what we're used to.
+OpenAI has a trick up their sleeve
+when it was buried super far down in their blog post
+announcing GPT 5.6 Sol.
+And the secret is custom silicon.
+OpenAI is partnering with Cerebrus
+to serve GPT 5.6 Sol on some of their infrastructure.
+Cerebrus is claiming that they can get up to 750 tokens
+per second serving GPT 5.6 Sol.
+So let's do a little thought experiment with our brain.
+Let's say that GPT 5.6 Sol is 95% as intelligent
+as Fable 5.
+I will let you be the judge.
+Which one is better?
+A Fable 5 class model that can do a job in two hours?
+Or a 95% as smart Fable 5
+that can get the job done in a little over 10 minutes?
+And most of the stuff you're asking for
+isn't going to require that 5% differential of intelligence
+between the two models.
+And GPT 5.6 is shaping up to be both A,
+more token efficient than Fable 5,
+but B, less expensive than Fable 5 per 1 million tokens.
+But yeah, I mean, we've all gotten used to Fable 5
+just being like the best model,
+that GPT 5.6 Sol might actually win here.

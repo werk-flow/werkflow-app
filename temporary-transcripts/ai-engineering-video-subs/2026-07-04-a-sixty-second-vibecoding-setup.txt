@@ -1,0 +1,46 @@
+# A sixty second setup for vibecoding
+
+Source: https://www.instagram.com/reel/DaYI80kIYEm/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-04
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+How to vibecode like a pro in 60s #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Everybody is vibe coding all wrong.
+So give me 60 seconds and I will save you a world of trouble.
+Your app is going to need three things,
+a database, a backend, and a frontend.
+First, make a GitHub account
+so you have a place to store your code.
+Now make repositories for your backend and frontend.
+Next, you need a place to see your code,
+so download VS Code.
+For the AI writing your code,
+you can either choose Cloud Code or Codex.
+This is my recommendations for text stacks.
+For the backend, use Python and Fast API for the server
+and SQL Alchemy as the ORM.
+For frontend, I like to use Next.js, React, TypeScript,
+Tailwind, and ShadZee for UI components.
+For the database, I like using Postgres.
+Now this is where a lot of vibe coders get messed up,
+so let's talk about deployment.
+I want you to move away from the Vercels
+and Superbases of the world.
+I would recommend using a more traditional cloud provider
+like AWS, GCP, or Azure.
+So here's all the services you would need for AWS.
+You're gonna need RDS for your database,
+ECS and ECR, as well as load balancing for your backend,
+and AWS Amplify for your frontend.
+If you want any sort of analytics,
+I prefer using Posthog, Datadog, and Sentry.
+And the biggest mistake that new vibe coders make,
+and this drives me insane, is not following me.
+Like, what are you doing?

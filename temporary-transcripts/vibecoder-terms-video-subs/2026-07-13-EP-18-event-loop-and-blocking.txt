@@ -1,0 +1,45 @@
+# Episode 18: the event loop and blocking
+
+Source: https://www.instagram.com/reel/Davk5rAIrwh/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-13
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 18
+
+## Caption
+
+Explain explaining a vent loops and blocking to non-technical vibe coders so they can get better at prompting #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 18 of teaching technical terms to non-technical vibe coders because nobody else
+will.
+We got an important one today, and that is event loop and blocking.
+For those of you making web apps out there, JavaScript runs your code on one thread.
+That means it does one thing at a time.
+And blocking is when a single task hogs that thread so nothing else can get done.
+But let's make it real with an analogy.
+So imagine a store with a cashier.
+The cashier is your thread, and each customer is a task.
+Normal checkouts take basically no time at all, but then you got that one middle-aged
+white lady with all of her coupons, and now everybody is waiting for 30 minutes.
+And the solution here isn't just getting a faster cashier.
+You take the tasks that are clogging everything up, in this case the coupons, and sending
+them to a back-of-office task.
+Somewhere else where they're still getting done, but it's not affecting the main flow
+of operations.
+So if you're a vibe coder, what does this mean for your applications?
+How should you be changing the way that you are prompting?
+So you can keep CPU heavy work off of the main thread in three main ways.
+Number one is just using the asynchronous version of everything.
+Number two, if there's a really big job that needs to be done, you can always just offload
+it to a worker thread in your backend.
+And number three, for loops that you have control over, make sure that you are chunking
+them.
+Let's say you're processing through 50,000 items.
+You can still send updates or events every 1,000 items.
+You don't have to wait for all 50,000.
+You can still make use of that data, even though it's not fully complete.
+And learning technical terms just makes you better at prompting, so you should follow
+for more.

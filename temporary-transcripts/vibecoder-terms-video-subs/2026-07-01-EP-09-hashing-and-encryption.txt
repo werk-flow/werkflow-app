@@ -1,0 +1,39 @@
+# Episode 9: hashing versus encryption
+
+Source: https://www.instagram.com/reel/DaOn_T_o0fN/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 9
+
+## Caption
+
+Episode nine of teaching technical terms to non-technical vibe coders because nobody else will: today’s term is hashing and encryption #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 9 of Teaching Technical Terms to Non-Technical Vibecoders because nobody else will.
+Today, we will be covering the difference between hashing and encryption.
+The analogy I like to use for hashing is that of a meat grinder.
+So let's say you have a meat grinder. Meat goes in, mince comes out.
+If you put the exact same shape of meat in, ideally, it would be the same type of mince out.
+So you can confirm that it's the same input into the system.
+But no one's taking mince and turning it back into the original meat.
+So hashing is like a way to confirm and verify that some other party also has the same secret code
+without ever sharing the secret code between you two.
+And that's a super important thing to be able to do,
+and it underpins a lot of modern networking, security, and cryptography.
+Encryption, on the other hand, is more like a safe.
+Let's say we're still using this big hunk of meat,
+but encryption just puts the meat in the safe and closes it.
+Whoever has the key is able to open it and take the meat back out.
+So what does this matter for your vibe-coded app?
+Well, I'll give you a couple rapid-fire things to check that have to do with hashing and encryption.
+The first one is make sure you are not storing your passwords in plain text.
+You need to be hashing them.
+Though when a user logs in, what should happen is they send over the password back to the server.
+The server then hashes that password and compares it against the hash for the password that's saved in the database.
+If they match, then cool, the user has the correct password.
+Now you can log them in.
+Knowing and understanding technical terms makes you a better prompter, so make sure you follow for more.

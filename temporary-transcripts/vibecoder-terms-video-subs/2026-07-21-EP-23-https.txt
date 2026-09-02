@@ -1,0 +1,42 @@
+# Episode 23: HTTPS
+
+Source: https://www.instagram.com/reel/DbEOtR2IkWd/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-21
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 23
+
+## Caption
+
+Episode 23 of teaching technical terms to non-technical vibe coders because nobody else will. Today’s term: HTTPS, which is regular web traffic wrapped in a locked verified tunnel. TLS is the protocol that builds the tunnel: it scrambles the data so nobody on the network can read it, and it proves the server is really who it claims to be. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+One letter, one single letter can be the difference
+between whether or not your vibe coded application
+gets hacked.
+Welcome back to Teaching Technical Terms
+to Non-Technical Vibe Coders because nobody else will.
+Today's episode, HTTPS.
+So web traffic is served over a protocol called HTTP.
+You can think of this like a set of rules and regulations
+that different computers follow to be able to communicate
+with one another.
+So HTTPS is regular web traffic that's wrapped
+in a verified locked down tunnel.
+Bonus term, TLS is the protocol that builds that tunnel.
+And this secure tunnel really has two functions.
+One is to scramble the data
+so that nobody on the network can read it.
+And two, it forces the servers to prove
+they really are who they claim to be.
+So a good way to think about this is that it both locks
+the box and checks the ID.
+To be honest, it's pretty uncommon to find a standard
+HTTP URL in 2026, unless of course it is a scam
+or phishing website.
+So if you're a vibe coder, check to make sure that your URL
+starts with HTTPS and not just HTTP.
+And knowing technical terms just makes you better
+at prompting, so follow for more.

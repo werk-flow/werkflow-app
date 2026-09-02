@@ -1,0 +1,35 @@
+# How not to vibecode
+
+Source: https://www.instagram.com/reel/Dbvz-c3oUjV/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-07
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+How NOT to vibecode #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+It's the question on everybody's mind.
+What is the most efficient way to vibe code?
+And spoiler alert, I don't have the answer,
+but hold on, wait a minute.
+I can tell you what it's not.
+It is not feeling the need to have at minimum 20 MCP servers
+hooked up to your agent at any given time.
+It is not feeling the need to shell out $200 a month
+for the max tier subscription for OpenAI or Cloth.
+It is not downloading and installing
+15 competing UI redesign skills.
+And it's certainly not having OpenAI and Tropic Gemini
+and Grok debate each other on what's the best way
+to implement this feature.
+The only thing that matters,
+the only thing you should be focused on is the speed
+at which you can realize this vision you have
+for your product.
+Everything else is noise.
+And if you just focus on that,
+you're probably gonna end up with a better app.

@@ -1,0 +1,35 @@
+# Cryptographic erasure for deletion requests
+
+Source: https://www.instagram.com/reel/DcYmYNYtFPM/
+Creator: @sayed.developer (Mohamad Al Sayed)
+Platform: Instagram
+Posted: 2026-08-23
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+What should happen to users’ data when they leave 👋🏽 
+#softwareengineering #computerscience #code
+
+## Transcript
+
+Dude, users who deleted their accounts are demanding all their data to be wiped out.
+Okay, so just delete them from the production database.
+We did, but all their personal data is still setting in our last 30 days of database backups.
+Is this not GDPR compliant?
+No, if editors find out, we're getting a huge fine.
+That's really bad.
+How about we write a script to open the backup data, find their data and delete it.
+But restoring, editing and recompressing terabytes of data every time someone leaves will completely
+overwhelm our servers.
+Okay, well, what do you think we should do?
+It's actually super simple.
+We need to implement cryptographic erasure.
+Okay, you mean encrypting their data before storing it?
+Exactly.
+We encrypt every user's sensitive data with their own unique encryption key.
+When they delete their account, we don't even touch the backups.
+We just destroy their one specific key.
+So the backup just becomes useless.
+Yes, and even if we restore the backup, it's mathematically impossible to read.
+And that's literally it.

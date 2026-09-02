@@ -1,0 +1,85 @@
+# A dependency quietly posting your environment variables away
+
+Source: https://www.instagram.com/reel/Dcg9G7PjY6E/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-26
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You installed an npm package last week. It has been sending your environment variables to a server you have never heard of. 
+
+Database credentials. API keys. Stripe secret. All posted to an external endpoint every time your app starts. Dependency audit on every package. Environment variable isolation. Lockfile integrity in CI.
+
+Your code is only as trustworthy as your least-trusted dependency.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #npm #production
+
+## Transcript
+
+You installed an NPM package just last week.
+Since then, it has been sending your environment variables
+to a server you've never heard of.
+Your database credentials, your API keys,
+your Stripe secret, your Jot signing key.
+All of it read from process.emv
+and posted to an external endpoint
+every time your application starts up.
+The package had 50,000 weekly downloads.
+The name was one character off from the real one.
+So you installed it because your AI recommended it
+and you never checked.
+So your dependency list is an attack surface.
+Every package on it is code you did not write running
+with full access to your environment.
+So let's get this cleaned up.
+Step one, a dependency audit on every package
+in your lock file.
+Not just your direct dependencies,
+your transitive dependencies,
+the package your package is installed,
+a single application can pull in 800 packages
+from a dozen maintainers you have never ever heard of.
+Direct your AI to run a full dependency tree audit,
+flag any package with fewer than 100 weekly downloads,
+any package where the maintainer changed
+in the last 90 days,
+and any package with post install scripts
+that execute on install.
+Injections are not cool.
+That's the win if you run that program.
+Step two, environment variable isolation.
+Your application should not expose
+every environment variable to every process.
+Secrets needed by one module should not be readable
+by every package in the dependency tree.
+So direct your AI to implement scoped secret access
+where each module receives only the environment variables
+that it needs, not the full process.emv object.
+That's a win.
+Step three, lock file integrity verification on CI.
+Your lock file pins exact versions.
+If a dependency is modified upstream after you installed it,
+the checksum will not match.
+Your CI pipeline should verify
+lock file integrity on every build
+and reject any build where the checksums
+do not match the expected values.
+So direct your AI to configure lock file integrity up checks
+in your CI pipeline that block deployment
+on any checksum mismatch.
+Your code is only as trustworthy
+as your least trusted dependency.
+So audit the list before the list is auditing you.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Run a dependency audit on every package.
+2. Isolate environment variables so one process cannot read them all.
+3. Enforce lockfile integrity in CI.

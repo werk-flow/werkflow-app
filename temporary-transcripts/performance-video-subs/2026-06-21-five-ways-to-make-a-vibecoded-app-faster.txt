@@ -1,0 +1,32 @@
+# Five ways to make a vibecoded app faster
+
+Source: https://www.instagram.com/reel/DZ3PQxzoUEr/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-21
+Transcript: Whisper small.en, transcribed from the video audio
+Note: pinned post on the creator's profile.
+
+## Caption
+
+5 ways to make your vibecoded app more performant #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Cloud writes all of your code, your app is painfully slow and you don't even realize it yet.
+So here are the five things it probably forgot to do.
+Don't worry, all of these are vibe-codable changes you just need to know to ask for them.
+Number one, your JSON is going over the wire uncompressed,
+which just makes everybody wait longer for everything your backend server responds with.
+Number two, your app is writing new rows to your database one at a time,
+which increases overhead for no reason.
+This isn't something that you would notice at one user,
+but at a thousand users, your app would feel like molasses.
+Number three, you have a single dependency bottleneck.
+To identify this, you can audit your round trip latency and break it down into specific network
+events. If one action is taking 90% of the round trip time, that is your bottleneck.
+Number four, every single action the user takes waits on the response from the backend before
+updating anything in the user interface.
+Number five, your front-end web server is rebuilding HTML for every visitor that loads up the site.
+And if you want to fix these issues with copy-pasteable prompts you can drop directly into
+cloud code, like the video and comment links, and I will send them over to you directly.

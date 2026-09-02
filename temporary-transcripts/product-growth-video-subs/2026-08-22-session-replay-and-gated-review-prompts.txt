@@ -1,0 +1,35 @@
+# Session replay and gated review prompts
+
+Source: https://www.instagram.com/reel/DcUy9rhR0Uo/
+Creator: @ayoships (Ayo O)
+Platform: Instagram
+Posted: 2026-08-22
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+If you find this useful please like, save, and share to your business partner
+
+## Transcript
+
+If I could go back in time, there are two things I prioritize before building any of my apps.
+I've shipped over 15 apps and I've wasted many months learning this the hard way.
+Number one, posthogs session replays.
+Like everyone else, I had basic analytics.
+I could see users churning, but I wasn't sure why.
+Session replay lets me see exactly what the user is doing step by step every single day.
+I learned why they churned, bugs I would have never caught,
+and even broken UX flows or onboardings.
+It's the closest thing to sitting next to your user without ever having to talk to them.
+And then point number two is prompting for reviews.
+The best defense against any competitor is simply having more reviews than them.
+So in every app I make now, I always ask at a key moment.
+But there's a trick.
+Don't show the native pop-up first.
+Rather, show your own feedback model.
+If they say they love the app, then you can show the native review prompt.
+If not, route them to a feedback form instead.
+That way, all the bad reviews get diverted into a private feedback pool,
+and your rating on the app store stays high.
+So do these two things from day one
+and you're miles ahead of everybody else on the app store.

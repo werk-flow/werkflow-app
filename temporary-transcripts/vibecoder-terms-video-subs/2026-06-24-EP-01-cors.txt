@@ -1,0 +1,22 @@
+# Episode 1: CORS
+
+Source: https://www.instagram.com/reel/DZ-v8DlqdOA/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-24
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 1
+
+## Caption
+
+Day 1 of teaching technical terms to nontechnical vibecoders because no one else will - today’s term is CORS, or cross origin resource sharing#claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Welcome to day one of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is CORS. This stands for Cross Origin Resource Sharing. You can pretty much think of it
+like the guest list at a party. It's the backend server saying which sites are allowed to read its
+responses. So these are the steps. It goes from server to browser and finally to your site. So
+if your front-end requests are getting rejected by your backend's CORS policy, this is always going
+to be a backend code change fix. What you need to do is add your front-end domain to the backend
+server's CORS policy. Knowing technical terms helps you write better prompts, so follow for more.

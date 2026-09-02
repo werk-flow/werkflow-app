@@ -1,0 +1,33 @@
+# Five ways to make a vibecoded UI look professional
+
+Source: https://www.instagram.com/reel/DaHTkxOolBF/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-28
+Transcript: Whisper small.en, transcribed from the video audio
+Note: the audio-only track Instagram serves for this post has corrupt AAC frames. The transcript was made from the audio in the full video file instead.
+
+## Caption
+
+5 ways to make your UI look more professional #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Claude writes all of your code, here's five easy ways to make your vibe-coded app's user interface look more professional.
+Don't worry, all of these are vibe-codeable changes, you just needed to know to ask for them.
+Number one, you're using a stupid font because Claude picked one and you never bothered to change it.
+So here's a couple of my favorite fonts, these are all free on Google Fonts and you can just download them directly.
+Number two, your app does not have tooltips.
+These are what tooltips look like, they just let your users know what buttons do on your app before they actually click them.
+Number three, start using skeleton loaders.
+These are the little gray bars that appear before the app's data has fully loaded in,
+but it gives the user an idea of what they will be looking at as far as the layout is concerned.
+Number four, you have an inconsistent hierarchy for your font weights.
+Usually, the more bold fonts designate headings or important priority pieces of information.
+So if there's ever body text that's the same thickness or even a little thicker as the heading above it or anything like that, it just looks off.
+There's no other way to describe it.
+Number five, you are using some janky custom made SVGs for the icons in your application that Claude threw together.
+You need to be using an actual icon pack.
+There are dozens of free ones online, but my two favorite are Lucid, Lucid, I don't know, and Phosphor.
+So both of these are completely free too.
+And if you want to make a better vibe coded app, make sure you follow me for more.

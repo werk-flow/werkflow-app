@@ -1,0 +1,56 @@
+# An OAuth redirect that hands tokens to an attacker
+
+Source: https://www.instagram.com/reel/DcwZzLckxZ4/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-01
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You added Sign in with Google. Your AI left the redirect wide open. 
+
+Someone just sent your users a login link that delivers their token to a server you have never seen. The user thinks they logged in. The attacker has their access token. Lock redirect URIs to exact registered URLs. Enforce a state parameter on every OAuth request. Scope token permissions to the minimum your app needs. 
+
+Your users trust that login button. Make sure it only works for you.
+
+-MM
+
+#vibecoding #aidirectedengineering #oauth #security #production
+
+## Transcript
+
+So your AI, it added sign-in with Google to your product, but your AI also left
+the redirect wide open. So someone just sent your users a login link that
+delivers their token to a server you've never even seen. So your AI, it built
+OAuth flow, right? Login with Google, get a token, redirect back to your app. But
+the redirect, that URL is not locked to your domain. And an attacker crafted a
+login link that looks exactly like yours. So the token gets redirected to
+their server instead of yours. And your authentication worked perfectly, but it
+just worked for the wrong person. Let's get that tightened up. Step one, lock
+your redirect URL to exact registered URLs. No wildcards, no pattern matching,
+no open redirects. Every OAuth provider gives you a whitelist. If you redirect
+can point anywhere, your login can be hijacked from anywhere. So direct your
+AI to audit every OAuth integration and restrict redirect URLs to exact
+hard-coded callback URLs registered with each provider. That's a win. Step two,
+enforce a state parameter on every OAuth request. The state parameter ties
+the login request to the user session. That's so the callback can verify the
+flow was initiated by your app and not by an attacker. Without it, anyone can
+forge an OAuth callback. So direct your AI to generate a unique
+cryptographically random state value on every login request and reject any
+callback where that state does not match. That's also a win. And step three, scope
+your token requests to the minimum permissions your app actually needs. So
+if you requested full profile access and your app only needs an email address,
+every stolen token gives the attacker more than it should. So direct your AI to
+audit every OAuth scope and reduce each to the minimum required for the feature
+it supports. Your users, they trust that login button so make sure it only works
+for them.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Lock redirect URIs to exact registered URLs.
+2. Enforce a state parameter on every OAuth request.
+3. Scope token permissions to the minimum the app needs.

@@ -1,0 +1,54 @@
+# Episode 6: N+1 queries
+
+Source: https://www.instagram.com/reel/DaLZiVrIEFO/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-29
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 6
+
+## Caption
+
+Day six teaching technical terms to non-technical vibe coders to make them better at prompting. Today’s episode: N +1 queries. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Welcome to day six of teaching technical terms
+to non-technical vibe coders because nobody else will.
+Today's term is N plus one query.
+Also quick side note,
+query is just the technical term for a question
+that you ask your database
+and your app uses lots of queries.
+For example, you could say,
+what is user one, two, fours first and last name?
+That information would get returned
+and is part of what's displayed on the user interface.
+Now that that's out of the way,
+what is an N plus one query
+and why does it kill your app's performance?
+So an N plus one query is a query to fetch a list
+and then one more query per item in that list
+to fetch its associated data.
+But let's make it real with an example.
+So let's say you're throwing a party
+and you're feeding 20 people.
+After you've called everyone to see
+what type of food they like, you have a shopping list.
+Now the normal thing to do once you have the shopping list
+would to be to go to the grocery store,
+get all of your items and then come home.
+The N plus one query way to do that
+would to be to go to the store, buy onions
+and then drive home.
+Go to the store, buy garlic and then drive home
+and repeat that process for the entire shopping list.
+So it should be pretty easy to intuit a sense of like,
+why that would be very inefficient.
+Don't worry, all of this is completely vibe-codeable.
+You can just ask either Codex or Cloud Code
+or whatever other tool you're using
+to just audit your application for any N plus one queries
+and then just kind of fix them as it goes.
+Learning technical terms makes you way better at prompting.
+So follow for more.

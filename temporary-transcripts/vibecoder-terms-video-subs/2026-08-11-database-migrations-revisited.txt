@@ -1,0 +1,39 @@
+# Database migrations, revisited
+
+Source: https://www.instagram.com/reel/Db55x0qIMNJ/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-11
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, unnumbered. Covers the same ground as episode 14.
+
+## Caption
+
+explaining DB migrations to vibecoders so they can make better apps #claude #claudecode #codex #aicoding #vibecoding
+
+## Transcript
+
+If Cloud has ever changed your database for you, you need to understand what are called migrations.
+Alright, so I'm going to cover three things.
+One, what database migrations are.
+Two, why you should care as a vibe coder.
+And three, what do you actually do about this new information?
+In short, a database migration is a controlled way to change the shape or structure of your database
+after the app already exists.
+I'm sure you've run into this when you've been adding new features.
+There's just more data points that your database needs to capture in order to facilitate those features being added.
+But let's make it real with an example.
+Let's say you are a contractor and you're tasked with renovating a house that already has people living in it.
+Because people are already living in the house, you can't just tear down walls and add a new bathroom.
+It's a bit more complicated than that.
+A database migration is effectively the renovation plan for your production database.
+And this is where vibe coding can get a little bit dangerous.
+Cloud will happily change your schema to allow the new version of your app to work perfectly fine.
+Sometimes without properly considering the 50,000 rows of data that are already sitting inside of it.
+So, now you have an idea of what a database migration is, but what does this actually mean for you as a vibe coder?
+Number one, never tell your AI coding agent to just modify the database.
+You should always be instructing Cloud, Codex, or whatever you use to use proper migrations.
+Number two, treat anything involving drop, deletions, or changing column types as especially dangerous.
+And number three, you need to be testing your migrations with production-like data before actually applying them.
+Think of this just like rehearsing for the big game.
+You want to make sure you have all of the edge cases covered before you actually go out on the field.

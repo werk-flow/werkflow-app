@@ -1,0 +1,81 @@
+# One column for one client slowed every other client down
+
+Source: https://www.instagram.com/reel/DcWGRX2G2l8/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-22
+Topic: database-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You added one column to your database for one client. Every other client's queries slowed down by 40%. 
+
+A custom field in a shared schema. One client's request becomes every client's technical debt. Per-tenant schema extensions. Tenant-isolated compute. Tenant-scoped migrations. 
+
+Say yes to your biggest client. Say it architecturally.
+
+-MM
+
+#vibecoding #aidirectedengineering #multitenant #architecture #production
+
+## Transcript
+
+You added one column to your database for one client.
+Now, every other client's queries have slowed down by 40%.
+So one client wanted a custom field on every single record
+and a new column in the shared schema
+that only they were using.
+So now every query, every migration,
+every backup and every restore carries a custom field
+that 99% of the clients never asked for or see.
+So one client's feature request
+just became every client's technical debt
+and every client is paying for it in performance.
+You cannot say no to the revenue, we get it,
+but you said yes in the wrong way.
+And now tenant specific schema changes compound
+with every single release.
+Here's what tier three multi-tenant isolation
+really looks like.
+Step one, per tenant schema extensions
+without shared schema pollution.
+A metadata table or JSONB column
+scoped to a tenant that holds custom fields.
+The base schema stays clean.
+Tenant specific data lives in an extension layer
+that can grow without affecting anyone else.
+So direct your AI to implement a tenant extension model
+where custom fields are stored outside the core schema
+and joined at query time only for the requesting tenant.
+That's a win.
+Number two, tenant isolated compute
+for heavy or custom workloads.
+When one tenant runs a report that scans millions of rows,
+that workload should not be competing for resources
+with every other tenant in real time.
+So isolate heavy compute into tenant scoped workers or queues.
+Direct your AI to implement workload isolation
+so one tenant's expensive operations
+cannot degrade the performance for all of the others.
+And step three, tenant scoped migration pass.
+A schema change for one tenant cannot require downtime
+for all of your tenants.
+Migrations that affect the extension layer run per tenant.
+So migrations that affect the core schema
+are backwards compatible.
+Direct your AI to build a migration strategy
+that separates core schema changes
+from tenant specific changes.
+This way, no single tenant's evolution
+forces a system wide deployment.
+Say yes to your client, but say it with your architecture.
+It's the best way to go.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Use per-tenant schema extensions instead of custom columns in the shared schema.
+2. Isolate compute per tenant.
+3. Scope migrations per tenant.

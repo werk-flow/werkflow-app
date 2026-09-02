@@ -1,0 +1,69 @@
+# Build in public day 2: the agentic loop
+
+Source: https://www.instagram.com/reel/DaTD1kOoqg_/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-02
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Day 2 of building a startup in 10 days - today’s focus is building the agentic harness #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Day two of building a startup in 10 days.
+Yesterday, we made a solidified spec doc
+and set up our GitHub repos.
+And today I'm gonna be designing the core agentic loop.
+So let's go.
+So as a reminder, we are building a free tool
+to help Vibe coders develop better agentic harnesses
+for their applications.
+And so for inputs, we're probably looking at form data,
+perhaps a folder full of code files,
+as well as some additional free text inputs.
+And we want the output of this system
+to be a couple of things.
+First and foremost, we want a PDF document
+explaining exactly what models should be used
+for different parts of this application,
+what tool calls should be used,
+what parameters for function calls, et cetera.
+We also want to give them a visual diagram,
+as well as some pseudo code to start changing over
+perhaps what they already have built.
+So this is probably going to end up being
+a multi agent system.
+And let me show you exactly what I mean.
+Okay, this is gonna be pretty in depth, so bear with me.
+But here up top, you can see we have our form,
+the free text brain dump,
+and the optional code or images upload.
+The first gate it goes through just determines
+whether or not the user input has code or has images.
+Depending on those aspects,
+it might just go ahead and make some forced choices
+based on if there needs to be multimodality,
+for example, or other factors.
+That information gets sent to a series of small scoped
+and lightweight models that just assess the characteristics
+of what the system should be.
+And all of those first gate models
+are going to output JSON.
+Based on that JSON, we are going to have hard coded
+prompt strings to add as additional context
+based on whatever the harness ought to include.
+You can see that gets added here, everything is assembled,
+and then it goes into the main synthesis agent.
+And that synthesis agent is what outputs
+those three things there at the bottom.
+And whatever models I end up using,
+I'm going to have the inference running through Cerebro
+so I can get super high tokens per second
+because I want the round trip latency of this system
+to be very, very minimal.
+All right, so now that we have our agentic harness developed,
+tomorrow we start writing code.
+So this wraps up day two,
+make sure you stick around and follow for more.

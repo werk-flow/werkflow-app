@@ -1,0 +1,60 @@
+# Four UI patterns a component library will not give you
+
+Source: https://www.instagram.com/reel/DbuU7MgIj5m/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-07
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+4 UI design patterns to level up your vibecoded app #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If you're a vibe coder, then you need to understand the differences between a functional design
+and a truly good one.
+And I'll give you a secret, it's not another Claude scale or another component library
+that you'll find online.
+So here's four UI design patterns that your vibe coded application should 100% be making
+use of.
+And the last one, almost nobody actually does it.
+Number one is making use of something called skeleton motors.
+These are the little gray bars that describe the layout of the user interface once the
+actual data loads.
+This helps to reduce perceived latency of your application and make everything feel
+so much faster.
+Number two is using what are called semantic colors.
+Your application likely has a brand color scheme.
+You have some sort of a monochromatic color ramp, as well as one or more accent colors
+that your application is using.
+These are some of the most common semantic colors that you will find in all of the applications
+that you use every day.
+And not using them just makes your app harder to navigate.
+If you vibe coded your app, I am 100% certain that this is in your user interface right
+now.
+For example, let's say you have a productivity app.
+In one of your screens, there's a header that says my day.
+That in and of itself is useful.
+It's a description of what the page contains.
+But what the user interface does not need is a two sentence description under the text
+my day explaining what my day means.
+For whatever reason, Cloud Code and Codex love to put these sub header pieces of text
+under everything.
+This is definitely not the only form of clutter in a user interface, but I hope this gives
+you a sense of what I'm talking about.
+If it is not tangibly useful, remove it.
+And for number four, we have an issue that I see in vibe coded applications all the time.
+It is far and away the most common issue I run into.
+And what's worse, this one can actually get you sued.
+Understandably, a lot of vibe coders overlook this, but it is checking your application
+against accessibility standards.
+If you aren't doing this, people can and they will file a complaint against your application.
+So making your website accessible is always a good rule of thumb.
+But if you don't, it can actually land you in some pretty hot water.
+I'm not going to ask you to comment and send you any prompts or anything.
+So here's what you need to do.
+You need to take what I said in this video, go to Claude, Codex or whatever tool you use
+and prompt it.
+I believe in you.
+You can do it.

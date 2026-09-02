@@ -1,0 +1,64 @@
+# Free-trial abuse and payment fraud rules
+
+Source: https://www.instagram.com/reel/DcNVfWkuDJ7/
+Creator: @adler.builds (adler.builds)
+Platform: Instagram
+Posted: 2026-08-19
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Payment FAILED !! Owned !!
+
+#tech #facebookads #stripe #appdevelopment #saas
+
+## Transcript
+
+running up for a free trial and they want credit card
+information, don't give it to them.
+You can use a Visa gift card with a low balance.
+And then if they ever try to charge you, it won't work,
+but you'll still get access to the free trial.
+Is what I would say if I were a consumer, okay?
+But I am developing an app and this is day 121
+of building it in public.
+And so I want to avoid people using this workaround
+because it just happened to me.
+My second customer ever got on a monthly plan
+and used a prepaid card.
+Okay, and then there was an insufficient balance
+so they didn't get charged.
+And so I've been researching all day.
+I'm like, how can I prevent this in the future?
+And the way you prevent it is by using
+your payment processor, they might have a service.
+Stripe has a product called Stripe Radar,
+which is one of their fraud detection services.
+And it allows you to set up rules like,
+hey, no one's allowed to sign up for a free trial
+if they're using a Visa gift card.
+If their zip code doesn't match,
+if the CVV, the three numbers on the back of the card,
+aren't accurate if they're not correct, okay?
+If they're using an anonymous IP address,
+and then you can even go crazier.
+You can say, if they're using a computer
+that is a thousand miles away or more
+from their issuing bank,
+and this will help cut down on fraud,
+which will help cut down on chargebacks.
+It'll help cut down on the people
+who are just trying to abuse Visa gift cards
+and then take the free trial for what it is.
+I don't think I'm gonna go as strict
+as banning anonymous IP addresses or the thousand mile thing,
+but I am gonna start banning Visa gift cards.
+And then I'm only gonna report the good ones,
+like the high quality customers back to Facebook
+so that they can start steering the advertising algorithm,
+serving ads to people who are most likely
+to enter real credit card information.
+But yeah, all right.
+Hope you had a good day.
+This is day 121, I'm building an app.
+I post every day and I'll see you tomorrow.

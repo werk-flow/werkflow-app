@@ -1,0 +1,42 @@
+# DNS and why changes take days to propagate
+
+Source: https://www.instagram.com/reel/DbBu6yvIM7m/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-20
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode number not stated on camera. It sits between episode 21 (CDN) and episode 23 (HTTPS).
+
+## Caption
+
+DNS is the Internet‘s address book: it turns a name like your app.com into the server IP where your browser actually connect to. Propagation is the delay before a DNS change takes affect everywhere, because the old answer is cashed around the world until it expires. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Welcome back to Teaching Technical Terms to Non-Technical Vibecoders because nobody else will,
+today's term DNS.
+So let's cover what DNS means, why you should care as a vibecoder, and, most importantly,
+why DNS changes can take up to three days to apply.
+So, the easiest way to think about DNS is to imagine it as the internet's phone book.
+For example, when you go to youtube.com, your screen fills with HTML, CSS, JavaScript, the whole thing.
+But where is that code actually coming from?
+Well, if you've watched previous episodes, you should understand that this code is getting sent to your computer by another server.
+But how does your computer know which server to ask for that information?
+How does your computer know which computer or computers are related to this domain that you just entered?
+So even though it looks like you might just be going to youtube.com, there's an underlying IP that your computer is actually connecting to.
+But let's say that you just created a new app and you just purchased a new domain.
+Now you need to connect that domain to your server.
+How is everybody else's phone books going to get updated with this information?
+You get two bonus terms today.
+One is TTL, which stands for Time to Live, and the other one is Propagation.
+Simply put, Time to Live just means how long can something stay stale until we need to check it again.
+In this instance, the data that might be stale is the underlying IP that sits behind the domain name.
+This is usually configured and decided by whoever owns that domain.
+And when an update is made, it's not like just one central place gets updated and then everybody immediately knows to actually connect to that new underlying IP address.
+It has to go through a process called Propagation.
+Eventually, these DNS updates propagate across the entire internet until every computer is now connecting to the correct underlying IP.
+But that process takes time.
+In some cases, it can take up to two to three days.
+In other cases, it'll be less than an hour.
+And you just don't know, so you just have to figure it out.
+And learning technical terms just makes you better at prompting, so follow for more.

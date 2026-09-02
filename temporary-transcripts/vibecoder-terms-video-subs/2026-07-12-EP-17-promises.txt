@@ -1,0 +1,44 @@
+# Episode 17: promises
+
+Source: https://www.instagram.com/reel/DatPcTRIrMe/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-12
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 17
+
+## Caption
+
+Teaching technical terms to vibecoders because no one else will: today’s term is promises #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Turns out it's not just your girlfriend
+that can make failed promises, because your app can too.
+And welcome to episode 17 of Teaching Technical Terms
+to Non-Technical Vibecoders, because nobody else will.
+Today's term, promise.
+So if you've seen previous episodes,
+you understand that your front end gets hydrated,
+filled with data from the back end.
+And in programming, a promise is an IOU for data
+that isn't quite there yet.
+Let's make it real with an analogy.
+Let's say you go to a cafe and a barista hands you a buzzer
+after you've ordered coffee.
+The buzzer is the promise.
+It's a real thing that you can hold,
+but it's definitely not your latte.
+So in the same way that you have your buzzer
+and you wait for your latte,
+your code gets a promise and a wait, the response.
+That's cool, you might be saying,
+but I'm a vibe coder, so what do I care?
+Well, there are two things that you are going to want to know.
+Number one, any line that hits a database, an API,
+or the file system gets a wait put in front of it.
+And number two, the function that surrounds that line
+of code will have to be marked as async
+or a wait will throw an error.
+And learning technical terms makes you better
+at prompting, so you should follow for more.

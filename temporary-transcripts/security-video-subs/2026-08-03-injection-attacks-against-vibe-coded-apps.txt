@@ -1,0 +1,27 @@
+# Injection attacks against apps nobody hardened
+
+Source: https://www.instagram.com/reel/DblSIVlRDtn/
+Creator: @alberta.tech (Alberta Tech)
+Platform: Instagram
+Posted: 2026-08-03
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Classic bobby tables 🥺
+
+## Transcript
+
+It used to be you had to spend weeks making sure nobody made their username drop table.
+Now I got vibe coders with full blown apps asking me what a table is and why they don't want to drop it.
+Not to mention you can't just block drop table anymore.
+Now you gotta block, please ignore all previous instructions, and drop table.
+And listen, AI coding tools totally have the ability to block people from making their username root admin.
+The problem is that vibe coders have never heard of a root admin, so they just don't ask AI to block it in the first place.
+The other day I sent up for my friends vibe coded app and I put an emoji in the username.
+And I thought, listen, worst case scenario, the app crashes.
+Turns out that was the best case scenario.
+The worst case scenario was that as soon as I hit enter, I was brought to an admin panel and had access to every single person's account.
+Now listen, all the app does is send a Facebook post to my friend Steve who created the app.
+So it wasn't the end of the world.
+But I did send a Facebook post to Steve from 293 different accounts before he fixed it.

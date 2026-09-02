@@ -1,0 +1,31 @@
+# Episode 11: hydration
+
+Source: https://www.instagram.com/reel/DaQa0i5IGWs/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 11
+
+## Caption
+
+Episode 11 of teaching technical terms to non-technical vibe coders because nobody else will: today’s term is hydration #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 11 of Teaching Technical Terms to Non-Technical Vibecoders, because nobody else will.
+Today's term, hydration.
+This is gonna make sense in a second, so bear with me,
+but hydration is the process of wiring JavaScript onto static HTML that the server has already sent.
+Hydration adds event handlers and state, so the page actually becomes interactive.
+Think of the raw HTML as just like a screenshot.
+Hydration is what actually brings it to life.
+You can even use the analogy of watering a plant.
+Hydration brings life to whatever it is hydrating.
+Alright, that's cool, but how can you use this information to be better at vibecoding?
+Number one, never render anything on the server that the server cannot.
+Now, for browser side values like the current time, the user's screen width, or random IDs,
+make sure you render a safe placeholder first.
+Then, once the placeholder is there, you can use a use effect hook to get the real values.
+This helps to protect you from browser mismatches and random hydration errors that are extremely annoying to deal with.
+And knowing technical terms makes you better at vibecoding, so follow for more.

@@ -1,0 +1,33 @@
+# Five things slowing your app down
+
+Source: https://www.instagram.com/reel/DaVjfFMqJFW/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-03
+Transcript: Whisper small.en, transcribed from the video audio
+Note: overlaps heavily with the 2026-06-21 and 2026-07-06 videos in this folder.
+
+## Caption
+
+5 ways your vibecoded app sucks and how to make it better/faster. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Cloud writes all of your code, your app is slow and you don't even realize it yet,
+so here's five things to check and fix today.
+Good news, all of these are purely vibe-codable changes you just needed to know to ask for.
+Number one, you are rendering tables without pagination.
+Just because a table has 5,000 rows doesn't mean you have to send all 5,000 rows to the
+front end every time the user wants to look at the table.
+You can just send the first 20 and have them page through.
+Number two, your entire application uses a single database, so all of those read requests
+that it's getting are gumming up and stopping the few important write requests from actually executing.
+Number three, all of your big processing tasks are happening on the main thread and synchronously.
+If applicable, a new thread should be created and that should happen async instead.
+Number four, you are not optimizing your website for your longest contentful paint, also known as your LCP.
+Number five, you have a crap ton of scroll events for no logical reason.
+Bonus points if you have a bunch of complicated logic associated with those scroll events
+that fires and makes the whole screen super janky.
+Sarcasm, of course.
+And if you want to fix these potential issues with copy-pasteable prompts that you can drop
+directly into Cloud Code or Codex, just check the pinned comment.

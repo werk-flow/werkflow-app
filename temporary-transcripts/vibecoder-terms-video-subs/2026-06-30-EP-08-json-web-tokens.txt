@@ -1,0 +1,45 @@
+# Episode 8: JSON Web Tokens
+
+Source: https://www.instagram.com/reel/DaOhP40IJOb/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-30
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 8
+
+## Caption
+
+Episode eight of teaching technical terms to non-technical vibe coders because nobody else will. Today’s term is JWT and why it is important for app security. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 8 of Teaching Technical Terms to Non-Technical Vibecoders, because nobody else will.
+Today's term is JSON Web Tokens, also known as JWTs.
+A JWT is a secret code that your backend server gives the user when they log in.
+Quick side note, it's technically not a secret, it's a signed string.
+Now, if there's a bunch of nerd debates as to why it should be called that instead of a secret,
+but at least for right now, just consider it to be a secret code.
+Now, what's this JWT code for?
+Every time the user sends a request to your backend server after they've logged in,
+they also pass that JWT.
+Of course, this goes on behind the scenes, the user doesn't know that they're sending that,
+but that's what the front end server is doing.
+So the JWT gets sent to the backend server, backend server reads it, parses it,
+and is like, oh, hey, you know, I know that guy, that's Paul.
+Yeah, Paul's trying to change his profile picture.
+I don't know, something like that.
+So how do you implement JSON Web Tokens the right way?
+Well, there's a couple things to consider.
+I'm going to list them out.
+First and foremost, you want to make sure that your JWTs expire at some point
+because you don't want a user to log in and then have that token just be able to authenticate any future request
+for an indefinite period of time.
+The general guidance here is roughly 15 minutes,
+but if you have JWTs that expire, you need a way to create new ones.
+So now you are also going to need what's called a refresh token.
+The refresh token gets used such that the backend server can create a new access token
+once its 15-minute lifecycle or however long you arbitrarily choose is close to elapsing.
+There's a lot more to say there, but those are the basics.
+If you are a vibe coder, you can just ask Claude or Codex to roll your authentication using JWTs.
+It'll probably implement everything I just said before, but hey, now you know.
+Make sure you follow because knowing technical terms makes you a better prompter.

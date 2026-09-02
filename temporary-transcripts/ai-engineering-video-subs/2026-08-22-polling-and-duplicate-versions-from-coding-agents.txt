@@ -1,0 +1,31 @@
+# Two things coding agents do behind your back
+
+Source: https://www.instagram.com/reel/DcW5UU5SUaB/
+Creator: @ayoships (Ayo O)
+Platform: Instagram
+Posted: 2026-08-22
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+If you find this useful please like and follow! Also let me know If there are any topics you’d like me to cover
+
+## Transcript
+
+So your coding agent is probably doing these two things behind your back that are slowly killing your app, and you can't see either of them.
+I've published over 15 apps with AI, and these two things were caught in almost all of them.
+The first one is likely why your app is laggy.
+When setting up the server, your coding agent probably built the app to ask the server for data every few seconds forever.
+This is called polling.
+This might feel fine during testing, but when users actually try the app, it'll drain their battery and lower their frame rate.
+Nowadays, modern back ends like Superbase or Convex can actually push data directly to your app when it changes.
+So make sure your AI is not polling, but rather subscribing to events as they happen.
+The second one can explain why your AI actually keeps going in circles and breaking things.
+Every time you request a change, most AIs don't actually change it.
+Rather, they create a version 2 on top of the broken version 1, just in case anybody was using it.
+This causes your app to be full of broken code that nobody was using anyway.
+Now, for your future prompts, the AI will get confused between which is the working version,
+and now go in circles and break things that seem to be working before.
+To fix this, just tell it not to use fallbacks or backwards compatibility.
+Just replace the old feature and make sure the new one works.
+And if you're like me and you're too lazy to type all of that, you can just send this video to your AI and it'll figure it out.

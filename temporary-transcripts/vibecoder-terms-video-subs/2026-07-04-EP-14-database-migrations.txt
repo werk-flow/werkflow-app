@@ -1,0 +1,32 @@
+# Episode 14: database migrations
+
+Source: https://www.instagram.com/reel/DaYEWXOosu_/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-04
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 14
+
+## Caption
+
+Teaching technical terms to non-technical vibe coders because nobody else will: today is episode 14 and we will be covering database migrations #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term, migration.
+Okay, so I want you to think of your database as an excel file.
+You have all your sheets, all your columns, and all of the data inside of those sheets.
+Standard database operations that happen very frequently,
+like reads or writes, would fetch from or write to those sheets in that excel file.
+But a migration, on the other hand, changes the shape of the data.
+Using our excel analogy, that might be adding a column to one of the sheets,
+or creating a new sheet entirely, or perhaps changing the data type of a column that already
+exists. And the important thing to note here is that a migration is a versioned script.
+Generally speaking, you never want to just like directly edit the shape of your database.
+The reason for that is it's just too risky. So a migration works by moving the database
+shape forward one step at a time. And if anything messes up, you can always roll back.
+So for the vibe coders out there, what does this mean for you?
+It means that if you ever want to change what data is stored or the way that it's stored
+within your application, make sure that you ask Cloud Code or Codex to do so using a migration.
+Knowing technical terms makes you better at prompting, so follow for more.

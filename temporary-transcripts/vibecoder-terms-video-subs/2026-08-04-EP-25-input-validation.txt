@@ -1,0 +1,36 @@
+# Episode 25: input validation
+
+Source: https://www.instagram.com/reel/DbmcHaFoXmR/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-04
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 25
+
+## Caption
+
+Ep. 25 - Input Validation. This is a series where I teach technical concepts to non technical vibecoders #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 25 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is input validation.
+So maybe you've heard this term before, but what does it actually mean and why should you care?
+I like to think of input validation almost like a sorting machine in an assembly line.
+I'm sure you've seen the videos online of like the apples where the green ones will get like kicked away,
+but the red ones can keep going.
+Yeah, so that's really exactly what input validation is doing.
+It's making sure that before these user inputs have hit anything that's actually important
+or there's any real logic in your server, that input is what the back end server is expecting to see.
+And it's not anything else, anything malformed like a green apple.
+And you might say, well, my back end server already has error handling.
+If I get some bad inputs, it'll just get caught by the back end, right?
+Well, that's true, but usually those issues are more costly to you.
+If it's actually hitting the back end server, that means there's a chance it's actually affecting something
+and those issues can be real and large.
+So input validation just stops that from happening entirely.
+So you as a vibe coder, what should you be doing to make sure that your app is protected as it can be?
+Well, you should ask Cloud Code or Codex or whatever AI coding tool you're using to look at anywhere that there is user input within your application
+and make sure that the front end has proper input validation before anything gets sent to the back end server.
+That alone will probably save you several hours of debugging.
+And learning technical terms just makes you better at prompting, so follow for more.

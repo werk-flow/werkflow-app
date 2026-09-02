@@ -1,0 +1,73 @@
+# Wrapping a web app as a mobile app exposes every key
+
+Source: https://www.instagram.com/reel/DcZOrpQCcZW/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-23
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+You shipped your web app as a mobile app. 
+
+Every API key is visible in local storage. Capacitor wraps your web app but does not secure it. Secrets in native keychain. Certificate pinning on every call. Deep link validation on every callback. 
+
+Your web app had a browser protecting it. Your mobile app does not.
+
+-MM
+
+#vibecoding #aidirectedengineering #mobile #capacitor #security
+
+## Transcript
+
+You just shipped your web app as a mobile app,
+and every API key is visible in the device's local storage.
+Capacitor wraps your web app in a native shell,
+so everything that was in the browser is now on the device.
+Local storage, session tokens, API keys, and web view cache.
+All of it sitting in the app's data directory
+where any rooted device or forensic tool can read it.
+So you did not ship a mobile app,
+you shipped your entire client side architecture
+to a device you do not control.
+So here, that's how we're gonna fix it.
+Step one, move secrets out of client side storage,
+and I mean API keys, tokens, and credentials.
+They do not belong in local storage on any mobile device.
+They belong in a platform secure key chain,
+whether it's key chain on iOS or key store on Android.
+Those are a win.
+Direct your AI to migrate all sensitive credentials
+from local storage to the platform's native secure storage
+using a capacitor secure storage plugin.
+That's a win.
+Step two, certificate pinning on every API call.
+Without certificate pinning,
+any proxy can intercept your app's traffic.
+So a user on a compromised network
+hands their session token to an attacker.
+So direct your AI to implement certificate pinning
+on all API endpoints.
+So the app will reject any connection not signed
+by your expected certificate.
+That's a win.
+And step three, deep link validation.
+Your app registers URL schemes.
+Without validation, a malicious app can register the same scheme
+and intercept authentication callbacks, password reset links,
+or even payment confirmations.
+So direct your AI to implement deep link validation
+that verifies the origin and signature of every incoming deep link
+before processing it.
+Your web app, how to browse are protecting it.
+Your mobile app, doesn't.
+So fix the gaps capacitor left open for you.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Store secrets in the native keychain, not local storage.
+2. Pin certificates on every call.
+3. Validate deep links on every callback.

@@ -1,0 +1,29 @@
+# Five security holes AI-written apps usually have
+
+Source: https://www.instagram.com/reel/DaQX7j-IcNu/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+If client breaks all of your code, here are five major security vulnerabilities that your app probably has that you are completely unaware of and the prompts to fix all of them #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If Cloud writes all of your code, here's the five major security vulnerabilities your vibe-coded app probably has that you don't even know about.
+Don't worry, all of these are purely vibe-codable changes you just needed to know to ask for them.
+Number one, if any user input ever hits a shell command, any user can write a shell script and have it execute on your server.
+Number two, you are encrypting and hashing things, but you are using out-of-date algorithms that are not nearly as defensible.
+These would be things like MD5 or SHA-1.
+Number three, your webhook endpoints are publicly accessible and pretty easy to spoof.
+That just means an attacker can send you fake events and your backend server will act on every single one of them.
+Number four, the endpoints you have that accept file attachments have no upper limit on the file size.
+This doesn't really sound important, but if someone unloads a freaking like two petabyte zip-bomb,
+like it's gonna eat up all of your server's memory and your app is just gonna crash.
+Number five, every single framework has a render-raw HTML escape hatch.
+And the moment you feed it untrusted data, all of that automatic escaping that's protecting your users goes completely out the window.
+And if you want to fix these potential issues with copy-pasteable prompts,
+you can drop directly into Cloud Code or Codex, like the video and comment prompts,
+and I will send them over to you directly.

@@ -1,0 +1,30 @@
+# A voice agent that reads out the workday
+
+Source: https://www.instagram.com/reel/Dberdw1Id58/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-01
+Transcript: Whisper small.en, transcribed from the video audio
+Note: a sponsored post for a text-to-speech provider.
+
+## Caption
+
+Fish Audio is letting developers use their new S2.1 Pro model - the one I’ve used to make my own super-agent - for completely free through the end of August to celebrate their 1st birthday, and 50% off all paid plans. Pretty solid birthday if you ask me. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Okay, I can't be Tony Stark, but I can get pretty close, so check this out.
+Wake up, Daddy-some.
+Welcome home, sir. Let me prepare your morning brief.
+You have free pull requests ready for review. A client success meeting at 2pm.
+This new voice agent is super sick and I built it completely for free using FISH audio.
+I've actually been using FISH audio for several months now and they just released their new S2.1
+model and the latency, or lack thereof, is really what sells it for me.
+I had to go with the dignified British voice, but they have a ton of other voices you can
+choose from or you can clone your own. Part of the reason it sounds so good is that you can add
+emotion tags to the text, so check this out. I can whisper, I can be sad, and I can even cough.
+So I just have my language model output those emotion tags as part of its response before it
+gets into the FISH audio API. You can use S2.1 Pro completely for free through the end of August,
+so if you're interested in making voice agents either for yourself or for other businesses,
+you should definitely use FISH audio. And if you want free access to FISH audio's S2.1 model,
+just comment audio and I will DM you a link to it.

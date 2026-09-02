@@ -1,0 +1,47 @@
+# What MCP actually is, without the hype
+
+Source: https://www.instagram.com/reel/Dblw15voKHc/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-03
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+explaining what MCP actually is without all the AI guru hype #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+I'm gonna let you in on just a little secret here.
+Most of these AI gurus that are pushing MCP servers
+left and right don't even know what MCP servers are,
+how they work, or how you can add them to your application.
+So I am going to teach you.
+All right, so as you probably know,
+MCP stands for Model Context Protocol.
+And here is the easiest way to think about it.
+In fact, this is how anthropic explains it.
+Before USB-C, every phone had its own charger.
+iPhone had one, Android had another,
+and your camera has a third.
+It was a mess of cables.
+So when USB-C came along, it said,
+hey, now you have one cable for literally everything,
+and now it is widely adopted, and everybody loves USB-C.
+You can think of a MCP server as a USB-C cable for agents.
+And even if you've never touched an MCP server before,
+if you're using a coding agent to build an application,
+that application likely has its own protocols
+and standards that it's using.
+You're probably familiar with HTTP, HTTPS, TLS, SSL.
+All of these are different guidelines and procedures
+and different rule sets that different computers follow
+to be able to talk to one another effectively.
+So when you connect an MCP server to Clod or Codex
+or otherwise, what you're really giving that agent
+is a rule book of how it can talk
+to whatever third-party resource you are connecting it to.
+So I hope that MCP is a little more amorphous
+and vague in your brain.
+And learning technical terms just makes you better
+at vibe coding in general, so follow for more.

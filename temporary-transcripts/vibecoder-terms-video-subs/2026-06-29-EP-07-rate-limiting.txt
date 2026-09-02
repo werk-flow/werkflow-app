@@ -1,0 +1,43 @@
+# Episode 7: rate limiting
+
+Source: https://www.instagram.com/reel/DaLf_bwIOQv/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-29
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 7
+
+## Caption
+
+Ep. 7 of teaching technical terms to non technical vibecoders so they can prompt better - today’s term is rate limiting #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 7 of Teaching Technical Terms to Non-Technical Vibecoders because nobody else will.
+Today's term is an important one, rate limiting.
+I'm going to cover three things.
+One, what rate limiting is.
+Two, why not having it can either drain your bank account or get your business sued.
+And three, how to set it up easily with vibe coding.
+Simply put, rate limiting is a hard cap at how many requests can get accepted by your server in a set window of time.
+So how can not having rate limiting get you sued?
+Well, certain actions within your app absolutely need to be rate limited.
+A fantastic example is your login route.
+If you don't have rate limiting, someone can just keep guessing passwords infinitely until they find a match.
+And if you don't have rate limiting set up, it's also safe to assume you don't have password strength checks set up.
+So there's a very real possibility one of your users passwords is just password.
+And data breaches are long, expensive, and often end in lawsuits.
+Another way that not having rate limiting can drain your bank account is by not having rate limiting on low cost lead magnet endpoints.
+For example, if you go on to chat GPT website and you're not signed in, you can still talk back and forth with whatever free chat GPT model they're using for at least a couple of minutes.
+The reason they do that is they are willing to eat the cost of paying for unauthenticated access in the hopes that people will like the product so much that they sign up for it and start paying.
+But imagine if there were zero limits on whatever model they were running.
+They're still paying just a little bit per transaction, but people are going to take advantage of it.
+They're going to find a way to hit the API directly and circumvent your front end entirely and just essentially leach off of your service because they can't.
+There's no rate limiting.
+OK, so I think it should be pretty clear that rate limiting is important in some instances.
+So how can you set it up?
+If you're a vibe coder, you're going to love to hear this.
+You can literally just ask, hey, audit my back end, look for candidates for rate limiting and implement rate limiting and make sure that my front end is able to catch those air states correctly if they do happen.
+It's just a single prompt.
+Anyway, knowing technical terms makes you much better at prompting.
+So make sure you follow for more.

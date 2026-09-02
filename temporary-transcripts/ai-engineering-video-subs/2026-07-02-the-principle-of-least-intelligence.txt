@@ -1,0 +1,27 @@
+# The principle of least intelligence
+
+Source: https://www.instagram.com/reel/DaTRVrioWnC/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-02
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+This vibecoding term will save you money when designing apps #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If you're a dirty, slimy, scumbag vibe coder, you need to learn this technical term.
+Disclaimer, I came up with this term, but it's based on over six years of software engineering experience, and I think it's relevant to you.
+Today at WebMeNow, it is the principle of least intelligence.
+But what does that mean?
+I'll tell you what it means.
+It means that you are wasting money by using Opus 4.8, Sonnet 5,
+or any of the other super expensive models for all of the AI crap within your applications.
+I am almost certain that you can get away with using something like GPT 5.4 Nano and paying maybe 5% of what you're paying right now.
+It's the same reason you don't hire a nuclear physicist to do addition.
+So, the principle of least intelligence states that when choosing a model for your application,
+you should always choose the one with the least amount of intelligence that still gets the task done.
+Anything else is a waste of money.
+And if you want to be a better vibe coder, make sure you follow me.

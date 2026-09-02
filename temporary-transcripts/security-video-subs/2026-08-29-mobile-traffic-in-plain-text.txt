@@ -1,0 +1,78 @@
+# A mobile app sending every API call in plain text
+
+Source: https://www.instagram.com/reel/DcoH5avEj3J/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-08-29
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your mobile app sends every API call in plain text. 
+
+Someone on the same coffee shop WiFi just watched your users log in. Your AI built the connection but never pinned a certificate. Tokens stored in plain text on the device. Encrypt sensitive payloads. Use secure storage. 
+
+Fix the transport before your users pay for it.
+
+-MM
+
+#vibecoding #aidirectedengineering #mobileapps #security #production
+
+## Transcript
+
+Your mobile app sends every API calling plain text.
+So someone on the same coffee shop Wi-Fi
+just watched all of your users log in.
+So your user opens your app at a coffee shop.
+Every request between the app and your server
+crosses the network where anyone on that Wi-Fi can read it.
+Login credentials, session tokens, personal data.
+An attacker running a free tool on the same network
+captures all of it without touching your server
+or your app at all.
+So let's get this thing locked down.
+Step one, your app is not verifying the server,
+it's talking to.
+So your AI set up the API connection
+but never pinned the certificate.
+An attacker on the same network can sit between your app
+and your server, intercept every single request,
+and your app will never know the difference at all.
+So direct your AI to implement certificate pinning
+so your app only communicates with your verified server.
+That, and it rejects any connection
+or the certificate does not match.
+That's a win.
+Step two, sensitive data is traveling in the request body
+with no additional protection.
+Even with the secure connection,
+tokens and credentials sitting in plain text
+in the request body are one misconfiguration
+away from full exposure.
+So direct your AI to encrypt sensitive fields
+in your API payloads independently of the transport layer.
+That, so the data is protected
+even if the connection is compromised.
+And step three, your app stores credentials
+on the device in plain text.
+So your AI saved the authentication token
+in local storage where any other app
+or anyone with physical access to the device can read it.
+So direct your ad and move all tokens and credentials
+into the platform secure storage.
+So they're encrypted at rest
+and inaccessible to other applications.
+And well, your app works,
+your connection is not secure.
+That's the problem.
+So fix that transport layer
+before your users end up paying for it.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Pin a certificate on the connection.
+2. Encrypt sensitive payloads.
+3. Use secure device storage instead of plain text tokens.

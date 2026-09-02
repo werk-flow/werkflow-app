@@ -1,0 +1,37 @@
+# Episode 3: idempotency
+
+Source: https://www.instagram.com/reel/DaD2m8JocyD/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-26
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 3
+
+## Caption
+
+Day three of teaching technical terms to non-technical vibe coders: today’s term is idempotency and why it is important for application security #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Day 3 of teaching technical terms to non-technical vibe coders because nobody else will.
+We've got an important one today, idempotency.
+You can think of idempotency as a characteristic of certain operations in your app.
+An operation is said to be idempotent if running it once or 100 times doesn't really affect
+the outcome of the system.
+Once it's run once, running it again doesn't really change anything.
+So why would we want a process to be idempotent?
+Well, I will give you an example and it has to do with money.
+So let's say you have an e-commerce website and you have a checkout page and a user is
+purchasing a $50 shirt and they click the checkout button.
+That hits the backend server, which then touches the database, whatever payment processor you're
+using and then it updates the front end.
+But let's say for whatever reason, the user was able to click the checkout button again,
+like directly after they clicked it the first time.
+You'd want to make that specific checkout operation idempotent and you can do that with
+an idempotency key.
+So on every state changing post request, you can require an idempotency key header.
+You can have your backend server create one UUID per intent and just store that as the
+idempotency key for that kind of transaction lifecycle.
+So if the server ever receives a request where the idempotency key is one that's already
+been processed, the backend server will reject it instead of doubling up on that operation.
+And learning technical terms makes you better at prompting, so make sure you follow.

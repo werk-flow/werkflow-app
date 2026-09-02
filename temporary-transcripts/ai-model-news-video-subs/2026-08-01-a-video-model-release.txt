@@ -1,0 +1,44 @@
+# A video generation model release
+
+Source: https://www.instagram.com/reel/DbgkUI6IXyp/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Seedance 2.5 just dropped #claudecode #vibecoder #aivideo #seedance25
+
+## Transcript
+
+Cdance 2.5 is here and it is absolutely incredible.
+They already had a massive lead with Cdance 2.0,
+but 2.5 just takes that to another level entirely.
+They just posted about it on their website
+for the first time two hours ago,
+so here are all of the important facts
+that make this different and much better than Cdance 2.0.
+And I'll spare you all of the,
+oh, the videos look more realistic because obviously,
+like obviously that got better,
+but here are the actual important things.
+Number one, Cdance 2.5 supports 30 second generations
+up from the 15 seconds of Cdance 2.0.
+Number two, and this is my personal favorite,
+it has multi round video extension.
+That means you can generate a 30 second video
+and then just extend it another 30 seconds,
+extend it another 30 seconds,
+and by the end you have a several minute long,
+full cohesive and coherent production.
+Number three, Cdance 2.5 supports up to 50 assets
+being included as references for a video.
+Number four, Cdance 2.5 supports timestamp level prompting.
+For example, you can say in seconds, zero to four,
+XYZ happens, then in seconds, five to seven, ABC happens.
+Number five, you can edit specific aspects of a video
+without having to regenerate the entire thing.
+Given that this is a frontier Chinese model,
+access to it is going to be pretty dicey,
+but it should be on Higgsville too.

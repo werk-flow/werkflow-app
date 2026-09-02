@@ -1,0 +1,37 @@
+# Three ways to improve an agentic harness
+
+Source: https://www.instagram.com/reel/Daga9_xoZL_/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-07
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+3 easy ways to make your agentic harnesses better #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Stop building agents that just try their best.
+Because if your agent is looping
+or getting stuck on the same sets of problems,
+it's not a prompt issue, it's a harness issue.
+Most people just throw a prompt at an LLM
+and hope for the best.
+It's less so an agent and more so a gamble.
+To build a real agentic harness, you need three things.
+First up, state management.
+Stop relying on the LLM to remember where it is.
+You should be using a structured state object.
+Second, the guardrail loop.
+Don't just trust the LLM's output.
+You need to pass it through a validator.
+If the agent says it's done with something,
+you should have some programmatic way of verifying
+that that action was actually taken and the task is complete.
+And third, tool granularity.
+Stop giving your agent a do everything tool.
+Best harnesses that I've developed
+have four to six very, very granular, well-scoped tools
+where anything that can be programmatically imputed
+as parameters are.

@@ -1,0 +1,42 @@
+# Hostility towards people learning to build
+
+Source: https://www.instagram.com/reel/DaQoZfuokJ_/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-01
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Why are software engineers so mean #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If you're a vibe coder, let me know if this sounds familiar.
+You started vibe coding on something like Bolt.new,
+lovable, replet, whatever.
+You're getting more into the weeds.
+Now you're on cloud code.
+You're trying to understand some basic technical details,
+but every time you do, there's a freaking jerk slimeball,
+zit-covered, sweaty, fat person in the comments that's saying,
+Oh, you're a vibe coder.
+You're never going to understand.
+You're never going to make it.
+You're never going to get hacked.
+Why does that happen?
+Why does that happen like every single time?
+Well, I am a software engineer and I can tell you exactly why that's happening.
+In the world of developers, they can pretty much be categorized into two groups.
+Group one sees coding as a means to an end.
+It is just a way to build cool stuff.
+I firmly sit within that camp.
+The other camp enjoys coding for the sake of coding.
+It's more like an artisanal craft for them.
+And so when AI got good enough to start writing code and making real applications,
+that artisanal craft group of people got really, really pissed off.
+So if you're a non-technical builder and you are getting hit with an onslaught
+of negative comments, pay them no mind.
+It's just their egos getting bruised.
+Anyway, I hope that helps to explain what's going on a little bit more.
+And if you want to get better at vibe coding from someone that won't make fun of you, follow me.

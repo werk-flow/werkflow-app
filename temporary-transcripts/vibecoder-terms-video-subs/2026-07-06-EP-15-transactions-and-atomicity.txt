@@ -1,0 +1,32 @@
+# Episode 15: transactions and atomicity
+
+Source: https://www.instagram.com/reel/Dadgtf6opFX/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-06
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 15
+
+## Caption
+
+Episode 15 of teaching technical terms to non-technical vibe coders: today’s episode is transaction #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 15 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term, transaction or atomicity.
+So transaction is a group of database rights that the database treats as one unit.
+So either all of them land or none of them do.
+Atomicity is a guarantee.
+A guarantee that the database isn't going to end up in some middle ground state where some stuff saved and some stuff didn't.
+You get the idea, so transactions are designed to be atomic.
+An analogy I like to use here is that of a bank transfer.
+Your friend's account gets $100 taken out of it.
+Your account gets $100 put into it.
+Either both of those things happen or neither of them happen.
+That could be represented as one database transaction because it is atomic.
+So what does this mean if you are a vibe coder?
+Well, you can ask Cloud Code or Codex to audit your entire backend,
+look for any database queries that should be represented as atomic transactions,
+make the changes, push the code, deploy it.
+And learning technical terms makes you better at vibe coding, so you should follow for more.

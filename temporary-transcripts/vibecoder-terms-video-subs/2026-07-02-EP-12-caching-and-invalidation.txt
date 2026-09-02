@@ -1,0 +1,34 @@
+# Episode 12: caching and cache invalidation
+
+Source: https://www.instagram.com/reel/DaS_kqOo6Qa/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-02
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 12
+
+## Caption
+
+Episode 12 of teaching technical terms to non-technical vibe coders because nobody else will: today’s episode is caching and cache invalidation #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 12 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is caching and cache invalidation.
+So the easiest way to think about caching is it's effectively a bet that nothing has changed in the underlying data
+since a user last needed that information.
+And this is really valuable for reducing your cloud infrastructure costs as well as improving your app's performance.
+But the question then becomes, how do you know if what's in your cache is outdated?
+Well, there's actually a couple cool ways to answer this question.
+So static assets like CSS, JavaScript or images can pretty much just be cached directly.
+You don't really have to think about it too much.
+For reference and configuration data like feature flags,
+you can generally just set a static time to live for that cached value before it becomes stale.
+User read data on the other hand, like the dashboard values, their profile, the user settings should be handled differently.
+The strategy here is called stale while revalidate also known as SWR.
+So when a user loads a page, you instantly render whatever is cached the moment the user clicks on it.
+But in the background, the server fetches the updated values and then updates the front end when that new data lands.
+In this sense, you kind of get the best of both worlds.
+You get the snappiness of having cached data,
+but you also have that self-healing component should anything be out of date.
+Knowing technical terms makes you better at prompting, so follow for more.

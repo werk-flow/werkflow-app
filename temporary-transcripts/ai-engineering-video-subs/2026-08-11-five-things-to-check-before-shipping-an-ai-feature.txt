@@ -1,0 +1,37 @@
+# Five things to check before shipping an AI feature
+
+Source: https://www.instagram.com/reel/Db4camlIlBz/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-08-11
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+5 AI pro strats for the vibecoders out there #claudecode #codex #vibecoding #startuphacks
+
+## Transcript
+
+If you're adding AI features to your vibe-coded app, don't just wire up another API and call it done.
+Here are five things I would never ship an AI feature without.
+Number one, always have a multi-provider LLM fallback.
+Sometimes model providers go down, and in the event that that happens, you don't want your app to break as a result.
+So let's say you're using open AI models.
+You might want to have a fallback to Anthropic or Google or something else in case OpenAI goes down.
+Number two, if you can output JSON, output JSON.
+If you want your LLM to output the same structure of response every time and you're not using JSON, you are suffering unnecessarily.
+Number three is something I like to call the principle of least intelligence, and this will save you a lot of money.
+I'm gonna let you in on a little secret here.
+As cool as your AI features are, you probably don't need a Fable 5 level model to get the job done.
+So what I like to do is set an arbitrary success rate for my AI features.
+Let's say this is 99%.
+I'll A.B. test progressively cheaper models until I find the cheapest model I can use that still gets me to that arbitrary success rate.
+Number four, you should be separating retrieval from generation.
+Basically, don't just try to stuff the entire database or your app's knowledge base into the prompt.
+Give your agent tools to search through that knowledge base more effectively.
+And number five is what I like to call reducing the cognitive load of the language model.
+Let's say your agent harness has a tool call for getting a user's information, and that can be searched via a user ID.
+The agent doesn't need to put in the user ID as a parameter because it's only scoped to that user.
+That parameter can be injected into that function call.
+It's reducing the amount of work the language model needs to do.
+And not only does that save you money, but it makes the agent smarter and more reliable.

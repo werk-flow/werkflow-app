@@ -1,0 +1,28 @@
+# Five ways a vibecoded login endpoint is insecure
+
+Source: https://www.instagram.com/reel/DZsXW-HonCi/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-17
+Transcript: Whisper small.en, transcribed from the video audio
+Note: pinned post on the creator's profile.
+
+## Caption
+
+5 ways your vibecoded login endpoint isn’t secure #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Cloud Code just added a login screen to your Vibecoded app?
+Big moment. Feels like the app's legit.
+But get this. That new login screen is the easiest thing in your whole application to hack.
+Here are the five things it's probably missing.
+Don't worry, these are all Vibecodable changes you just needed to know to ask for them.
+Number one, your session token lives in local storage, which leaves you open to cross-site
+scripting. Number two, your admin check happens on the client side, not the server side.
+Number three, you haven't set up two-factor authentication or email verification,
+which means that anybody can sign up as anybody. You wouldn't think it happens, but it does.
+Number four, your login endpoint and your password reset endpoint have no rate limiting,
+which means anyone can just brute force them. Number five, you don't have password rule sets
+or a leaked password check. Like the video and comment prompts and I'll just send over copy-pastable
+versions directly.

@@ -1,0 +1,33 @@
+# Episode 24: stateless and serverless functions
+
+Source: https://www.instagram.com/reel/DbZZ9UZIhIf/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-30
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 24
+
+## Caption
+
+Episode 24 of teaching technical terms to non-technical vibe coder so they can make better apps. Today’s episode is stateless and/or serverless functions. #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 24 of teaching technical terms to non-technical vibe coders.
+Today's episode we have stateless and serverless functions.
+So what are serverless functions and why should you care as a vibe coder?
+Serverless function spins up fresh on every request, runs once, and then dies.
+Stateless just means that it remembers nothing from the previous time that function was called.
+So as a result, every single call starts from a blank slate.
+For the purposes of the coding you'll be doing, just imagine that every function has amnesia.
+If a value must outlive the response from that function,
+it either needs to go to a cache, a database, or somewhere else where it can be stored.
+So under what circumstances should you consider using serverless or stateless functions in your application?
+I'll give you three categories.
+The first one is event-driven, bursty, or otherwise unpredictable traffic.
+Number two is thin API glue or just back-in for front-end logic.
+And number three are isolated, independently scalable pieces of larger systems.
+If you're just starting out, I really wouldn't recommend using stateless or serverless functions
+and just keeping everything under the same server.
+But if you want to venture out, now you know the basics.
+And learning technical terms just makes you better at prompting, so follow for more.

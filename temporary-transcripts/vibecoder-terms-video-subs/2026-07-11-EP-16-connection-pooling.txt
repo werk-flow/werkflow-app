@@ -1,0 +1,27 @@
+# Episode 16: connection pooling
+
+Source: https://www.instagram.com/reel/Daq28-jIOxC/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-11
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 16
+
+## Caption
+
+Episode 16 of teaching technical terms to non technical vibecoders, today’s term is connection pooling #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 16 of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is connection pooling.
+So what is connection pooling and why is it important?
+So connection pooling keeps a small number of active connections to your database
+and spreads all of your incoming requests to the database among those connections.
+The alternative to this is opening up a connection every time a request comes in and then closing it after.
+So in effect, your app borrows a connection, uses it and then releases it to the next user.
+The logic here is that database connections are expensive to spin up and the database can only support so many.
+So if you are a vibe coder, how can you use this information to make your app better?
+Here's what you need to tell Cloud Code or Codex to do.
+Put a pooler in front of my database in transaction mode and point my app at it.
+Learning technical terms makes you better at prompting, so follow for more.

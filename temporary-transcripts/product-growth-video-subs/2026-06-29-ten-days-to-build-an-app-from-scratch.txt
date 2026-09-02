@@ -1,0 +1,25 @@
+# Ten days to build an app from scratch
+
+Source: https://www.instagram.com/reel/DaLkqy2oS9C/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-29
+Transcript: Whisper small.en, transcribed from the video audio
+Note: the opening video of a build-in-public series.
+
+## Caption
+
+Let’s get rich baby #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+If you're a new vibe coder, pay attention, because in the next 10 days, I'm going to build an app
+completely from scratch to teach you exactly what you need to do. My name is Hayden Smith. I'm a
+software engineer by trade. For the past six years, I've been helping businesses to deploy custom
+software solutions, and I hate how belittling and condescending the engineering community has
+grown towards non-technical builders. So my real mission here is to walk you through the process
+front to back so you know exactly what to look for from a technical engineering perspective.
+Because I mean, it's 2026, you really don't need to know how to code, but having that system's
+first principle style of thinking is incredibly valuable. And whatever I end up building, I'm
+going to release for completely free. I'd like it to be a resource or a tool for vibe coders.
+So anyway, follow along if that interests you and hope to see you tomorrow.

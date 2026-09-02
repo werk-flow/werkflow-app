@@ -1,0 +1,40 @@
+# Episode 4: race conditions
+
+Source: https://www.instagram.com/reel/DaG2xPjIXYG/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-06-27
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 4
+
+## Caption
+
+Day four of teaching technical terms to non-technical vibe coders because nobody else will: today’s episode is race conditions, and why they are important #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Day four of teaching technical terms to non-technical vibe coders because nobody else will.
+Today's term is race condition.
+So what is a race condition?
+A race condition is a bug that depends on who finishes first.
+Two operations touch the same data at the same time, and one silently overwrites the
+other.
+Let's make it real with an example.
+So let's say you and a buddy both have your phones open to the same banking app, logged
+into the same account, looking at the same bank account, and that account has $100 in
+it.
+You click a button to withdraw $30 at the exact same moment that your buddy clicks a
+button to withdraw $40.
+$100 minus your 30 minus their 40 should result in an account balance of $30.
+But when you open the app, it either says $60 or $70.
+So what the frick happened?
+Well, the second operation started running before the first one finished.
+And so when the second operation started running, its account balance, quote unquote, for the
+life cycle of that operation is still showing $100.
+It was never updated to either show $60 or $70 from that first transaction.
+But Hayden, I can hear you saying, how do we fix this?
+Well, I'm about to tell you, so don't frickin' worry about it, all right?
+Jeez.
+Number one, wrap all of your database interactions with transactions.
+Number two, lock down that rose data while the process is still in flight.
+And knowing technical terms just makes prompting easier, so you should follow for more.

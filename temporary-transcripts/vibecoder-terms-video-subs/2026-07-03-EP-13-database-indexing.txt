@@ -1,0 +1,30 @@
+# Episode 13: database indexing
+
+Source: https://www.instagram.com/reel/DaVbJFKoMj5/
+Creator: @haydenschmitty (Hayden Smith)
+Platform: Instagram
+Posted: 2026-07-03
+Transcript: Whisper small.en, transcribed from the video audio
+Series: teaching technical terms to non-technical vibecoders, episode 13
+
+## Caption
+
+Episode 13 of teaching technical terms to non technical vibecoders: today’s term is database indexing and how it can speed up your apps #claudecode #vibecoder #vibecoding #startuphacks #aicoding
+
+## Transcript
+
+Episode 13 of Teaching Technical Terms to Non-Technical Vibecoders because nobody else
+will.
+Today's term, Database Indexing.
+An index is a pre-sorted shortcut that your database builds for one specific column.
+And this shortcut allows the database to get data back to you quicker.
+Instead of reading through every row in the table, it only has to read through some.
+You can also think of a database index like the index of a book.
+Without the index, if you wanted to find every occurrence of mitochondria, for example, you'd
+have to read through all 900 pages to be sure that you found every one.
+If you have an index, though, you can search the index for the specific term you're looking
+for and that entry will just show you all of the occurrences.
+So if you're Vibecoding, make sure to instruct ClodCode or Codex to set up proper database
+indexes where applicable.
+It will make your app feel much faster.
+And knowing technical terms makes you better at prompting, so follow for more.
