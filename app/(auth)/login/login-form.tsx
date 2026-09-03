@@ -8,14 +8,9 @@ import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -182,47 +177,37 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
         <FormField
           control={form.control}
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>E-Mail</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="beispiel@firma.de"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <Field label="E-Mail" required error={fieldState.error?.message}>
+              <Input
+                {...field}
+                type="email"
+                autoComplete="email"
+                placeholder="beispiel@firma.de"
+              />
+            </Field>
           )}
         />
 
         <FormField
           control={form.control}
           name="password"
-          render={({ field }) => (
-            <FormItem>
-              <div className="flex items-center justify-between">
-                <FormLabel>Passwort</FormLabel>
-                <Link
-                  href="/forgot-password"
-                  className="text-sm text-primary underline-offset-4 hover:underline"
-                >
-                  Passwort vergessen?
-                </Link>
-              </div>
-              <FormControl>
+          render={({ field, fieldState }) => (
+            <div className="grid gap-2">
+              <Field label="Passwort" required error={fieldState.error?.message}>
                 <PasswordInput {...field} autoComplete="current-password" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+              </Field>
+              <Link
+                href="/forgot-password"
+                className="justify-self-end text-sm text-primary underline-offset-4 hover:underline"
+              >
+                Passwort vergessen?
+              </Link>
+            </div>
           )}
         />
 
-        {formError ? (
-          <p className="text-sm text-destructive">{formError}</p>
-        ) : null}
+        <ErrorText>{formError}</ErrorText>
 
         <Button className="w-full" disabled={isSubmitting} type="submit">
           {isSubmitting ? 'Anmeldung läuft...' : 'Anmelden'}

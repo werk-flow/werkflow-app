@@ -19,9 +19,12 @@ import {
   PROFILE_AVATAR_MAX_FILE_SIZE_BYTES,
 } from '@/lib/profile-avatar';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { parseDecimalInput } from '@/lib/ui/decimal';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import {
   Card,
   CardContent,
@@ -39,6 +42,9 @@ import {
 } from '@/components/ui/dialog';
 
 const OUTPUT_AVATAR_SIZE = 512;
+// react-easy-crop's default zoom bounds; the stepper shows them as percent.
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -388,18 +394,19 @@ export function ProfileAvatarSection() {
               ) : null}
             </div>
 
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              Zoom
-              <input
-                type="range"
-                min={1}
-                max={3}
-                step={0.01}
-                value={zoom}
-                onChange={(event) => setZoom(Number(event.target.value))}
-                className="w-full accent-primary"
+            <Field label="Zoom">
+              <QuantityStepper
+                value={String(Math.round(zoom * 100))}
+                onChange={(value) => {
+                  const percent = parseDecimalInput(value);
+                  if (!Number.isFinite(percent)) return;
+                  setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, percent / 100)));
+                }}
+                min={MIN_ZOOM * 100}
+                step={10}
+                unitLabel="%"
               />
-            </label>
+            </Field>
           </div>
 
           <DialogFooter className="gap-2">

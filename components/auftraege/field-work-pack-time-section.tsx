@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock3, Loader2, LogIn, LogOut, RefreshCw } from 'lucide-react';
+import { Clock3, Loader2, LogIn, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ReactElement } from 'react';
 
@@ -9,6 +9,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 
@@ -153,19 +154,13 @@ export function FieldWorkPackTimeSection({
         </ErrorText>
       )}
       {loadError ? (
-        <div className="mt-4 space-y-3" role="alert">
-          <ErrorText>Deine bisherigen Zeiten zu diesem Auftrag konnten nicht geladen werden.</ErrorText>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={isRefreshing}
-            onClick={() => startRefresh(() => router.refresh())}
-          >
-            {isRefreshing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            Erneut laden
-          </Button>
-        </div>
+        <SectionError
+          className="mt-4"
+          onRetry={() => startRefresh(() => router.refresh())}
+          retryPending={isRefreshing}
+        >
+          Deine bisherigen Zeiten zu diesem Auftrag konnten nicht geladen werden.
+        </SectionError>
       ) : sessions.length === 0 ? (
         <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
           Für dich ist noch keine Arbeitszeit mit diesem Auftrag verknüpft.

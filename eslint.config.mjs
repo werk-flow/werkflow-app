@@ -170,6 +170,26 @@ const registrySelectors = [
       'Native week inputs are banned — pick a date with DatePicker or a month with MonthPicker. See the werkflow-design skill registry.',
   },
   {
+    selector: 'JSXAttribute[name.name="type"][value.value="checkbox"]',
+    message:
+      'Native checkboxes are banned — use Checkbox (components/ui/checkbox) with a Label. See the werkflow-design skill registry.',
+  },
+  {
+    selector: 'JSXAttribute[name.name="type"][value.value="radio"]',
+    message:
+      'Native radios are banned — use shadcn Select for a short fixed choice or Tabs for a segmented one. See the werkflow-design skill registry.',
+  },
+  {
+    selector: 'JSXAttribute[name.name="type"][value.value="range"]',
+    message:
+      'Native range sliders are banned — use QuantityStepper or a registered stepper. See the werkflow-design skill registry.',
+  },
+  {
+    selector: 'JSXAttribute[name.name="role"][value.value="alert"]',
+    message:
+      'Raw role="alert" outside components/ui: inline errors render through ErrorText, region failures through SectionError, global feedback through Banner (feedback canon, no silent failures).',
+  },
+  {
     selector: 'JSXAttribute[name.name="type"][value.value="time"]',
     message:
       "Native time inputs are banned — use TimeInput (components/ui/time-input). See the werkflow-design skill registry.",

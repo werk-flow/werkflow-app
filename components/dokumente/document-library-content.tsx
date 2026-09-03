@@ -64,7 +64,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { ListRow } from "@/components/ui/list-row";
 import {
   Select,
@@ -2373,8 +2373,7 @@ export function DocumentLibraryContent({
         {filterPanelOpen && (
           <div className="rounded-lg border bg-muted/20 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1.5">
-                <Label className="text-xs">Kategorie</Label>
+              <Field label="Kategorie">
                 <Select
                   value={category}
                   onValueChange={(value) =>
@@ -2398,9 +2397,8 @@ export function DocumentLibraryContent({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs">Verknüpfung</Label>
+              </Field>
+              <Field label="Verknüpfung">
                 <Select
                   value={linkFilter}
                   onValueChange={(value) =>
@@ -2424,7 +2422,7 @@ export function DocumentLibraryContent({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             </div>
             {visibleView !== "all" && (
               <p className="mt-2 text-xs text-muted-foreground">

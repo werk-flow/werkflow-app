@@ -14,8 +14,9 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -24,7 +25,6 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
-import { cn } from '@/lib/utils';
 
 // Role labels for the dropdown (using gender-inclusive German format)
 const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
@@ -70,6 +70,7 @@ export function InviteDialog() {
     // Validate email format
     if (!EMAIL_REGEX.test(email)) {
       setEmailError('Bitte gib eine gültige E-Mail-Adresse ein.');
+      document.getElementById('email')?.focus();
       return;
     }
 
@@ -142,10 +143,13 @@ export function InviteDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">E-Mail-Adresse</Label>
+            <Field
+              label="E-Mail-Adresse"
+              htmlFor="email"
+              required
+              error={showEmailError ? emailError : null}
+            >
               <Input
-                id="email"
                 type="text"
                 inputMode="email"
                 autoComplete="email"
@@ -157,24 +161,19 @@ export function InviteDialog() {
                   if (emailError) setEmailError(null);
                 }}
                 disabled={isLoading || success}
-                aria-invalid={showEmailError ? true : undefined}
-                className={cn(
-                  showEmailError &&
-                    'border-destructive ring-destructive/20 dark:ring-destructive/40 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40'
-                )}
               />
-              {showEmailError && (
-                <p className="text-sm text-destructive">{emailError}</p>
-              )}
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="role">Rolle</Label>
+            </Field>
+            <Field
+              label="Rolle"
+              htmlFor="role"
+              description="Die Rolle, die der Mitarbeiter nach Annahme der Einladung erhält."
+            >
               <Select
                 value={selectedRole}
                 onValueChange={(value) => setSelectedRole(value as InviteRole)}
                 disabled={isLoading || success}
               >
-                <SelectTrigger id="role">
+                <SelectTrigger>
                   <SelectValue placeholder="Rolle auswählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -185,12 +184,8 @@ export function InviteDialog() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Die Rolle, die der Mitarbeiter nach Annahme der Einladung
-                erhält.
-              </p>
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            </Field>
+            <ErrorText>{error}</ErrorText>
             {success && (
               <p className="text-sm text-green-600">
                 Einladung erfolgreich gesendet!
@@ -198,7 +193,7 @@ export function InviteDialog() {
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading || success || !email}>
+            <Button type="submit" disabled={isLoading || success}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gesendet...' : 'Einladung senden'}
             </Button>

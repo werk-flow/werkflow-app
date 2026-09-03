@@ -9,7 +9,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Separator } from '@/components/ui/separator';
 import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -247,7 +247,10 @@ export function CreateJobFormContent({
       );
       hasValidationError = true;
     }
-    if (hasValidationError) return;
+    if (hasValidationError) {
+      document.getElementById(!jobNumber.trim() ? 'job-number' : 'job-title')?.focus();
+      return;
+    }
 
     setIsLoading(true);
 
@@ -450,10 +453,13 @@ export function CreateJobFormContent({
     <>
     <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="grid gap-4 py-2">
-        <div className="grid gap-2">
-          <Label htmlFor="job-number">Auftragsnummer *</Label>
+        <Field
+          label="Auftragsnummer"
+          htmlFor="job-number"
+          required
+          error={showJobNumberError ? jobNumberError : null}
+        >
           <Input
-            id="job-number"
             placeholder="z.B. AUF-2026-001"
             value={jobNumber}
             onChange={(e) => {
@@ -461,15 +467,11 @@ export function CreateJobFormContent({
               if (jobNumberError) setJobNumberError(null);
             }}
             disabled={formDisabled}
-            aria-invalid={showJobNumberError ? true : undefined}
           />
-          <ErrorText>{showJobNumberError ? jobNumberError : null}</ErrorText>
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-title">Titel</Label>
+        <Field label="Titel" htmlFor="job-title">
           <Input
-            id="job-title"
             placeholder="z.B. Heizung reparieren"
             value={title}
             onChange={(e) => {
@@ -479,12 +481,14 @@ export function CreateJobFormContent({
             disabled={formDisabled}
             aria-invalid={showContentError ? true : undefined}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-description">Beschreibung</Label>
+        <Field
+          label="Beschreibung"
+          htmlFor="job-description"
+          error={showContentError ? contentError : null}
+        >
           <Textarea
-            id="job-description"
             placeholder="Optionale Beschreibung des Auftrags..."
             value={description}
             onChange={(e) => {
@@ -492,10 +496,8 @@ export function CreateJobFormContent({
               if (contentError && e.target.value.trim()) setContentError(null);
             }}
             disabled={formDisabled}
-            aria-invalid={showContentError ? true : undefined}
           />
-          <ErrorText>{showContentError ? contentError : null}</ErrorText>
-        </div>
+        </Field>
 
         <WorkTemplatePicker
           targetType="job"
@@ -509,21 +511,26 @@ export function CreateJobFormContent({
           Zuordnung
         </p>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-client">Kunde</Label>
+        <Field label="Kunde" htmlFor="job-client">
           <ClientSelectWithCreate
             clients={clients}
             value={clientId}
             onValueChange={handleClientChange}
             disabled={projectSelectionDisabled}
-            id="job-client"
             readOnly={isClientLocked}
             readOnlyLabel={lockedClientLabel}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-project">Projekt</Label>
+        <Field
+          label="Projekt"
+          htmlFor="job-project"
+          description={
+            noProjectsForClient
+              ? 'Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.'
+              : undefined
+          }
+        >
           <SearchableSelect
             options={projectOptions}
             value={projectId}
@@ -536,21 +543,15 @@ export function CreateJobFormContent({
             noneLabel="Kein Projekt"
             readOnly={readOnlyProject}
           />
-          {noProjectsForClient && (
-            <p className="text-xs text-muted-foreground">
-              Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.
-            </p>
-          )}
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-priority">Priorität</Label>
+        <Field label="Priorität" htmlFor="job-priority">
           <Select
             value={priority}
             onValueChange={(v) => setPriority(v as JobPriority)}
             disabled={formDisabled}
           >
-            <SelectTrigger id="job-priority">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -561,34 +562,30 @@ export function CreateJobFormContent({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </Field>
 
         <Separator />
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Planung
         </p>
 
-        <div className="grid gap-2">
-          <Label>Geplantes Datum</Label>
+        <Field label="Geplantes Datum" htmlFor="job-date">
           <DatePicker
             value={plannedDate}
             onChange={setPlannedDate}
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-time">Geplante Uhrzeit</Label>
+        <Field label="Geplante Uhrzeit" htmlFor="job-time">
           <TimeInput
-            id="job-time"
             value={plannedTime}
             onChange={setPlannedTime}
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-duration">Geschätzte Dauer (Stunden)</Label>
+        <Field label="Geschätzte Dauer (Stunden)" htmlFor="job-duration">
           <DurationHoursInput
             id="job-duration"
             placeholder="z.B. 2.5"
@@ -596,7 +593,7 @@ export function CreateJobFormContent({
             onChange={setEstimatedHours}
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
         <SiteContactFields
           clientId={clientId}
@@ -616,19 +613,16 @@ export function CreateJobFormContent({
           idPrefix="job"
         />
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-location">Ort</Label>
+        <Field label="Ort" htmlFor="job-location">
           <Input
-            id="job-location"
             placeholder="Adresse oder Ort"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label>Mitarbeiter</Label>
+        <Field label="Mitarbeiter" htmlFor="job-employees">
           <EmployeeMultiSelect
             members={members}
             selectedIds={selectedEmployees}
@@ -639,12 +633,17 @@ export function CreateJobFormContent({
             onTeamApplied={setAssignmentTeamSourceId}
             disabled={projectSelectionDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="job-planned-working">
-            Geplanter Arbeitsaufwand (Stunden)
-          </Label>
+        <Field
+          label="Geplanter Arbeitsaufwand (Stunden)"
+          htmlFor="job-planned-working"
+          description={
+            !plannedWorkingTouched
+              ? 'Wird automatisch aus geschätzter Dauer × Mitarbeiter vorbelegt.'
+              : 'Manuell angepasst. Weitere Änderungen an Dauer oder Mitarbeitern überschreiben diesen Wert nicht.'
+          }
+        >
           <DurationHoursInput
             id="job-planned-working"
             placeholder="z.B. 5"
@@ -655,12 +654,7 @@ export function CreateJobFormContent({
             }}
             disabled={formDisabled}
           />
-          <p className="text-xs text-muted-foreground">
-            {!plannedWorkingTouched
-              ? 'Wird automatisch aus geschätzter Dauer × Mitarbeiter vorbelegt.'
-              : 'Manuell angepasst. Weitere Änderungen an Dauer oder Mitarbeitern überschreiben diesen Wert nicht.'}
-          </p>
-        </div>
+        </Field>
 
         <ErrorText>{error}</ErrorText>
       </DialogBody>

@@ -39,8 +39,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
 import { FormDisclosure } from "@/components/ui/form-disclosure";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -198,17 +199,15 @@ function TransitionDialog({
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
             {needsReason && (
-              <div className="space-y-2">
-                <Label htmlFor="work-transition-reason">Grund</Label>
+              <Field label="Grund" htmlFor="work-transition-reason" required>
                 <Textarea
-                  id="work-transition-reason"
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   maxLength={1000}
                   placeholder="Warum ist dieser Schritt jetzt richtig?"
                   required
                 />
-              </div>
+              </Field>
             )}
             {isManager &&
               (transition === "execution_complete" ||
@@ -287,11 +286,21 @@ function BlockerDialog({
       !reviewDate ||
       (reason === "other" && details.trim().length < 3)
     ) {
+      const detailsMissing = reason === "other" && details.trim().length < 3;
       setError(
-        reason === "other" && details.trim().length < 3
+        detailsMissing
           ? "Beschreibe den Grund unter Details."
           : "Grund, verantwortliche Person und Wiedervorlage sind erforderlich.",
       );
+      document
+        .getElementById(
+          detailsMissing
+            ? "work-blocker-details"
+            : !ownerId
+              ? "work-blocker-owner"
+              : "work-blocker-review",
+        )
+        ?.focus();
       return;
     }
     void runBlockerTask(async () => {
@@ -347,13 +356,12 @@ function BlockerDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2">
-              <Label htmlFor="work-blocker-reason">Grund</Label>
+            <Field label="Grund" htmlFor="work-blocker-reason" required>
               <Select
                 value={reason}
                 onValueChange={(value) => setReason(value as WorkBlockerReason)}
               >
-                <SelectTrigger id="work-blocker-reason">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -366,23 +374,21 @@ function BlockerDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="work-blocker-details">
-                Nächster Schritt / Details
-              </Label>
+            </Field>
+            <Field
+              label="Nächster Schritt / Details"
+              htmlFor="work-blocker-details"
+              required={reason === "other"}
+            >
               <Textarea
-                id="work-blocker-details"
                 value={details}
                 onChange={(event) => setDetails(event.target.value)}
                 maxLength={2000}
                 placeholder="Was muss als Nächstes passieren?"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="work-blocker-owner">Verantwortlich</Label>
+            </Field>
+            <Field label="Verantwortlich" htmlFor="work-blocker-owner" required>
               <SearchableSelect
-                id="work-blocker-owner"
                 options={snapshot.ownerOptions}
                 value={ownerId}
                 onChange={setOwnerId}
@@ -390,17 +396,15 @@ function BlockerDialog({
                 searchPlaceholder="Person suchen…"
                 emptyMessage="Keine Person gefunden"
               />
-            </div>
+            </Field>
             {isManager ? (
-              <div className="space-y-2">
-                <Label htmlFor="work-blocker-review">Wiedervorlage</Label>
+              <Field label="Wiedervorlage" htmlFor="work-blocker-review" required>
                 <DatePicker
-                  id="work-blocker-review"
                   ariaLabel="Wiedervorlagedatum"
                   value={reviewDate}
                   onChange={setReviewDate}
                 />
-              </div>
+              </Field>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Die Wiedervorlage wird auf heute gesetzt.
@@ -471,14 +475,14 @@ function ReasonDialog({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-2 py-1">
-            <Label htmlFor="work-reason">Begründung</Label>
-            <Textarea
-              id="work-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              maxLength={1000}
-              required
-            />
+            <Field label="Begründung" htmlFor="work-reason" required>
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                maxLength={1000}
+                required
+              />
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -582,8 +586,7 @@ function DependencyDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2">
-              <Label htmlFor="dependency-type">Art</Label>
+            <Field label="Art" htmlFor="dependency-type">
               <Select
                 value={type}
                 onValueChange={(value) => {
@@ -593,7 +596,7 @@ function DependencyDialog({
                   setSearch("");
                 }}
               >
-                <SelectTrigger id="dependency-type">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -607,11 +610,9 @@ function DependencyDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dependency-target">Voraussetzung</Label>
+            </Field>
+            <Field label="Voraussetzung" htmlFor="dependency-target" required>
               <SearchableSelect
-                id="dependency-target"
                 options={remoteOptions ?? snapshot.predecessorOptions[type]}
                 value={predecessor}
                 onChange={setPredecessor}
@@ -623,30 +624,25 @@ function DependencyDialog({
                 searchPlaceholder="Voraussetzung suchen…"
                 emptyMessage="Keine passende Voraussetzung"
               />
-            </div>
+            </Field>
             {type === "declared" && (
-              <div className="space-y-2">
-                <Label htmlFor="dependency-description">
-                  Konkrete Bedingung
-                </Label>
+              <Field label="Konkrete Bedingung" htmlFor="dependency-description" required>
                 <Textarea
-                  id="dependency-description"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   maxLength={1000}
                   required
                 />
-              </div>
+              </Field>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="dependency-effect">Auswirkung</Label>
+            <Field label="Auswirkung" htmlFor="dependency-effect">
               <Select
                 value={effect}
                 onValueChange={(value) =>
                   setEffect(value as WorkDependencyEffect)
                 }
               >
-                <SelectTrigger id="dependency-effect">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -659,7 +655,7 @@ function DependencyDialog({
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -731,7 +727,7 @@ function ArtifactApprovalDependencyDialog({
       onClose();
     });
   }
-  return <Dialog open onOpenChange={(open) => !open && !pending && onClose()}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Freigabe verknüpfen</DialogTitle><DialogDescription>Nur eine aktuelle, intern freigegebene Version dieses Auftrags oder Projekts erfüllt die Voraussetzung.</DialogDescription></DialogHeader><DialogBody className="space-y-4 py-1"><div className="space-y-2"><Label htmlFor="dependency-artifact-approval">Freigegebener Arbeitsnachweis</Label>{options === null ? <p className="text-sm text-muted-foreground">Freigaben werden geladen…</p> : <SearchableSelect id="dependency-artifact-approval" options={options} value={actionId} onChange={setActionId} placeholder="Freigabe auswählen" searchPlaceholder="Arbeitsnachweis suchen…" emptyMessage="Keine aktuelle Freigabe vorhanden" />}</div><div className="space-y-2"><Label htmlFor="dependency-artifact-reason">Begründung</Label><Textarea id="dependency-artifact-reason" value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} /></div><ErrorText>{error}</ErrorText></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={pending}>Abbrechen</Button><Button type="submit" disabled={pending || !actionId || reason.trim().length < 3}>{pending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(open) => !open && !pending && onClose()}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Freigabe verknüpfen</DialogTitle><DialogDescription>Nur eine aktuelle, intern freigegebene Version dieses Auftrags oder Projekts erfüllt die Voraussetzung.</DialogDescription></DialogHeader><DialogBody className="space-y-4 py-1"><Field label="Freigegebener Arbeitsnachweis" htmlFor="dependency-artifact-approval" required>{options === null ? <p className="text-sm text-muted-foreground">Freigaben werden geladen…</p> : <SearchableSelect options={options} value={actionId} onChange={setActionId} placeholder="Freigabe auswählen" searchPlaceholder="Arbeitsnachweis suchen…" emptyMessage="Keine aktuelle Freigabe vorhanden" />}</Field><Field label="Begründung" htmlFor="dependency-artifact-reason" required><Textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} /></Field><ErrorText>{error}</ErrorText></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={pending}>Abbrechen</Button><Button type="submit" disabled={pending || !actionId || reason.trim().length < 3}>{pending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter></form></DialogContent></Dialog>;
 }
 
 type DialogState =
@@ -764,25 +760,14 @@ export function WorkLifecycleLoadError(): ReactElement {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   return (
-    <Card className="gap-3 p-4" role="alert">
-      <div>
-        <h2 className="text-sm font-semibold">Arbeitsstand nicht verfügbar</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Auftrag oder Projekt bleiben sichtbar. Der Arbeitsstand konnte gerade
-          nicht geladen werden und wird nicht als erfüllt angenommen.
-        </p>
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="w-fit"
-        disabled={pending}
-        onClick={() => startTransition(() => router.refresh())}
-      >
-        {pending && <Loader2 className="size-4 animate-spin" />}
-        Erneut laden
-      </Button>
-    </Card>
+    <SectionError
+      title="Arbeitsstand nicht verfügbar"
+      onRetry={() => startTransition(() => router.refresh())}
+      retryPending={pending}
+    >
+      Auftrag oder Projekt bleiben sichtbar. Der Arbeitsstand konnte gerade
+      nicht geladen werden und wird nicht als erfüllt angenommen.
+    </SectionError>
   );
 }
 

@@ -53,19 +53,21 @@ async function fillPlanDialog(
   await page.goto("/service/wartung");
   await page.getByRole("button", { name: "Wartungsplan anlegen" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.locator("#maintenance-client").click();
-  await page
-    .getByRole("option", { name: fixture.customerName, exact: true })
-    .click();
-  await dialog.locator("#maintenance-site").click();
-  await page
-    .getByRole("option", { name: fixture.siteName, exact: true })
-    .click();
-  await dialog.locator("#maintenance-template").click();
-  await page
-    .getByRole("option")
-    .filter({ hasText: fixture.templateName })
-    .click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-client"),
+    fixture.customerName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-site"),
+    fixture.siteName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-template"),
+    fixture.templateName,
+  );
   await typeIntoDatePickerById(dialog, "maintenance-effective", DATES[0]);
   await typeIntoDatePickerById(dialog, "maintenance-first-due", DATES[1]);
   await dialog

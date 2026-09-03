@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { getClientRelations } from '@/lib/clients/actions';
 import {
@@ -75,10 +75,8 @@ export function SiteContactFields({
   return (
     <>
       {(isLoading || sites.length > 0) && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-site`}>Einsatzort</Label>
+        <Field label="Einsatzort" htmlFor={`${idPrefix}-site`}>
           <SearchableSelect
-            id={`${idPrefix}-site`}
             options={sites.map((site) => ({
               value: site.id,
               label: site.name,
@@ -96,14 +94,12 @@ export function SiteContactFields({
             noneLabel="Kein Einsatzort"
             disabled={disabled || isLoading}
           />
-        </div>
+        </Field>
       )}
 
       {(isLoading || contacts.length > 0) && (
-        <div className="grid gap-2">
-          <Label htmlFor={`${idPrefix}-contact`}>Ansprechpartner</Label>
+        <Field label="Ansprechpartner" htmlFor={`${idPrefix}-contact`}>
           <SearchableSelect
-            id={`${idPrefix}-contact`}
             options={contacts.map((contact) => ({
               value: contact.id,
               label: contact.name,
@@ -118,7 +114,7 @@ export function SiteContactFields({
             noneLabel="Kein Ansprechpartner"
             disabled={disabled || isLoading}
           />
-        </div>
+        </Field>
       )}
     </>
   );

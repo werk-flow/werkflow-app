@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -243,6 +245,7 @@ function SicknessReportDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
 
@@ -251,12 +254,22 @@ function SicknessReportDialog({
     if (isSaving) return;
     setError(null);
 
-    if (!startDate || (endKnown && !endDate)) {
-      setError('Bitte wähle die Daten aus.');
-      return;
-    }
-    if (endKnown && endDate < startDate) {
-      setError(SICKNESS_ERROR_MESSAGES.invalid_range);
+    const nextDateErrors = {
+      start: startDate ? undefined : 'Bitte wähle ein Datum aus.',
+      end:
+        endKnown && !endDate
+          ? 'Bitte wähle ein Datum aus.'
+          : endKnown && endDate < startDate
+            ? SICKNESS_ERROR_MESSAGES.invalid_range
+            : undefined,
+    };
+    setDateErrors(nextDateErrors);
+    if (nextDateErrors.start || nextDateErrors.end) {
+      document
+        .getElementById(
+          nextDateErrors.start ? 'sickness-start-date' : 'sickness-end-date'
+        )
+        ?.focus();
       return;
     }
 
@@ -305,8 +318,7 @@ function SicknessReportDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="sickness-type">Art</Label>
+            <Field label="Art" htmlFor="sickness-type">
               <Select
                 value={absenceType}
                 onValueChange={(value) =>
@@ -314,7 +326,7 @@ function SicknessReportDialog({
                 }
                 disabled={isSaving}
               >
-                <SelectTrigger id="sickness-type" aria-label="Art">
+                <SelectTrigger aria-label="Art">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -325,12 +337,15 @@ function SicknessReportDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="sickness-start-date">Ab</Label>
+            <Field
+              label="Ab"
+              htmlFor="sickness-start-date"
+              required
+              error={dateErrors.start}
+            >
               <DatePicker
-                id="sickness-start-date"
                 ariaLabel="Ab"
                 value={startDate ? new Date(`${startDate}T00:00:00`) : undefined}
                 onChange={(date) => {
@@ -342,7 +357,7 @@ function SicknessReportDialog({
                 }}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
 
             <div className="flex items-center gap-2">
               <Checkbox
@@ -357,10 +372,13 @@ function SicknessReportDialog({
             </div>
 
             {endKnown ? (
-              <div className="grid gap-2">
-                <Label htmlFor="sickness-end-date">Bis</Label>
+              <Field
+                label="Bis"
+                htmlFor="sickness-end-date"
+                required
+                error={dateErrors.end}
+              >
                 <DatePicker
-                  id="sickness-end-date"
                   ariaLabel="Bis"
                   value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                   onChange={(date) =>
@@ -368,7 +386,7 @@ function SicknessReportDialog({
                   }
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
             ) : (
               <p className="text-xs text-muted-foreground">
                 Ohne Enddatum gilt die Meldung bis auf Weiteres. Du kannst das
@@ -404,11 +422,7 @@ function SicknessReportDialog({
               </p>
             )}
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             {overlapHint ? (
@@ -427,10 +441,7 @@ function SicknessReportDialog({
                 >
                   Abbrechen
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isSaving || !startDate || (endKnown && !endDate)}
-                >
+                <Button type="submit" disabled={isSaving}>
                   {isSaving && <Loader2 className="size-4 animate-spin" />}
                   {isSaving ? 'Wird gemeldet...' : 'Krank melden'}
                 </Button>
@@ -463,6 +474,7 @@ function SicknessEndDialog({
     setError(null);
     if (!endDate) {
       setError('Bitte wähle ein Enddatum aus.');
+      document.getElementById('sickness-end-date-edit')?.focus();
       return;
     }
 
@@ -500,10 +512,8 @@ function SicknessEndDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="sickness-end-date-edit">Letzter Tag</Label>
+            <Field label="Letzter Tag" htmlFor="sickness-end-date-edit" required>
               <DatePicker
-                id="sickness-end-date-edit"
                 ariaLabel="Letzter Tag"
                 value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                 onChange={(date) =>
@@ -511,12 +521,8 @@ function SicknessEndDialog({
                 }
                 disabled={isSaving}
               />
-            </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            </Field>
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             <Button
@@ -527,7 +533,7 @@ function SicknessEndDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !endDate}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird gespeichert...' : 'Enddatum speichern'}
             </Button>
@@ -580,11 +586,7 @@ function SicknessCancelDialog({
             und zählt nicht mehr als Abwesenheit.
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button
             type="button"

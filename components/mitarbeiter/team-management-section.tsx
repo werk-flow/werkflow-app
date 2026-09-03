@@ -19,7 +19,7 @@ import {
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -61,6 +61,10 @@ export function TeamManagementSection({
   const [teamToDissolve, setTeamToDissolve] = useState<Team | null>(null);
   const [dissolveError, setDissolveError] = useState<string | null>(null);
   const [addErrorByTeam, setAddErrorByTeam] = useState<Record<string, string>>({});
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [addFieldErrorsByTeam, setAddFieldErrorsByTeam] = useState<
+    Record<string, { member?: string; validUntil?: string }>
+  >({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [selectedEmployeeByTeam, setSelectedEmployeeByTeam] = useState<
     Record<string, string>
@@ -100,6 +104,12 @@ export function TeamManagementSection({
   }, [teamMemberships, today]);
 
   const handleCreate = async () => {
+    if (!name.trim()) {
+      setNameError('Bitte gib einen Teamnamen an.');
+      document.getElementById('new-team-name')?.focus();
+      return;
+    }
+    setNameError(null);
     setPendingAction('create');
     setCreateError(null);
     try {
@@ -174,34 +184,38 @@ export function TeamManagementSection({
           </p>
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-[1fr_1.5fr_auto]">
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="new-team-name">Name</Label>
+          <Field
+            label="Name"
+            htmlFor="new-team-name"
+            required
+            error={nameError}
+            className="min-w-0 gap-1.5"
+          >
             <Input
-              id="new-team-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="z. B. Kundendienst"
               maxLength={120}
             />
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="new-team-description">
-              Beschreibung (optional)
-            </Label>
+          </Field>
+          <Field
+            label="Beschreibung (optional)"
+            htmlFor="new-team-description"
+            className="min-w-0 gap-1.5"
+          >
             <Textarea
-              id="new-team-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Kurzer operativer Zweck"
               className="min-h-9 min-w-0"
               maxLength={1000}
             />
-          </div>
+          </Field>
           <Button
             type="button"
             className="self-end"
             onClick={() => void handleCreate()}
-            disabled={!name.trim() || pendingAction !== null || isPending}
+            disabled={pendingAction !== null || isPending}
           >
             <Plus className="size-4" />
             Team anlegen
@@ -372,27 +386,37 @@ export function TeamManagementSection({
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <SearchableSelect
-                      ariaLabel={'Mitglied zu ' + team.name + ' hinzufügen'}
-                      options={availableEmployees.map((employee) => ({
-                        value: employee.employeeRecordId,
-                        label: `${employee.displayName}${!employee.userId ? ' (ohne Zugang)' : ''}`,
-                      }))}
-                      value={selectedEmployeeByTeam[team.id] ?? ''}
-                      onChange={(value) =>
-                        setSelectedEmployeeByTeam((current) => ({
-                          ...current,
-                          [team.id]: value,
-                        }))
-                      }
-                      placeholder="Mitarbeiter auswählen"
-                      searchPlaceholder="Mitarbeiter suchen …"
-                      emptyMessage="Kein Mitarbeiter gefunden"
-                    />
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`team-${team.id}-valid-from`}>Gültig ab</Label>
+                    <Field
+                      label="Mitarbeiter"
+                      htmlFor={`team-${team.id}-member`}
+                      required
+                      error={addFieldErrorsByTeam[team.id]?.member}
+                      className="gap-1.5"
+                    >
+                      <SearchableSelect
+                        ariaLabel={'Mitglied zu ' + team.name + ' hinzufügen'}
+                        options={availableEmployees.map((employee) => ({
+                          value: employee.employeeRecordId,
+                          label: `${employee.displayName}${!employee.userId ? ' (ohne Zugang)' : ''}`,
+                        }))}
+                        value={selectedEmployeeByTeam[team.id] ?? ''}
+                        onChange={(value) =>
+                          setSelectedEmployeeByTeam((current) => ({
+                            ...current,
+                            [team.id]: value,
+                          }))
+                        }
+                        placeholder="Mitarbeiter auswählen"
+                        searchPlaceholder="Mitarbeiter suchen …"
+                        emptyMessage="Kein Mitarbeiter gefunden"
+                      />
+                    </Field>
+                    <Field
+                      label="Gültig ab"
+                      htmlFor={`team-${team.id}-valid-from`}
+                      className="gap-1.5"
+                    >
                       <DatePicker
-                        id={`team-${team.id}-valid-from`}
                         ariaLabel={`Teamzugehörigkeit zu ${team.name} gültig ab`}
                         value={isoToLocalDate(
                           membershipWindowByTeam[team.id]?.validFrom ?? today
@@ -407,13 +431,14 @@ export function TeamManagementSection({
                           }))
                         }
                       />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`team-${team.id}-valid-until`}>
-                        Gültig bis (optional)
-                      </Label>
+                    </Field>
+                    <Field
+                      label="Gültig bis (optional)"
+                      htmlFor={`team-${team.id}-valid-until`}
+                      error={addFieldErrorsByTeam[team.id]?.validUntil}
+                      className="gap-1.5"
+                    >
                       <DatePicker
-                        id={`team-${team.id}-valid-until`}
                         ariaLabel={`Teamzugehörigkeit zu ${team.name} gültig bis`}
                         value={isoToLocalDate(
                           membershipWindowByTeam[team.id]?.validUntil ?? ''
@@ -428,16 +453,13 @@ export function TeamManagementSection({
                           }))
                         }
                       />
-                    </div>
+                    </Field>
                     <Button
                       variant="outline"
-                      disabled={
-                        !selectedEmployeeByTeam[team.id] || pendingAction !== null
-                      }
+                      disabled={pendingAction !== null}
                       onClick={async () => {
                         const employeeRecordId =
                           selectedEmployeeByTeam[team.id];
-                        if (!employeeRecordId) return;
                         const membershipWindow = membershipWindowByTeam[team.id];
                         const validFrom = membershipWindow?.validFrom ?? today;
                         const validUntil = membershipWindow?.validUntil || null;
@@ -449,10 +471,27 @@ export function TeamManagementSection({
                             return next;
                           });
                         setAddError(null);
-                        if (validUntil && validUntil < validFrom) {
-                          setAddError(
-                            '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
-                          );
+                        const fieldErrors = {
+                          member: employeeRecordId
+                            ? undefined
+                            : 'Bitte wähle einen Mitarbeiter aus.',
+                          validUntil:
+                            validUntil && validUntil < validFrom
+                              ? '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
+                              : undefined,
+                        };
+                        setAddFieldErrorsByTeam((current) => ({
+                          ...current,
+                          [team.id]: fieldErrors,
+                        }));
+                        if (!employeeRecordId || fieldErrors.validUntil) {
+                          document
+                            .getElementById(
+                              fieldErrors.member
+                                ? `team-${team.id}-member`
+                                : `team-${team.id}-valid-until`
+                            )
+                            ?.focus();
                           return;
                         }
                         setPendingAction(`add:${team.id}`);

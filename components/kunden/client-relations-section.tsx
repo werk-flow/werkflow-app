@@ -29,11 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
 import { useBanner } from "@/components/ui/banner";
 import { usePendingTask } from "@/hooks/use-server-action";
 
@@ -137,11 +138,13 @@ export function ClientRelationsSection({
     contactId: string | null;
     draft: ContactDraft;
     error: string | null;
+    nameError?: string | null;
   } | null>(null);
   const [siteDialog, setSiteDialog] = useState<{
     siteId: string | null;
     draft: SiteDraft;
     error: string | null;
+    nameError?: string | null;
   } | null>(null);
 
   const activeContacts = contacts.filter((contact) => contact.isActive);
@@ -151,6 +154,11 @@ export function ClientRelationsSection({
 
   function saveContact() {
     if (!contactDialog) return;
+    if (!contactDialog.draft.name.trim()) {
+      setContactDialog({ ...contactDialog, nameError: "Bitte gib einen Namen ein." });
+      document.getElementById("contact-name")?.focus();
+      return;
+    }
     void runRelationTask(async () => {
       const { contactId, draft } = contactDialog;
       const result = contactId
@@ -174,6 +182,11 @@ export function ClientRelationsSection({
 
   function saveSite() {
     if (!siteDialog) return;
+    if (!siteDialog.draft.name.trim()) {
+      setSiteDialog({ ...siteDialog, nameError: "Bitte gib eine Bezeichnung ein." });
+      document.getElementById("site-name")?.focus();
+      return;
+    }
     void runRelationTask(async () => {
       const { siteId, draft } = siteDialog;
       const result = siteId
@@ -459,12 +472,9 @@ export function ClientRelationsSection({
         </div>
 
         {equipmentLoadFailed && (
-          <p
-            role="alert"
-            className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-          >
+          <SectionError className="mb-3">
             Anlagen und Geräte konnten nicht geladen werden.
-          </p>
+          </SectionError>
         )}
 
         {activeSites.length === 0 ? (
@@ -679,25 +689,27 @@ export function ClientRelationsSection({
               noValidate
               className="grid gap-4"
             >
-              <div className="grid gap-2">
-                <Label htmlFor="contact-name">Name</Label>
+              <Field
+                label="Name"
+                htmlFor="contact-name"
+                required
+                error={contactDialog.nameError}
+              >
                 <Input
-                  id="contact-name"
                   value={contactDialog.draft.name}
                   onChange={(e) =>
                     setContactDialog({
                       ...contactDialog,
                       draft: { ...contactDialog.draft, name: e.target.value },
                       error: null,
+                      nameError: null,
                     })
                   }
                   placeholder="z. B. Sabine Krause"
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="contact-role">Rolle</Label>
+              </Field>
+              <Field label="Rolle" htmlFor="contact-role">
                 <Input
-                  id="contact-role"
                   value={contactDialog.draft.role ?? ""}
                   onChange={(e) =>
                     setContactDialog({
@@ -713,12 +725,10 @@ export function ClientRelationsSection({
                     <option key={role} value={role} />
                   ))}
                 </datalist>
-              </div>
+              </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="contact-phone">Telefon</Label>
+                <Field label="Telefon" htmlFor="contact-phone">
                   <Input
-                    id="contact-phone"
                     value={contactDialog.draft.phone ?? ""}
                     onChange={(e) =>
                       setContactDialog({
@@ -730,11 +740,9 @@ export function ClientRelationsSection({
                       })
                     }
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="contact-email">E-Mail</Label>
+                </Field>
+                <Field label="E-Mail" htmlFor="contact-email">
                   <Input
-                    id="contact-email"
                     type="text"
                     inputMode="email"
                     value={contactDialog.draft.email ?? ""}
@@ -748,13 +756,10 @@ export function ClientRelationsSection({
                       })
                     }
                   />
-                </div>
+                </Field>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="contact-notes">Notizen</Label>
+              <Field label="Notizen" htmlFor="contact-notes">
                 <Textarea
-                  id="contact-notes"
-                  rows={2}
                   value={contactDialog.draft.notes ?? ""}
                   onChange={(e) =>
                     setContactDialog({
@@ -763,7 +768,7 @@ export function ClientRelationsSection({
                     })
                   }
                 />
-              </div>
+              </Field>
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={contactDialog.draft.isPrimary ?? false}
@@ -789,10 +794,7 @@ export function ClientRelationsSection({
                 >
                   Abbrechen
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isPending || !contactDialog.draft.name.trim()}
-                >
+                <Button type="submit" disabled={isPending}>
                   {isPending && (
                     <Loader2 className="mr-2 size-4 animate-spin" />
                   )}
@@ -831,25 +833,27 @@ export function ClientRelationsSection({
               className="flex min-h-0 flex-1 flex-col"
             >
               <DialogBody className="grid gap-4 py-1">
-                <div className="grid gap-2">
-                  <Label htmlFor="site-name">Bezeichnung</Label>
+                <Field
+                  label="Bezeichnung"
+                  htmlFor="site-name"
+                  required
+                  error={siteDialog.nameError}
+                >
                   <Input
-                    id="site-name"
                     value={siteDialog.draft.name}
                     onChange={(e) =>
                       setSiteDialog({
                         ...siteDialog,
                         draft: { ...siteDialog.draft, name: e.target.value },
                         error: null,
+                        nameError: null,
                       })
                     }
                     placeholder="z. B. Hauptgebäude, Wohnung 3. OG"
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="site-street">Straße und Hausnummer</Label>
+                </Field>
+                <Field label="Straße und Hausnummer" htmlFor="site-street">
                   <Input
-                    id="site-street"
                     value={siteDialog.draft.street ?? ""}
                     onChange={(e) =>
                       setSiteDialog({
@@ -858,12 +862,10 @@ export function ClientRelationsSection({
                       })
                     }
                   />
-                </div>
+                </Field>
                 <div className="grid gap-4 sm:grid-cols-[120px_1fr]">
-                  <div className="grid gap-2">
-                    <Label htmlFor="site-postal-code">PLZ</Label>
+                  <Field label="PLZ" htmlFor="site-postal-code">
                     <Input
-                      id="site-postal-code"
                       inputMode="numeric"
                       value={siteDialog.draft.postalCode ?? ""}
                       onChange={(e) =>
@@ -876,11 +878,9 @@ export function ClientRelationsSection({
                         })
                       }
                     />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="site-city">Ort</Label>
+                  </Field>
+                  <Field label="Ort" htmlFor="site-city">
                     <Input
-                      id="site-city"
                       value={siteDialog.draft.city ?? ""}
                       onChange={(e) =>
                         setSiteDialog({
@@ -889,13 +889,10 @@ export function ClientRelationsSection({
                         })
                       }
                     />
-                  </div>
+                  </Field>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="site-access-notes">Zugang & Schlüssel</Label>
+                <Field label="Zugang & Schlüssel" htmlFor="site-access-notes">
                   <Textarea
-                    id="site-access-notes"
-                    rows={2}
                     value={siteDialog.draft.accessNotes ?? ""}
                     onChange={(e) =>
                       setSiteDialog({
@@ -908,13 +905,9 @@ export function ClientRelationsSection({
                     }
                     placeholder="z. B. Schlüssel bei Hausmeister, Parken im Hof"
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="site-primary-contact">
-                    Ansprechpartner vor Ort
-                  </Label>
+                </Field>
+                <Field label="Ansprechpartner vor Ort" htmlFor="site-primary-contact">
                   <SearchableSelect
-                    id="site-primary-contact"
                     options={contacts
                       // Archived contacts stay visible only while they are the
                       // current selection, so editing never silently drops them.
@@ -943,12 +936,9 @@ export function ClientRelationsSection({
                     allowNone
                     noneLabel="Nicht festgelegt"
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="site-notes">Notizen</Label>
+                </Field>
+                <Field label="Notizen" htmlFor="site-notes">
                   <Textarea
-                    id="site-notes"
-                    rows={2}
                     value={siteDialog.draft.notes ?? ""}
                     onChange={(e) =>
                       setSiteDialog({
@@ -957,7 +947,7 @@ export function ClientRelationsSection({
                       })
                     }
                   />
-                </div>
+                </Field>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={siteDialog.draft.isPrimary ?? false}
@@ -984,10 +974,7 @@ export function ClientRelationsSection({
                 >
                   Abbrechen
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isPending || !siteDialog.draft.name.trim()}
-                >
+                <Button type="submit" disabled={isPending}>
                   {isPending && (
                     <Loader2 className="mr-2 size-4 animate-spin" />
                   )}

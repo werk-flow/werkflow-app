@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -161,8 +161,21 @@ export function ConvertRequestDialog({
   const submitConversion = async (approval?: AssignmentApproval) => {
     setError(null);
 
+    // Field-level checks in visual order; the first failing field gets the
+    // error and the focus.
+    if (!title.trim()) {
+      setError(target === 'job' ? ERROR_MESSAGES.title_or_description_required : ERROR_MESSAGES.name_required);
+      document.getElementById('convert-title')?.focus();
+      return;
+    }
+    if (target === 'job' && !number.trim()) {
+      setError(ERROR_MESSAGES.job_number_required);
+      document.getElementById('convert-number')?.focus();
+      return;
+    }
     if (!clientId) {
       setError(ERROR_MESSAGES.client_required);
+      document.getElementById('convert-client')?.focus();
       return;
     }
 
@@ -230,6 +243,19 @@ export function ConvertRequestDialog({
     await submitConversion();
   };
 
+  const titleError =
+    error === ERROR_MESSAGES.title_or_description_required || error === ERROR_MESSAGES.name_required
+      ? error
+      : null;
+  const numberError =
+    error === ERROR_MESSAGES.job_number_required ||
+    error === ERROR_MESSAGES.job_number_taken ||
+    error === ERROR_MESSAGES.project_number_taken
+      ? error
+      : null;
+  const clientError = error === ERROR_MESSAGES.client_required ? error : null;
+  const formError = titleError || numberError || clientError ? null : error;
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -267,32 +293,43 @@ export function ConvertRequestDialog({
               disabled={isLoading}
             />
 
-            <div className="grid gap-2">
-              <Label htmlFor="convert-title">
-                {target === 'job' ? 'Titel *' : 'Projektname *'}
-              </Label>
+            <Field
+              label={target === 'job' ? 'Titel' : 'Projektname'}
+              htmlFor="convert-title"
+              required
+              error={titleError}
+            >
               <Input
-                id="convert-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="convert-number">
-                {target === 'job' ? 'Auftragsnummer *' : 'Projektnummer'}
-              </Label>
+            <Field
+              label={target === 'job' ? 'Auftragsnummer' : 'Projektnummer'}
+              htmlFor="convert-number"
+              required={target === 'job'}
+              error={numberError}
+            >
               <Input
-                id="convert-number"
                 value={number}
                 onChange={(e) => setNumber(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="convert-client">Kunde *</Label>
+            <Field
+              label="Kunde"
+              htmlFor="convert-client"
+              required
+              error={clientError}
+              description={
+                !request.clientId
+                  ? `Die Anfrage kam von ${request.callerName || 'einem unbekannten Anrufer'}. Wähle den passenden Kunden oder lege ihn neu an.`
+                  : undefined
+              }
+            >
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
@@ -303,13 +340,7 @@ export function ConvertRequestDialog({
                 }}
                 disabled={isLoading}
               />
-              {!request.clientId && (
-                <p className="text-xs text-muted-foreground">
-                  Die Anfrage kam von {request.callerName || 'einem unbekannten Anrufer'}.
-                  Wähle den passenden Kunden oder lege ihn neu an.
-                </p>
-              )}
-            </div>
+            </Field>
 
             {clientId && (
               <SiteContactFields
@@ -335,25 +366,22 @@ export function ConvertRequestDialog({
 
             {target === 'job' && (
               <>
-                <div className="grid gap-2">
-                  <Label htmlFor="convert-location">Ort</Label>
+                <Field label="Ort" htmlFor="convert-location">
                   <Input
-                    id="convert-location"
                     placeholder="Straße, PLZ Ort"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     disabled={isLoading}
                   />
-                </div>
+                </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="convert-priority">Priorität</Label>
+                  <Field label="Priorität" htmlFor="convert-priority">
                     <Select
                       value={priority}
                       onValueChange={(value) => setPriority(value as JobPriority)}
                       disabled={isLoading}
                     >
-                      <SelectTrigger id="convert-priority">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -366,11 +394,9 @@ export function ConvertRequestDialog({
                         )}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="convert-date">Geplantes Datum</Label>
+                  </Field>
+                  <Field label="Geplantes Datum" htmlFor="convert-date">
                     <DatePicker
-                      id="convert-date"
                       ariaLabel="Geplantes Datum"
                       value={
                         plannedDate
@@ -386,18 +412,16 @@ export function ConvertRequestDialog({
                       }
                       disabled={isLoading}
                     />
-                  </div>
+                  </Field>
                 </div>
                 {plannedDate && (
-                  <div className="grid gap-2">
-                    <Label htmlFor="convert-time">Geplante Uhrzeit</Label>
+                  <Field label="Geplante Uhrzeit" htmlFor="convert-time">
                     <TimeInput
-                      id="convert-time"
                       value={plannedTime}
                       onChange={setPlannedTime}
                       disabled={isLoading}
                     />
-                  </div>
+                  </Field>
                 )}
                 {!plannedDate && (
                   <p className="text-xs text-muted-foreground">
@@ -408,17 +432,15 @@ export function ConvertRequestDialog({
               </>
             )}
 
-            <div className="grid gap-2">
-              <Label htmlFor="convert-description">Beschreibung</Label>
+            <Field label="Beschreibung" htmlFor="convert-description">
               <Textarea
-                id="convert-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
+            </Field>
 
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{formError}</ErrorText>
           </DialogBody>
           <DialogFooter className="pt-4">
             <Button
@@ -429,10 +451,7 @@ export function ConvertRequestDialog({
             >
               Abbrechen
             </Button>
-            <Button
-              type="submit"
-              disabled={isLoading || !title.trim() || !clientId}
-            >
+            <Button type="submit" disabled={isLoading}>
               {isLoading ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (

@@ -1,3 +1,4 @@
+import { SectionError } from '@/components/ui/section-error';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -40,9 +41,9 @@ async function AnfragenData({ activeOrgId }: { activeOrgId: string }) {
   if (requestsResult.error) {
     console.error('Error fetching client requests:', requestsResult.error);
     return (
-      <p className="text-destructive">
+      <SectionError>
         Die Anfragen konnten nicht geladen werden. Bitte versuche es erneut.
-      </p>
+      </SectionError>
     );
   }
 

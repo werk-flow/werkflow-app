@@ -11,6 +11,7 @@ import {
 import { CheckCircle, FileText, Loader2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorText } from "@/components/ui/error-text";
 import {
   Dialog,
   DialogContent,
@@ -306,10 +307,10 @@ export function DocumentUploadDialog({
           </div>
 
           {oversizedCount > 0 && !hasStarted && (
-            <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <ErrorText className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
               {oversizedCount} Datei(en) sind größer als 50 MB und werden nicht
               hochgeladen.
-            </p>
+            </ErrorText>
           )}
 
           <div className="max-h-80 overflow-auto rounded-md border">
@@ -354,11 +355,9 @@ export function DocumentUploadDialog({
                             ? ` · ${Math.round(row.progress * 100)} %`
                             : ""}
                         </p>
-                        {row.error && (
-                          <p className="mt-0.5 text-xs text-destructive">
-                            {row.error}
-                          </p>
-                        )}
+                        <ErrorText className="mt-0.5 text-xs">
+                          {row.error}
+                        </ErrorText>
                       </div>
                     </div>
                   );

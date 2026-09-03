@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ErrorText } from '@/components/ui/error-text';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   getPendingSessions,
@@ -355,7 +356,7 @@ export function PendingApprovals({
     if (error && allItems.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <p className="text-sm text-destructive">{error}</p>
+          <ErrorText>{error}</ErrorText>
           <Button
             variant="outline"
             size="sm"
@@ -490,7 +491,7 @@ export function PendingApprovals({
       {/* Inline error message for operation failures (when items exist) */}
       {error && allItems.length > 0 && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
-          <span>{error}</span>
+          <ErrorText>{error}</ErrorText>
           <Button
             variant="ghost"
             size="sm"

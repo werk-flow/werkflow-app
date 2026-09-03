@@ -16,7 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -162,7 +162,10 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
     setHasAttemptedSubmit(true);
     setError(null);
 
-    if (!summary.trim()) return;
+    if (!summary.trim()) {
+      document.getElementById('request-summary')?.focus();
+      return;
+    }
 
     const receivedAtDate = receivedAt
       ? parseBerlinDateTimeInput(receivedAt)
@@ -238,31 +241,29 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="request-summary">Anliegen *</Label>
+            <Field
+              label="Anliegen"
+              htmlFor="request-summary"
+              required
+              error={showSummaryError ? 'Bitte beschreibe kurz das Anliegen.' : null}
+            >
               <Input
-                id="request-summary"
                 placeholder="z. B. Heizung fällt aus, kein Warmwasser"
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 disabled={isLoading}
-                aria-invalid={showSummaryError ? true : undefined}
                 autoFocus
               />
-              <ErrorText>
-                {showSummaryError ? 'Bitte beschreibe kurz das Anliegen.' : null}
-              </ErrorText>
-            </div>
+            </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="request-category">Kategorie</Label>
+              <Field label="Kategorie" htmlFor="request-category">
                 <Select
                   value={category}
                   onValueChange={(value) => setCategory(value as RequestCategory)}
                   disabled={isLoading}
                 >
-                  <SelectTrigger id="request-category">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -273,15 +274,14 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="request-urgency">Dringlichkeit</Label>
+              </Field>
+              <Field label="Dringlichkeit" htmlFor="request-urgency">
                 <Select
                   value={urgency}
                   onValueChange={(value) => setUrgency(value as RequestUrgency)}
                   disabled={isLoading}
                 >
-                  <SelectTrigger id="request-urgency">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -292,11 +292,14 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="request-received-at-date">Eingangszeit</Label>
+            <Field
+              label="Eingangszeit"
+              htmlFor="request-received-at-date"
+              error={showReceivedAtError ? ERROR_MESSAGES.invalid_received_at : null}
+            >
               <DateTimeField
                 idPrefix="request-received-at"
                 value={receivedAt}
@@ -305,34 +308,32 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                 dateAriaLabel="Eingangsdatum"
                 invalid={showReceivedAtError}
                 describedById={
-                  showReceivedAtError ? 'request-received-at-error' : undefined
+                  showReceivedAtError ? 'request-received-at-date-error' : undefined
                 }
               />
-              <ErrorText id="request-received-at-error" className="text-xs">
-                {showReceivedAtError ? ERROR_MESSAGES.invalid_received_at : null}
-              </ErrorText>
-            </div>
+            </Field>
 
             <Separator />
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Kunde
             </p>
 
-            <div className="grid gap-2">
-              <Label htmlFor="request-client">Kunde</Label>
+            <Field
+              label="Kunde"
+              htmlFor="request-client"
+              description={
+                !clientId
+                  ? 'Unbekannte Anrufer kannst du unten festhalten und später einem Kunden zuordnen.'
+                  : undefined
+              }
+            >
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
                 onValueChange={handleClientChange}
                 disabled={isLoading}
               />
-              {!clientId && (
-                <p className="text-xs text-muted-foreground">
-                  Unbekannte Anrufer kannst du unten festhalten und später einem
-                  Kunden zuordnen.
-                </p>
-              )}
-            </div>
+            </Field>
 
             {clientId ? (
               <SiteContactFields
@@ -349,32 +350,26 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Anrufer/in (noch kein Kunde)
                 </p>
-                <div className="grid gap-2">
-                  <Label htmlFor="request-caller-name">Name</Label>
+                <Field label="Name" htmlFor="request-caller-name">
                   <Input
-                    id="request-caller-name"
                     placeholder="Name der Anruferin / des Anrufers"
                     value={callerName}
                     onChange={(e) => setCallerName(e.target.value)}
                     disabled={isLoading}
                   />
-                </div>
+                </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="request-caller-phone">Telefon</Label>
+                  <Field label="Telefon" htmlFor="request-caller-phone">
                     <Input
-                      id="request-caller-phone"
                       type="tel"
                       placeholder="+49 123 456789"
                       value={callerPhone}
                       onChange={(e) => setCallerPhone(e.target.value)}
                       disabled={isLoading}
                     />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="request-caller-email">E-Mail</Label>
+                  </Field>
+                  <Field label="E-Mail" htmlFor="request-caller-email">
                     <Input
-                      id="request-caller-email"
                       type="text"
                       inputMode="email"
                       placeholder="name@beispiel.de"
@@ -382,18 +377,16 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                       onChange={(e) => setCallerEmail(e.target.value)}
                       disabled={isLoading}
                     />
-                  </div>
+                  </Field>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="request-caller-address">Adresse</Label>
+                <Field label="Adresse" htmlFor="request-caller-address">
                   <Input
-                    id="request-caller-address"
                     placeholder="Straße, PLZ Ort"
                     value={callerAddress}
                     onChange={(e) => setCallerAddress(e.target.value)}
                     disabled={isLoading}
                   />
-                </div>
+                </Field>
               </div>
             )}
 
@@ -402,26 +395,23 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
               Weitere Angaben
             </p>
 
-            <div className="grid gap-2">
-              <Label htmlFor="request-details">Details</Label>
+            <Field label="Details" htmlFor="request-details">
               <Textarea
-                id="request-details"
                 placeholder="Weitere Angaben aus dem Gespräch..."
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
+            </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="request-source">Eingang über</Label>
+              <Field label="Eingang über" htmlFor="request-source">
                 <Select
                   value={source}
                   onValueChange={(value) => setSource(value as RequestSource)}
                   disabled={isLoading}
                 >
-                  <SelectTrigger id="request-source">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -432,11 +422,9 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="request-number">Anfragenummer</Label>
+              </Field>
+              <Field label="Anfragenummer" htmlFor="request-number">
                 <Input
-                  id="request-number"
                   placeholder="ANF-2026-001"
                   value={requestNumber}
                   onChange={(event) => {
@@ -445,13 +433,11 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                   }}
                   disabled={isLoading}
                 />
-              </div>
+              </Field>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="request-assignee">Zuständig</Label>
+            <Field label="Zuständig" htmlFor="request-assignee">
               <SearchableSelect
-                id="request-assignee"
                 options={assignees.map((assignee) => ({
                   value: assignee.userId,
                   label: assignee.name,
@@ -465,12 +451,12 @@ export function CreateRequestDialog({ clients, assignees }: CreateRequestDialogP
                 noneLabel="Niemand zuständig"
                 disabled={isLoading}
               />
-            </div>
+            </Field>
 
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{showReceivedAtError ? null : error}</ErrorText>
           </DialogBody>
           <DialogFooter className="pt-4">
-            <Button type="submit" disabled={isLoading || !summary.trim()}>
+            <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird gespeichert...' : 'Anfrage erfassen'}
             </Button>

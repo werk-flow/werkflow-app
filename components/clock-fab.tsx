@@ -7,6 +7,7 @@ import { useClockState } from '@/components/clock-state-provider';
 import { useOrganization } from '@/components/organization/organization-context';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { Button } from '@/components/ui/button';
+import { SectionError } from '@/components/ui/section-error';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 
 export function ClockFAB() {
@@ -54,21 +55,13 @@ export function ClockFAB() {
           )}
         </Button>
         {statusError && (
-          <div
-            className="max-w-56 rounded-md border border-destructive/40 bg-card px-3 py-2 text-xs text-destructive shadow-lg"
-            role="alert"
+          <SectionError
+            className="max-w-64 shadow-lg"
+            onRetry={() => void refresh()}
+            retryLabel="Erneut laden"
           >
-            <p>Der Zeitstatus konnte nicht sicher geladen werden.</p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-2 min-h-11"
-              onClick={() => void refresh()}
-            >
-              Erneut laden
-            </Button>
-          </div>
+            Der Zeitstatus konnte nicht sicher geladen werden.
+          </SectionError>
         )}
       </div>
     </>

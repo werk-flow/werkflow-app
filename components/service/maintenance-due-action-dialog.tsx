@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DurationHoursInput } from "@/components/ui/duration-hours-input";
-import { Label } from "@/components/ui/label";
+import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
+import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -63,6 +65,24 @@ type ActionKind =
   | "cancelled"
   | "superseded";
 
+type RequiredField =
+  | "date"
+  | "durationHours"
+  | "completedOn"
+  | "evidenceIds"
+  | "serviceCaseId"
+  | "reason";
+
+// Focus order on a failed submit.
+const REQUIRED_FIELD_IDS: Array<[RequiredField, string]> = [
+  ["date", "due-date"],
+  ["durationHours", "due-duration"],
+  ["completedOn", "due-completed"],
+  ["serviceCaseId", "maintenance-service-case"],
+  ["reason", "due-reason"],
+  ["evidenceIds", "due-evidence"],
+];
+
 export function MaintenanceDueActionDialog({
   open,
   onOpenChange,
@@ -97,6 +117,7 @@ export function MaintenanceDueActionDialog({
   const [evidenceLoadFailed, setEvidenceLoadFailed] = useState(false);
   const [serviceCaseId, setServiceCaseId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const idempotencyKey = useRef(crypto.randomUUID());
   useEffect(() => {
     if (!open || !due.jobId) return;
@@ -197,6 +218,48 @@ export function MaintenanceDueActionDialog({
   const canSchedule =
     due.status === "visit_created" && !due.planningOccurrenceId;
   const canComplete = due.status === "visit_created";
+  // The reason field is hidden for schedule, so it must never count as missing there.
+  const showReason = action !== "schedule";
+  const reasonRequired =
+    showReason && action !== "create_visit" && action !== "complete";
+
+  // Mirrors the maintenance validation schemas per action so the user sees the
+  // missing field instead of the generic invalid_input message.
+  function missingFields(): Partial<Record<RequiredField, string>> {
+    const errors: Partial<Record<RequiredField, string>> = {};
+    if (action === "schedule") {
+      if (!date) errors.date = "Bitte wähle ein Datum.";
+      if ((parseHoursInputToMinutes(durationHours) ?? 0) < 15) {
+        errors.durationHours = "Bitte gib mindestens 0,25 Stunden an.";
+      }
+    }
+    if (action === "complete") {
+      if (!completedOn) errors.completedOn = "Bitte gib das Abschlussdatum an.";
+      if (evidenceIds.length === 0) {
+        errors.evidenceIds = "Wähle mindestens einen versionierten Arbeitsnachweis.";
+      }
+    }
+    if (action === "link_service_case" && !serviceCaseId) {
+      errors.serviceCaseId = "Bitte wähle einen Servicefall.";
+    }
+    if (reasonRequired && reason.trim().length < 3) {
+      errors.reason = "Bitte gib eine Begründung mit mindestens 3 Zeichen an.";
+    }
+    return errors;
+  }
+  const fieldErrors = attempted ? missingFields() : {};
+
+  function submit(): void {
+    setError(null);
+    setAttempted(true);
+    const errors = missingFields();
+    const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
+    if (firstInvalid) {
+      document.getElementById(firstInvalid[1])?.focus();
+      return;
+    }
+    void run();
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -211,13 +274,12 @@ export function MaintenanceDueActionDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="due-action">Aktion</Label>
+          <Field label="Aktion" htmlFor="due-action">
             <Select
               value={action}
               onValueChange={(value) => setAction(value as ActionKind)}
             >
-              <SelectTrigger id="due-action">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -246,46 +308,46 @@ export function MaintenanceDueActionDialog({
                 </SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Field>
           {action === "schedule" && (
             <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="due-date">Datum</Label>
+              <Field label="Datum" htmlFor="due-date" required error={fieldErrors.date}>
                 <DatePicker
-                  id="due-date"
                   ariaLabel="Datum"
                   value={toLocalDate(date)}
                   onChange={(value) =>
                     setDate(value ? formatBerlinLocalDate(value) : "")
                   }
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="due-time">Uhrzeit</Label>
-                <TimeInput id="due-time" value={time} onChange={setTime} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="due-duration">Dauer (Stunden)</Label>
+              </Field>
+              <Field label="Uhrzeit" htmlFor="due-time" required>
+                <TimeInput value={time} onChange={setTime} />
+              </Field>
+              <Field
+                label="Dauer (Stunden)"
+                htmlFor="due-duration"
+                required
+                error={fieldErrors.durationHours}
+              >
                 <DurationHoursInput
                   id="due-duration"
                   value={durationHours}
                   onChange={setDurationHours}
                 />
-              </div>
+              </Field>
             </div>
           )}
           {action === "complete" && (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="due-outcome">Ergebnis</Label>
+                <Field label="Ergebnis" htmlFor="due-outcome">
                   <Select
                     value={scopeOutcome}
                     onValueChange={(value) =>
                       setScopeOutcome(value as MaintenanceScopeOutcome)
                     }
                   >
-                    <SelectTrigger id="due-outcome">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -296,18 +358,21 @@ export function MaintenanceDueActionDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="due-completed">Abgeschlossen am</Label>
+                </Field>
+                <Field
+                  label="Abgeschlossen am"
+                  htmlFor="due-completed"
+                  required
+                  error={fieldErrors.completedOn}
+                >
                   <DatePicker
-                    id="due-completed"
                     ariaLabel="Abgeschlossen am"
                     value={toLocalDate(completedOn)}
                     onChange={(value) =>
                       setCompletedOn(value ? formatBerlinLocalDate(value) : "")
                     }
                   />
-                </div>
+                </Field>
               </div>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">
@@ -318,15 +383,16 @@ export function MaintenanceDueActionDialog({
                     Arbeitsnachweise werden geladen…
                   </p>
                 ) : evidenceLoadFailed ? (
-                  <p
-                    role="alert"
-                    className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
-                  >
+                  <SectionError>
                     Die Arbeitsnachweise konnten nicht geladen werden. Schließe
                     den Dialog und versuche es erneut.
-                  </p>
+                  </SectionError>
                 ) : evidence.length ? (
-                  <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3">
+                  <div
+                    id="due-evidence"
+                    tabIndex={-1}
+                    className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3"
+                  >
                     {evidence.map((option) => (
                       <label
                         key={option.revisionId}
@@ -354,14 +420,18 @@ export function MaintenanceDueActionDialog({
                     Arbeitsnachweis vor.
                   </p>
                 )}
+                <ErrorText>{fieldErrors.evidenceIds}</ErrorText>
               </fieldset>
             </>
           )}
           {action === "link_service_case" && (
-            <div className="space-y-2">
-              <Label htmlFor="maintenance-service-case">Servicefall</Label>
+            <Field
+              label="Servicefall"
+              htmlFor="maintenance-service-case"
+              required
+              error={fieldErrors.serviceCaseId}
+            >
               <SearchableSelect
-                id="maintenance-service-case"
                 value={serviceCaseId}
                 onChange={setServiceCaseId}
                 options={serviceCases.map((serviceCase) => ({
@@ -371,28 +441,23 @@ export function MaintenanceDueActionDialog({
                 placeholder="Servicefall suchen"
                 emptyMessage="Kein passender Servicefall gefunden"
               />
-            </div>
+            </Field>
           )}
-          {action !== "schedule" && (
-            <div className="space-y-2">
-              <Label htmlFor="due-reason">
-                {action === "create_visit" || action === "complete"
-                  ? "Notiz (optional)"
-                  : "Begründung"}
-              </Label>
+          {showReason && (
+            <Field
+              label={reasonRequired ? "Begründung" : "Notiz (optional)"}
+              htmlFor="due-reason"
+              required={reasonRequired}
+              error={fieldErrors.reason}
+            >
               <Textarea
-                id="due-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
-            </div>
+            </Field>
           )}
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button
             type="button"
@@ -404,13 +469,11 @@ export function MaintenanceDueActionDialog({
           </Button>
           <Button
             type="button"
-            onClick={() => void run()}
+            onClick={submit}
             disabled={
               isPending ||
               (action === "complete" &&
-                (isEvidenceLoading ||
-                  evidenceLoadFailed ||
-                  evidenceIds.length === 0))
+                (isEvidenceLoading || evidenceLoadFailed))
             }
           >
             {isPending ? "Speichert…" : "Aktion ausführen"}

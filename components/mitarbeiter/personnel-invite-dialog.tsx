@@ -14,8 +14,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -66,6 +67,7 @@ export function PersonnelInviteDialog({
   const [role, setRole] = useState<InviteRole>('employee');
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -75,6 +77,7 @@ export function PersonnelInviteDialog({
       setEmail('');
       setRole('employee');
       setError(null);
+      setEmailError(null);
       setSuccess(false);
     }
   };
@@ -85,7 +88,8 @@ export function PersonnelInviteDialog({
     setError(null);
 
     if (!EMAIL_REGEX.test(email)) {
-      setError(ERROR_MESSAGES.invalid_email);
+      setEmailError(ERROR_MESSAGES.invalid_email);
+      document.getElementById('personnel-invite-email')?.focus();
       return;
     }
 
@@ -131,10 +135,13 @@ export function PersonnelInviteDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="personnel-invite-email">E-Mail-Adresse</Label>
+            <Field
+              label="E-Mail-Adresse"
+              htmlFor="personnel-invite-email"
+              required
+              error={emailError}
+            >
               <Input
-                id="personnel-invite-email"
                 type="text"
                 inputMode="email"
                 autoComplete="email"
@@ -142,19 +149,19 @@ export function PersonnelInviteDialog({
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
+                  setEmailError(null);
                   if (error) setError(null);
                 }}
                 disabled={isSending || success}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="personnel-invite-role">Rolle</Label>
+            </Field>
+            <Field label="Rolle" htmlFor="personnel-invite-role">
               <Select
                 value={role}
                 onValueChange={(value) => setRole(value as InviteRole)}
                 disabled={isSending || success}
               >
-                <SelectTrigger id="personnel-invite-role">
+                <SelectTrigger>
                   <SelectValue placeholder="Rolle auswählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,12 +172,8 @@ export function PersonnelInviteDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            </Field>
+            <ErrorText>{error}</ErrorText>
             {success && (
               <p className="text-sm text-green-600">
                 Einladung erfolgreich gesendet!
@@ -178,7 +181,7 @@ export function PersonnelInviteDialog({
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isSending || success || !email}>
+            <Button type="submit" disabled={isSending || success}>
               {isSending && <Loader2 className="size-4 animate-spin" />}
               {isSending ? 'Wird gesendet...' : 'Einladung senden'}
             </Button>

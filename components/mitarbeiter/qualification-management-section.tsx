@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -78,6 +79,16 @@ export function QualificationManagementSection({
   const [supersedesId, setSupersedesId] = useState<string | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [grantError, setGrantError] = useState<string | null>(null);
+  const [definitionFieldErrors, setDefinitionFieldErrors] = useState<{
+    name?: string;
+    warningDays?: string;
+  }>({});
+  const [grantFieldErrors, setGrantFieldErrors] = useState<{
+    employee?: string;
+    capability?: string;
+    validFrom?: string;
+    validUntil?: string;
+  }>({});
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   const definitionById = useMemo(
@@ -129,6 +140,7 @@ export function QualificationManagementSection({
     setSupersedesId(null);
     setEditingRecordId(null);
     setGrantError(null);
+    setGrantFieldErrors({});
   };
 
   return (
@@ -142,13 +154,12 @@ export function QualificationManagementSection({
           </p>
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-[180px_1fr_180px_auto]">
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="capability-kind">Art</Label>
+          <Field label="Art" htmlFor="capability-kind" className="min-w-0 gap-1.5">
             <Select
               value={kind}
               onValueChange={(value) => setKind(value as CapabilityKind)}
             >
-              <SelectTrigger id="capability-kind">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -156,44 +167,57 @@ export function QualificationManagementSection({
                 <SelectItem value="certification">Zertifizierung</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="capability-name">Name</Label>
+          </Field>
+          <Field
+            label="Name"
+            htmlFor="capability-name"
+            required
+            error={definitionFieldErrors.name}
+            className="min-w-0 gap-1.5"
+          >
             <Input
-              id="capability-name"
               value={definitionName}
               onChange={(event) => setDefinitionName(event.target.value)}
               placeholder="z. B. Wärmepumpen-Inbetriebnahme"
               maxLength={160}
             />
-          </div>
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="capability-warning-days">
-              Hinweis vorher (Tage)
-            </Label>
+          </Field>
+          <Field
+            label="Hinweis vorher (Tage)"
+            htmlFor="capability-warning-days"
+            error={definitionFieldErrors.warningDays}
+            className="min-w-0 gap-1.5"
+          >
             <QuantityStepper
-              id="capability-warning-days"
               min={0}
               value={kind === 'skill' ? '0' : warningDays}
               onChange={setWarningDays}
               disabled={kind === 'skill'}
             />
-          </div>
+          </Field>
           <Button
             className="self-end"
-            disabled={!definitionName.trim() || pendingAction !== null}
+            disabled={pendingAction !== null}
             onClick={async () => {
               setDefinitionError(null);
               const expiryWarningDays =
                 kind === 'certification' ? parseDecimalInput(warningDays) : 0;
-              if (
-                !Number.isInteger(expiryWarningDays) ||
-                expiryWarningDays < 0 ||
-                expiryWarningDays > 365
-              ) {
-                setDefinitionError(
-                  'Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.'
-                );
+              const nextFieldErrors = {
+                name: definitionName.trim() ? undefined : 'Bitte gib einen Namen an.',
+                warningDays:
+                  !Number.isInteger(expiryWarningDays) ||
+                  expiryWarningDays < 0 ||
+                  expiryWarningDays > 365
+                    ? 'Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.'
+                    : undefined,
+              };
+              setDefinitionFieldErrors(nextFieldErrors);
+              if (nextFieldErrors.name || nextFieldErrors.warningDays) {
+                document
+                  .getElementById(
+                    nextFieldErrors.name ? 'capability-name' : 'capability-warning-days'
+                  )
+                  ?.focus();
                 return;
               }
               setPendingAction('create-definition');
@@ -305,10 +329,14 @@ export function QualificationManagementSection({
           </p>
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="qualification-employee">Mitarbeiter</Label>
+          <Field
+            label="Mitarbeiter"
+            htmlFor="qualification-employee"
+            required
+            error={grantFieldErrors.employee}
+            className="gap-1.5"
+          >
             <SearchableSelect
-              id="qualification-employee"
               ariaLabel="Mitarbeiter für Qualifikation"
               options={employeeOptions}
               value={employeeRecordId}
@@ -318,13 +346,15 @@ export function QualificationManagementSection({
               searchPlaceholder="Mitarbeiter suchen …"
               emptyMessage="Kein Mitarbeiter gefunden"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="qualification-capability">
-              Fähigkeit oder Zertifizierung
-            </Label>
+          </Field>
+          <Field
+            label="Fähigkeit oder Zertifizierung"
+            htmlFor="qualification-capability"
+            required
+            error={grantFieldErrors.capability}
+            className="gap-1.5"
+          >
             <SearchableSelect
-              id="qualification-capability"
               ariaLabel="Qualifikation auswählen"
               options={capabilityOptions}
               value={capabilityId}
@@ -334,68 +364,65 @@ export function QualificationManagementSection({
               searchPlaceholder="Begriff suchen …"
               emptyMessage="Kein Begriff gefunden"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="qualification-valid-from">Gültig ab</Label>
+          </Field>
+          <Field
+            label="Gültig ab"
+            htmlFor="qualification-valid-from"
+            required
+            error={grantFieldErrors.validFrom}
+            className="gap-1.5"
+          >
             <DatePicker
-              id="qualification-valid-from"
               ariaLabel="Qualifikation gültig ab"
               value={isoToLocalDate(validFrom)}
               onChange={(date) =>
                 setValidFrom(date ? toLocalDateString(date) : '')
               }
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="qualification-valid-until">
-              Gültig bis (optional)
-            </Label>
+          </Field>
+          <Field
+            label="Gültig bis (optional)"
+            htmlFor="qualification-valid-until"
+            error={grantFieldErrors.validUntil}
+            className="gap-1.5"
+          >
             <DatePicker
-              id="qualification-valid-until"
               ariaLabel="Qualifikation gültig bis"
               value={isoToLocalDate(validUntil)}
               onChange={(date) =>
                 setValidUntil(date ? toLocalDateString(date) : '')
               }
             />
-          </div>
+          </Field>
           {selectedDefinition?.kind === 'certification' && (
             <>
-              <div className="space-y-1.5">
-                <Label htmlFor="qualification-issuer">Ausstellende Stelle</Label>
+              <Field label="Ausstellende Stelle" htmlFor="qualification-issuer" className="gap-1.5">
                 <Input
-                  id="qualification-issuer"
                   value={issuer}
                   onChange={(event) => setIssuer(event.target.value)}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="qualification-renewal-date">
-                  Erneuerung vorgesehen (optional)
-                </Label>
+              </Field>
+              <Field
+                label="Erneuerung vorgesehen (optional)"
+                htmlFor="qualification-renewal-date"
+                className="gap-1.5"
+              >
                 <DatePicker
-                  id="qualification-renewal-date"
                   ariaLabel="Erneuerung vorgesehen"
                   value={isoToLocalDate(renewalDueDate)}
                   onChange={(date) =>
                     setRenewalDueDate(date ? toLocalDateString(date) : '')
                   }
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="qualification-evidence-state">
-                  Nachweisstatus
-                </Label>
+              </Field>
+              <Field label="Nachweisstatus" htmlFor="qualification-evidence-state" className="gap-1.5">
                 <Select
                   value={evidenceState}
                   onValueChange={(value) =>
                     setEvidenceState(value as EvidenceState)
                   }
                 >
-                  <SelectTrigger
-                    id="qualification-evidence-state"
-                    aria-label="Nachweisstatus"
-                  >
+                  <SelectTrigger aria-label="Nachweisstatus">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -404,7 +431,7 @@ export function QualificationManagementSection({
                     <SelectItem value="received">Erhalten</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="qualification-confirmed"
@@ -417,19 +444,19 @@ export function QualificationManagementSection({
               </div>
             </>
           )}
-          <div className="min-w-0 space-y-1.5 md:col-span-2">
-            <Label htmlFor="qualification-operational-note">
-              Operativer Hinweis (optional)
-            </Label>
+          <Field
+            label="Operativer Hinweis (optional)"
+            htmlFor="qualification-operational-note"
+            className="min-w-0 gap-1.5 md:col-span-2"
+          >
             <Textarea
-              id="qualification-operational-note"
               className="min-w-0"
               value={operationalNote}
               onChange={(event) => setOperationalNote(event.target.value)}
               maxLength={1000}
               placeholder="Nur Hinweise für die interne Planung"
             />
-          </div>
+          </Field>
           {supersedesId && (
             <p className="self-center text-sm text-muted-foreground">
               Erneuerung eines bestehenden Zertifizierungseintrags.
@@ -445,16 +472,30 @@ export function QualificationManagementSection({
               </Button>
             )}
             <Button
-              disabled={
-                !employeeRecordId ||
-                !capabilityId ||
-                !validFrom ||
-                pendingAction !== null
-              }
+              disabled={pendingAction !== null}
               onClick={async () => {
                 setGrantError(null);
-                if (validUntil && validUntil < validFrom) {
-                  setGrantError('„Gültig bis“ darf nicht vor „Gültig ab“ liegen.');
+                const nextFieldErrors = {
+                  employee: employeeRecordId ? undefined : 'Bitte wähle einen Mitarbeiter aus.',
+                  capability: capabilityId ? undefined : 'Bitte wähle einen Begriff aus.',
+                  validFrom: validFrom ? undefined : 'Bitte gib ein Datum an.',
+                  validUntil:
+                    validUntil && validUntil < validFrom
+                      ? '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.'
+                      : undefined,
+                };
+                setGrantFieldErrors(nextFieldErrors);
+                const firstInvalidId = nextFieldErrors.employee
+                  ? 'qualification-employee'
+                  : nextFieldErrors.capability
+                    ? 'qualification-capability'
+                    : nextFieldErrors.validFrom
+                      ? 'qualification-valid-from'
+                      : nextFieldErrors.validUntil
+                        ? 'qualification-valid-until'
+                        : null;
+                if (firstInvalidId) {
+                  document.getElementById(firstInvalidId)?.focus();
                   return;
                 }
                 const sharedInput = {

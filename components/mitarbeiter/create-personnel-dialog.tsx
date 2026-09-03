@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -47,6 +47,7 @@ export function CreatePersonnelDialog() {
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastNameError, setLastNameError] = useState<string | null>(null);
 
   // Guards for the async number suggestion: a suggestion must never overwrite
   // a number the user has already typed (see the P1-02 dialogs for the same
@@ -80,6 +81,7 @@ export function CreatePersonnelDialog() {
     setEntryDate('');
     setNotes('');
     setError(null);
+    setLastNameError(null);
     numberTouchedRef.current = false;
   };
 
@@ -95,7 +97,8 @@ export function CreatePersonnelDialog() {
     setError(null);
 
     if (lastName.trim().length === 0) {
-      setError(ERROR_MESSAGES.last_name_required);
+      setLastNameError(ERROR_MESSAGES.last_name_required);
+      document.getElementById('personnel-last-name')?.focus();
       return;
     }
 
@@ -151,29 +154,31 @@ export function CreatePersonnelDialog() {
         >
           <DialogBody className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="personnel-first-name">Vorname</Label>
+              <Field label="Vorname" htmlFor="personnel-first-name">
                 <Input
-                  id="personnel-first-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   disabled={isSaving}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="personnel-last-name">Nachname</Label>
+              </Field>
+              <Field
+                label="Nachname"
+                htmlFor="personnel-last-name"
+                required
+                error={lastNameError}
+              >
                 <Input
-                  id="personnel-last-name"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => {
+                    setLastNameError(null);
+                    setLastName(e.target.value);
+                  }}
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="personnel-number">Personalnummer</Label>
+            <Field label="Personalnummer" htmlFor="personnel-number">
               <Input
-                id="personnel-number"
                 placeholder="z. B. MA-001"
                 value={employeeNumber}
                 onChange={(e) => {
@@ -182,11 +187,9 @@ export function CreatePersonnelDialog() {
                 }}
                 disabled={isSaving}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="personnel-entry-date">Eintrittsdatum</Label>
+            </Field>
+            <Field label="Eintrittsdatum" htmlFor="personnel-entry-date">
               <DatePicker
-                id="personnel-entry-date"
                 ariaLabel="Eintrittsdatum"
                 value={entryDate ? new Date(`${entryDate}T00:00:00`) : undefined}
                 onChange={(date) =>
@@ -194,24 +197,18 @@ export function CreatePersonnelDialog() {
                 }
                 disabled={isSaving}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="personnel-notes">Notizen</Label>
+            </Field>
+            <Field label="Notizen" htmlFor="personnel-notes">
               <Textarea
-                id="personnel-notes"
-                rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button
-              type="submit"
-              disabled={isSaving || lastName.trim().length === 0}
-            >
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird angelegt...' : 'Personalakte anlegen'}
             </Button>

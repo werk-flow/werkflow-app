@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { Search, SlidersHorizontal, X, ChevronsUpDown } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Popover,
@@ -52,6 +52,7 @@ function MultiSelectPopover({
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerId = useId();
   const selectedSet = new Set(selectedIds);
 
   const toggle = (id: string) => {
@@ -68,11 +69,11 @@ function MultiSelectPopover({
       : `${selectedIds.length} ausgewählt`;
 
   return (
-    <div className="grid gap-1.5">
-      <Label className="text-xs">{label}</Label>
+    <Field label={label} htmlFor={triggerId} className="gap-1.5">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            id={triggerId}
             variant="outline"
             role="combobox"
             aria-expanded={open}
@@ -110,7 +111,7 @@ function MultiSelectPopover({
           </div>
         </PopoverContent>
       </Popover>
-    </div>
+    </Field>
   );
 }
 
@@ -178,12 +179,11 @@ export function FilterBar({
   const filterFields = (
     <div className="grid gap-3 sm:grid-cols-2">
       {lockedClientLabel ? (
-        <div className="grid gap-1.5">
-          <Label className="text-xs">Kunde</Label>
-          <div className="flex h-8 w-full items-center rounded-md border bg-muted px-3 text-xs cursor-not-allowed text-muted-foreground">
+        <Field label="Kunde" htmlFor="filter-client-locked" className="gap-1.5">
+          <div id="filter-client-locked" className="flex h-8 w-full items-center rounded-md border bg-muted px-3 text-xs cursor-not-allowed text-muted-foreground">
             <span className="truncate">{lockedClientLabel}</span>
           </div>
-        </div>
+        </Field>
       ) : (
         <MultiSelectPopover
           label="Kunde"
@@ -195,12 +195,11 @@ export function FilterBar({
       )}
 
       {lockedEmployeeLabel ? (
-        <div className="grid gap-1.5">
-          <Label className="text-xs">Mitarbeiter</Label>
-          <div className="flex h-8 w-full items-center rounded-md border bg-muted px-3 text-xs cursor-not-allowed text-muted-foreground">
+        <Field label="Mitarbeiter" htmlFor="filter-employee-locked" className="gap-1.5">
+          <div id="filter-employee-locked" className="flex h-8 w-full items-center rounded-md border bg-muted px-3 text-xs cursor-not-allowed text-muted-foreground">
             <span className="truncate">{lockedEmployeeLabel}</span>
           </div>
-        </div>
+        </Field>
       ) : (
         <MultiSelectPopover
           label="Mitarbeiter"
@@ -211,26 +210,23 @@ export function FilterBar({
         />
       )}
 
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Datum von</Label>
+      <Field label="Datum von" htmlFor="filter-date-from" className="gap-1.5">
         <DatePicker
           value={filters.dateFrom ? new Date(filters.dateFrom + 'T00:00:00') : undefined}
           onChange={(d) => updateFilter('dateFrom', d ? toLocalDateString(d) : '')}
           placeholder="Von"
         />
-      </div>
+      </Field>
 
-      <div className="grid gap-1.5">
-        <Label className="text-xs">Datum bis</Label>
+      <Field label="Datum bis" htmlFor="filter-date-to" className="gap-1.5">
         <DatePicker
           value={filters.dateTo ? new Date(filters.dateTo + 'T00:00:00') : undefined}
           onChange={(d) => updateFilter('dateTo', d ? toLocalDateString(d) : '')}
           placeholder="Bis"
         />
-      </div>
+      </Field>
 
-      <div className="grid gap-1.5 sm:col-span-2">
-        <Label className="text-xs">Typ</Label>
+      <Field label="Typ" htmlFor="filter-entry-type" className="gap-1.5 sm:col-span-2">
         <Select
           value={filters.entryType}
           onValueChange={(v) => updateFilter('entryType', v as EntryTypeFilter)}
@@ -244,7 +240,7 @@ export function FilterBar({
             <SelectItem value="projekte">Nur Projekte</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </Field>
     </div>
   );
 

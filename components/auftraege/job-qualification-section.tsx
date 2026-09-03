@@ -8,6 +8,8 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
@@ -58,9 +60,7 @@ export function JobQualificationSection({
     }
     return (
       <Card className="p-4">
-        <p role="alert" className="text-sm text-destructive">
-          Qualifikationsabdeckung konnte nicht geladen werden.
-        </p>
+        <ErrorText>Qualifikationsabdeckung konnte nicht geladen werden.</ErrorText>
         <Button
           variant="outline"
           size="sm"
@@ -118,10 +118,8 @@ export function JobQualificationSection({
 
       {canEdit && (
         <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-56 flex-1 space-y-1.5">
-            <Label htmlFor="job-qualification-capability">Anforderung hinzufügen</Label>
+          <Field label="Anforderung hinzufügen" htmlFor="job-qualification-capability" className="min-w-56 flex-1">
             <SearchableSelect
-              id="job-qualification-capability"
               options={detail.capabilities
                 .filter(
                   (capability) =>
@@ -148,7 +146,7 @@ export function JobQualificationSection({
               searchPlaceholder="Begriff suchen..."
               emptyMessage="Kein Begriff gefunden"
             />
-          </div>
+          </Field>
           {selectedDefinition?.kind === 'certification' && (
             <div className="flex h-9 items-center gap-2">
               <Checkbox

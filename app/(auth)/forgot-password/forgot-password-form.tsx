@@ -7,14 +7,9 @@ import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { createSupabaseImplicitClient } from '@/lib/supabase/implicit-client';
 
@@ -101,27 +96,19 @@ export function ForgotPasswordForm({
   return (
     <Form {...form}>
       <form className="grid gap-4" onSubmit={handleSubmit}>
-        {serverErrorMessage ? (
-          <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-            {serverErrorMessage}
-          </div>
-        ) : null}
+        <ErrorText>{serverErrorMessage}</ErrorText>
         <FormField
           control={form.control}
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>E-Mail</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="beispiel@firma.de"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <Field label="E-Mail" required error={fieldState.error?.message}>
+              <Input
+                {...field}
+                type="email"
+                autoComplete="email"
+                placeholder="beispiel@firma.de"
+              />
+            </Field>
           )}
         />
 

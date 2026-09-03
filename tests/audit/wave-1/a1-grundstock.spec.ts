@@ -2919,8 +2919,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage
       .getByRole("option", { name: "Material", exact: true })
       .click();
-    await itemDialog.locator("#inventory-item-unit").click();
-    await adminPage.getByRole("option", { name: "Meter", exact: true }).click();
+    await selectFromSearchable(
+      adminPage,
+      itemDialog.locator("#inventory-item-unit"),
+      "Meter",
+    );
     await itemDialog
       .locator("#inventory-item-internal-sku")
       .fill(`SKU-${world.runId}`);
@@ -3296,10 +3299,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       unit: "Einheit",
     } as const;
     for (const [field, header] of Object.entries(mappings)) {
-      await dialog.locator(`#inventory-import-${field}`).click();
-      await adminPage
-        .getByRole("option", { name: header, exact: true })
-        .click();
+      await selectFromSearchable(
+        adminPage,
+        dialog.locator(`#inventory-import-${field}`),
+        header,
+      );
     }
     await dialog.getByRole("button", { name: "Importieren" }).click();
     await expect(dialog).toHaveCount(0, { timeout: 30_000 });

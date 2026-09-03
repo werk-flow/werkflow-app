@@ -541,7 +541,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       }),
       'Für Kundendokumentation'
     );
-    await selectOption(
+    await selectFromSearchable(
       employeePage,
       dialog.getByRole('combobox', {
         name: 'Zugehörige Aufgabe oder Checkliste',
@@ -643,7 +643,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       .getByRole('button', { name: 'Dokument verknüpfen' })
       .locator('..');
     await documentDisclosure.getByRole('button', { name: 'Dokument verknüpfen' }).click();
-    await selectOption(
+    await selectFromSearchable(
       employeePage,
       dialog.getByRole('combobox', { name: 'Dokument auswählen' }),
       evidenceFileName
@@ -662,8 +662,10 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       .getByRole('button', { name: 'Zeiteintrag verknüpfen' })
       .locator('..');
     await timeEntryDisclosure.getByRole('button', { name: 'Zeiteintrag verknüpfen' }).click();
+    // The time-entry picker is a searchable select (registry rule for entity
+    // lists): its rows are buttons inside the open listbox.
     await dialog.getByRole('combobox', { name: 'Zeiteintrag auswählen' }).click();
-    const timeEntryOptions = employeePage.getByRole('option');
+    const timeEntryOptions = employeePage.getByRole('listbox').getByRole('button');
     await expect(timeEntryOptions).toHaveCount(1);
     await timeEntryOptions.click();
     await timeEntryDisclosure.getByRole('button', { name: 'Verknüpfen', exact: true }).click();

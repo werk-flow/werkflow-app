@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { TimeAccountDateField } from "@/components/zeiterfassung/time-account-date-field";
 import {
@@ -72,8 +73,7 @@ function AdjustmentRequestForms({
           </Button>
         </div>
       </div>
-      <label className="grid gap-1.5 text-sm font-medium">
-        Minuten
+      <Field label="Minuten" htmlFor={`adjustment-minutes-${account.id}`} required>
         <Input
           name="minutes"
           type="text"
@@ -82,23 +82,25 @@ function AdjustmentRequestForms({
           aria-label={`Korrektur in Minuten für ${account.employeeName}`}
           required
         />
-      </label>
-      <label className="grid gap-1.5 text-sm font-medium">
-        Wirksam am
+      </Field>
+      <Field
+        label="Wirksam am"
+        htmlFor={`adjustment-effective-date-${account.id}`}
+        required
+      >
         <TimeAccountDateField
           name="effectiveDate"
           initialValue={todayBerlin()}
           ariaLabel={`Wirksamkeitsdatum für ${account.employeeName}`}
         />
-      </label>
-      <label className="grid gap-1.5 text-sm font-medium">
-        Grund
+      </Field>
+      <Field label="Grund" htmlFor={`adjustment-reason-${account.id}`} required>
         <Input
           name="reason"
           aria-label={`Korrekturgrund für ${account.employeeName}`}
           required
         />
-      </label>
+      </Field>
       <span className="pb-2 text-xs text-muted-foreground">
         Art wählen, um zu beantragen
       </span>
@@ -174,22 +176,20 @@ export default async function TimeAccountSettingsPage() {
                 action={createStarterTimePolicy}
                 className="flex flex-wrap items-end gap-3"
               >
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Name
+                <Field label="Name" htmlFor="time-policy-name" required>
                   <Input
                     name="name"
                     defaultValue="Standard-Arbeitszeit"
                     required
                   />
-                </label>
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Gültig ab
+                </Field>
+                <Field label="Gültig ab" htmlFor="time-policy-effective-from" required>
                   <TimeAccountDateField
                     name="effectiveFrom"
                     initialValue={todayBerlin()}
                     ariaLabel="Gültig ab"
                   />
-                </label>
+                </Field>
                 <div className="flex flex-wrap gap-2">
                   <Button type="submit" name="policyKind" value="default">
                     Standardversion bestätigen
@@ -259,22 +259,28 @@ export default async function TimeAccountSettingsPage() {
                           ))}
                       </div>
                     </div>
-                    <label className="grid gap-1.5 text-sm font-medium">
-                      Gültig ab
+                    <Field
+                      label="Gültig ab"
+                      htmlFor={`policy-valid-from-${employee.employeeRecordId}`}
+                      required
+                    >
                       <TimeAccountDateField
                         name="validFrom"
                         initialValue={todayBerlin()}
                         ariaLabel={`Regel gültig ab für ${employee.employeeName}`}
                       />
-                    </label>
-                    <label className="grid gap-1.5 text-sm font-medium">
-                      Grund
+                    </Field>
+                    <Field
+                      label="Grund"
+                      htmlFor={`policy-reason-${employee.employeeRecordId}`}
+                      required
+                    >
                       <Input
                         name="reason"
                         defaultValue="Individuelle Arbeitszeitregel"
                         required
                       />
-                    </label>
+                    </Field>
                     <Button type="submit">Zuweisen</Button>
                   </form>
                 ))
@@ -311,8 +317,11 @@ export default async function TimeAccountSettingsPage() {
                       <div className="pb-2 text-sm font-medium">
                         {employee.employeeName}
                       </div>
-                      <label className="grid gap-1.5 text-sm font-medium">
-                        Anfangssaldo
+                      <Field
+                        label="Anfangssaldo"
+                        htmlFor={`opening-minutes-${employee.employeeRecordId}`}
+                        required
+                      >
                         <Input
                           name="openingMinutes"
                           type="text"
@@ -322,24 +331,30 @@ export default async function TimeAccountSettingsPage() {
                           aria-label={`Anfangssaldo in Minuten für ${employee.employeeName}`}
                           required
                         />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-medium">
-                        Eröffnungsdatum
+                      </Field>
+                      <Field
+                        label="Eröffnungsdatum"
+                        htmlFor={`opened-on-${employee.employeeRecordId}`}
+                        required
+                      >
                         <TimeAccountDateField
                           name="openedOn"
                           initialValue={todayBerlin()}
                           ariaLabel={`Eröffnungsdatum für ${employee.employeeName}`}
                         />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-medium">
-                        Grund
+                      </Field>
+                      <Field
+                        label="Grund"
+                        htmlFor={`opening-reason-${employee.employeeRecordId}`}
+                        required
+                      >
                         <Input
                           name="reason"
                           defaultValue="Einführung des Zeitkontos"
                           aria-label={`Eröffnungsgrund für ${employee.employeeName}`}
                           required
                         />
-                      </label>
+                      </Field>
                       <Button type="submit">Konto eröffnen</Button>
                     </form>
                   ))}

@@ -16,15 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { Field } from '@/components/ui/field'
+import { Form, FormField } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -145,19 +138,24 @@ export function TimeTrackingSettingsForm({
               <FormField
                 control={form.control}
                 name="breakMode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Art der Pausenbuchung</FormLabel>
+                render={({ field, fieldState }) => (
+                  <Field
+                    label="Art der Pausenbuchung"
+                    required
+                    description={
+                      BREAK_MODE_OPTIONS.find((option) => option.value === field.value)
+                        ?.description ?? BREAK_MODE_OPTIONS[0].description
+                    }
+                    error={fieldState.error?.message}
+                  >
                     <Select
                       disabled={!canEdit || isSaving}
                       onValueChange={field.onChange}
                       value={field.value}
                     >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Bitte wählen" />
-                        </SelectTrigger>
-                      </FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Bitte wählen" />
+                      </SelectTrigger>
                       <SelectContent>
                         {BREAK_MODE_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
@@ -166,12 +164,7 @@ export function TimeTrackingSettingsForm({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      {BREAK_MODE_OPTIONS.find((option) => option.value === field.value)
-                        ?.description ?? BREAK_MODE_OPTIONS[0].description}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+                  </Field>
                 )}
               />
 
@@ -179,10 +172,13 @@ export function TimeTrackingSettingsForm({
                 <FormField
                   control={form.control}
                   name="autoBreakThresholdMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Automatische Schwelle (Minuten)</FormLabel>
-                      <FormControl>
+                  render={({ field, fieldState }) => (
+                    <Field
+                      label="Automatische Schwelle (Minuten)"
+                      required
+                      description="Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt."
+                      error={fieldState.error?.message}
+                    >
                         <Input
                           name={field.name}
                           ref={field.ref}
@@ -197,23 +193,19 @@ export function TimeTrackingSettingsForm({
                             )
                           }
                         />
-                      </FormControl>
-                      <FormDescription>
-                        Ab dieser gesamten Anwesenheitszeit wird die automatische Pause
-                        berücksichtigt.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                    </Field>
                   )}
                 />
 
                 <FormField
                   control={form.control}
                   name="autoBreakDurationMinutes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Automatische Pausendauer (Minuten)</FormLabel>
-                      <FormControl>
+                  render={({ field, fieldState }) => (
+                    <Field
+                      label="Automatische Pausendauer (Minuten)"
+                      description="Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist."
+                      error={fieldState.error?.message}
+                    >
                         <Input
                           name={field.name}
                           ref={field.ref}
@@ -228,13 +220,7 @@ export function TimeTrackingSettingsForm({
                             )
                           }
                         />
-                      </FormControl>
-                      <FormDescription>
-                        Diese Minuten werden automatisch abgezogen, sobald die Schwelle
-                        erreicht ist.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                    </Field>
                   )}
                 />
               </div>

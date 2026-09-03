@@ -8,7 +8,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -331,6 +331,11 @@ function ConditionDialog({
   const [note, setNote] = useState<string>(condition?.note ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    validFrom?: string;
+    weeklyHours?: string;
+    vacationDays?: string;
+  }>({});
   const { showBanner } = useBanner();
 
   const parseOptionalNumber = (value: string): number | null | undefined => {
@@ -346,13 +351,28 @@ function ConditionDialog({
     setError(null);
 
     const parsedWeeklyHours = parseOptionalNumber(weeklyHours);
-    if (parsedWeeklyHours === undefined) {
-      setError('Bitte gib die Wochenstunden als Zahl an.');
-      return;
-    }
     const parsedVacationDays = parseOptionalNumber(vacationDays);
-    if (parsedVacationDays === undefined) {
-      setError('Bitte gib die Urlaubstage als Zahl an.');
+    const nextFieldErrors = {
+      validFrom: validFrom ? undefined : CONDITION_ERROR_MESSAGES.invalid_valid_from,
+      weeklyHours:
+        parsedWeeklyHours === undefined
+          ? 'Bitte gib die Wochenstunden als Zahl an.'
+          : undefined,
+      vacationDays:
+        parsedVacationDays === undefined
+          ? 'Bitte gib die Urlaubstage als Zahl an.'
+          : undefined,
+    };
+    setFieldErrors(nextFieldErrors);
+    const firstInvalidId = nextFieldErrors.validFrom
+      ? 'condition-valid-from'
+      : nextFieldErrors.weeklyHours
+        ? 'condition-weekly-hours'
+        : nextFieldErrors.vacationDays
+          ? 'condition-vacation-days'
+          : null;
+    if (firstInvalidId) {
+      document.getElementById(firstInvalidId)?.focus();
       return;
     }
 
@@ -360,8 +380,8 @@ function ConditionDialog({
     const input = {
       validFrom,
       employmentType,
-      weeklyHours: parsedWeeklyHours,
-      vacationDaysPerYear: parsedVacationDays,
+      weeklyHours: parsedWeeklyHours ?? null,
+      vacationDaysPerYear: parsedVacationDays ?? null,
       note: note.trim().length > 0 ? note.trim() : null,
     };
     const result = condition
@@ -401,10 +421,13 @@ function ConditionDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="condition-valid-from">Gültig ab</Label>
+            <Field
+              label="Gültig ab"
+              htmlFor="condition-valid-from"
+              required
+              error={fieldErrors.validFrom}
+            >
               <DatePicker
-                id="condition-valid-from"
                 ariaLabel="Gültig ab"
                 value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
                 onChange={(date) =>
@@ -412,9 +435,8 @@ function ConditionDialog({
                 }
                 disabled={isSaving}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="condition-type">Beschäftigungsart</Label>
+            </Field>
+            <Field label="Beschäftigungsart" htmlFor="condition-type" required>
               <Select
                 value={employmentType}
                 onValueChange={(value) =>
@@ -422,7 +444,7 @@ function ConditionDialog({
                 }
                 disabled={isSaving}
               >
-                <SelectTrigger id="condition-type">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -433,44 +455,43 @@ function ConditionDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="condition-weekly-hours">Wochenstunden</Label>
+              <Field
+                label="Wochenstunden"
+                htmlFor="condition-weekly-hours"
+                error={fieldErrors.weeklyHours}
+              >
                 <Input
-                  id="condition-weekly-hours"
                   inputMode="decimal"
                   placeholder="z. B. 40"
                   value={weeklyHours}
                   onChange={(e) => setWeeklyHours(e.target.value)}
                   disabled={isSaving}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="condition-vacation-days">
-                  Urlaubstage/Jahr
-                </Label>
+              </Field>
+              <Field
+                label="Urlaubstage/Jahr"
+                htmlFor="condition-vacation-days"
+                error={fieldErrors.vacationDays}
+              >
                 <Input
-                  id="condition-vacation-days"
                   inputMode="decimal"
                   placeholder="z. B. 30"
                   value={vacationDays}
                   onChange={(e) => setVacationDays(e.target.value)}
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="condition-note">Notiz</Label>
+            <Field label="Notiz" htmlFor="condition-note">
               <Textarea
-                id="condition-note"
-                rows={2}
                 placeholder="z. B. Probezeit bis 30.09."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -482,7 +503,7 @@ function ConditionDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !validFrom}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird gespeichert...' : 'Speichern'}
             </Button>

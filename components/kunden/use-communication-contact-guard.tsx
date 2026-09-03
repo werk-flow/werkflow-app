@@ -2,7 +2,7 @@
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   evaluateCustomerCommunicationGuidance,
@@ -59,6 +59,8 @@ export function useCommunicationContactGuard({
   const { showBanner } = useBanner();
   const [pendingContact, setPendingContact] = useState<PendingContact | null>(null);
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const { run: runGuardTask, isPending } = usePendingTask();
 
   function requestContact(input: Omit<PendingContact, 'warnings'>) {
@@ -83,12 +85,18 @@ export function useCommunicationContactGuard({
         return;
       }
       setReason('');
+      setReasonError(null);
       setPendingContact({ ...input, warnings: result.data.warnings });
     });
   }
 
   function continueWithException() {
-    if (!pendingContact || !reason.trim()) return;
+    if (!pendingContact) return;
+    if (!reason.trim()) {
+      setReasonError('Bitte begründe die Ausnahme.');
+      reasonRef.current?.focus();
+      return;
+    }
     void runGuardTask(async () => {
       const result = await recordCustomerCommunicationException(clientId, {
         contactId: pendingContact.contactId,
@@ -134,22 +142,28 @@ export function useCommunicationContactGuard({
               </li>
             ))}
           </ul>
-          <div className="space-y-2">
-            <Label htmlFor="contact-exception-reason">Begründung für die Ausnahme</Label>
+          <Field
+            label="Begründung für die Ausnahme"
+            htmlFor="contact-exception-reason"
+            required
+            error={reasonError}
+          >
             <Textarea
-              id="contact-exception-reason"
+              ref={reasonRef}
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setReasonError(null);
+              }}
               placeholder="Warum ist dieser Kontakt im konkreten Fall erforderlich?"
               maxLength={1000}
-              rows={3}
               autoFocus
             />
-          </div>
+          </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setPendingContact(null)} disabled={isPending}>Abbrechen</Button>
-          <Button onClick={continueWithException} disabled={isPending || !reason.trim()}>
+          <Button onClick={continueWithException} disabled={isPending}>
             {isPending && <Loader2 className="size-4 animate-spin" />}
             Begründet fortfahren
           </Button>

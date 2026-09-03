@@ -20,6 +20,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogBody,
@@ -30,6 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1288,6 +1290,13 @@ function ItemDialog({
 }) {
   const unitOptions: InventoryUnitOption[] = INVENTORY_UNIT_OPTIONS;
   const initialQuantity = decimalFromInput(form.initialQuantity);
+  const [attempted, setAttempted] = useState(false);
+  const nameError =
+    attempted && !form.name.trim() ? 'Bitte gib einen Namen ein.' : undefined;
+  const initialLocationError =
+    attempted && !form.id && initialQuantity > 0 && !form.initialLocationId
+      ? 'Wähle ein Lager für den Startbestand.'
+      : undefined;
 
   const supplierItems = useMemo(() => {
     const items: Array<{ id: string; name: string }> = [...suppliers];
@@ -1310,6 +1319,15 @@ function ItemDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setAttempted(true);
+            if (!form.name.trim()) {
+              document.getElementById('inventory-item-name')?.focus();
+              return;
+            }
+            if (!form.id && initialQuantity > 0 && !form.initialLocationId) {
+              document.getElementById('inventory-item-initial-location')?.focus();
+              return;
+            }
             onSave();
           }}
           noValidate
@@ -1317,9 +1335,8 @@ function ItemDialog({
         >
         <DialogBody className="grid gap-4 py-1 sm:grid-cols-2">
           <h3 className="text-sm font-semibold sm:col-span-2">Stammdaten</h3>
-          <Field label="Name" htmlFor="inventory-item-name">
+          <Field label="Name" htmlFor="inventory-item-name" required error={nameError}>
             <Input
-              id="inventory-item-name"
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
@@ -1331,7 +1348,7 @@ function ItemDialog({
                 setForm({ ...form, itemType: value as InventoryItemType })
               }
             >
-              <SelectTrigger id="inventory-item-type">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1345,7 +1362,6 @@ function ItemDialog({
           </Field>
           <Field label="Kategorie" htmlFor="inventory-item-category">
             <SearchableSelect
-              id="inventory-item-category"
               options={categories.map((category) => ({
                 value: category.id,
                 label: category.name,
@@ -1362,30 +1378,25 @@ function ItemDialog({
             />
           </Field>
           <Field label="Einheit" htmlFor="inventory-item-unit">
-            <Select
+            <SearchableSelect
+              options={unitOptions}
               value={form.unit}
-              onValueChange={(value) => setForm({ ...form, unit: value })}
-            >
-              <SelectTrigger id="inventory-item-unit">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {unitOptions.map((unit) => (
-                  <SelectItem key={unit.value} value={unit.value}>
-                    {unit.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(value) => setForm({ ...form, unit: value })}
+              searchPlaceholder="Einheit suchen …"
+              emptyMessage="Keine Einheit gefunden"
+            />
           </Field>
           <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
             Bestand & Kennzeichnung
           </h3>
           {!form.id && (
             <>
-              <Field label="Lager" htmlFor="inventory-item-initial-location">
+              <Field
+                label="Lager"
+                htmlFor="inventory-item-initial-location"
+                error={initialLocationError}
+              >
                 <LocationSelectWithCreate
-                  id="inventory-item-initial-location"
                   locations={locations}
                   value={form.initialLocationId}
                   onValueChange={(value) =>
@@ -1396,9 +1407,19 @@ function ItemDialog({
                   noneLabel="Noch kein Lager"
                 />
               </Field>
-              <Field label="Startbestand" htmlFor="inventory-item-initial-quantity">
+              <Field
+                label="Startbestand"
+                htmlFor="inventory-item-initial-quantity"
+                description={
+                  initialQuantity > 0
+                    ? `Beim Speichern werden ${formatInventoryQuantity(
+                        initialQuantity,
+                        form.unit
+                      )} in das gewählte Lager gebucht.`
+                    : 'Ohne Startbestand wird nur der Artikel angelegt.'
+                }
+              >
                 <QuantityStepper
-                  id="inventory-item-initial-quantity"
                   value={form.initialQuantity}
                   onChange={(value) =>
                     setForm({ ...form, initialQuantity: value })
@@ -1406,20 +1427,11 @@ function ItemDialog({
                   unitLabel={getInventoryUnitLabel(form.unit)}
                   min={0}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {initialQuantity > 0
-                    ? `Beim Speichern werden ${formatInventoryQuantity(
-                        initialQuantity,
-                        form.unit
-                      )} in das gewählte Lager gebucht.`
-                    : 'Ohne Startbestand wird nur der Artikel angelegt.'}
-                </p>
               </Field>
             </>
           )}
           <Field label="Interne SKU" htmlFor="inventory-item-internal-sku">
             <Input
-              id="inventory-item-internal-sku"
               value={form.internalSku}
               onChange={(event) =>
                 setForm({ ...form, internalSku: event.target.value })
@@ -1428,14 +1440,12 @@ function ItemDialog({
           </Field>
           <Field label="Barcode" htmlFor="inventory-item-barcode">
             <Input
-              id="inventory-item-barcode"
               value={form.barcode}
               onChange={(event) => setForm({ ...form, barcode: event.target.value })}
             />
           </Field>
           <Field label="Mindestbestand" htmlFor="inventory-item-minimum-stock">
             <Input
-              id="inventory-item-minimum-stock"
               inputMode="decimal"
               value={form.globalMinimumStock}
               onChange={(event) =>
@@ -1445,7 +1455,6 @@ function ItemDialog({
           </Field>
           <Field label="Zielbestand" htmlFor="inventory-item-target-stock">
             <Input
-              id="inventory-item-target-stock"
               inputMode="decimal"
               value={form.globalTargetStock}
               onChange={(event) =>
@@ -1458,7 +1467,6 @@ function ItemDialog({
           </h3>
           <Field label="Hersteller" htmlFor="inventory-item-manufacturer">
             <Input
-              id="inventory-item-manufacturer"
               value={form.manufacturer}
               onChange={(event) =>
                 setForm({ ...form, manufacturer: event.target.value })
@@ -1467,7 +1475,6 @@ function ItemDialog({
           </Field>
           <Field label="Lieferant" htmlFor="inventory-item-supplier">
             <SelectWithCreate
-              id="inventory-item-supplier"
               items={supplierItems}
               getOption={(supplier) => ({
                 value: supplier.id,
@@ -1510,7 +1517,6 @@ function ItemDialog({
           </Field>
           <Field label="Lieferanten-Nr." htmlFor="inventory-item-supplier-number">
             <Input
-              id="inventory-item-supplier-number"
               value={form.supplierArticleNumber}
               onChange={(event) =>
                 setForm({ ...form, supplierArticleNumber: event.target.value })
@@ -1519,7 +1525,6 @@ function ItemDialog({
           </Field>
           <Field label="Einkaufspreis" htmlFor="inventory-item-purchase-price">
             <Input
-              id="inventory-item-purchase-price"
               inputMode="decimal"
               value={form.purchasePrice}
               onChange={(event) =>
@@ -1529,7 +1534,6 @@ function ItemDialog({
           </Field>
           <Field label="Verkaufspreis" htmlFor="inventory-item-sale-price">
             <Input
-              id="inventory-item-sale-price"
               inputMode="decimal"
               value={form.salePrice}
               onChange={(event) =>
@@ -1537,39 +1541,34 @@ function ItemDialog({
               }
             />
           </Field>
-          <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+            <Checkbox
+              id="inventory-item-billable"
               checked={form.isBillable}
-              onChange={(event) =>
-                setForm({ ...form, isBillable: event.target.checked })
+              onCheckedChange={(checked) =>
+                setForm({ ...form, isBillable: checked === true })
               }
-              className="size-4 rounded border-input"
             />
-            Abrechenbar
-          </label>
+            <Label htmlFor="inventory-item-billable">Abrechenbar</Label>
+          </div>
           <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">
             Beschreibung & Notizen
           </h3>
           <div className="sm:col-span-2">
             <Field label="Beschreibung" htmlFor="inventory-item-description">
               <Textarea
-                id="inventory-item-description"
                 value={form.description}
                 onChange={(event) =>
                   setForm({ ...form, description: event.target.value })
                 }
-                rows={3}
               />
             </Field>
           </div>
           <div className="sm:col-span-2">
             <Field label="Notizen" htmlFor="inventory-item-notes">
               <Textarea
-                id="inventory-item-notes"
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                rows={3}
               />
             </Field>
           </div>
@@ -1586,7 +1585,7 @@ function ItemDialog({
           >
             Abbrechen
           </Button>
-          <Button type="submit" disabled={isSaving || !form.name.trim()}>
+          <Button type="submit" disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Speichern
           </Button>
@@ -1634,9 +1633,8 @@ function SupplierQuickCreateDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
-          <Field label="Name" htmlFor="inventory-new-supplier-name">
+          <Field label="Name" htmlFor="inventory-new-supplier-name" required>
             <Input
-              id="inventory-new-supplier-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="z. B. Großhandel Nord GmbH"
@@ -1677,6 +1675,9 @@ function LocationDialog({
   error: string | null;
   onSave: () => void;
 }) {
+  const [attempted, setAttempted] = useState(false);
+  const nameError =
+    attempted && !form.name.trim() ? 'Bitte gib einen Namen ein.' : undefined;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -1687,14 +1688,18 @@ function LocationDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setAttempted(true);
+            if (!form.name.trim()) {
+              document.getElementById('inventory-location-name')?.focus();
+              return;
+            }
             onSave();
           }}
           noValidate
           className="space-y-4"
         >
-          <Field label="Name" htmlFor="inventory-location-name">
+          <Field label="Name" htmlFor="inventory-location-name" required error={nameError}>
             <Input
-              id="inventory-location-name"
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
@@ -1706,7 +1711,7 @@ function LocationDialog({
                 setForm({ ...form, locationType: value as InventoryLocationType })
               }
             >
-              <SelectTrigger id="inventory-location-type">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1720,12 +1725,10 @@ function LocationDialog({
           </Field>
           <Field label="Beschreibung" htmlFor="inventory-location-description">
             <Textarea
-              id="inventory-location-description"
               value={form.description}
               onChange={(event) =>
                 setForm({ ...form, description: event.target.value })
               }
-              rows={3}
             />
           </Field>
           <ErrorText>{error}</ErrorText>
@@ -1738,7 +1741,7 @@ function LocationDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !form.name.trim()}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
               Speichern
             </Button>
@@ -1768,6 +1771,13 @@ function StockAdjustmentDialog({
   const selectedLocation = state
     ? locations.find((location) => location.id === state.locationId)
     : null;
+  const [attempted, setAttempted] = useState(false);
+  const locationError =
+    attempted && state && !state.locationId ? 'Bitte wähle ein Lager.' : undefined;
+  const quantityError =
+    attempted && state && quantity <= 0
+      ? 'Bitte gib eine Menge größer als 0 ein.'
+      : undefined;
 
   return (
     <Dialog open={!!state} onOpenChange={(open) => !open && setState(null)}>
@@ -1779,6 +1789,15 @@ function StockAdjustmentDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setAttempted(true);
+            if (!state?.locationId) {
+              document.getElementById('inventory-stock-location')?.focus();
+              return;
+            }
+            if (quantity <= 0) {
+              document.getElementById('inventory-stock-quantity')?.focus();
+              return;
+            }
             onSave();
           }}
           noValidate
@@ -1786,7 +1805,8 @@ function StockAdjustmentDialog({
         >
         {state && (
           <div className="space-y-4">
-            <Field label="Aktion" labelId="inventory-stock-action-label">
+            <div className="space-y-2">
+              <Label id="inventory-stock-action-label">Aktion</Label>
               <div
                 className="grid grid-cols-2 gap-2"
                 role="group"
@@ -1807,10 +1827,14 @@ function StockAdjustmentDialog({
                   Entnehmen
                 </Button>
               </div>
-            </Field>
-            <Field label="Lager" htmlFor="inventory-stock-location">
+            </div>
+            <Field
+              label="Lager"
+              htmlFor="inventory-stock-location"
+              required
+              error={locationError}
+            >
               <LocationSelectWithCreate
-                id="inventory-stock-location"
                 locations={locations}
                 value={state.locationId}
                 onValueChange={(value) =>
@@ -1822,9 +1846,10 @@ function StockAdjustmentDialog({
             <Field
               label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
               htmlFor="inventory-stock-quantity"
+              required
+              error={quantityError}
             >
               <QuantityStepper
-                id="inventory-stock-quantity"
                 value={state.quantity}
                 onChange={(value) => setState({ ...state, quantity: value })}
                 unitLabel={getInventoryUnitLabel(state.item.unit)}
@@ -1833,12 +1858,10 @@ function StockAdjustmentDialog({
             </Field>
             <Field label="Grund" htmlFor="inventory-stock-reason">
               <Textarea
-                id="inventory-stock-reason"
                 value={state.reason}
                 onChange={(event) =>
                   setState({ ...state, reason: event.target.value })
                 }
-                rows={3}
               />
             </Field>
             <p
@@ -1871,10 +1894,7 @@ function StockAdjustmentDialog({
           >
             Abbrechen
           </Button>
-          <Button
-            type="submit"
-            disabled={isSaving || !state?.locationId || !state.quantity.trim()}
-          >
+          <Button type="submit" disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Speichern
           </Button>
@@ -1907,6 +1927,15 @@ function ImportDialog({
   const [mapping, setMapping] = useState<Partial<Record<ImportColumnKey, string>>>({});
   const [error, setError] = useState<string | null>(null);
   const { run: runImportTask, isPending } = usePendingTask();
+  const [attempted, setAttempted] = useState(false);
+  const fileError =
+    attempted && rows.length === 0
+      ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.'
+      : undefined;
+  const nameMappingError =
+    attempted && rows.length > 0 && !mapping.name
+      ? 'Ordne die Spalte mit dem Artikelnamen zu.'
+      : undefined;
 
   function resetImportState() {
     setFileName('');
@@ -1914,6 +1943,7 @@ function ImportDialog({
     setRows([]);
     setMapping({});
     setError(null);
+    setAttempted(false);
   }
 
   function handleOpenChange(nextOpen: boolean) {
@@ -2007,17 +2037,28 @@ function ImportDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            setAttempted(true);
+            if (rows.length === 0) {
+              document.getElementById('inventory-import-file')?.focus();
+              return;
+            }
+            if (!mapping.name) {
+              document.getElementById('inventory-import-name')?.focus();
+              return;
+            }
             handleImport();
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
         <DialogBody className="space-y-4 py-1">
-          <Input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
-          />
+          <Field label="CSV-Datei" htmlFor="inventory-import-file" required error={fileError}>
+            <Input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => handleFile(event.target.files?.[0] ?? null)}
+            />
+          </Field>
 
           {headers.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -2026,28 +2067,24 @@ function ImportDialog({
                   key={column.key}
                   label={column.label}
                   htmlFor={`inventory-import-${column.key}`}
+                  required={column.key === 'name'}
+                  error={column.key === 'name' ? nameMappingError : undefined}
                 >
-                  <Select
-                    value={mapping[column.key] ?? NONE_VALUE}
-                    onValueChange={(value) =>
+                  <SearchableSelect
+                    options={headers.map((header) => ({ value: header, label: header }))}
+                    value={mapping[column.key] ?? ''}
+                    onChange={(value) =>
                       setMapping({
                         ...mapping,
-                        [column.key]: value === NONE_VALUE ? undefined : value,
+                        [column.key]: value || undefined,
                       })
                     }
-                  >
-                    <SelectTrigger id={`inventory-import-${column.key}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE_VALUE}>Nicht importieren</SelectItem>
-                      {headers.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Nicht importieren"
+                    searchPlaceholder="Spalte suchen …"
+                    emptyMessage="Keine Spalte gefunden"
+                    allowNone
+                    noneLabel="Nicht importieren"
+                  />
                 </Field>
               ))}
             </div>
@@ -2064,10 +2101,7 @@ function ImportDialog({
           >
             Abbrechen
           </Button>
-          <Button
-            type="submit"
-            disabled={isPending || rows.length === 0 || !mapping.name}
-          >
+          <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             Importieren
           </Button>
@@ -2075,26 +2109,5 @@ function ImportDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  children,
-  htmlFor,
-  labelId,
-}: {
-  label: string;
-  children: ReactNode;
-  htmlFor?: string;
-  labelId?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={htmlFor} id={labelId}>
-        {label}
-      </Label>
-      {children}
-    </div>
   );
 }

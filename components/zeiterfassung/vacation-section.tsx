@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
@@ -281,11 +283,7 @@ export function VacationSection() {
                 </li>
               ))}
             </ul>
-            {listError && (
-              <p role="alert" className="mt-2 text-sm text-destructive">
-                {listError}
-              </p>
-            )}
+            <ErrorText className="mt-2">{listError}</ErrorText>
           </CardContent>
         </Card>
       )}
@@ -322,6 +320,7 @@ function VacationRequestDialog({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const previewGenerationRef = useRef(0);
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const isSingleDay = startDate === endDate;
   const dayPortion = halfDay && isSingleDay ? 'half_day' : 'full';
@@ -371,12 +370,19 @@ function VacationRequestDialog({
     if (isSaving) return;
     setError(null);
 
-    if (!startDate || !endDate) {
-      setError('Bitte wähle Start- und Enddatum aus.');
-      return;
-    }
-    if (endDate < startDate) {
-      setError(REQUEST_ERROR_MESSAGES.invalid_range);
+    const nextDateErrors = {
+      start: startDate ? undefined : 'Bitte wähle ein Startdatum aus.',
+      end: !endDate
+        ? 'Bitte wähle ein Enddatum aus.'
+        : endDate < startDate
+          ? REQUEST_ERROR_MESSAGES.invalid_range
+          : undefined,
+    };
+    setDateErrors(nextDateErrors);
+    if (nextDateErrors.start || nextDateErrors.end) {
+      document
+        .getElementById(nextDateErrors.start ? 'vacation-start-date' : 'vacation-end-date')
+        ?.focus();
       return;
     }
 
@@ -413,10 +419,13 @@ function VacationRequestDialog({
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="vacation-start-date">Von</Label>
+              <Field
+                label="Von"
+                htmlFor="vacation-start-date"
+                required
+                error={dateErrors.start}
+              >
                 <DatePicker
-                  id="vacation-start-date"
                   ariaLabel="Von"
                   value={
                     startDate ? new Date(`${startDate}T00:00:00`) : undefined
@@ -432,11 +441,14 @@ function VacationRequestDialog({
                   }}
                   disabled={isSaving}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="vacation-end-date">Bis</Label>
+              </Field>
+              <Field
+                label="Bis"
+                htmlFor="vacation-end-date"
+                required
+                error={dateErrors.end ?? rangePreviewError}
+              >
                 <DatePicker
-                  id="vacation-end-date"
                   ariaLabel="Bis"
                   value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                   onChange={(date) => {
@@ -447,7 +459,7 @@ function VacationRequestDialog({
                   }}
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
             </div>
 
             <div className="flex items-center gap-2">
@@ -486,9 +498,7 @@ function VacationRequestDialog({
                   Berechnete Urlaubstage:{' '}
                   <strong>{formatVacationDays(previewDays)}</strong>
                 </span>
-              ) : rangePreviewError ? (
-                <span className="text-destructive">{rangePreviewError}</span>
-              ) : previewError ? (
+              ) : rangePreviewError ? null : previewError ? (
                 <span className="flex items-center justify-between gap-3 text-destructive">
                   {PREVIEW_ERROR_MESSAGES[previewError] ??
                     'Die Urlaubstage konnten nicht berechnet werden.'}
@@ -509,17 +519,14 @@ function VacationRequestDialog({
               ) : null}
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="vacation-comment">Notiz (optional)</Label>
+            <Field label="Notiz (optional)" htmlFor="vacation-comment">
               <Textarea
-                id="vacation-comment"
-                rows={2}
                 placeholder="z. B. Familienfeier"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
 
             {!hasEntitlement && (
               <p className="text-xs text-muted-foreground">
@@ -529,11 +536,7 @@ function VacationRequestDialog({
               </p>
             )}
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             <Button
@@ -544,16 +547,7 @@ function VacationRequestDialog({
             >
               Abbrechen
             </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSaving ||
-                isPreviewing ||
-                Boolean(rangePreviewError) ||
-                !startDate ||
-                !endDate
-              }
-            >
+            <Button type="submit" disabled={isSaving || isPreviewing}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird eingereicht...' : 'Antrag einreichen'}
             </Button>

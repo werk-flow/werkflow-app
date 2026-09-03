@@ -3,6 +3,7 @@ import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ErrorText } from '@/components/ui/error-text';
 import type {
   PersonnelQualificationSummary,
 } from '@/lib/qualifications/types';
@@ -17,9 +18,9 @@ export function PersonnelQualificationSummary({
   if (!data) {
     return (
       <Card className="p-4">
-        <p role="alert" className="text-sm text-destructive">
+        <ErrorText>
           Teams und Qualifikationen konnten nicht geladen werden.
-        </p>
+        </ErrorText>
       </Card>
     );
   }

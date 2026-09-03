@@ -28,6 +28,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -315,14 +317,7 @@ export function EquipmentDetailContent({
             markiert. Seine Historie bleibt erhalten.
           </p>
         )}
-        {error && (
-          <p
-            role="alert"
-            className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <div className="space-y-6">
@@ -379,12 +374,9 @@ export function EquipmentDetailContent({
             </section>
 
             {documentsLoadFailed ? (
-              <p
-                role="alert"
-                className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-              >
+              <SectionError>
                 Dokumente und Bilder konnten nicht geladen werden.
-              </p>
+              </SectionError>
             ) : (
               <ContextualDocumentsSection
                 title="Dokumente & Bilder"
@@ -685,13 +677,12 @@ export function EquipmentDetailContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="equipment-target-state">Neuer Zustand</Label>
+            <Field label="Neuer Zustand" htmlFor="equipment-target-state">
               <Select
                 value={targetState}
                 onValueChange={(value: EquipmentState) => setTargetState(value)}
               >
-                <SelectTrigger id="equipment-target-state">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -702,15 +693,13 @@ export function EquipmentDetailContent({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-state-reason">Begründung</Label>
+            </Field>
+            <Field label="Begründung" htmlFor="equipment-state-reason" required>
               <Textarea
-                id="equipment-state-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStatusOpen(false)}>
@@ -748,8 +737,7 @@ export function EquipmentDetailContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="equipment-work-type">Art</Label>
+            <Field label="Art" htmlFor="equipment-work-type">
               <Select
                 value={workTargetType}
                 onValueChange={(value: "job" | "project") => {
@@ -757,7 +745,7 @@ export function EquipmentDetailContent({
                   setWorkTargetId("");
                 }}
               >
-                <SelectTrigger id="equipment-work-type">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -765,13 +753,13 @@ export function EquipmentDetailContent({
                   <SelectItem value="project">Projekt</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-work-target">
-                {workTargetType === "job" ? "Auftrag" : "Projekt"}
-              </Label>
+            </Field>
+            <Field
+              label={workTargetType === "job" ? "Auftrag" : "Projekt"}
+              htmlFor="equipment-work-target"
+              required
+            >
               <SearchableSelect
-                id="equipment-work-target"
                 value={workTargetId}
                 onChange={setWorkTargetId}
                 options={(workTargetType === "job" ? jobs : projects)
@@ -786,7 +774,7 @@ export function EquipmentDetailContent({
                 placeholder="Auswählen"
                 searchPlaceholder="Suchen..."
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWorkLinkOpen(false)}>
@@ -828,10 +816,8 @@ export function EquipmentDetailContent({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="equipment-source">Nachweis</Label>
+            <Field label="Nachweis" htmlFor="equipment-source" required>
               <SearchableSelect
-                id="equipment-source"
                 value={sourceValue}
                 onChange={setSourceValue}
                 options={sourceOptions.map((option) => ({
@@ -843,18 +829,18 @@ export function EquipmentDetailContent({
                 searchPlaceholder="Nachweis suchen..."
                 emptyMessage="Keine passenden Nachweise verfügbar"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-source-reason">
-                Bedeutung des Nachweises
-              </Label>
+            </Field>
+            <Field
+              label="Bedeutung des Nachweises"
+              htmlFor="equipment-source-reason"
+              required
+            >
               <Textarea
-                id="equipment-source-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="z. B. Installation laut Übergabestand"
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSourceOpen(false)}>
@@ -897,14 +883,12 @@ export function EquipmentDetailContent({
               der irrtümliche Nachfolger als korrigierter Datensatz erhalten.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="equipment-correction-reason">Korrekturgrund</Label>
+          <Field label="Korrekturgrund" htmlFor="equipment-correction-reason" required>
             <Textarea
-              id="equipment-correction-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
-          </div>
+          </Field>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
@@ -943,14 +927,12 @@ export function EquipmentDetailContent({
               erhalten.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="equipment-archive-reason">Begründung</Label>
+          <Field label="Begründung" htmlFor="equipment-archive-reason" required>
             <Textarea
-              id="equipment-archive-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
-          </div>
+          </Field>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction

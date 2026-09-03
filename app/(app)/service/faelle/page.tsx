@@ -1,3 +1,4 @@
+import { SectionError } from "@/components/ui/section-error";
 import { cache, Suspense } from "react";
 import { redirect } from "next/navigation";
 
@@ -42,7 +43,7 @@ async function ServiceCaseList() {
   if (!result.success) {
     if (result.error === "not_authorized") redirect("/auftraege");
     if (["not_authenticated", "no_active_org", "not_a_member"].includes(result.error)) redirect("/login");
-    return <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">Servicefälle konnten nicht geladen werden.</p>;
+    return <SectionError>Servicefälle konnten nicht geladen werden.</SectionError>;
   }
   return <ServiceCaseListContent initialCases={result.workspace.cases} clients={result.workspace.clients} />;
 }

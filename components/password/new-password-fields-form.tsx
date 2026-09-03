@@ -6,13 +6,9 @@ import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
 import {
   getPasswordConfirmationError,
@@ -97,51 +93,45 @@ export function NewPasswordFieldsForm({
           control={form.control}
           name="password"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Neues Passwort</FormLabel>
-              <FormControl>
-                <PasswordInput
-                  {...field}
-                  autoComplete="new-password"
-                  placeholder="Neues Passwort"
-                  onChange={(event) => {
-                    clearValidationError();
-                    field.onChange(event);
-                  }}
-                />
-              </FormControl>
+            <Field label="Neues Passwort" required>
+              <PasswordInput
+                {...field}
+                autoComplete="new-password"
+                placeholder="Neues Passwort"
+                onChange={(event) => {
+                  clearValidationError();
+                  field.onChange(event);
+                }}
+              />
               <PasswordStrengthMeter className="mt-2" level={strengthLevel} />
               <PasswordRequirements className="mt-2" requirements={requirements} />
-            </FormItem>
+            </Field>
           )}
         />
 
         <FormField
           control={form.control}
           name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Passwort bestätigen</FormLabel>
-              <FormControl>
-                <PasswordInput
-                  {...field}
-                  autoComplete="new-password"
-                  placeholder="Passwort wiederholen"
-                  onChange={(event) => {
-                    clearValidationError();
-                    field.onChange(event);
-                  }}
-                />
-              </FormControl>
-            </FormItem>
+          render={({ field, fieldState }) => (
+            <Field
+              label="Passwort bestätigen"
+              required
+              error={fieldState.error?.message}
+            >
+              <PasswordInput
+                {...field}
+                autoComplete="new-password"
+                placeholder="Passwort wiederholen"
+                onChange={(event) => {
+                  clearValidationError();
+                  field.onChange(event);
+                }}
+              />
+            </Field>
           )}
         />
 
-        {displayError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {displayError}
-          </div>
-        ) : null}
+        <ErrorText>{displayError}</ErrorText>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           {onBack ? (

@@ -1,3 +1,4 @@
+import { SectionError } from "@/components/ui/section-error";
 import { notFound, redirect } from "next/navigation";
 
 import { ServiceCaseDetailContent } from "@/components/service/service-case-detail-content";
@@ -11,7 +12,7 @@ export default async function ServiceCasePage({ params }: { params: Promise<{ ca
     if (result.error === "service_case_not_found") notFound();
     if (result.error === "not_authorized") redirect("/auftraege");
     if (["not_authenticated", "no_active_org", "not_a_member"].includes(result.error)) redirect("/login");
-    return <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">Der Servicefall konnte nicht geladen werden.</p>;
+    return <SectionError>Der Servicefall konnte nicht geladen werden.</SectionError>;
   }
   const documentsResult = await getServiceCaseDocuments(
     result.workspace.serviceCase.id,

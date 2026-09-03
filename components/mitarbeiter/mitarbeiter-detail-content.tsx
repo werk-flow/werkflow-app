@@ -14,6 +14,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
@@ -474,12 +475,7 @@ export function MitarbeiterDetailContent({
         }
       />
       {actionError && !showRemoveDialog ? (
-        <div
-          role="alert"
-          className="mx-4 mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
-        >
-          {actionError}
-        </div>
+        <ErrorText className="mx-4 mt-4 sm:mx-6">{actionError}</ErrorText>
       ) : null}
 
       <PageBody>
@@ -735,11 +731,7 @@ export function MitarbeiterDetailContent({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {actionError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {actionError}
-            </p>
-          ) : null}
+          <ErrorText>{actionError}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>
               Abbrechen

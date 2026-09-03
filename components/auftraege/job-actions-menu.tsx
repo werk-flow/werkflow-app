@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,7 +156,7 @@ export function JobActionsMenu({
               werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

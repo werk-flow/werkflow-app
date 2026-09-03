@@ -15,7 +15,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
   Dialog,
@@ -361,6 +361,7 @@ function ScheduleDialog({
   const [note, setNote] = useState<string>(schedule?.note ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validFromError, setValidFromError] = useState<string | null>(null);
   const { showBanner } = useBanner();
 
   const parsedDayMinutes: (number | null)[] = dayHours.map((value) => {
@@ -380,8 +381,15 @@ function ScheduleDialog({
     if (isSaving) return;
     setError(null);
 
-    if (parsedDayMinutes.some((m) => m === null)) {
+    if (!validFrom) {
+      setValidFromError(SCHEDULE_ERROR_MESSAGES.invalid_valid_from);
+      document.getElementById('schedule-valid-from')?.focus();
+      return;
+    }
+    const firstInvalidDay = parsedDayMinutes.findIndex((m) => m === null);
+    if (firstInvalidDay !== -1) {
       setError(SCHEDULE_ERROR_MESSAGES.invalid_day_minutes);
+      document.getElementById(`schedule-day-${firstInvalidDay}`)?.focus();
       return;
     }
 
@@ -428,33 +436,39 @@ function ScheduleDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="schedule-valid-from">Gültig ab</Label>
+            <Field
+              label="Gültig ab"
+              htmlFor="schedule-valid-from"
+              required
+              error={validFromError}
+            >
               <DatePicker
-                id="schedule-valid-from"
                 ariaLabel="Gültig ab"
                 value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
-                onChange={(date) =>
-                  setValidFrom(date ? toLocalDateString(date) : '')
-                }
+                onChange={(date) => {
+                  setValidFromError(null);
+                  setValidFrom(date ? toLocalDateString(date) : '');
+                }}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <fieldset className="grid gap-2">
               <legend className="text-sm font-medium">
                 Arbeitsstunden pro Wochentag
               </legend>
               <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
                 {WEEKDAY_LABELS.map((label, index) => (
-                  <div key={label} className="grid gap-1">
-                    <Label
-                      htmlFor={`schedule-day-${index}`}
-                      className="text-xs text-muted-foreground"
-                    >
-                      {label}
-                    </Label>
+                  <Field
+                    key={label}
+                    label={
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {label}
+                      </span>
+                    }
+                    htmlFor={`schedule-day-${index}`}
+                    className="gap-1"
+                  >
                     <Input
-                      id={`schedule-day-${index}`}
                       inputMode="decimal"
                       value={dayHours[index]}
                       onChange={(e) => {
@@ -464,7 +478,7 @@ function ScheduleDialog({
                       }}
                       disabled={isSaving}
                     />
-                  </div>
+                  </Field>
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -473,16 +487,14 @@ function ScheduleDialog({
                   ` Summe: ${formatDuration(weeklyMinutes)} pro Woche.`}
               </p>
             </fieldset>
-            <div className="grid gap-2">
-              <Label htmlFor="schedule-note">Notiz</Label>
+            <Field label="Notiz" htmlFor="schedule-note">
               <Input
-                id="schedule-note"
                 placeholder="z. B. Elternzeit-Teilzeit"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -494,7 +506,7 @@ function ScheduleDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !validFrom}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird gespeichert...' : 'Speichern'}
             </Button>

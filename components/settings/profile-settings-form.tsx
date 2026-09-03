@@ -22,14 +22,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
 export function ProfileSettingsForm() {
@@ -95,28 +89,20 @@ export function ProfileSettingsForm() {
               <FormField
                 control={form.control}
                 name="firstName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vorname</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Max" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+                render={({ field, fieldState }) => (
+                  <Field label="Vorname" required error={fieldState.error?.message}>
+                    <Input placeholder="Max" {...field} />
+                  </Field>
                 )}
               />
 
               <FormField
                 control={form.control}
                 name="lastName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nachname</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Mustermann" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+                render={({ field, fieldState }) => (
+                  <Field label="Nachname" required error={fieldState.error?.message}>
+                    <Input placeholder="Mustermann" {...field} />
+                  </Field>
                 )}
               />
             </CardContent>

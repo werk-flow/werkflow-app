@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
@@ -83,6 +83,10 @@ export function ParkingContextDialog({
   const [options, setOptions] = useState<ParkingResponsibleOption[]>([]);
   const [optionsError, setOptionsError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    responsible?: string;
+    reviewDate?: string;
+  }>({});
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -118,8 +122,19 @@ export function ParkingContextDialog({
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSaving(true);
     setError(null);
+    if (!responsibleId) {
+      setFieldErrors({ responsible: 'Bitte wähle eine verantwortliche Person aus.' });
+      document.getElementById('parking-responsible')?.focus();
+      return;
+    }
+    if (!reviewDate) {
+      setFieldErrors({ reviewDate: 'Bitte wähle ein Datum für die Wiedervorlage.' });
+      document.getElementById('parking-review-date')?.focus();
+      return;
+    }
+    setFieldErrors({});
+    setIsSaving(true);
     try {
       const result = existingContext
         ? await setJobParkingContext({
@@ -168,13 +183,12 @@ export function ParkingContextDialog({
         </DialogHeader>
 
         <form onSubmit={handleSave} noValidate className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="parking-reason">Grund</Label>
+          <Field label="Grund" htmlFor="parking-reason" required>
             <Select
               value={reason}
               onValueChange={(value) => setReason(value as JobParkingReason)}
             >
-              <SelectTrigger id="parking-reason" className="w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Grund auswählen" />
               </SelectTrigger>
               <SelectContent>
@@ -185,52 +199,59 @@ export function ParkingContextDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="parking-note">Notiz (optional)</Label>
+          <Field label="Notiz (optional)" htmlFor="parking-note">
             <Textarea
-              id="parking-note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="z. B. Kunde meldet sich nach dem Urlaub"
               maxLength={1000}
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="parking-responsible">Verantwortlich (Büro)</Label>
+          <Field
+            label="Verantwortlich (Büro)"
+            htmlFor="parking-responsible"
+            required
+            error={
+              optionsError
+                ? 'Die Personenliste konnte nicht geladen werden.'
+                : fieldErrors.responsible
+            }
+          >
             <SearchableSelect
-              id="parking-responsible"
               options={selectableOptions.map((option) => ({
                 value: option.employeeRecordId,
                 label: option.label,
               }))}
               value={responsibleId}
-              onChange={setResponsibleId}
+              onChange={(value) => {
+                setResponsibleId(value);
+                setFieldErrors({});
+              }}
               placeholder="Person auswählen"
               searchPlaceholder="Person suchen …"
               emptyMessage="Keine Person gefunden"
             />
-            <ErrorText className="text-xs">
-              {optionsError
-                ? 'Die Personenliste konnte nicht geladen werden.'
-                : null}
-            </ErrorText>
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="parking-review-date">
-              Wiedervorlage
-            </Label>
+          <Field
+            label="Wiedervorlage"
+            htmlFor="parking-review-date"
+            required
+            error={fieldErrors.reviewDate}
+          >
             <DatePicker
-              id="parking-review-date"
               ariaLabel="Wiedervorlagedatum"
               value={reviewDate}
-              onChange={setReviewDate}
+              onChange={(value) => {
+                setReviewDate(value);
+                setFieldErrors({});
+              }}
               placeholder="Datum wählen"
             />
-          </div>
+          </Field>
 
           <ErrorText>{error}</ErrorText>
 
@@ -238,7 +259,7 @@ export function ParkingContextDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               {isAlreadyParked ? 'Ohne Kontext lassen' : 'Abbrechen'}
             </Button>
-            <Button type="submit" disabled={isSaving || !responsibleId || !reviewDate}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               Kontext speichern
             </Button>

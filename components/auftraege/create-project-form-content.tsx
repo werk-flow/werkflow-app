@@ -9,7 +9,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Separator } from '@/components/ui/separator';
 import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from './job-multi-select';
@@ -156,7 +156,12 @@ export function CreateProjectFormContent({
       );
       hasValidationError = true;
     }
-    if (hasValidationError) return;
+    if (hasValidationError) {
+      document
+        .getElementById(!projectNumber.trim() ? 'create-project-number' : 'create-project-name')
+        ?.focus();
+      return;
+    }
 
     setIsLoading(true);
 
@@ -242,10 +247,13 @@ export function CreateProjectFormContent({
   return (
     <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="grid gap-4 py-2">
-        <div className="grid gap-2">
-          <Label htmlFor="create-project-number">Projektnummer *</Label>
+        <Field
+          label="Projektnummer"
+          htmlFor="create-project-number"
+          required
+          error={showProjectNumberError ? projectNumberError : null}
+        >
           <Input
-            id="create-project-number"
             placeholder="z.B. P-2026-001"
             value={projectNumber}
             onChange={(e) => {
@@ -253,15 +261,11 @@ export function CreateProjectFormContent({
               if (projectNumberError) setProjectNumberError(null);
             }}
             disabled={formDisabled}
-            aria-invalid={showProjectNumberError ? true : undefined}
           />
-          <ErrorText>{showProjectNumberError ? projectNumberError : null}</ErrorText>
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="create-project-name">Titel</Label>
+        <Field label="Titel" htmlFor="create-project-name">
           <Input
-            id="create-project-name"
             placeholder="z.B. Sanierung Hauptgebäude"
             value={name}
             onChange={(e) => {
@@ -271,12 +275,14 @@ export function CreateProjectFormContent({
             disabled={formDisabled}
             aria-invalid={showContentError ? true : undefined}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="create-project-description">Beschreibung</Label>
+        <Field
+          label="Beschreibung"
+          htmlFor="create-project-description"
+          error={showContentError ? contentError : null}
+        >
           <Textarea
-            id="create-project-description"
             placeholder="Optionale Beschreibung des Projekts..."
             value={description}
             onChange={(e) => {
@@ -284,10 +290,8 @@ export function CreateProjectFormContent({
               if (contentError && e.target.value.trim()) setContentError(null);
             }}
             disabled={formDisabled}
-            aria-invalid={showContentError ? true : undefined}
           />
-          <ErrorText>{showContentError ? contentError : null}</ErrorText>
-        </div>
+        </Field>
 
         <WorkTemplatePicker
           targetType="project"
@@ -296,18 +300,16 @@ export function CreateProjectFormContent({
           disabled={formDisabled}
         />
 
-        <div className="grid gap-2">
-          <Label htmlFor="create-project-client">Kunde</Label>
+        <Field label="Kunde" htmlFor="create-project-client">
           <ClientSelectWithCreate
             clients={clients}
             value={clientId}
             onValueChange={handleClientChange}
             disabled={formDisabled}
-            id="create-project-client"
             readOnly={readOnlyClient}
             readOnlyLabel={readOnlyClientLabel}
           />
-        </div>
+        </Field>
 
         <SiteContactFields
           clientId={clientId}
@@ -324,40 +326,40 @@ export function CreateProjectFormContent({
           Planung
         </p>
 
-        <div className="grid gap-2">
-          <Label>Geplanter Beginn</Label>
+        <Field label="Geplanter Beginn" htmlFor="create-project-start-date">
           <DatePicker
             value={plannedStartDate}
             onChange={setPlannedStartDate}
             placeholder="Startdatum wählen"
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label>Geplantes Ende</Label>
+        <Field label="Geplantes Ende" htmlFor="create-project-end-date">
           <DatePicker
             value={plannedEndDate}
             onChange={setPlannedEndDate}
             placeholder="Enddatum wählen"
             disabled={formDisabled}
           />
-        </div>
+        </Field>
 
-        <div className="grid gap-2">
-          <Label>Aufträge zuweisen</Label>
+        <Field
+          label="Aufträge zuweisen"
+          htmlFor="create-project-jobs"
+          description={
+            unlinkedJobs.length === 0
+              ? 'Alle Aufträge sind bereits einem Projekt zugeordnet.'
+              : undefined
+          }
+        >
           <JobMultiSelect
             jobs={unlinkedJobs}
             selectedIds={selectedJobIds}
             onSelectionChange={setSelectedJobIds}
             disabled={formDisabled}
           />
-          {unlinkedJobs.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              Alle Aufträge sind bereits einem Projekt zugeordnet.
-            </p>
-          )}
-        </div>
+        </Field>
 
         <ErrorText>{error}</ErrorText>
       </DialogBody>

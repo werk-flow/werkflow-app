@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   Dialog,
   DialogContent,
@@ -75,9 +76,7 @@ export function ProjectJobsAssignmentDialog({
 
           {loadError ? (
             <div className="flex items-center justify-between gap-3">
-              <p role="alert" className="text-sm text-destructive">
-                {loadError}
-              </p>
+              <ErrorText>{loadError}</ErrorText>
               {onRetry && (
                 <Button
                   type="button"
@@ -96,11 +95,7 @@ export function ProjectJobsAssignmentDialog({
             </p>
           ) : null}
 
-          {saveError && (
-            <p role="alert" className="text-sm text-destructive">
-              {saveError}
-            </p>
-          )}
+          <ErrorText>{saveError}</ErrorText>
 
           <div className="flex justify-end gap-2">
             <Button

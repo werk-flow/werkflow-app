@@ -17,14 +17,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -334,11 +329,7 @@ export function PasswordChangeCard() {
             <PasswordStepIndicator currentStep={step} />
 
             <div className="space-y-5 rounded-lg border bg-background p-5">
-              {formError ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {formError}
-                </div>
-              ) : null}
+              <ErrorText>{formError}</ErrorText>
 
               {step === 'verify_current' ? (
                 <Form {...currentPasswordForm}>
@@ -357,18 +348,18 @@ export function PasswordChangeCard() {
                     <FormField
                       control={currentPasswordForm.control}
                       name="currentPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Aktuelles Passwort</FormLabel>
-                          <FormControl>
-                            <PasswordInput
-                              placeholder="Aktuelles Passwort"
-                              autoComplete="current-password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                      render={({ field, fieldState }) => (
+                        <Field
+                          label="Aktuelles Passwort"
+                          required
+                          error={fieldState.error?.message}
+                        >
+                          <PasswordInput
+                            placeholder="Aktuelles Passwort"
+                            autoComplete="current-password"
+                            {...field}
+                          />
+                        </Field>
                       )}
                     />
 

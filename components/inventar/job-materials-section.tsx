@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -1170,18 +1171,20 @@ function MaterialSelectionDialog({
                       </div>
 
                       <div className="space-y-3">
-                        <Field label="Menge" htmlFor={`${fieldIdPrefix}-quantity`}>
+                        <Field label="Menge" htmlFor={`${fieldIdPrefix}-quantity`} required>
                           <QuantityStepper
-                            id={`${fieldIdPrefix}-quantity`}
                             value={row.quantity}
                             onChange={(value) => updateRow(row.key, { quantity: value })}
                             unitLabel={unitLabel}
                             min={0}
                           />
                         </Field>
-                        <Field label="Lager" htmlFor={`${fieldIdPrefix}-location`}>
+                        <Field
+                          label="Lager"
+                          htmlFor={`${fieldIdPrefix}-location`}
+                          required={mode === 'take' || mode === 'return'}
+                        >
                           <SearchableSelect
-                            id={`${fieldIdPrefix}-location`}
                             options={locationOptions.map((location) => ({
                               value: location.id,
                               label: location.label,
@@ -1203,12 +1206,10 @@ function MaterialSelectionDialog({
                         </Field>
                         <Field label="Notiz" htmlFor={`${fieldIdPrefix}-notes`}>
                           <Textarea
-                            id={`${fieldIdPrefix}-notes`}
                             value={row.notes}
                             onChange={(event) =>
                               updateRow(row.key, { notes: event.target.value })
                             }
-                            rows={2}
                           />
                         </Field>
                         <p
@@ -1248,10 +1249,7 @@ function MaterialSelectionDialog({
           >
             Abbrechen
           </Button>
-          <Button
-            type="submit"
-            disabled={isSaving || currentDialog.rows.length === 0}
-          >
+          <Button type="submit" disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
             {mode === 'take'
               ? 'Entnahme buchen'
@@ -1263,22 +1261,5 @@ function MaterialSelectionDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  children,
-  htmlFor,
-}: {
-  label: string;
-  children: ReactNode;
-  htmlFor: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-    </div>
   );
 }

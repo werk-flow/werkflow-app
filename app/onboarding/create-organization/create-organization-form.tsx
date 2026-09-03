@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { createOrganization } from '@/lib/org/actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -49,10 +50,8 @@ export function CreateOrganizationForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="org-name">Name der Organisation</Label>
+      <Field label="Name der Organisation" htmlFor="org-name" required>
         <Input
-          id="org-name"
           type="text"
           placeholder="z.B. Meine Firma GmbH"
           value={name}
@@ -61,11 +60,9 @@ export function CreateOrganizationForm() {
           autoFocus
           autoComplete="organization"
         />
-      </div>
+      </Field>
 
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+      <ErrorText>{error}</ErrorText>
 
       <Button
         type="submit"

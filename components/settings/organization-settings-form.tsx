@@ -16,15 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { updateOrganizationSettings } from '@/lib/org/settings-actions';
 import {
@@ -184,55 +177,50 @@ export function OrganizationSettingsForm({
               <FormField
                 control={form.control}
                 name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name der Organisation</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        autoComplete="organization"
-                        disabled={!canEdit || isSaving}
-                        maxLength={100}
-                        placeholder="z.B. WerkFlow Nord"
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Pro Admin darf jeder Organisationsname nur einmal vergeben sein.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+                render={({ field, fieldState }) => (
+                  <Field
+                    label="Name der Organisation"
+                    required
+                    description="Pro Admin darf jeder Organisationsname nur einmal vergeben sein."
+                    error={fieldState.error?.message}
+                  >
+                    <Input
+                      {...field}
+                      autoComplete="organization"
+                      disabled={!canEdit || isSaving}
+                      maxLength={100}
+                      placeholder="z.B. WerkFlow Nord"
+                    />
+                  </Field>
                 )}
               />
 
               <FormField
                 control={form.control}
                 name="uniqueCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Organisationscode</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        autoCapitalize="characters"
-                        autoComplete="off"
-                        className="font-mono uppercase tracking-[0.3em]"
-                        disabled={!canEdit || isSaving}
-                        maxLength={ORGANIZATION_CODE_LENGTH}
-                        onChange={(event) =>
-                          field.onChange(
-                            event.target.value.toUpperCase().replace(/\s+/g, '')
-                          )
-                        }
-                        placeholder="ABC123"
-                        spellCheck={false}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt
-                      beitreten können.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+                render={({ field, fieldState }) => (
+                  <Field
+                    label="Organisationscode"
+                    required
+                    description="Dieser Code muss organisationsweit eindeutig sein, damit neue Nutzer gezielt beitreten können."
+                    error={fieldState.error?.message}
+                  >
+                    <Input
+                      {...field}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      className="font-mono uppercase tracking-[0.3em]"
+                      disabled={!canEdit || isSaving}
+                      maxLength={ORGANIZATION_CODE_LENGTH}
+                      onChange={(event) =>
+                        field.onChange(
+                          event.target.value.toUpperCase().replace(/\s+/g, '')
+                        )
+                      }
+                      placeholder="ABC123"
+                      spellCheck={false}
+                    />
+                  </Field>
                 )}
               />
             </CardContent>

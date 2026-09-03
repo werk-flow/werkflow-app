@@ -15,6 +15,7 @@ import {
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import { deleteAccount } from '@/lib/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
@@ -85,11 +86,7 @@ export function DeleteAccountButton() {
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
+        <ErrorText>{error}</ErrorText>
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>

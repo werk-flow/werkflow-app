@@ -12,8 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useServerAction } from "@/hooks/use-server-action";
 import {
   setMaintenancePlanArchived,
@@ -40,11 +41,15 @@ export function MaintenancePlanActionDialog({
   const router = useRouter();
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLInputElement>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const { run, isPending } = useServerAction(async () => {
     setError(null);
+    setReasonError(null);
     if (reason.trim().length < 3) {
-      setError("Gib eine kurze Begründung ein.");
+      setReasonError("Gib eine kurze Begründung ein.");
+      reasonRef.current?.focus();
       return;
     }
     const result = toStatus
@@ -100,19 +105,20 @@ export function MaintenancePlanActionDialog({
             als Verlauf erhalten.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2 py-2">
-          <Label htmlFor="maintenance-action-reason">Begründung</Label>
+        <Field
+          label="Begründung"
+          htmlFor="maintenance-action-reason"
+          required
+          error={reasonError}
+          className="py-2"
+        >
           <Input
-            id="maintenance-action-reason"
+            ref={reasonRef}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
           />
-        </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        </Field>
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button
             type="button"

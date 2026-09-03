@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ErrorText } from '@/components/ui/error-text';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 
 export function SignaturePad({
   disabled,
@@ -133,10 +132,8 @@ export function SignaturePad({
           Zurücksetzen
         </Button>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="artifact-signature-upload">Oder Unterschrift als Bild auswählen</Label>
+      <Field label="Oder Unterschrift als Bild auswählen" htmlFor="artifact-signature-upload" error={uploadError}>
         <Input
-          id="artifact-signature-upload"
           type="file"
           accept="image/*"
           disabled={disabled}
@@ -152,8 +149,7 @@ export function SignaturePad({
             onChange(file);
           }}
         />
-        <ErrorText>{uploadError}</ErrorText>
-      </div>
+      </Field>
     </div>
   );
 }

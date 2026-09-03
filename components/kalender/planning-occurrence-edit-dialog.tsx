@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { ErrorText } from '@/components/ui/error-text';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import {
   Select,
@@ -161,6 +161,11 @@ export function PlanningOccurrenceEditDialog({
     [employees]
   );
 
+  const [fieldErrors, setFieldErrors] = useState<{
+    date?: string;
+    duration?: string;
+    reason?: string;
+  }>({});
   const durationMinutes = parseHoursInputToMinutes(durationHours);
   const durationInvalid =
     job.timeKind !== 'all_day' &&
@@ -170,8 +175,15 @@ export function PlanningOccurrenceEditDialog({
 
   async function handleSubmit() {
     if (!job.occurrenceId) return;
-    if (durationInvalid) {
-      setSubmitError('Bitte eine gültige Dauer angeben.');
+    setFieldErrors({});
+    // Required inputs in visual order; the first missing one gets the focus.
+    const missing: Array<[keyof typeof fieldErrors, string, string]> = [];
+    if (!date) missing.push(['date', 'Bitte wähle ein Datum.', 'planning-edit-date']);
+    if (durationInvalid) missing.push(['duration', 'Bitte eine gültige Dauer angeben.', 'planning-edit-duration']);
+    if (conflicts.length > 0 && reason.trim().length < 8) missing.push(['reason', 'Bitte begründe die Änderung mit mindestens 8 Zeichen.', 'planning-edit-reason']);
+    if (missing.length > 0) {
+      setFieldErrors(Object.fromEntries(missing.map(([key, message]) => [key, message])));
+      document.getElementById(missing[0][2])?.focus();
       return;
     }
     setSubmitting(true);
@@ -348,8 +360,7 @@ export function PlanningOccurrenceEditDialog({
         >
           <DialogBody className="space-y-4">
             {job.seriesId && (
-              <div className="space-y-2">
-                <Label htmlFor="planning-edit-scope">Änderungsumfang</Label>
+              <Field label="Änderungsumfang" htmlFor="planning-edit-scope">
                 <Select
                   value={scope}
                   onValueChange={(value) => {
@@ -357,7 +368,7 @@ export function PlanningOccurrenceEditDialog({
                     setConflicts([]);
                   }}
                 >
-                  <SelectTrigger id="planning-edit-scope">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -401,7 +412,7 @@ export function PlanningOccurrenceEditDialog({
                   {extendConflicts.length > 0 && (
                     <div
                       data-planning-warning
-                      role="alert"
+                      role="status"
                       className="space-y-2 rounded-md border border-yellow-500/40 bg-yellow-500/5 p-2.5"
                     >
                       <p className="text-sm font-medium">Planungshinweise</p>
@@ -417,25 +428,21 @@ export function PlanningOccurrenceEditDialog({
                           </li>
                         ))}
                       </ul>
-                      <div className="space-y-2">
-                        <Label htmlFor="planning-extend-reason">Begründung</Label>
+                      <Field label="Begründung" htmlFor="planning-extend-reason" required>
                         <Textarea
-                          id="planning-extend-reason"
                           value={extendReason}
                           onChange={(event) => setExtendReason(event.target.value)}
                           placeholder="Warum ist die Verlängerung trotzdem sinnvoll?"
                         />
-                      </div>
+                      </Field>
                     </div>
                   )}
                 </div>
-              </div>
+              </Field>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="planning-edit-date">Datum</Label>
+              <Field label="Datum" htmlFor="planning-edit-date" required error={fieldErrors.date}>
                 <DatePicker
-                  id="planning-edit-date"
                   ariaLabel="Datum des Termins"
                   value={isoToLocalDate(date)}
                   onChange={(nextDate) => {
@@ -443,24 +450,21 @@ export function PlanningOccurrenceEditDialog({
                     setConflicts([]);
                   }}
                 />
-              </div>
+              </Field>
               {job.timeKind !== 'all_day' && (
-                <div className="space-y-2">
-                  <Label htmlFor="planning-edit-time">Beginn</Label>
+                <Field label="Beginn" htmlFor="planning-edit-time" required>
                   <TimeInput
-                    id="planning-edit-time"
                     value={time}
                     onChange={(nextTime) => {
                       setTime(nextTime);
                       setConflicts([]);
                     }}
                   />
-                </div>
+                </Field>
               )}
             </div>
             {job.timeKind !== 'all_day' && (
-              <div className="space-y-2">
-                <Label htmlFor="planning-edit-duration">Dauer</Label>
+              <Field label="Dauer" htmlFor="planning-edit-duration" required error={fieldErrors.duration}>
                 <DurationHoursInput
                   id="planning-edit-duration"
                   value={durationHours}
@@ -469,15 +473,17 @@ export function PlanningOccurrenceEditDialog({
                     setConflicts([]);
                   }}
                 />
-              </div>
+              </Field>
             )}
-            <div className="space-y-2">
-              <Label>Mitarbeiter</Label>
-              <ErrorText>
-                {optionsFailed
+            <Field
+              label="Mitarbeiter"
+              htmlFor="planning-edit-employees"
+              error={
+                optionsFailed
                   ? 'Die Mitarbeiterliste konnte nicht geladen werden.'
-                  : null}
-              </ErrorText>
+                  : null
+              }
+            >
               <SearchableMultiSelect
                 options={employeeOptions}
                 selectedIds={employeeRecordIds}
@@ -492,9 +498,9 @@ export function PlanningOccurrenceEditDialog({
                 searchPlaceholder="Mitarbeiter suchen …"
                 emptyMessage="Kein Mitarbeiter gefunden"
               />
-            </div>
+            </Field>
             {conflicts.length > 0 && (
-              <div data-planning-warning role="alert" className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3">
+              <div data-planning-warning role="status" className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3">
                 <p className="flex items-center gap-2 font-medium">
                   <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400" />
                   Planungshinweise
@@ -508,15 +514,19 @@ export function PlanningOccurrenceEditDialog({
                     </li>
                   ))}
                 </ul>
-                <div className="space-y-2">
-                  <Label htmlFor="planning-edit-reason">Begründung</Label>
+                <Field
+                  label="Begründung"
+                  htmlFor="planning-edit-reason"
+                  required
+                  description="Mindestens 8 Zeichen."
+                  error={fieldErrors.reason}
+                >
                   <Textarea
-                    id="planning-edit-reason"
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
                     placeholder="Warum ist die Änderung trotzdem sinnvoll?"
                   />
-                </div>
+                </Field>
               </div>
             )}
             {statusIntent && (
@@ -544,15 +554,18 @@ export function PlanningOccurrenceEditDialog({
                   Der Termin bleibt für Verlauf und Nachvollziehbarkeit erhalten
                   und wird nicht gelöscht.
                 </p>
-                <div className="space-y-2">
-                  <Label htmlFor="planning-status-reason">Begründung</Label>
+                <Field
+                  label="Begründung"
+                  htmlFor="planning-status-reason"
+                  required
+                  description="Mindestens 8 Zeichen."
+                >
                   <Textarea
-                    id="planning-status-reason"
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
                     placeholder="Kurze nachvollziehbare Begründung"
                   />
-                </div>
+                </Field>
               </div>
             )}
             <ErrorText>{submitError}</ErrorText>
@@ -597,14 +610,11 @@ export function PlanningOccurrenceEditDialog({
               type="submit"
               disabled={
                 submitting ||
-                // Status changes (auslassen/absagen) only need their reason;
-                // the schedule-edit validations must not block them.
-                (statusIntent !== null
-                  ? reason.trim().length < 8
-                  : optionsFailed ||
-                    !date ||
-                    durationInvalid ||
-                    (conflicts.length > 0 && reason.trim().length < 8))
+                // Status changes (auslassen/absagen) are a one-field form and
+                // may gate on their reason; schedule edits report missing
+                // input on submit and only stay locked while the employee
+                // list failed to load.
+                (statusIntent !== null ? reason.trim().length < 8 : optionsFailed)
               }
             >
               {submitting

@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { useBanner } from '@/components/ui/banner';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
@@ -511,8 +511,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label>Kunde</Label>
+            <Field label="Kunde" htmlFor="match-client" required>
               <ClientSelectWithCreate
                 clients={data.clients}
                 value={matchClientId}
@@ -523,7 +522,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                 }}
                 disabled={isPending}
               />
-            </div>
+            </Field>
             {matchClientId && (
               <SiteContactFields
                 clientId={matchClientId}

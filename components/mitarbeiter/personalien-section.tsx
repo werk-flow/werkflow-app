@@ -12,6 +12,7 @@ import {
   type PersonnelMasterDataPatch,
 } from '@/lib/personnel/actions';
 import type { EmployeeRecord } from '@/lib/personnel/types';
+import { ErrorText } from '@/components/ui/error-text';
 
 const SAVE_ERROR_MESSAGES: Record<string, string> = {
   number_taken: 'Diese Personalnummer ist in der Organisation bereits vergeben.',
@@ -142,11 +143,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
   return (
     <div className="grid gap-2">
       <MetadataSection title="Personalien" fields={fields} isEditable={canEdit} />
-      {saveError && (
-        <p role="alert" className="text-sm text-destructive">
-          {saveError}
-        </p>
-      )}
+      <ErrorText>{saveError}</ErrorText>
     </div>
   );
 }

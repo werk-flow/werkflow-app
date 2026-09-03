@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -138,7 +139,7 @@ export function ProjectActionsMenu({
               rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

@@ -1,4 +1,5 @@
 'use client';
+import { SectionError } from '@/components/ui/section-error';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -217,9 +218,9 @@ export function AufgabenContent() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <PersonnelOwnActionsSection />
-        <p role="alert" className="text-sm text-destructive">
+        <SectionError>
           Die Aufgaben konnten nicht geladen werden. Bitte versuche es erneut.
-        </p>
+        </SectionError>
       </div>
     );
   }

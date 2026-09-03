@@ -6,6 +6,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   Select,
   SelectContent,
@@ -334,12 +335,12 @@ function MetadataFieldRow({
                 placeholder={config.placeholder}
                 autoFocus
                 disabled={isPending}
-                rows={3}
               />
             )}
             {config.type === 'select' &&
               // Registry rule: entity-sized lists get search; short fixed
-              // enums keep the plain select.
+              // enums keep the plain select, which itself throws in
+              // development at ten or more options.
               ((config.options?.length ?? 0) > 8 ? (
                 <SearchableSelect
                   options={config.options ?? []}
@@ -434,11 +435,7 @@ function MetadataFieldRow({
             </Button>
           </div>
         </div>
-        {saveError && (
-          <p role="alert" className="text-sm text-destructive">
-            {saveError}
-          </p>
-        )}
+        <ErrorText>{saveError}</ErrorText>
       </div>
     );
   }

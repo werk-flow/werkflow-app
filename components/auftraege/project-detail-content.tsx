@@ -18,7 +18,6 @@ import {
   MoreVertical,
   Loader2,
   Pencil,
-  RefreshCw,
 } from 'lucide-react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
@@ -54,7 +53,7 @@ import { ApplyWorkTemplateCard } from '@/components/arbeitsvorlagen/apply-work-t
 import { JobInstructionItemsCard } from './job-instruction-items-card';
 import { ProjectQualificationSection } from './project-qualification-section';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import { CreateJobDialog } from './create-job-dialog';
 import { ClientAssignmentDialog } from './client-assignment-dialog';
 import { EditProjectDialog } from './edit-project-dialog';
@@ -901,25 +900,12 @@ export function ProjectDetailContent({
                   <Skeleton className="h-8 w-3/4" />
                 </div>
               ) : timeLoadError ? (
-                <div className="space-y-3" role="alert">
-                  <ErrorText>
-                    Die Arbeitszeiten für dieses Projekt konnten nicht geladen werden.
-                  </ErrorText>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11"
-                    disabled={timeView.isRefreshing}
-                    onClick={() => void timeView.refresh()}
-                  >
-                    {timeView.isRefreshing ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                    Erneut laden
-                  </Button>
-                </div>
+                <SectionError
+                  onRetry={() => void timeView.refresh()}
+                  retryPending={timeView.isRefreshing}
+                >
+                  Die Arbeitszeiten für dieses Projekt konnten nicht geladen werden.
+                </SectionError>
               ) : projectTimeSummary.totalMinutes === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   Noch keine Arbeitszeiten für dieses Projekt erfasst.

@@ -9,6 +9,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { ErrorText } from '@/components/ui/error-text';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { JobPickerModal } from '@/components/job-picker-modal';
@@ -543,9 +544,7 @@ export function ZeiterfassungDashboard({
         initialActivity="travel"
       />
 
-      {statusError && (
-        <p className="text-center text-xs text-destructive">{statusError}</p>
-      )}
+      <ErrorText className="text-center text-xs">{statusError}</ErrorText>
     </div>
   );
 }

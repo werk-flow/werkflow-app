@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import type { PlanningConflict } from '@/lib/planning/types';
 
@@ -91,17 +91,19 @@ export function usePlanningWarningConfirmation(): {
               </li>
             ))}
           </ul>
-          <div className="space-y-2">
-            <Label htmlFor="planning-warning-reason">Kurze Begründung</Label>
+          <Field
+            label="Kurze Begründung"
+            htmlFor="planning-warning-reason"
+            required
+            description="Mindestens 8 Zeichen."
+          >
             <Textarea
-              id="planning-warning-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               placeholder="z. B. abgestimmter Notdiensteinsatz"
               maxLength={1000}
             />
-            <p className="text-xs text-muted-foreground">Mindestens 8 Zeichen.</p>
-          </div>
+          </Field>
           <DialogFooter>
             <Button variant="outline" onClick={() => finish(null)}>
               Änderung zurücknehmen

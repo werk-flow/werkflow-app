@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MoreHorizontal, UserCog, UserMinus, Loader2, ExternalLink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -239,7 +240,7 @@ export function MemberActionsMenu({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRemoving}>
               Abbrechen

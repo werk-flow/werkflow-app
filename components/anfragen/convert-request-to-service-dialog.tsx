@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
 import { useServerAction } from "@/hooks/use-server-action";
 import { createServiceCase } from "@/lib/service-cases/actions";
 
@@ -63,7 +64,7 @@ export function ConvertRequestToServiceDialog({
               danach nicht nochmals umgewandelt werden.
             </DialogDescription>
           </DialogHeader>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Abbrechen</Button>
             <Button type="button" onClick={() => void run()} disabled={isPending}>{isPending ? "Übernimmt…" : "Übernehmen"}</Button>

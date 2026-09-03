@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   getCoverageStatusLabel,
@@ -124,12 +124,13 @@ function QualificationWarningDialogContent({
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="qualification-override-reason">
-              Kurze Begründung
-            </Label>
+          <Field
+            label="Kurze Begründung"
+            htmlFor="qualification-override-reason"
+            required
+            error={showReasonError ? 'Bitte gib eine kurze Begründung ein.' : null}
+          >
             <Textarea
-              id="qualification-override-reason"
               value={reason}
               onChange={(event) => {
                 setReason(event.target.value);
@@ -140,23 +141,8 @@ function QualificationWarningDialogContent({
               placeholder="z. B. kurzfristiger Notdienst"
               maxLength={500}
               disabled={isSubmitting}
-              aria-invalid={showReasonError}
-              aria-describedby={
-                showReasonError
-                  ? 'qualification-override-reason-error'
-                  : undefined
-              }
             />
-            {showReasonError && (
-              <p
-                id="qualification-override-reason-error"
-                role="alert"
-                className="text-xs text-destructive"
-              >
-                Bitte gib eine kurze Begründung ein.
-              </p>
-            )}
-          </div>
+          </Field>
         </div>
 
         <DialogFooter>

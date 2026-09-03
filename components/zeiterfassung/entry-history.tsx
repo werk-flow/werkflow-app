@@ -8,7 +8,8 @@ import {
   Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
@@ -210,19 +211,24 @@ export function EntryHistory({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-        <div className="flex-1 min-w-[140px] space-y-1">
-          <Label className="text-muted-foreground">Von</Label>
-          <DatePicker value={dateFrom} onChange={setDateFrom} placeholder="Von" />
-        </div>
-        <div className="flex-1 min-w-[140px] space-y-1">
-          <Label className="text-muted-foreground">Bis</Label>
-          <DatePicker value={dateTo} onChange={setDateTo} placeholder="Bis" />
-        </div>
+        <Field label="Von" className="flex-1 min-w-[140px] gap-1">
+          <DatePicker
+            value={dateFrom}
+            onChange={setDateFrom}
+            placeholder="Von"
+            ariaLabel="Von"
+          />
+        </Field>
+        <Field label="Bis" className="flex-1 min-w-[140px] gap-1">
+          <DatePicker
+            value={dateTo}
+            onChange={setDateTo}
+            placeholder="Bis"
+            ariaLabel="Bis"
+          />
+        </Field>
         {members.length > 0 && (
-          <div className="flex-1 min-w-[180px] space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">
-              Mitarbeiter
-            </label>
+          <Field label="Mitarbeiter" className="flex-1 min-w-[180px] gap-1">
             <SearchableSelect
               ariaLabel="Nach Mitarbeiter filtern"
               options={[
@@ -237,12 +243,9 @@ export function EntryHistory({
               searchPlaceholder="Mitarbeiter suchen …"
               emptyMessage="Kein Mitarbeiter gefunden"
             />
-          </div>
+          </Field>
         )}
-        <div className="flex-1 min-w-[140px] space-y-1">
-          <label className="text-sm font-medium text-muted-foreground">
-            Status
-          </label>
+        <Field label="Status" className="flex-1 min-w-[140px] gap-1">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger>
               <SelectValue />
@@ -257,7 +260,7 @@ export function EntryHistory({
               </SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </Field>
         <Button
           variant="outline"
           onClick={() => void view.refresh()}
@@ -274,11 +277,7 @@ export function EntryHistory({
       </div>
 
       {/* Results */}
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      <ErrorText>{error}</ErrorText>
 
       {view.isLoading ? (
         <div className="space-y-2">

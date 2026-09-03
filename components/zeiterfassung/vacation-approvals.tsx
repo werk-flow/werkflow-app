@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { Check, Loader2, Palmtree, Undo2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { SectionError } from '@/components/ui/section-error';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -13,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -186,9 +187,7 @@ export function VacationApprovals() {
   // A failed initial load must be visible, never an empty screen.
   if (loadFailed && pending.length === 0 && approved.length === 0) {
     return (
-      <p role="alert" className="px-1 text-sm text-muted-foreground">
-        Die Urlaubsanträge konnten nicht geladen werden.
-      </p>
+      <SectionError>Die Urlaubsanträge konnten nicht geladen werden.</SectionError>
     );
   }
 
@@ -373,6 +372,7 @@ function ReasonDialog({
     const trimmed = reason.trim();
     if (!trimmed) {
       setError('Bitte gib einen Grund an.');
+      document.getElementById('vacation-decision-reason')?.focus();
       return;
     }
     onConfirm(trimmed);
@@ -387,17 +387,21 @@ function ReasonDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="vacation-decision-reason">Grund</Label>
+            <Field
+              label="Grund"
+              htmlFor="vacation-decision-reason"
+              required
+              error={error}
+            >
               <Textarea
-                id="vacation-decision-reason"
-                rows={2}
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  setError(null);
+                  setReason(e.target.value);
+                }}
                 disabled={isBusy}
               />
-            </div>
-            <ErrorText>{error}</ErrorText>
+            </Field>
           </div>
           <DialogFooter>
             <Button

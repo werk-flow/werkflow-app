@@ -12,8 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useServerAction } from "@/hooks/use-server-action";
@@ -51,12 +52,10 @@ export function MaintenanceCoverageFollowUpDialog({
   );
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const { run, isPending } = useServerAction(async () => {
     const dueDate = parseBerlinDateTimeInput(dueAt);
-    if (!title.trim() || !ownerUserId || !dueDate) {
-      setError("Bitte fülle Titel, Zuständigkeit und Fälligkeit aus.");
-      return;
-    }
+    if (!dueDate) return;
     const result = await createCustomerFollowUp(coverage.clientId, {
       title,
       note,
@@ -71,6 +70,31 @@ export function MaintenanceCoverageFollowUpDialog({
     }
     onOpenChange(false);
   });
+  const titleError =
+    attempted && !title.trim() ? "Bitte gib einen Titel ein." : undefined;
+  const ownerError =
+    attempted && !ownerUserId ? "Bitte wähle eine zuständige Person." : undefined;
+  const dueError =
+    attempted && !parseBerlinDateTimeInput(dueAt)
+      ? "Bitte gib eine Fälligkeit an."
+      : undefined;
+
+  function submit(): void {
+    setError(null);
+    setAttempted(true);
+    const firstInvalidId = !title.trim()
+      ? "coverage-follow-up-title"
+      : !ownerUserId
+        ? "coverage-follow-up-owner"
+        : !parseBerlinDateTimeInput(dueAt)
+          ? "coverage-follow-up-due-date"
+          : null;
+    if (firstInvalidId) {
+      document.getElementById(firstInvalidId)?.focus();
+      return;
+    }
+    void run();
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,26 +110,32 @@ export function MaintenanceCoverageFollowUpDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            void run();
+            submit();
           }}
         >
           <p className="rounded-md bg-muted px-3 py-2 text-sm">
             Quelle: {coverage.coverageNumber}
           </p>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-follow-up-title">Titel</Label>
+          <Field
+            label="Titel"
+            htmlFor="coverage-follow-up-title"
+            required
+            error={titleError}
+          >
             <Input
-              id="coverage-follow-up-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               maxLength={160}
               autoFocus
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-follow-up-owner">Zuständig</Label>
+          </Field>
+          <Field
+            label="Zuständig"
+            htmlFor="coverage-follow-up-owner"
+            required
+            error={ownerError}
+          >
             <SearchableSelect
-              id="coverage-follow-up-owner"
               value={ownerUserId}
               onChange={setOwnerUserId}
               options={owners.map((owner) => ({
@@ -116,31 +146,29 @@ export function MaintenanceCoverageFollowUpDialog({
               searchPlaceholder="Person suchen…"
               emptyMessage="Keine Person gefunden"
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Fällig am</Label>
+          </Field>
+          <Field
+            label="Fällig am"
+            htmlFor="coverage-follow-up-due-date"
+            required
+            error={dueError}
+          >
             <DateTimeField
               idPrefix="coverage-follow-up-due"
               value={dueAt}
               onChange={setDueAt}
               dateAriaLabel="Fälligkeitsdatum"
+              invalid={Boolean(dueError)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-follow-up-note">Notiz</Label>
+          </Field>
+          <Field label="Notiz" htmlFor="coverage-follow-up-note">
             <Textarea
-              id="coverage-follow-up-note"
               value={note}
               onChange={(event) => setNote(event.target.value)}
               maxLength={2000}
-              rows={4}
             />
-          </div>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          </Field>
+          <ErrorText>{error}</ErrorText>
           <DialogFooter>
             <Button
               type="button"

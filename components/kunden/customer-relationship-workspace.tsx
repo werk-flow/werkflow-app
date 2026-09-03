@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -197,6 +197,10 @@ export function CustomerRelationshipWorkspace({
   const [timelineFilter, setTimelineFilter] = useState<'all' | TimelineCategory>('all');
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft | null>(null);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const [followUpAttempted, setFollowUpAttempted] = useState(false);
+  const followUpTitleError = followUpAttempted && followUpDraft && !followUpDraft.title.trim() ? 'Bitte gib einen Titel ein.' : undefined;
+  const followUpOwnerError = followUpAttempted && followUpDraft && !followUpDraft.ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined;
+  const followUpDueError = followUpAttempted && followUpDraft && !parseBerlinDateTimeInput(followUpDraft.dueAt) ? 'Bitte gib eine Fälligkeit an.' : undefined;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferenceOpen, setPreferenceOpen] = useState(false);
   const { run: runRelationshipTask, isPending } = usePendingTask();
@@ -302,9 +306,15 @@ export function CustomerRelationshipWorkspace({
   function saveFollowUp() {
     if (!followUpDraft) return;
     setFollowUpError(null);
+    setFollowUpAttempted(true);
     const dueDate = parseBerlinDateTimeInput(followUpDraft.dueAt);
     if (!followUpDraft.title.trim() || !followUpDraft.ownerUserId || !dueDate) {
-      setFollowUpError('Bitte fülle Titel, Zuständigkeit und Fälligkeit aus.');
+      const firstInvalidId = !followUpDraft.title.trim()
+        ? 'follow-up-title'
+        : !followUpDraft.ownerUserId
+          ? 'follow-up-owner'
+          : 'follow-up-due-date';
+      document.getElementById(firstInvalidId)?.focus();
       return;
     }
     const input: FollowUpInput = {
@@ -568,6 +578,7 @@ export function CustomerRelationshipWorkspace({
           if (!open) {
             setFollowUpDraft(null);
             setFollowUpError(null);
+            setFollowUpAttempted(false);
           }
         }}
       >
@@ -586,14 +597,11 @@ export function CustomerRelationshipWorkspace({
               className="space-y-4"
             >
               {followUpDraft.sourceLabel && <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {followUpDraft.sourceLabel}</p>}
-              <div className="space-y-2">
-                <Label htmlFor="follow-up-title">Titel</Label>
-                <Input id="follow-up-title" value={followUpDraft.title} onChange={(event) => setFollowUpDraft({ ...followUpDraft, title: event.target.value })} maxLength={160} autoFocus />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="follow-up-owner">Zuständig</Label>
+              <Field label="Titel" htmlFor="follow-up-title" required error={followUpTitleError}>
+                <Input value={followUpDraft.title} onChange={(event) => setFollowUpDraft({ ...followUpDraft, title: event.target.value })} maxLength={160} autoFocus />
+              </Field>
+              <Field label="Zuständig" htmlFor="follow-up-owner" required error={followUpOwnerError}>
                 <SearchableSelect
-                  id="follow-up-owner"
                   options={bundle.followUpOwners.map((owner) => ({
                     value: owner.userId,
                     label: owner.name,
@@ -604,23 +612,22 @@ export function CustomerRelationshipWorkspace({
                   searchPlaceholder="Person suchen..."
                   emptyMessage="Keine Person gefunden"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="follow-up-due-date">Fällig am</Label>
+              </Field>
+              <Field label="Fällig am" htmlFor="follow-up-due-date" required error={followUpDueError}>
                 <DateTimeField
                   idPrefix="follow-up-due"
                   value={followUpDraft.dueAt}
                   onChange={(value) => setFollowUpDraft({ ...followUpDraft, dueAt: value })}
                   dateAriaLabel="Fälligkeitsdatum"
+                  invalid={Boolean(followUpDueError)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="follow-up-note">Notiz</Label>
-                <Textarea id="follow-up-note" value={followUpDraft.note} onChange={(event) => setFollowUpDraft({ ...followUpDraft, note: event.target.value })} maxLength={2000} rows={4} />
-              </div>
+              </Field>
+              <Field label="Notiz" htmlFor="follow-up-note">
+                <Textarea value={followUpDraft.note} onChange={(event) => setFollowUpDraft({ ...followUpDraft, note: event.target.value })} maxLength={2000} />
+              </Field>
               <ErrorText>{followUpError}</ErrorText>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setFollowUpDraft(null); setFollowUpError(null); }}>Abbrechen</Button>
+                <Button type="button" variant="outline" onClick={() => { setFollowUpDraft(null); setFollowUpError(null); setFollowUpAttempted(false); }}>Abbrechen</Button>
                 <Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button>
               </DialogFooter>
             </form>
@@ -789,9 +796,8 @@ function CommunicationPreferencesSection({
             className="flex min-h-0 flex-1 flex-col"
           >
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="preferred-contact">Bevorzugter Ansprechpartner</Label>
+            <Field label="Bevorzugter Ansprechpartner" htmlFor="preferred-contact">
               <SearchableSelect
-                id="preferred-contact"
                 options={contacts
                   // The selected archived contact stays visible so editing
                   // never shows a raw id or silently drops the selection.
@@ -814,13 +820,13 @@ function CommunicationPreferencesSection({
                 allowNone
                 noneLabel="Nicht festgelegt"
               />
-            </div>
-            <div className="space-y-2"><Label htmlFor="preferred-channel">Bevorzugter Kanal</Label><Select value={settingsDraft.preferredChannel ?? '__none__'} onValueChange={(value) => setSettingsDraft({ ...settingsDraft, preferredChannel: value === '__none__' ? undefined : value as CommunicationChannel })}><SelectTrigger id="preferred-channel"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">Nicht festgelegt</SelectItem>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="dnc-note">Nicht-kontaktieren-Hinweis</Label><Textarea id="dnc-note" value={settingsDraft.doNotContactInstruction ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, doNotContactInstruction: event.target.value })} rows={3} /></div>
-            <div className="space-y-2"><Label htmlFor="contact-time">Geeignete Kontaktzeit</Label><Input id="contact-time" value={settingsDraft.contactTimeNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, contactTimeNote: event.target.value })} /></div>
-            <div className="space-y-2"><Label htmlFor="language-note">Sprache</Label><Input id="language-note" value={settingsDraft.languageNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, languageNote: event.target.value })} /></div>
-            <div className="space-y-2"><Label htmlFor="accessibility-note">Barrierefreiheit / Unterstützungsbedarf</Label><Textarea id="accessibility-note" value={settingsDraft.accessibilityNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, accessibilityNote: event.target.value })} rows={2} /></div>
-            <div className="space-y-2"><Label htmlFor="settings-source">Quelle der Angaben</Label><Input id="settings-source" value={settingsDraft.sourceNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, sourceNote: event.target.value })} placeholder="z. B. Kundengespräch am 10.08.2026" /></div>
+            </Field>
+            <Field label="Bevorzugter Kanal" htmlFor="preferred-channel"><Select value={settingsDraft.preferredChannel ?? '__none__'} onValueChange={(value) => setSettingsDraft({ ...settingsDraft, preferredChannel: value === '__none__' ? undefined : value as CommunicationChannel })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__none__">Nicht festgelegt</SelectItem>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Nicht-kontaktieren-Hinweis" htmlFor="dnc-note"><Textarea value={settingsDraft.doNotContactInstruction ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, doNotContactInstruction: event.target.value })} /></Field>
+            <Field label="Geeignete Kontaktzeit" htmlFor="contact-time"><Input value={settingsDraft.contactTimeNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, contactTimeNote: event.target.value })} /></Field>
+            <Field label="Sprache" htmlFor="language-note"><Input value={settingsDraft.languageNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, languageNote: event.target.value })} /></Field>
+            <Field label="Barrierefreiheit / Unterstützungsbedarf" htmlFor="accessibility-note"><Textarea value={settingsDraft.accessibilityNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, accessibilityNote: event.target.value })} /></Field>
+            <Field label="Quelle der Angaben" htmlFor="settings-source"><Input value={settingsDraft.sourceNote ?? ''} onChange={(event) => setSettingsDraft({ ...settingsDraft, sourceNote: event.target.value })} placeholder="z. B. Kundengespräch am 10.08.2026" /></Field>
             <ErrorText>{settingsError}</ErrorText>
           </DialogBody>
           <DialogFooter className="pt-4"><Button type="button" variant="outline" onClick={() => { setSettingsError(null); onSettingsOpenChange(false); }}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
@@ -839,9 +845,8 @@ function CommunicationPreferencesSection({
             noValidate
             className="space-y-4"
           >
-            <div className="space-y-2"><Label htmlFor="preference-contact">Gilt für</Label>
+            <Field label="Gilt für" htmlFor="preference-contact">
               <SearchableSelect
-                id="preference-contact"
                 options={contacts
                   .filter(
                     (contact) =>
@@ -861,13 +866,13 @@ function CommunicationPreferencesSection({
                 allowNone
                 noneLabel="Kunde (Standard)"
               />
-            </div>
+            </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2"><Label htmlFor="preference-channel">Kanal</Label><Select value={preferenceDraft.channel} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, channel: value as CommunicationChannel })}><SelectTrigger id="preference-channel"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label htmlFor="preference-state">Status</Label><Select value={preferenceDraft.state} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, state: value as CommunicationPreferenceState })}><SelectTrigger id="preference-state"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(STATE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+              <Field label="Kanal" htmlFor="preference-channel"><Select value={preferenceDraft.channel} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, channel: value as CommunicationChannel })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(CHANNEL_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>
+              <Field label="Status" htmlFor="preference-state"><Select value={preferenceDraft.state} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, state: value as CommunicationPreferenceState })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(STATE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>
             </div>
-            <div className="space-y-2"><Label htmlFor="preference-purpose">Zweck</Label><Select value={preferenceDraft.purpose} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, purpose: value as CommunicationPurpose })}><SelectTrigger id="preference-purpose"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(PURPOSE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label htmlFor="preference-source">Quelle der Angabe</Label><Input id="preference-source" value={preferenceDraft.sourceNote ?? ''} onChange={(event) => setPreferenceDraft({ ...preferenceDraft, sourceNote: event.target.value })} placeholder="z. B. ausdrückliche Angabe im Telefonat" /></div>
+            <Field label="Zweck" htmlFor="preference-purpose"><Select value={preferenceDraft.purpose} onValueChange={(value) => setPreferenceDraft({ ...preferenceDraft, purpose: value as CommunicationPurpose })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(PURPOSE_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></Field>
+            <Field label="Quelle der Angabe" htmlFor="preference-source"><Input value={preferenceDraft.sourceNote ?? ''} onChange={(event) => setPreferenceDraft({ ...preferenceDraft, sourceNote: event.target.value })} placeholder="z. B. ausdrückliche Angabe im Telefonat" /></Field>
             <ErrorText>{preferenceError}</ErrorText>
             <DialogFooter><Button type="button" variant="outline" onClick={() => handlePreferenceOpenChange(false)}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
           </form>

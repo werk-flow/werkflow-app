@@ -1,3 +1,4 @@
+import { SectionError } from '@/components/ui/section-error';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -38,10 +39,10 @@ async function KundenData({ activeOrgId }: { activeOrgId: string }) {
   if (clientsResult.error) {
     console.error('Error fetching clients:', clientsResult.error);
     return (
-      <p className="text-destructive">
+      <SectionError>
         Fehler beim Laden der Kunden:{' '}
         {clientsResult.error.message || 'Unbekannter Fehler'}
-      </p>
+      </SectionError>
     );
   }
 

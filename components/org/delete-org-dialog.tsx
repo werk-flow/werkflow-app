@@ -6,6 +6,7 @@ import { Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -14,8 +15,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { deleteOrganization } from '@/lib/org/delete-action';
 import { cn } from '@/lib/utils';
 
@@ -126,34 +128,38 @@ export function DeleteOrgDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-3 py-2">
-          <div className="space-y-2">
-            <Label htmlFor="confirm-name" className="text-sm">
-              Gib den Namen der Organisation ein, um zu bestätigen:
-            </Label>
+          <Field
+            label="Gib den Namen der Organisation ein, um zu bestätigen:"
+            htmlFor="confirm-name"
+            required
+          >
             <div className="rounded-md bg-muted px-3 py-2 text-sm font-medium">
               {orgName}
             </div>
             <Input
-              id="confirm-name"
               value={confirmationName}
               onChange={(e) => setConfirmationName(e.target.value)}
               placeholder="Organisationsname eingeben"
               disabled={isLoading}
             />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          </Field>
+          <ErrorText>{error}</ErrorText>
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
+          <AlertDialogAction
+            // Keep the dialog open until the server confirms; a failure must
+            // stay visible at the point of action.
+            onClick={(event) => {
+              event.preventDefault();
+              void handleDelete();
+            }}
             disabled={isLoading || !isNameMatch}
             className="bg-red-500 text-white hover:bg-red-400 dark:bg-red-500 dark:hover:bg-red-400"
           >
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Wird gelöscht...' : 'Endgültig löschen'}
-          </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

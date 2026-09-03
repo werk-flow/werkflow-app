@@ -1,3 +1,4 @@
+import { SectionError } from '@/components/ui/section-error';
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -70,10 +71,10 @@ async function AuftraegeData({
     if (jobsResult.error) {
       console.error('Error fetching jobs:', jobsResult.error);
       return (
-        <p className="text-destructive">
+        <SectionError>
           Fehler beim Laden der Aufträge:{' '}
           {jobsResult.error.message || 'Unbekannter Fehler'}
-        </p>
+        </SectionError>
       );
     }
 

@@ -13,9 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { FormDisclosure } from "@/components/ui/form-disclosure";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -99,6 +100,38 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Die Anlage konnte nicht gespeichert werden.",
 };
 
+type RequiredField = "clientId" | "siteId" | "name" | "parentEquipmentId" | "reason";
+
+// Focus order on a failed submit; the ids double as the spec selectors.
+const REQUIRED_FIELD_IDS: Array<[RequiredField, string]> = [
+  ["clientId", "equipment-client"],
+  ["siteId", "equipment-site"],
+  ["name", "equipment-name"],
+  ["parentEquipmentId", "equipment-parent"],
+  ["reason", "equipment-reason"],
+];
+
+// Mirrors equipmentFormSchema and the update/replace reason rule so the user
+// sees the missing field instead of "Bitte prüfe die markierten Angaben".
+function missingFields(
+  form: FormState,
+  mode: EquipmentFormMode,
+): Partial<Record<RequiredField, string>> {
+  const errors: Partial<Record<RequiredField, string>> = {};
+  if (!form.clientId) errors.clientId = "Bitte wähle einen Kunden.";
+  if (!form.siteId) errors.siteId = "Bitte wähle einen Einsatzort.";
+  if (form.name.trim().length < 2) {
+    errors.name = "Bitte gib eine Bezeichnung mit mindestens 2 Zeichen ein.";
+  }
+  if (form.category === "system_component" && !form.parentEquipmentId) {
+    errors.parentEquipmentId = "Bitte wähle die übergeordnete Anlage.";
+  }
+  if (mode !== "create" && (form.reason ?? "").trim().length < 3) {
+    errors.reason = "Bitte gib einen Grund mit mindestens 3 Zeichen an.";
+  }
+  return errors;
+}
+
 function toDate(value: string | null | undefined): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split("-").map(Number);
@@ -174,6 +207,7 @@ export function EquipmentFormDialog({
     return fromEquipment(initial);
   });
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
 
   const selectedClient = clients.find((client) => client.id === form.clientId);
   const siteOptions = (selectedClient?.sites ?? []).filter(
@@ -193,6 +227,7 @@ export function EquipmentFormDialog({
       : mode === "edit"
         ? "Anlagendaten bearbeiten"
         : "Anlage ersetzen";
+  const fieldErrors = attempted ? missingFields(form, mode) : {};
 
   const payload = useMemo<EquipmentFormInput>(() => {
     const identifiers: EquipmentIdentifierInput[] = [];
@@ -225,6 +260,13 @@ export function EquipmentFormDialog({
 
   async function handleSubmit(): Promise<void> {
     setError(null);
+    setAttempted(true);
+    const errors = missingFields(form, mode);
+    const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
+    if (firstInvalid) {
+      document.getElementById(firstInvalid[1])?.focus();
+      return;
+    }
     const idempotencyKey = crypto.randomUUID();
     const effectiveAt = new Date().toISOString();
     const result =
@@ -287,10 +329,13 @@ export function EquipmentFormDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-1 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="equipment-client">Kunde</Label>
+          <Field
+            label="Kunde"
+            htmlFor="equipment-client"
+            required
+            error={fieldErrors.clientId}
+          >
             <SearchableSelect
-              id="equipment-client"
               value={form.clientId}
               disabled={mode !== "create"}
               onChange={(value) =>
@@ -308,11 +353,14 @@ export function EquipmentFormDialog({
               placeholder="Kunde auswählen"
               searchPlaceholder="Kunde suchen..."
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="equipment-site">Einsatzort</Label>
+          </Field>
+          <Field
+            label="Einsatzort"
+            htmlFor="equipment-site"
+            required
+            error={fieldErrors.siteId}
+          >
             <SearchableSelect
-              id="equipment-site"
               value={form.siteId}
               disabled={!form.clientId || mode !== "create"}
               onChange={(value) =>
@@ -330,18 +378,21 @@ export function EquipmentFormDialog({
               placeholder="Einsatzort auswählen"
               searchPlaceholder="Einsatzort suchen..."
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="equipment-name">Bezeichnung</Label>
+          </Field>
+          <Field
+            label="Bezeichnung"
+            htmlFor="equipment-name"
+            required
+            error={fieldErrors.name}
+            className="sm:col-span-2"
+          >
             <Input
-              id="equipment-name"
               value={form.name}
               onChange={(event) => updateField("name", event.target.value)}
               placeholder="z. B. Wärmepumpe Wohnhaus"
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="equipment-category">Kategorie</Label>
+          </Field>
+          <Field label="Kategorie" htmlFor="equipment-category">
             <Select
               value={form.category}
               onValueChange={(value: EquipmentCategory) =>
@@ -356,7 +407,7 @@ export function EquipmentFormDialog({
                 }))
               }
             >
-              <SelectTrigger id="equipment-category">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -367,9 +418,8 @@ export function EquipmentFormDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="equipment-subtype">Untertyp</Label>
+          </Field>
+          <Field label="Untertyp" htmlFor="equipment-subtype">
             <Select
               value={form.subtype ?? "none"}
               onValueChange={(value) =>
@@ -380,7 +430,7 @@ export function EquipmentFormDialog({
               }
               disabled={subtypeOptions.length === 0}
             >
-              <SelectTrigger id="equipment-subtype">
+              <SelectTrigger>
                 <SelectValue placeholder="Nicht angegeben" />
               </SelectTrigger>
               <SelectContent>
@@ -392,12 +442,16 @@ export function EquipmentFormDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
           {form.category === "system_component" && (
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="equipment-parent">Übergeordnete Anlage</Label>
+            <Field
+              label="Übergeordnete Anlage"
+              htmlFor="equipment-parent"
+              required
+              error={fieldErrors.parentEquipmentId}
+              className="sm:col-span-2"
+            >
               <SearchableSelect
-                id="equipment-parent"
                 value={form.parentEquipmentId ?? ""}
                 disabled={mode === "replace"}
                 onChange={(value) =>
@@ -410,18 +464,17 @@ export function EquipmentFormDialog({
                 placeholder="Anlage auswählen"
                 searchPlaceholder="Anlage suchen..."
               />
-            </div>
+            </Field>
           )}
           {mode !== "edit" && (
-            <div className="space-y-2">
-              <Label htmlFor="equipment-state">Aktueller Zustand</Label>
+            <Field label="Aktueller Zustand" htmlFor="equipment-state">
               <Select
                 value={form.state}
                 onValueChange={(value: EquipmentState) =>
                   updateField("state", value)
                 }
               >
-                <SelectTrigger id="equipment-state">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -432,19 +485,17 @@ export function EquipmentFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="equipment-location">Position am Einsatzort</Label>
+          <Field label="Position am Einsatzort" htmlFor="equipment-location">
             <Input
-              id="equipment-location"
               value={form.locationDetail ?? ""}
               onChange={(event) =>
                 updateField("locationDetail", event.target.value)
               }
               placeholder="z. B. Heizraum, Keller"
             />
-          </div>
+          </Field>
         </div>
 
         <FormDisclosure
@@ -452,158 +503,141 @@ export function EquipmentFormDialog({
           defaultOpen={mode === "edit"}
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="equipment-manufacturer">Hersteller</Label>
+            <Field label="Hersteller" htmlFor="equipment-manufacturer">
               <Input
-                id="equipment-manufacturer"
                 value={form.manufacturer ?? ""}
                 onChange={(event) =>
                   updateField("manufacturer", event.target.value)
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-model">Modell</Label>
+            </Field>
+            <Field label="Modell" htmlFor="equipment-model">
               <Input
-                id="equipment-model"
                 value={form.model ?? ""}
                 onChange={(event) => updateField("model", event.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-serial">Seriennummer</Label>
+            </Field>
+            <Field label="Seriennummer" htmlFor="equipment-serial">
               <Input
-                id="equipment-serial"
                 value={form.serialNumber}
                 onChange={(event) =>
                   updateField("serialNumber", event.target.value)
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-product">
-                Hersteller- oder Artikelnummer
-              </Label>
+            </Field>
+            <Field
+              label="Hersteller- oder Artikelnummer"
+              htmlFor="equipment-product"
+            >
               <Input
-                id="equipment-product"
                 value={form.productNumber}
                 onChange={(event) =>
                   updateField("productNumber", event.target.value)
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-operator">Betreiberkennung</Label>
+            </Field>
+            <Field label="Betreiberkennung" htmlFor="equipment-operator">
               <Input
-                id="equipment-operator"
                 value={form.operatorNumber}
                 onChange={(event) =>
                   updateField("operatorNumber", event.target.value)
                 }
               />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="equipment-notes">Technische Hinweise</Label>
+            </Field>
+            <Field
+              label="Technische Hinweise"
+              htmlFor="equipment-notes"
+              className="sm:col-span-2"
+            >
               <Textarea
-                id="equipment-notes"
                 value={form.technicalNotes ?? ""}
                 onChange={(event) =>
                   updateField("technicalNotes", event.target.value)
                 }
                 placeholder="Nur dauerhafte technische Hinweise, keine Servicechronik"
               />
-            </div>
+            </Field>
           </div>
         </FormDisclosure>
 
         <FormDisclosure label="Installation, Inbetriebnahme und Gewährleistung">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="equipment-installation-date">
-                Installationsdatum
-              </Label>
+            <Field
+              label="Installationsdatum"
+              htmlFor="equipment-installation-date"
+            >
               <DatePicker
-                id="equipment-installation-date"
                 value={toDate(form.installationDate)}
                 onChange={(value) =>
                   updateField("installationDate", toDateValue(value))
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-commissioning-date">
-                Inbetriebnahme
-              </Label>
+            </Field>
+            <Field
+              label="Inbetriebnahme"
+              htmlFor="equipment-commissioning-date"
+            >
               <DatePicker
-                id="equipment-commissioning-date"
                 value={toDate(form.commissioningDate)}
                 onChange={(value) =>
                   updateField("commissioningDate", toDateValue(value))
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-warranty-provider">
-                Gewährleistungsgeber
-              </Label>
+            </Field>
+            <Field
+              label="Gewährleistungsgeber"
+              htmlFor="equipment-warranty-provider"
+            >
               <Input
-                id="equipment-warranty-provider"
                 value={form.warrantyProvider ?? ""}
                 onChange={(event) =>
                   updateField("warrantyProvider", event.target.value)
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-warranty-basis">Grundlage</Label>
+            </Field>
+            <Field label="Grundlage" htmlFor="equipment-warranty-basis">
               <Input
-                id="equipment-warranty-basis"
                 value={form.warrantyBasis ?? ""}
                 onChange={(event) =>
                   updateField("warrantyBasis", event.target.value)
                 }
                 placeholder="z. B. Vertrag oder Herstellerzusage"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-warranty-start">Beginn</Label>
+            </Field>
+            <Field label="Beginn" htmlFor="equipment-warranty-start">
               <DatePicker
-                id="equipment-warranty-start"
                 value={toDate(form.warrantyStartDate)}
                 onChange={(value) =>
                   updateField("warrantyStartDate", toDateValue(value))
                 }
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="equipment-warranty-end">Ende</Label>
+            </Field>
+            <Field label="Ende" htmlFor="equipment-warranty-end">
               <DatePicker
-                id="equipment-warranty-end"
                 value={toDate(form.warrantyEndDate)}
                 onChange={(value) =>
                   updateField("warrantyEndDate", toDateValue(value))
                 }
               />
-            </div>
+            </Field>
           </div>
         </FormDisclosure>
 
         {mode !== "create" && (
-          <div className="space-y-2">
-            <Label htmlFor="equipment-reason">Grund der Änderung</Label>
+          <Field
+            label="Grund der Änderung"
+            htmlFor="equipment-reason"
+            required
+            error={fieldErrors.reason}
+          >
             <Textarea
-              id="equipment-reason"
               value={form.reason ?? ""}
               onChange={(event) => updateField("reason", event.target.value)}
               placeholder="Warum wird diese Änderung vorgenommen?"
             />
-          </div>
+          </Field>
         )}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
 
         <DialogFooter>
           <Button

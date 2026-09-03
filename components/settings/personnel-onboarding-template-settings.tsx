@@ -16,8 +16,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useBanner } from "@/components/ui/banner";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
@@ -48,12 +49,22 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
   const [required, setRequired] = useState(true);
   const [blocksAccess, setBlocksAccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; itemTitle?: string }>({});
   const { run, isPending } = useServerAction(publishPersonnelOnboardingTemplate);
 
   useRealtimeRouterRefresh({ tables: ["personnel_onboarding_templates"] });
 
   async function submit(): Promise<void> {
     setError(null);
+    const nextFieldErrors = {
+      name: name.trim() ? undefined : "Bitte gib einen Namen an.",
+      itemTitle: itemTitle.trim() ? undefined : "Bitte gib den ersten Punkt an.",
+    };
+    setFieldErrors(nextFieldErrors);
+    if (nextFieldErrors.name || nextFieldErrors.itemTitle) {
+      document.getElementById(nextFieldErrors.name ? "template-name" : "template-item-title")?.focus();
+      return;
+    }
     const result = await run({
       templateId: null,
       expectedVersion: 0,
@@ -86,13 +97,10 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
           <h2 id="onboarding-template-settings-title" className="text-base font-semibold">Onboardingvorlagen</h2>
           <p className="mt-1 text-sm text-muted-foreground">Wiederverwendbare Ausgangspunkte. Es gibt keine automatisch angelegte Standardvorlage.</p>
         </div>
-        <Button size="sm" onClick={() => { setError(null); setOpen(true); }} disabled={templates === null}><Plus className="size-4" /> Vorlage</Button>
+        <Button size="sm" onClick={() => { setError(null); setFieldErrors({}); setOpen(true); }} disabled={templates === null}><Plus className="size-4" /> Vorlage</Button>
       </div>
       {templates === null ? (
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          <p>Die Onboardingvorlagen konnten nicht geladen werden.</p>
-          <Button className="mt-2" size="sm" variant="outline" onClick={() => window.location.reload()}>Erneut laden</Button>
-        </div>
+        <SectionError onRetry={() => window.location.reload()}>Die Onboardingvorlagen konnten nicht geladen werden.</SectionError>
       ) : templates.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Noch keine Vorlage eingerichtet.</p>
       ) : (
@@ -110,9 +118,9 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
         <DialogContent>
           <DialogHeader><DialogTitle>Onboardingvorlage veröffentlichen</DialogTitle><DialogDescription>Die erste Version enthält einen klaren Punkt. Weitere Anforderungen werden im erzeugten Plan bearbeitet.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="template-name">Name</Label><Input id="template-name" value={name} onChange={(event) => setName(event.target.value)} /></div>
-            <div className="space-y-2"><Label htmlFor="template-requirement-type">Art des ersten Punkts</Label><SearchableSelect id="template-requirement-type" options={REQUIREMENT_OPTIONS} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></div>
-            <div className="space-y-2"><Label htmlFor="template-item-title">Erster Punkt</Label><Input id="template-item-title" value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} /></div>
+            <Field label="Name" htmlFor="template-name" required error={fieldErrors.name}><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
+            <Field label="Art des ersten Punkts" htmlFor="template-requirement-type"><SearchableSelect options={REQUIREMENT_OPTIONS} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></Field>
+            <Field label="Erster Punkt" htmlFor="template-item-title" required error={fieldErrors.itemTitle}><Input value={itemTitle} onChange={(event) => setItemTitle(event.target.value)} /></Field>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={required} onCheckedChange={(value) => setRequired(value === true)} />Erforderlich</label>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={blocksAccess} onCheckedChange={(value) => setBlocksAccess(value === true)} />Blockiert die Zugangsaktivierung</label>
             <ErrorText>{error}</ErrorText>

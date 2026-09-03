@@ -10,6 +10,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -81,6 +82,12 @@ export function PlanningEntryForm({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    job?: string;
+    title?: string;
+    date?: string;
+    override?: string;
+  }>({});
   const [entryKind, setEntryKind] = useState<'job_visit' | 'internal'>('job_visit');
   const [jobId, setJobId] = useState('');
   const [internalType, setInternalType] = useState('meeting');
@@ -154,6 +161,18 @@ export function PlanningEntryForm({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitError(null);
+    setFieldErrors({});
+    // Required fields in visual order; the first missing one gets the focus.
+    const missing: Array<[keyof typeof fieldErrors, string, string]> = [];
+    if (entryKind === 'job_visit' && !jobId) missing.push(['job', 'Bitte wähle einen Auftrag aus.', 'planning-job']);
+    if (entryKind === 'internal' && !title.trim()) missing.push(['title', 'Bitte gib einen Titel ein.', 'planning-title']);
+    if (!date) missing.push(['date', 'Bitte wähle ein Datum.', 'planning-date']);
+    if (conflicts.length > 0 && overrideReason.trim().length < 8) missing.push(['override', 'Bitte begründe die Abweichung mit mindestens 8 Zeichen.', 'planning-override']);
+    if (missing.length > 0) {
+      setFieldErrors(Object.fromEntries(missing.map(([key, message]) => [key, message])));
+      document.getElementById(missing[0][2])?.focus();
+      return;
+    }
     const durationMinutes = parseHoursInputToMinutes(durationHours);
     const parsedDurationDays = parseDecimalInput(durationDays);
     const parsedInterval = parseDecimalInput(interval);
@@ -303,8 +322,13 @@ export function PlanningEntryForm({
         </div>
 
         {entryKind === 'job_visit' ? (
-          <div className="space-y-2">
-            <Label>Auftrag</Label>
+          <Field
+            label="Auftrag"
+            htmlFor="planning-job"
+            required
+            description="Mehrere Besuche bleiben mit demselben Auftrag verbunden."
+            error={fieldErrors.job}
+          >
             <SearchableMultiSelect
               options={jobOptions}
               selectedIds={jobId ? [jobId] : []}
@@ -314,14 +338,12 @@ export function PlanningEntryForm({
               searchPlaceholder="Auftrag suchen …"
               emptyMessage="Kein Auftrag gefunden"
             />
-            <p className="text-xs text-muted-foreground">Mehrere Besuche bleiben mit demselben Auftrag verbunden.</p>
-          </div>
+          </Field>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="planning-internal-type">Art</Label>
+            <Field label="Art" htmlFor="planning-internal-type">
               <Select value={internalType} onValueChange={setInternalType}>
-                <SelectTrigger id="planning-internal-type"><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="internal_work">Interne Arbeit</SelectItem>
                   <SelectItem value="meeting">Besprechung</SelectItem>
@@ -329,19 +351,16 @@ export function PlanningEntryForm({
                   <SelectItem value="other">Sonstiges</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="planning-title">Titel</Label>
-              <Input id="planning-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="z. B. Teamrunde" />
-            </div>
+            </Field>
+            <Field label="Titel" htmlFor="planning-title" required error={fieldErrors.title}>
+              <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="z. B. Teamrunde" />
+            </Field>
           </div>
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="planning-date">Datum</Label>
+          <Field label="Datum" htmlFor="planning-date" required error={fieldErrors.date}>
             <DatePicker
-              id="planning-date"
               ariaLabel="Datum des Termins"
               value={isoToLocalDate(date)}
               onChange={(nextDate) => {
@@ -351,41 +370,36 @@ export function PlanningEntryForm({
                 setConflicts([]);
               }}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="planning-time-kind">Zeitart</Label>
+          </Field>
+          <Field label="Zeitart" htmlFor="planning-time-kind">
             <Select value={timeKind} onValueChange={(value) => setTimeKind(value as 'timed' | 'all_day')}>
-              <SelectTrigger id="planning-time-kind"><SelectValue /></SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="timed">Mit Uhrzeit</SelectItem>
                 <SelectItem value="all_day">Ganztägig / mehrtägig</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Field>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           {timeKind === 'timed' ? (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="planning-time">Beginn</Label>
-                <TimeInput id="planning-time" value={time} onChange={setTime} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="planning-duration">Dauer</Label>
+              <Field label="Beginn" htmlFor="planning-time" required>
+                <TimeInput value={time} onChange={setTime} />
+              </Field>
+              <Field label="Dauer" htmlFor="planning-duration" required>
                 <DurationHoursInput id="planning-duration" value={durationHours} onChange={setDurationHours} />
-              </div>
+              </Field>
             </>
           ) : (
-            <div className="space-y-2">
-              <Label htmlFor="planning-days">Kalendertage</Label>
+            <Field label="Kalendertage" htmlFor="planning-days" required>
               <QuantityStepper id="planning-days" min={1} value={durationDays} onChange={setDurationDays} />
-            </div>
+            </Field>
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label>Mitarbeiter</Label>
+        <Field label="Mitarbeiter" htmlFor="planning-employees">
           <SearchableMultiSelect
             options={employeeOptions}
             selectedIds={employeeRecordIds}
@@ -405,7 +419,7 @@ export function PlanningEntryForm({
               ))}
             </div>
           )}
-        </div>
+        </Field>
 
         <div className="space-y-3 border-t pt-4">
           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
@@ -415,35 +429,31 @@ export function PlanningEntryForm({
           {recurring && (
             <div className="space-y-4 rounded-lg border bg-muted/20 p-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2"><Label>Rhythmus</Label><Select value={frequency} onValueChange={(value) => setFrequency(value as typeof frequency)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select></div>
-                <div className="space-y-2">
-                  <Label htmlFor="planning-interval">Alle</Label>
+                <Field label="Rhythmus" htmlFor="planning-frequency"><Select value={frequency} onValueChange={(value) => setFrequency(value as typeof frequency)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Täglich</SelectItem><SelectItem value="weekly">Wöchentlich</SelectItem><SelectItem value="monthly">Monatlich</SelectItem></SelectContent></Select></Field>
+                <Field label="Alle" htmlFor="planning-interval">
                   <div className="flex items-center gap-2">
                     <QuantityStepper id="planning-interval" min={1} className="flex-1" value={interval} onChange={setIntervalValue} />
                     <span className="text-sm text-muted-foreground">{frequency === 'daily' ? 'Tage' : frequency === 'weekly' ? 'Wochen' : 'Monate'}</span>
                   </div>
-                </div>
+                </Field>
               </div>
               {frequency === 'weekly' && (
                 <div className="space-y-2"><Label>Wochentage</Label><div className="flex flex-wrap gap-1.5">{WEEKDAYS.map(([label, value]) => <Button key={value} type="button" size="sm" variant={weekdays.includes(value) ? 'secondary' : 'outline'} className="size-8 p-0" aria-pressed={weekdays.includes(value)} onClick={() => setWeekdays((days) => days.includes(value) ? days.filter((day) => day !== value) : [...days, value].sort())}>{label}</Button>)}</div></div>
               )}
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2"><Label>Ende</Label><Select value={endMode} onValueChange={(value) => setEndMode(value as typeof endMode)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="count">Nach Anzahl</SelectItem><SelectItem value="until">An Datum</SelectItem></SelectContent></Select></div>
+                <Field label="Ende" htmlFor="planning-end-mode"><Select value={endMode} onValueChange={(value) => setEndMode(value as typeof endMode)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="count">Nach Anzahl</SelectItem><SelectItem value="until">An Datum</SelectItem></SelectContent></Select></Field>
                 {endMode === 'count' ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="planning-count">Termine</Label>
+                  <Field label="Termine" htmlFor="planning-count">
                     <QuantityStepper id="planning-count" min={2} value={occurrenceCount} onChange={setOccurrenceCount} />
-                  </div>
+                  </Field>
                 ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="planning-until">Letztes Datum</Label>
+                  <Field label="Letztes Datum" htmlFor="planning-until">
                     <DatePicker
-                      id="planning-until"
                       ariaLabel="Letztes Datum der Serie"
                       value={isoToLocalDate(untilDate)}
                       onChange={(nextDate) => setUntilDate(nextDate ? toLocalDateString(nextDate) : '')}
                     />
-                  </div>
+                  </Field>
                 )}
               </div>
               <p className="flex items-start gap-1.5 text-xs text-muted-foreground"><CalendarDays className="mt-0.5 size-3.5 shrink-0" />WerkFlow plant höchstens 18 Monate im Voraus und erweitert die Serie später ohne Duplikate.</p>
@@ -454,31 +464,27 @@ export function PlanningEntryForm({
         {entryKind === 'internal' && (
           <FormDisclosure className="text-sm">
             <div className="grid gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="planning-location">Ort</Label>
+              <Field label="Ort" htmlFor="planning-location">
                 <Input
-                  id="planning-location"
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="planning-description">Beschreibung</Label>
+              </Field>
+              <Field label="Beschreibung" htmlFor="planning-description">
                 <Textarea
-                  id="planning-description"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
-              </div>
+              </Field>
             </div>
           </FormDisclosure>
         )}
 
         {conflicts.length > 0 && (
-          <div data-planning-warning className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3" role="alert">
+          <div data-planning-warning className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/5 p-3" role="status">
             <div><p className="font-medium">Planungshinweise prüfen</p><p className="text-xs text-muted-foreground">Die Hinweise blockieren berechtigte Ausnahmen nicht. Eine bewusste Abweichung benötigt einen Grund.</p></div>
             <ul className="space-y-1.5 text-sm">{conflicts.map((conflict, index) => <li key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`} className="flex gap-2"><span aria-hidden="true">•</span><span>{conflict.employeeName ? `${conflict.employeeName}: ` : ''}{conflict.message}{conflict.localDate ? ` (${conflict.localDate})` : ''}</span></li>)}</ul>
-            <div className="space-y-2"><Label htmlFor="planning-override">Begründung der Abweichung</Label><Textarea id="planning-override" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Warum ist diese Planung trotzdem sinnvoll?" /></div>
+            <Field label="Begründung der Abweichung" htmlFor="planning-override" required description="Mindestens 8 Zeichen." error={fieldErrors.override}><Textarea value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Warum ist diese Planung trotzdem sinnvoll?" /></Field>
           </div>
         )}
 
@@ -486,16 +492,7 @@ export function PlanningEntryForm({
       </DialogBody>
 
       <DialogFooter className="pt-4">
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={
-            submitting ||
-            !date ||
-            (entryKind === 'job_visit' ? !jobId : !title.trim()) ||
-            (conflicts.length > 0 && overrideReason.trim().length < 8)
-          }
-        >
+        <Button type="submit" className="w-full" disabled={submitting}>
           {submitting ? 'Planung wird geprüft …' : conflicts.length > 0 ? 'Mit Begründung planen' : 'Planung prüfen und speichern'}
         </Button>
       </DialogFooter>

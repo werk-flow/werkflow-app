@@ -9,14 +9,9 @@ import { z } from 'zod';
 import { PasswordRequirements } from '@/components/password/PasswordRequirements';
 import { PasswordStrengthMeter } from '@/components/password/PasswordStrengthMeter';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -95,22 +90,6 @@ export function SignupForm({
     [passwordValue]
   );
 
-  // Watch name fields to check if they're filled
-  const firstNameValue =
-    useWatch({ control: form.control, name: 'firstName' }) ?? '';
-  const lastNameValue =
-    useWatch({ control: form.control, name: 'lastName' }) ?? '';
-  const emailValue = useWatch({ control: form.control, name: 'email' }) ?? '';
-
-  // Button is enabled if all fields are filled and password meets requirements
-  // Name length validation only happens on submit
-  const allFieldsFilled =
-    firstNameValue.length > 0 &&
-    lastNameValue.length > 0 &&
-    emailValue.length > 0 &&
-    passwordValue.length > 0;
-  const canSubmit =
-    passwordRequirements.allMet && allFieldsFilled && !isSubmitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +98,7 @@ export function SignupForm({
     form.clearErrors('password');
 
     const values = form.getValues();
-    let hasValidationErrors = false;
+    let firstInvalidField: keyof SignupValues | null = null;
 
     // Validate name fields manually
     if (values.firstName.length < 2) {
@@ -127,7 +106,7 @@ export function SignupForm({
         type: 'manual',
         message: 'Der Vorname muss mindestens 2 Zeichen lang sein.'
       });
-      hasValidationErrors = true;
+      firstInvalidField ??= 'firstName';
     }
 
     if (values.lastName.length < 2) {
@@ -135,7 +114,7 @@ export function SignupForm({
         type: 'manual',
         message: 'Der Nachname muss mindestens 2 Zeichen lang sein.'
       });
-      hasValidationErrors = true;
+      firstInvalidField ??= 'lastName';
     }
 
     // Validate email
@@ -145,7 +124,7 @@ export function SignupForm({
         type: 'manual',
         message: 'Bitte gib eine gültige E-Mail-Adresse ein.'
       });
-      hasValidationErrors = true;
+      firstInvalidField ??= 'email';
     }
 
     // If this is an invite signup, ensure the email matches the invited email
@@ -159,15 +138,17 @@ export function SignupForm({
         type: 'manual',
         message: `Diese Einladung ist für ${maskEmail(invitedEmail)} bestimmt.`
       });
-      hasValidationErrors = true;
+      firstInvalidField ??= 'email';
     }
 
-    // Check password requirements
+    // The requirements checklist under the field already names what is
+    // missing; focusing the field is the only extra signal needed.
     if (!passwordRequirements.allMet) {
-      hasValidationErrors = true;
+      firstInvalidField ??= 'password';
     }
 
-    if (hasValidationErrors) {
+    if (firstInvalidField) {
+      form.setFocus(firstInvalidField);
       return;
     }
 
@@ -266,55 +247,31 @@ export function SignupForm({
           <FormField
             control={form.control}
             name="firstName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel
-                  className={
-                    !hasAttemptedSubmit
-                      ? 'data-[error=true]:text-foreground'
-                      : ''
-                  }
-                >
-                  Vorname
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    autoComplete="given-name"
-                    placeholder="Max"
-                    {...field}
-                    aria-invalid={hasAttemptedSubmit ? undefined : false}
-                  />
-                </FormControl>
-                {/* Only show error after user attempts to submit */}
-                {hasAttemptedSubmit && <FormMessage />}
-              </FormItem>
+            render={({ field, fieldState }) => (
+              <Field
+                label="Vorname"
+                required
+                error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
+              >
+                <Input autoComplete="given-name" placeholder="Max" {...field} />
+              </Field>
             )}
           />
           <FormField
             control={form.control}
             name="lastName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel
-                  className={
-                    !hasAttemptedSubmit
-                      ? 'data-[error=true]:text-foreground'
-                      : ''
-                  }
-                >
-                  Nachname
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    autoComplete="family-name"
-                    placeholder="Mustermann"
-                    {...field}
-                    aria-invalid={hasAttemptedSubmit ? undefined : false}
-                  />
-                </FormControl>
-                {/* Only show error after user attempts to submit */}
-                {hasAttemptedSubmit && <FormMessage />}
-              </FormItem>
+            render={({ field, fieldState }) => (
+              <Field
+                label="Nachname"
+                required
+                error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
+              >
+                <Input
+                  autoComplete="family-name"
+                  placeholder="Mustermann"
+                  {...field}
+                />
+              </Field>
             )}
           />
         </div>
@@ -322,37 +279,29 @@ export function SignupForm({
         <FormField
           control={form.control}
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel
+          render={({ field, fieldState }) => (
+            <Field
+              label="E-Mail"
+              required
+              description={
+                isInviteSignup
+                  ? 'Die E-Mail-Adresse ist durch die Einladung vorgegeben.'
+                  : undefined
+              }
+              error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
+            >
+              <Input
+                {...field}
+                type="text"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="beispiel@firma.de"
+                readOnly={isInviteSignup}
                 className={
-                  !hasAttemptedSubmit ? 'data-[error=true]:text-foreground' : ''
+                  isInviteSignup ? 'bg-muted cursor-not-allowed' : ''
                 }
-              >
-                E-Mail
-              </FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  type="text"
-                  inputMode="email"
-                  autoComplete="email"
-                  placeholder="beispiel@firma.de"
-                  readOnly={isInviteSignup}
-                  aria-invalid={hasAttemptedSubmit ? undefined : false}
-                  className={
-                    isInviteSignup ? 'bg-muted cursor-not-allowed' : ''
-                  }
-                />
-              </FormControl>
-              {isInviteSignup && (
-                <p className="text-xs text-muted-foreground">
-                  Die E-Mail-Adresse ist durch die Einladung vorgegeben.
-                </p>
-              )}
-              {/* Only show error after user attempts to submit */}
-              {hasAttemptedSubmit && <FormMessage />}
-            </FormItem>
+              />
+            </Field>
           )}
         />
 
@@ -360,11 +309,19 @@ export function SignupForm({
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
-            <FormItem>
-              <FormLabel>Passwort</FormLabel>
-              <FormControl>
-                <PasswordInput {...field} autoComplete="new-password" />
-              </FormControl>
+            // Client-side rules are already visible in the requirements
+            // checklist; only server rejections (e.g. the leaked-password
+            // check) carry information the checklist cannot show.
+            <Field
+              label="Passwort"
+              required
+              error={
+                fieldState.error?.type === 'server'
+                  ? fieldState.error.message
+                  : undefined
+              }
+            >
+              <PasswordInput {...field} autoComplete="new-password" />
               <PasswordStrengthMeter
                 className="mt-2"
                 level={passwordStrength}
@@ -373,24 +330,13 @@ export function SignupForm({
                 className="mt-2"
                 requirements={passwordRequirements}
               />
-              {/* Client-side rules are already visible in the requirements
-                  checklist above; only server rejections (e.g. the
-                  leaked-password check) carry information the checklist
-                  cannot show and must be visible. */}
-              {fieldState.error?.type === 'server' ? (
-                <FormMessage />
-              ) : (
-                <FormMessage aria-hidden className="hidden" />
-              )}
-            </FormItem>
+            </Field>
           )}
         />
 
-        {formError ? (
-          <p className="text-sm text-destructive">{formError}</p>
-        ) : null}
+        <ErrorText>{formError}</ErrorText>
 
-        <Button className="w-full" disabled={!canSubmit} type="submit">
+        <Button className="w-full" disabled={isSubmitting} type="submit">
           {isSubmitting ? 'Konto wird erstellt...' : 'Registrieren'}
         </Button>
       </form>

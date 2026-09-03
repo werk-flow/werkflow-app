@@ -1,4 +1,5 @@
 'use client';
+import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -100,7 +101,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
 
           <div className="flex justify-end gap-2">
             <Button

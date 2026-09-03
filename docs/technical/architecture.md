@@ -1,6 +1,6 @@
 # Technical Architecture
 
-Status: living — last reviewed 2026-09-02
+Status: living — last reviewed 2026-09-03
 
 This document describes the current high-level architecture of WerkFlow. It intentionally avoids duplicating exact database schema details; for exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards, including the implementation-simplicity rules, live in `AGENTS.md` and are not repeated here.
 
@@ -54,6 +54,10 @@ The app uses the Next.js App Router. The top-level trees under `app/` are:
 - `app/upgrade/` and `app/invite-error/`: standalone pages outside the product shell for the subscription upgrade and for a failed invite redemption.
 
 Authenticated product areas are Dashboard, Aufgaben, Kalender, Zeiterfassung with Zeitkonto and Perioden, Qualifikationen, Anfragen, Aufträge and Projekte with Übergaben, Dokumente, Inventar, Service with Anlagen, Fälle and Wartung, Arbeitsvorlagen, Mitarbeiter, Kunden, and Einstellungen. The sidebar entries live in `components/sidebar/app-shell.tsx`; the route tree under `app/(app)/` is the authority for what exists. Inventory V1 is implemented; use [inventory.md](../features/inventory.md) for the current product boundary.
+
+### Page shell and area layouts
+
+Since 2026-09-03 every authenticated page renders one column: `PageShell` → `PageHeader` → `PageBody` from `components/shared/page-shell.tsx` and `page-header.tsx`. The app shell's `<main>` carries no padding and no scroll region; `PageBody` owns both, hides horizontal overflow, and reserves the bottom clearance for the clock button. Areas with subpages (`/service`, `/zeiterfassung`, `/einstellungen`) render the shell and a persistent header with `AreaNav` route tabs in a `layout.tsx`; their pages render content only, and their `loading.tsx` files render content-only skeletons so the header never blinks. ESLint bans the raw column class strings outside the primitive, and the `@AUDIT-LAYOUT` browser audit walks every area at 375 px. The design rules behind this live in the `werkflow-design` skill; the record of the change is [uiux-hardening-2026-09.md](../plans/uiux-hardening-2026-09.md).
 
 ### Request-edge routing
 

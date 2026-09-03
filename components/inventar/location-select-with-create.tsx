@@ -16,8 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -136,21 +137,18 @@ function CreateLocationDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="quick-location-name">Name</Label>
+          <Field label="Name" htmlFor="quick-location-name" required>
             <Input
-              id="quick-location-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="quick-location-type">Typ</Label>
+          </Field>
+          <Field label="Typ" htmlFor="quick-location-type">
             <Select
               value={locationType}
               onValueChange={(value) => setLocationType(value as InventoryLocationType)}
             >
-              <SelectTrigger id="quick-location-type">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -161,18 +159,15 @@ function CreateLocationDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="quick-location-description">Beschreibung</Label>
+          </Field>
+          <Field label="Beschreibung" htmlFor="quick-location-description">
             <Textarea
-              id="quick-location-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              rows={3}
             />
-          </div>
+          </Field>
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Abbrechen

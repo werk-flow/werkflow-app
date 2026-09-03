@@ -1,4 +1,5 @@
 "use client";
+import { SectionError } from "@/components/ui/section-error";
 
 import { useEffect, useState, type ReactElement } from "react";
 
@@ -52,9 +53,7 @@ export function MaintenanceCoverageDocumentsDialog({
           </DialogDescription>
         </DialogHeader>
         {failed ? (
-          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            Dokumente konnten nicht geladen werden.
-          </p>
+          <SectionError>Dokumente konnten nicht geladen werden.</SectionError>
         ) : (
           <ContextualDocumentsSection
             title="Dokumente & Bilder"

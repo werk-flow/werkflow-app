@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
@@ -229,8 +229,7 @@ function TimeActivityDialogForm({
             </div>
 
             {canLinkJob && (
-              <div className="space-y-2">
-                <Label htmlFor="time-activity-job">Zuordnung</Label>
+              <Field label="Zuordnung" htmlFor="time-activity-job">
                 <div className="flex gap-2">
                   <Button
                     id="time-activity-job"
@@ -245,14 +244,13 @@ function TimeActivityDialogForm({
                   </Button>
                   {jobId && <Button type="button" variant="ghost" onClick={() => setJobId(null)}>Lösen</Button>}
                 </div>
-              </div>
+              </Field>
             )}
 
             {kind === 'internal_activity' && (
-              <div className="space-y-2">
-                <Label htmlFor="time-internal-type">Interne Tätigkeit</Label>
+              <Field label="Interne Tätigkeit" htmlFor="time-internal-type">
                 <Select value={internalType} onValueChange={(value) => setInternalType(value as TimeInternalActivity)}>
-                  <SelectTrigger id="time-internal-type"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="internal_work">Betriebsarbeit</SelectItem>
                     <SelectItem value="meeting">Besprechung</SelectItem>
@@ -260,15 +258,14 @@ function TimeActivityDialogForm({
                     <SelectItem value="other">Sonstiges</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             )}
 
             {kind === 'travel' && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="time-travel-route">Strecke</Label>
+                <Field label="Strecke" htmlFor="time-travel-route">
                   <Select value={travelRoute} onValueChange={(value) => setTravelRoute(value as TimeTravelRoute)}>
-                    <SelectTrigger id="time-travel-route"><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="company_to_site">Betrieb → Einsatzort</SelectItem>
                       <SelectItem value="home_to_site">Zuhause → Einsatzort</SelectItem>
@@ -278,35 +275,33 @@ function TimeActivityDialogForm({
                       <SelectItem value="unspecified">Nicht angegeben</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="time-travel-role">Rolle</Label>
+                </Field>
+                <Field label="Rolle" htmlFor="time-travel-role">
                   <Select value={travelRole} onValueChange={(value) => setTravelRole(value as TimeTravelRole)}>
-                    <SelectTrigger id="time-travel-role"><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="driver">Selbst gefahren</SelectItem>
                       <SelectItem value="passenger">Mitgefahren</SelectItem>
                       <SelectItem value="unspecified">Nicht angegeben</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                </Field>
               </div>
             )}
 
             {kind === 'standby' && (
-              <div className="space-y-2">
-                <Label htmlFor="time-standby-context">Bereitschaft</Label>
+              <Field label="Bereitschaft" htmlFor="time-standby-context">
                 <Select value={standbyContext} onValueChange={(value) => setStandbyContext(value as TimeStandbyContext)}>
-                  <SelectTrigger id="time-standby-context"><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="on_site">Vor Ort</SelectItem>
                     <SelectItem value="remote">Extern</SelectItem>
                     <SelectItem value="unspecified">Nicht angegeben</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
             )}
-            {error && <ErrorText>{error}</ErrorText>}
+            <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
             {state?.isClockedIn && (

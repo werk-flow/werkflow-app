@@ -1,4 +1,5 @@
 'use client';
+import { ErrorText } from '@/components/ui/error-text';
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -50,9 +51,7 @@ export function SimulatePaymentButton() {
           'Zahlung simulieren / Fortfahren'
         )}
       </Button>
-      {error && (
-        <p className="text-sm text-destructive text-center">{error}</p>
-      )}
+      <ErrorText className="text-center">{error}</ErrorText>
     </div>
   );
 }

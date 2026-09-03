@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -557,8 +557,7 @@ function ConfigurationDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor={`${responsibility}-mode`}>Verantwortliche Personen</Label>
+          <Field label="Verantwortliche Personen" htmlFor={`${responsibility}-mode`}>
             <Select
               value={mode}
               onValueChange={(value) => {
@@ -566,7 +565,7 @@ function ConfigurationDialog({
                 setPreview(null);
               }}
             >
-              <SelectTrigger id={`${responsibility}-mode`}>
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -576,7 +575,7 @@ function ConfigurationDialog({
                 <SelectItem value="selected">Bestimmte Personen</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
           {mode === 'selected' ? (
             <fieldset className="space-y-2">
@@ -727,7 +726,14 @@ function DelegationDialog({
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [personErrors, setPersonErrors] = useState<{
+    delegator?: string;
+    substitute?: string;
+  }>({});
   const hasInvalidDateRange = validUntil < validFrom;
+  const dateRangeError = hasInvalidDateRange
+    ? 'Das Enddatum darf nicht vor dem Startdatum liegen.'
+    : null;
   const canSave =
     Boolean(delegatorId) && Boolean(substituteId) && !hasInvalidDateRange;
 
@@ -738,6 +744,7 @@ function DelegationDialog({
     setValidUntil(data.businessDate);
     setNote('');
     setSaveError(null);
+    setPersonErrors({});
   };
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) reset();
@@ -746,7 +753,25 @@ function DelegationDialog({
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (hasInvalidDateRange || isSaving) return;
+    if (isSaving) return;
+    const nextPersonErrors = {
+      delegator: delegatorId
+        ? undefined
+        : 'Bitte wähle die verantwortliche Person aus.',
+      substitute: substituteId ? undefined : 'Bitte wähle eine Vertretung aus.',
+    };
+    setPersonErrors(nextPersonErrors);
+    const firstInvalidId = nextPersonErrors.delegator
+      ? `${responsibility}-delegator`
+      : nextPersonErrors.substitute
+        ? `${responsibility}-substitute`
+        : hasInvalidDateRange
+          ? `${responsibility}-valid-until`
+          : null;
+    if (firstInvalidId) {
+      document.getElementById(firstInvalidId)?.focus();
+      return;
+    }
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -784,25 +809,36 @@ function DelegationDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor={`${responsibility}-delegator`}>Verantwortliche Person</Label>
+          <Field
+            label="Verantwortliche Person"
+            htmlFor={`${responsibility}-delegator`}
+            required
+            error={personErrors.delegator}
+            className="sm:col-span-2"
+          >
             <SearchableSelect
-              id={`${responsibility}-delegator`}
               options={baseHolders.map((holder) => ({
                 value: holder.employeeRecordId,
                 label: personName(data.people, holder.employeeRecordId),
               }))}
               value={delegatorId}
-              onChange={setDelegatorId}
+              onChange={(value) => {
+                setDelegatorId(value);
+                setPersonErrors((current) => ({ ...current, delegator: undefined }));
+              }}
               placeholder="Person wählen"
               searchPlaceholder="Person suchen …"
               emptyMessage="Keine Person gefunden"
             />
-          </div>
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor={`${responsibility}-substitute`}>Vertretung</Label>
+          </Field>
+          <Field
+            label="Vertretung"
+            htmlFor={`${responsibility}-substitute`}
+            required
+            error={personErrors.substitute}
+            className="sm:col-span-2"
+          >
             <SearchableSelect
-              id={`${responsibility}-substitute`}
               options={data.people
                 .filter((person) => person.employeeRecordId !== delegatorId)
                 .map((person) => ({
@@ -810,40 +846,46 @@ function DelegationDialog({
                   label: formatResponsibilityPersonName(person),
                 }))}
               value={substituteId}
-              onChange={setSubstituteId}
+              onChange={(value) => {
+                setSubstituteId(value);
+                setPersonErrors((current) => ({ ...current, substitute: undefined }));
+              }}
               placeholder="Vertretung wählen"
               searchPlaceholder="Person suchen …"
               emptyMessage="Keine Person gefunden"
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor={`${responsibility}-valid-from`}>Gültig ab</Label>
+          </Field>
+          <Field label="Gültig ab" htmlFor={`${responsibility}-valid-from`} required>
             <DatePicker
-              id={`${responsibility}-valid-from`}
               ariaLabel="Gültig ab"
               value={isoToDate(validFrom)}
               onChange={(date) => date && setValidFrom(toLocalDateString(date))}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor={`${responsibility}-valid-until`}>Gültig bis</Label>
+          </Field>
+          <Field
+            label="Gültig bis"
+            htmlFor={`${responsibility}-valid-until`}
+            required
+            error={dateRangeError}
+          >
             <DatePicker
-              id={`${responsibility}-valid-until`}
               ariaLabel="Gültig bis"
               value={isoToDate(validUntil)}
               onChange={(date) => date && setValidUntil(toLocalDateString(date))}
             />
-          </div>
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor={`${responsibility}-delegation-note`}>Hinweis (optional)</Label>
+          </Field>
+          <Field
+            label="Hinweis (optional)"
+            htmlFor={`${responsibility}-delegation-note`}
+            className="sm:col-span-2"
+          >
             <Textarea
-              id={`${responsibility}-delegation-note`}
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Zum Beispiel: Urlaubsvertretung"
               maxLength={500}
             />
-          </div>
+          </Field>
           {canSave ? (
             <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
               <p className="flex items-center gap-2 font-medium">
@@ -856,17 +898,12 @@ function DelegationDialog({
               </p>
             </div>
           ) : null}
-          <ErrorText className="sm:col-span-2">
-            {hasInvalidDateRange
-              ? 'Das Enddatum darf nicht vor dem Startdatum liegen.'
-              : null}
-          </ErrorText>
           <ErrorText className="sm:col-span-2">{saveError}</ErrorText>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !canSave}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="animate-spin" />}
               Vertretung speichern
             </Button>

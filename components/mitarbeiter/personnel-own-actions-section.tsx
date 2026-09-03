@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveView, type LiveViewResult } from "@/hooks/use-live-view";
 import { useServerAction } from "@/hooks/use-server-action";
@@ -36,6 +36,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("Krankheitsnachweis");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ file?: string; type?: string }>({});
   const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
   const view = useLiveView<OwnPersonnelActions>({
     tables: [
@@ -53,9 +54,9 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   if (view.isLoading) return <Skeleton className="h-28 w-full" />;
   if (!view.data) {
     return forceVisible ? (
-      <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+      <ErrorText className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
         Deine persönlichen Aufgaben konnten nicht geladen werden. Bitte melde dich erneut an.
-      </p>
+      </ErrorText>
     ) : null;
   }
   const { requirements, documents, prestart } = view.data;
@@ -119,8 +120,13 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   }
 
   async function uploadEvidence(): Promise<void> {
-    if (!file || documentType.trim().length < 2) {
-      setError("Bitte wähle eine Datei und gib die Dokumentart an.");
+    const nextFieldErrors = {
+      file: file ? undefined : "Bitte wähle eine Datei aus.",
+      type: documentType.trim().length < 2 ? "Bitte gib die Dokumentart an." : undefined,
+    };
+    setFieldErrors(nextFieldErrors);
+    if (!file || nextFieldErrors.type) {
+      document.getElementById(nextFieldErrors.file ? "own-evidence-file" : "own-evidence-type")?.focus();
       return;
     }
     await run(async () => {
@@ -152,7 +158,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
             {prestart ? "Bis zum Zugangsstart siehst du nur freigegebene Unterlagen und deine Onboardingaufgaben." : "Freigegebene Personalunterlagen und Aufgaben, die dich selbst betreffen."}
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={() => { setError(null); setUploadOpen(true); }}><FileUp className="size-4" /> Nachweis hochladen</Button>
+        <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setUploadOpen(true); }}><FileUp className="size-4" /> Nachweis hochladen</Button>
       </div>
       {requirements.length === 0 && documents.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Keine offenen Personalaufgaben oder freigegebenen Unterlagen.</p>
@@ -197,8 +203,8 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
         <DialogContent>
           <DialogHeader><DialogTitle>Gesundheitsnachweis hochladen</DialogTitle><DialogDescription>Die Datei wird geschützt gespeichert. Andere Beschäftigte und Büro-Nutzer sehen sie nicht.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="own-evidence-file">Datei</Label><Input id="own-evidence-file" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
-            <div className="space-y-2"><Label htmlFor="own-evidence-type">Dokumentart</Label><Input id="own-evidence-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)} /></div>
+            <Field label="Datei" htmlFor="own-evidence-file" required error={fieldErrors.file}><Input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></Field>
+            <Field label="Dokumentart" htmlFor="own-evidence-type" required error={fieldErrors.type}><Input value={documentType} onChange={(event) => setDocumentType(event.target.value)} /></Field>
             <p className="text-xs text-muted-foreground">Keine Diagnose oder medizinischen Details in WerkFlow erfassen.</p>
             <ErrorText>{error}</ErrorText>
           </DialogBody>

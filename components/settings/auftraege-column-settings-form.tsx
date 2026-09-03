@@ -16,15 +16,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
+import { ErrorText } from '@/components/ui/error-text'
+import { Form, FormField } from '@/components/ui/form'
 import { saveAuftraegeColumnPreferences } from '@/lib/jobs/auftraege-column-preferences-actions'
 import {
   AUFTRAEGE_TABLE_COLUMNS,
@@ -122,12 +115,12 @@ export function AuftraegeColumnSettingsForm({
               <FormField
                 control={form.control}
                 name="visibleColumns"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>Tabellenspalten</FormLabel>
-                    <FormDescription>
+                render={({ fieldState }) => (
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">Tabellenspalten</legend>
+                    <p className="text-sm text-muted-foreground">
                       Diese Auswahl gilt nur für dich innerhalb von {organizationName}.
-                    </FormDescription>
+                    </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {AUFTRAEGE_TABLE_COLUMNS.map((column) => {
                         const isChecked = form.watch('visibleColumns').includes(column.id)
@@ -137,15 +130,13 @@ export function AuftraegeColumnSettingsForm({
                             key={column.id}
                             className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/30"
                           >
-                            <FormControl>
-                              <Checkbox
-                                checked={isChecked}
-                                disabled={isSaving}
-                                onCheckedChange={(checked) =>
-                                  toggleColumn(column.id, checked === true)
-                                }
-                              />
-                            </FormControl>
+                            <Checkbox
+                              checked={isChecked}
+                              disabled={isSaving}
+                              onCheckedChange={(checked) =>
+                                toggleColumn(column.id, checked === true)
+                              }
+                            />
                             <div>
                               <p className="text-sm font-medium leading-none">
                                 {column.label}
@@ -155,8 +146,8 @@ export function AuftraegeColumnSettingsForm({
                         )
                       })}
                     </div>
-                    <FormMessage />
-                  </FormItem>
+                    <ErrorText>{fieldState.error?.message}</ErrorText>
+                  </fieldset>
                 )}
               />
             </CardContent>

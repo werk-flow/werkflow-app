@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 
+import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -14,8 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -100,6 +103,53 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Der Wartungsplan wurde gespeichert, aber die Fälligkeiten konnten nicht erzeugt werden. Lade die Seite neu und versuche die Aktivierung erneut.",
 };
 
+type RequiredField =
+  | "clientId"
+  | "siteId"
+  | "templateVersionId"
+  | "effectiveFromDate"
+  | "firstDueDate"
+  | "equipmentIds"
+  | "reason";
+
+// Focus order on a failed submit; the ids double as the spec selectors.
+const REQUIRED_FIELD_IDS: Array<[RequiredField, string]> = [
+  ["clientId", "maintenance-client"],
+  ["siteId", "maintenance-site"],
+  ["templateVersionId", "maintenance-template"],
+  ["effectiveFromDate", "maintenance-effective"],
+  ["firstDueDate", "maintenance-first-due"],
+  ["reason", "maintenance-reason"],
+  ["equipmentIds", "maintenance-equipment"],
+];
+
+// Mirrors maintenancePlanSchema so the user sees the missing field instead of
+// the generic invalid_input message.
+function missingFields(
+  form: FormState,
+  isRevision: boolean,
+): Partial<Record<RequiredField, string>> {
+  const errors: Partial<Record<RequiredField, string>> = {};
+  if (!form.clientId) errors.clientId = "Bitte wähle einen Kunden.";
+  if (!form.siteId) errors.siteId = "Bitte wähle einen Einsatzort.";
+  if (!form.templateVersionId) {
+    errors.templateVersionId = "Bitte wähle eine veröffentlichte Arbeitsvorlage.";
+  }
+  if (!form.effectiveFromDate) {
+    errors.effectiveFromDate = "Bitte gib an, ab wann der Plan gilt.";
+  }
+  if (!form.firstDueDate) {
+    errors.firstDueDate = "Bitte gib die erste Fälligkeit an.";
+  }
+  if (form.siteId && form.equipmentIds.length === 0) {
+    errors.equipmentIds = "Wähle mindestens eine Anlage für den Wartungsumfang.";
+  }
+  if (isRevision && form.reason.trim().length < 3) {
+    errors.reason = "Bitte gib einen Grund mit mindestens 3 Zeichen an.";
+  }
+  return errors;
+}
+
 function formFromPlan(plan: MaintenancePlanItem): FormState {
   return {
     clientId: plan.clientId,
@@ -141,6 +191,7 @@ export function MaintenancePlanDialog({
     initial ? formFromPlan(initial) : EMPTY_FORM,
   );
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const mutationIdentity = useRef({
     planId: initial?.id ?? crypto.randomUUID(),
     revisionId: crypto.randomUUID(),
@@ -191,6 +242,19 @@ export function MaintenancePlanDialog({
     onOpenChange(false);
     router.refresh();
   });
+  const fieldErrors = attempted ? missingFields(form, Boolean(initial)) : {};
+
+  function submit(): void {
+    setError(null);
+    setAttempted(true);
+    const errors = missingFields(form, Boolean(initial));
+    const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
+    if (firstInvalid) {
+      document.getElementById(firstInvalid[1])?.focus();
+      return;
+    }
+    void run();
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -206,9 +270,14 @@ export function MaintenancePlanDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-client">Kunde</Label>
-            <Select
+          <Field
+            label="Kunde"
+            htmlFor="maintenance-client"
+            required
+            error={fieldErrors.clientId}
+          >
+            <ClientSelectWithCreate
+              clients={clients}
               value={form.clientId}
               onValueChange={(clientId) =>
                 setForm((value) => ({
@@ -220,24 +289,17 @@ export function MaintenancePlanDialog({
                 }))
               }
               disabled={Boolean(initial)}
-            >
-              <SelectTrigger id="maintenance-client">
-                <SelectValue placeholder="Kunde wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-site">Einsatzort</Label>
-            <Select
+            />
+          </Field>
+          <Field
+            label="Einsatzort"
+            htmlFor="maintenance-site"
+            required
+            error={fieldErrors.siteId}
+          >
+            <SearchableSelect
               value={form.siteId}
-              onValueChange={(siteId) =>
+              onChange={(siteId) =>
                 setForm((value) => ({
                   ...value,
                   siteId,
@@ -245,80 +307,67 @@ export function MaintenancePlanDialog({
                   equipmentIds: [],
                 }))
               }
+              options={(client?.sites ?? []).map((item) => ({
+                value: item.id,
+                label: item.name,
+                description: item.address,
+              }))}
               disabled={!client || Boolean(initial)}
-            >
-              <SelectTrigger id="maintenance-site">
-                <SelectValue placeholder="Einsatzort wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {client?.sites.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="maintenance-coverage">
-              Operative Abdeckung (optional)
-            </Label>
-            <Select
-              value={form.maintenanceCoverageId || "none"}
-              onValueChange={(maintenanceCoverageId) =>
-                setForm((value) => ({
-                  ...value,
-                  maintenanceCoverageId:
-                    maintenanceCoverageId === "none"
-                      ? ""
-                      : maintenanceCoverageId,
-                }))
+              placeholder="Einsatzort wählen"
+              searchPlaceholder="Einsatzort suchen…"
+              emptyMessage="Kein Einsatzort gefunden"
+            />
+          </Field>
+          <Field
+            label="Operative Abdeckung (optional)"
+            htmlFor="maintenance-coverage"
+            className="sm:col-span-2"
+          >
+            <SearchableSelect
+              value={form.maintenanceCoverageId}
+              onChange={(maintenanceCoverageId) =>
+                setForm((value) => ({ ...value, maintenanceCoverageId }))
               }
+              options={availableCoverages.map((coverage) => ({
+                value: coverage.id,
+                label: `${coverage.coverageNumber}${coverage.reference ? ` · ${coverage.reference}` : ""}`,
+              }))}
               disabled={!site || Boolean(initial)}
-            >
-              <SelectTrigger id="maintenance-coverage">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Keine Abdeckung verknüpfen</SelectItem>
-                {availableCoverages.map((coverage) => (
-                  <SelectItem key={coverage.id} value={coverage.id}>
-                    {coverage.coverageNumber}
-                    {coverage.reference ? ` · ${coverage.reference}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="maintenance-template">
-              Veröffentlichte Arbeitsvorlage
-            </Label>
-            <Select
+              placeholder="Keine Abdeckung verknüpfen"
+              searchPlaceholder="Abdeckung suchen…"
+              emptyMessage="Keine Abdeckung gefunden"
+              allowNone
+              noneLabel="Keine Abdeckung verknüpfen"
+            />
+          </Field>
+          <Field
+            label="Veröffentlichte Arbeitsvorlage"
+            htmlFor="maintenance-template"
+            required
+            error={fieldErrors.templateVersionId}
+            className="sm:col-span-2"
+          >
+            <SearchableSelect
               value={form.templateVersionId}
-              onValueChange={(templateVersionId) =>
+              onChange={(templateVersionId) =>
                 setForm((value) => ({ ...value, templateVersionId }))
               }
-            >
-              <SelectTrigger id="maintenance-template">
-                <SelectValue placeholder="Arbeitsvorlage wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {templates.map((template) => (
-                  <SelectItem
-                    key={template.versionId}
-                    value={template.versionId}
-                  >
-                    {template.name} · Version {template.versionNumber}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-effective">Gültig ab</Label>
+              options={templates.map((template) => ({
+                value: template.versionId,
+                label: `${template.name} · Version ${template.versionNumber}`,
+              }))}
+              placeholder="Arbeitsvorlage wählen"
+              searchPlaceholder="Arbeitsvorlage suchen…"
+              emptyMessage="Keine veröffentlichte Arbeitsvorlage gefunden"
+            />
+          </Field>
+          <Field
+            label="Gültig ab"
+            htmlFor="maintenance-effective"
+            required
+            error={fieldErrors.effectiveFromDate}
+          >
             <DatePicker
-              id="maintenance-effective"
               ariaLabel="Gültig ab"
               value={toLocalDate(form.effectiveFromDate)}
               onChange={(date) =>
@@ -328,11 +377,14 @@ export function MaintenancePlanDialog({
                 }))
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-first-due">Erste Fälligkeit</Label>
+          </Field>
+          <Field
+            label="Erste Fälligkeit"
+            htmlFor="maintenance-first-due"
+            required
+            error={fieldErrors.firstDueDate}
+          >
             <DatePicker
-              id="maintenance-first-due"
               ariaLabel="Erste Fälligkeit"
               value={toLocalDate(form.firstDueDate)}
               onChange={(date) =>
@@ -342,9 +394,8 @@ export function MaintenancePlanDialog({
                 }))
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-interval">Intervall in Monaten</Label>
+          </Field>
+          <Field label="Intervall in Monaten" htmlFor="maintenance-interval">
             <QuantityStepper
               id="maintenance-interval"
               min={1}
@@ -353,11 +404,11 @@ export function MaintenancePlanDialog({
                 setForm((value) => ({ ...value, intervalMonths }))
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-duration">
-              Geplante Dauer in Minuten
-            </Label>
+          </Field>
+          <Field
+            label="Geplante Dauer in Minuten"
+            htmlFor="maintenance-duration"
+          >
             <QuantityStepper
               id="maintenance-duration"
               min={15}
@@ -368,11 +419,11 @@ export function MaintenancePlanDialog({
               }
               unitLabel="Min."
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-window-before">
-              Frühestens (Tage vorher)
-            </Label>
+          </Field>
+          <Field
+            label="Frühestens (Tage vorher)"
+            htmlFor="maintenance-window-before"
+          >
             <QuantityStepper
               id="maintenance-window-before"
               min={0}
@@ -382,11 +433,11 @@ export function MaintenancePlanDialog({
               }
               unitLabel="Tage"
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="maintenance-window-after">
-              Spätestens (Tage danach)
-            </Label>
+          </Field>
+          <Field
+            label="Spätestens (Tage danach)"
+            htmlFor="maintenance-window-after"
+          >
             <QuantityStepper
               id="maintenance-window-after"
               min={0}
@@ -396,11 +447,12 @@ export function MaintenancePlanDialog({
               }
               unitLabel="Tage"
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="maintenance-basis">
-              Nächste Fälligkeit berechnen
-            </Label>
+          </Field>
+          <Field
+            label="Nächste Fälligkeit berechnen"
+            htmlFor="maintenance-basis"
+            className="sm:col-span-2"
+          >
             <Select
               value={form.nextDueBasis}
               onValueChange={(nextDueBasis) =>
@@ -410,7 +462,7 @@ export function MaintenancePlanDialog({
                 }))
               }
             >
-              <SelectTrigger id="maintenance-basis">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -421,13 +473,17 @@ export function MaintenancePlanDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
           {site?.equipment.length ? (
             <fieldset className="space-y-2 sm:col-span-2">
               <legend className="text-sm font-medium">
                 Anlagen im Wartungsumfang
               </legend>
-              <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
+              <div
+                id="maintenance-equipment"
+                tabIndex={-1}
+                className="grid gap-2 rounded-md border p-3 sm:grid-cols-2"
+              >
                 {site.equipment.map((equipment) => (
                   <label
                     key={equipment.id}
@@ -457,21 +513,22 @@ export function MaintenancePlanDialog({
                   </label>
                 ))}
               </div>
+              <ErrorText>{fieldErrors.equipmentIds}</ErrorText>
             </fieldset>
           ) : site ? (
             <p
-              role="alert"
+              role="status"
               className="sm:col-span-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm"
             >
               An diesem Einsatzort ist noch keine aktive Anlage erfasst.
             </p>
           ) : null}
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="maintenance-instructions">
-              Hinweise für die Ausführung
-            </Label>
+          <Field
+            label="Hinweise für die Ausführung"
+            htmlFor="maintenance-instructions"
+            className="sm:col-span-2"
+          >
             <Textarea
-              id="maintenance-instructions"
               value={form.operationalInstructions}
               onChange={(event) =>
                 setForm((value) => ({
@@ -481,13 +538,13 @@ export function MaintenancePlanDialog({
               }
               placeholder="Zugang, Prüfhinweise oder Besonderheiten für den Einsatz"
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="maintenance-overlap">
-              Begründung bei Überschneidung (falls erforderlich)
-            </Label>
+          </Field>
+          <Field
+            label="Begründung bei Überschneidung (falls erforderlich)"
+            htmlFor="maintenance-overlap"
+            className="sm:col-span-2"
+          >
             <Textarea
-              id="maintenance-overlap"
               value={form.overlapReason}
               onChange={(event) =>
                 setForm((value) => ({
@@ -497,23 +554,28 @@ export function MaintenancePlanDialog({
               }
               placeholder="Warum darf dieselbe Anlage in mehreren laufenden Plänen enthalten sein?"
             />
-          </div>
+          </Field>
           {initial ? (
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="maintenance-reason">
-                Grund der neuen Revision
-              </Label>
+            <Field
+              label="Grund der neuen Revision"
+              htmlFor="maintenance-reason"
+              required
+              error={fieldErrors.reason}
+              className="sm:col-span-2"
+            >
               <Input
-                id="maintenance-reason"
                 value={form.reason}
                 onChange={(event) =>
                   setForm((value) => ({ ...value, reason: event.target.value }))
                 }
               />
-            </div>
+            </Field>
           ) : (
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="maintenance-status">Startstatus</Label>
+            <Field
+              label="Startstatus"
+              htmlFor="maintenance-status"
+              className="sm:col-span-2"
+            >
               <Select
                 value={form.status}
                 onValueChange={(status) =>
@@ -523,7 +585,7 @@ export function MaintenancePlanDialog({
                   }))
                 }
               >
-                <SelectTrigger id="maintenance-status">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -535,14 +597,10 @@ export function MaintenancePlanDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
           )}
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button
             type="button"
@@ -552,7 +610,7 @@ export function MaintenancePlanDialog({
           >
             Abbrechen
           </Button>
-          <Button type="button" onClick={() => void run()} disabled={isPending}>
+          <Button type="button" onClick={submit} disabled={isPending}>
             {isPending
               ? "Speichert…"
               : initial

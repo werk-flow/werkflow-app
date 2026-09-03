@@ -18,7 +18,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Separator } from '@/components/ui/separator';
 import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -430,21 +430,17 @@ export function EditJobDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-number">Auftragsnummer</Label>
+            <Field label="Auftragsnummer" htmlFor="edit-job-number">
               <Input
-                id="edit-job-number"
                 placeholder="z.B. AUF-2026-001"
                 value={jobNumber}
                 onChange={(e) => setJobNumber(e.target.value)}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-title">Titel</Label>
+            <Field label="Titel" htmlFor="edit-job-title">
               <Input
-                id="edit-job-title"
                 placeholder="z.B. Heizung reparieren"
                 value={title}
                 onChange={(e) => {
@@ -454,12 +450,14 @@ export function EditJobDialog({
                 disabled={formDisabled}
                 aria-invalid={showContentError ? true : undefined}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-description">Beschreibung</Label>
+            <Field
+              label="Beschreibung"
+              htmlFor="edit-job-description"
+              error={showContentError ? contentError : null}
+            >
               <Textarea
-                id="edit-job-description"
                 placeholder="Optionale Beschreibung..."
                 value={description}
                 onChange={(e) => {
@@ -467,31 +465,34 @@ export function EditJobDialog({
                   if (contentError && e.target.value.trim()) setContentError(null);
                 }}
                 disabled={formDisabled}
-                aria-invalid={showContentError ? true : undefined}
               />
-              <ErrorText>{showContentError ? contentError : null}</ErrorText>
-            </div>
+            </Field>
 
             <Separator />
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Zuordnung
             </p>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-client">Kunde</Label>
+            <Field label="Kunde" htmlFor="edit-job-client">
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
                 onValueChange={handleClientChange}
                 disabled={formDisabled}
-                id="edit-job-client"
                 readOnly={isClientLocked}
                 readOnlyLabel={lockedClientLabel}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-project">Projekt</Label>
+            <Field
+              label="Projekt"
+              htmlFor="edit-job-project"
+              description={
+                noProjectsForClient
+                  ? 'Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.'
+                  : undefined
+              }
+            >
               <SearchableSelect
                 options={projectOptions}
                 value={projectId}
@@ -503,21 +504,15 @@ export function EditJobDialog({
                 allowNone
                 noneLabel="Kein Projekt"
               />
-              {noProjectsForClient && (
-                <p className="text-xs text-muted-foreground">
-                  Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.
-                </p>
-              )}
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-priority">Priorität</Label>
+            <Field label="Priorität" htmlFor="edit-job-priority">
               <Select
                 value={priority}
                 onValueChange={(v) => setPriority(v as JobPriority)}
                 disabled={formDisabled}
               >
-                <SelectTrigger id="edit-job-priority">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -528,36 +523,30 @@ export function EditJobDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             <Separator />
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Planung
             </p>
 
-            <div className="grid gap-2">
-              <Label>Geplantes Datum</Label>
+            <Field label="Geplantes Datum" htmlFor="edit-job-date">
               <DatePicker
                 value={plannedDate}
                 onChange={setPlannedDate}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-time">Geplante Uhrzeit</Label>
+            <Field label="Geplante Uhrzeit" htmlFor="edit-job-time">
               <TimeInput
-                id="edit-job-time"
                 value={plannedTime}
                 onChange={setPlannedTime}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-duration">
-                Geschätzte Dauer (Stunden)
-              </Label>
+            <Field label="Geschätzte Dauer (Stunden)" htmlFor="edit-job-duration">
               <DurationHoursInput
                 id="edit-job-duration"
                 placeholder="z.B. 2.5"
@@ -565,7 +554,7 @@ export function EditJobDialog({
                 onChange={handleEstimatedHoursChange}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
             <SiteContactFields
               clientId={clientId}
@@ -585,19 +574,25 @@ export function EditJobDialog({
               idPrefix="edit-job"
             />
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-location">Ort</Label>
+            <Field label="Ort" htmlFor="edit-job-location">
               <Input
-                id="edit-job-location"
                 placeholder="Adresse oder Ort"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label>Mitarbeiter</Label>
+            <Field
+              label="Mitarbeiter"
+              htmlFor="edit-job-employees"
+              description={isLoadingAssignments ? 'Zuweisungen werden geladen...' : undefined}
+              error={
+                assignmentsLoadFailed
+                  ? 'Die aktuellen Zuweisungen konnten nicht geladen werden. Bitte schließe den Dialog und öffne ihn erneut.'
+                  : null
+              }
+            >
               <EmployeeMultiSelect
                 members={members}
                 selectedIds={selectedEmployees}
@@ -608,22 +603,19 @@ export function EditJobDialog({
                 onTeamApplied={setAssignmentTeamSourceId}
                 disabled={formDisabled || isLoadingAssignments}
               />
-              {isLoadingAssignments && (
-                <p className="text-xs text-muted-foreground">
-                  Zuweisungen werden geladen...
-                </p>
-              )}
-              <ErrorText className="text-xs">
-                {assignmentsLoadFailed
-                  ? 'Die aktuellen Zuweisungen konnten nicht geladen werden. Bitte schließe den Dialog und öffne ihn erneut.'
-                  : null}
-              </ErrorText>
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-job-planned-working">
-                Geplanter Arbeitsaufwand (Stunden)
-              </Label>
+            <Field
+              label="Geplanter Arbeitsaufwand (Stunden)"
+              htmlFor="edit-job-planned-working"
+              description={
+                plannedWorkingTouched
+                  ? 'Manuell angepasst. Bis zum Schließen dieses Dialogs überschreiben weitere Änderungen an Dauer oder Mitarbeitern diesen Wert nicht.'
+                  : !autoSyncPlannedWorking
+                    ? 'Bleibt zunächst beim aktuellen Wert. Änderungen an Dauer oder Mitarbeitern berechnen ihn neu.'
+                    : 'Wird automatisch aus geschätzter Dauer × Mitarbeiter berechnet.'
+              }
+            >
               <DurationHoursInput
                 id="edit-job-planned-working"
                 placeholder="z.B. 5"
@@ -634,14 +626,7 @@ export function EditJobDialog({
                 }}
                 disabled={formDisabled || isLoadingAssignments}
               />
-              <p className="text-xs text-muted-foreground">
-                {plannedWorkingTouched
-                  ? 'Manuell angepasst. Bis zum Schließen dieses Dialogs überschreiben weitere Änderungen an Dauer oder Mitarbeitern diesen Wert nicht.'
-                  : !autoSyncPlannedWorking
-                    ? 'Bleibt zunächst beim aktuellen Wert. Änderungen an Dauer oder Mitarbeitern berechnen ihn neu.'
-                    : 'Wird automatisch aus geschätzter Dauer × Mitarbeiter berechnet.'}
-              </p>
-            </div>
+            </Field>
 
             <ErrorText>{error}</ErrorText>
           </DialogBody>

@@ -56,6 +56,7 @@ The first question for any control is: **does this list contain entities or a fi
 | --- | --- | --- |
 | Page column, header, scroll body | `PageShell`, `PageHeader`, `PageBody` | `components/shared/page-shell`, `components/shared/page-header` |
 | Route tabs of an area with subpages | `AreaNav` (in the area `layout.tsx`) | `components/shared/area-nav` |
+| Header primary action whose dialog lives in suspended content | `PageActionProvider` + `PageActionButton` + `usePageAction` (share the open flag across the Suspense boundary so the header paints first) | `components/shared/page-action` |
 | Label + control stack (every form field) | `Field` (owns gap, required marker, helper text, `ErrorText`, ARIA wiring; `Input`/`Textarea` read its context) | `components/ui/field` |
 | Table row that reacts to a click | `TableRow interactive` (`"select"` for click-selects, double-click-opens) | `components/ui/table` |
 | Mobile card row of a list | `ListRow` (`interactive`, `asChild` for links, `skeleton`) | `components/ui/list-row` |
@@ -85,10 +86,11 @@ The first question for any control is: **does this list contain entities or a fi
 | Inline-editable detail fields | `MetadataSection` | `components/shared/metadata-section` |
 | Success/error/info/progress feedback | `Banner` via `useBanner()` | `components/ui/banner` |
 | Inline field/action errors | `ErrorText` | `components/ui/error-text` |
+| Failure of one page region or section, with retry | `SectionError` | `components/ui/section-error` |
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
-Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, or `type="number"` inputs (range, checkbox and radio join the ban when their last native sites are migrated in the forms sweep), no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container. In development, a raw `Select` with more than nine options throws at render.
+Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no raw `role="alert"` (errors render through `ErrorText`, `SectionError`, or `Banner`), no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container. In development, a raw `Select` with more than nine options throws at render.
 
 Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 
@@ -133,7 +135,7 @@ One convention: on success the dialog closes immediately and the success banner 
 - Inline spinners are only for small contained actions: inside the clicked button or beside the refreshed control.
 - Determinate operations (uploads, imports) show progress, never a bare spinner.
 - Expected latency under ~1 second gets no loader at all — a flashing skeleton reads as broken.
-- Sections load and fail independently: one failed section shows its own error and retry, the rest of the page stays usable.
+- Sections load and fail independently: one failed section shows its own error and retry through `SectionError`, the rest of the page stays usable.
 
 ## Feedback
 

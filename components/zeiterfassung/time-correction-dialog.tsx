@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
@@ -124,6 +124,7 @@ export function TimeCorrectionDialog({
   const [activityKind, setActivityKind] = useState<TimeSegmentKind>(
     entry?.activityKind ?? 'work'
   );
+  const [fieldErrors, setFieldErrors] = useState<{ person?: string; reason?: string }>({});
 
   useEffect(() => {
     if (!open) return;
@@ -182,12 +183,15 @@ export function TimeCorrectionDialog({
   }, [entry]);
 
   const submit = async () => {
-    if (!subjectEmployeeRecordId) {
-      showBanner({ variant: 'error', message: 'Bitte wähle eine Person aus.' });
-      return;
-    }
-    if (!reason.trim()) {
-      showBanner({ variant: 'error', message: 'Bitte gib einen Grund an.' });
+    const nextFieldErrors = {
+      person: subjectEmployeeRecordId ? undefined : 'Bitte wähle eine Person aus.',
+      reason: reason.trim() ? undefined : 'Bitte gib einen Grund an.',
+    };
+    setFieldErrors(nextFieldErrors);
+    if (nextFieldErrors.person || nextFieldErrors.reason) {
+      document
+        .getElementById(nextFieldErrors.person ? 'time-correction-person' : 'time-correction-reason')
+        ?.focus();
       return;
     }
     const baseEmployeeRecordId = kind === 'reassign'
@@ -292,8 +296,7 @@ export function TimeCorrectionDialog({
             </div>
           ) : (
             <>
-              <div className="space-y-1.5">
-                <Label>Korrektur</Label>
+              <Field label="Korrektur" className="gap-1.5">
                 <Select value={kind} onValueChange={(value) => setKind(value as TimeCorrectionKind)}>
                   <SelectTrigger aria-label="Art der Zeitkorrektur"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -304,11 +307,16 @@ export function TimeCorrectionDialog({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
 
               {!entry ? (
-                <div className="space-y-1.5">
-                  <Label>Person</Label>
+                <Field
+                  label="Person"
+                  htmlFor="time-correction-person"
+                  required
+                  error={fieldErrors.person}
+                  className="gap-1.5"
+                >
                   <SearchableSelect
                     ariaLabel="Person für Zeitkorrektur"
                     options={peopleOptions}
@@ -317,12 +325,11 @@ export function TimeCorrectionDialog({
                     searchPlaceholder="Person suchen …"
                     emptyMessage="Keine Person gefunden"
                   />
-                </div>
+                </Field>
               ) : null}
 
               {kind === 'reassign' ? (
-                <div className="space-y-1.5">
-                  <Label>Neue Person</Label>
+                <Field label="Neue Person" htmlFor="time-correction-target-person" required className="gap-1.5">
                   <SearchableSelect
                     ariaLabel="Neue Person für Zeiteintrag"
                     options={peopleOptions}
@@ -331,31 +338,27 @@ export function TimeCorrectionDialog({
                     searchPlaceholder="Person suchen …"
                     emptyMessage="Keine Person gefunden"
                   />
-                </div>
+                </Field>
               ) : null}
 
               {kind !== 'delete' ? (
-                <div className="space-y-1.5">
-                  <Label>{kind === 'edit' ? 'Neue Zeit' : 'Beginn'}</Label>
+                <Field label={kind === 'edit' ? 'Neue Zeit' : 'Beginn'} htmlFor="time-correction-start-date" required className="gap-1.5">
                   <DateTimeField value={startAt} onChange={setStartAt} idPrefix="time-correction-start" />
-                </div>
+                </Field>
               ) : null}
               {kind === 'split' ? (
-                <div className="space-y-1.5">
-                  <Label>Trennzeit</Label>
+                <Field label="Trennzeit" htmlFor="time-correction-split-date" required className="gap-1.5">
                   <DateTimeField value={splitAt} onChange={setSplitAt} idPrefix="time-correction-split" />
-                </div>
+                </Field>
               ) : null}
               {kind === 'add' || kind === 'missed_clock' || kind === 'split' ? (
-                <div className="space-y-1.5">
-                  <Label>Ende</Label>
+                <Field label="Ende" htmlFor="time-correction-end-date" required className="gap-1.5">
                   <DateTimeField value={endAt} onChange={setEndAt} idPrefix="time-correction-end" />
-                </div>
+                </Field>
               ) : null}
 
               {kind === 'reclassify' ? (
-                <div className="space-y-1.5">
-                  <Label>Neue Tätigkeit</Label>
+                <Field label="Neue Tätigkeit" className="gap-1.5">
                   <Select value={activityKind} onValueChange={(value) => setActivityKind(value as TimeSegmentKind)}>
                     <SelectTrigger aria-label="Neue Tätigkeit"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -364,12 +367,11 @@ export function TimeCorrectionDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </Field>
               ) : null}
 
               {kind === 'reallocate' || kind === 'add' || kind === 'missed_clock' ? (
-                <div className="space-y-1.5">
-                  <Label>Auftrag</Label>
+                <Field label="Auftrag" className="gap-1.5">
                   <SearchableSelect
                     ariaLabel="Auftrag für Zeitkorrektur"
                     options={jobOptions}
@@ -378,19 +380,23 @@ export function TimeCorrectionDialog({
                     searchPlaceholder="Auftrag suchen …"
                     emptyMessage="Kein Auftrag gefunden"
                   />
-                </div>
+                </Field>
               ) : null}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="time-correction-reason">Grund</Label>
+              <Field
+                label="Grund"
+                htmlFor="time-correction-reason"
+                required
+                error={fieldErrors.reason}
+                className="gap-1.5"
+              >
                 <Textarea
-                  id="time-correction-reason"
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   placeholder="Was soll korrigiert werden?"
                   maxLength={2000}
                 />
-              </div>
+              </Field>
             </>
           )}
         </DialogBody>

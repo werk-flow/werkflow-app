@@ -5,8 +5,16 @@ import type { SearchableSelectOption } from '@/components/ui/searchable-select';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
+/**
+ * The select only needs identity and display fields, so callers that hold a
+ * projected client option (service, maintenance) can use it without
+ * fabricating a full `Client`. A created `Client` satisfies it as well.
+ */
+export type ClientSelectItem = Pick<Client, 'id' | 'name'> &
+  Partial<Pick<Client, 'email'>>;
+
 interface ClientSelectWithCreateProps {
-  clients: Client[];
+  clients: ClientSelectItem[];
   value: string;
   onValueChange: (value: string) => void;
   disabled?: boolean;
@@ -15,7 +23,7 @@ interface ClientSelectWithCreateProps {
   readOnlyLabel?: string;
 }
 
-function clientOption(client: Client): SearchableSelectOption {
+function clientOption(client: ClientSelectItem): SearchableSelectOption {
   return {
     value: client.id,
     label: client.name,

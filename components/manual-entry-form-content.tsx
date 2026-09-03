@@ -7,7 +7,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { TimeInput } from '@/components/ui/time-input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import {
   Select,
   SelectContent,
@@ -96,6 +96,7 @@ export function ManualEntryFormContent({
     entryMode === 'clock_in' || entryMode === 'both';
 
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ member?: string; date?: string }>({});
   const { showBanner } = useBanner();
 
   useEffect(() => {
@@ -201,6 +202,7 @@ export function ManualEntryFormContent({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setFieldErrors({});
 
     if (!activeOrgId) {
       setError('Keine Organisation ausgewählt.');
@@ -208,7 +210,8 @@ export function ManualEntryFormContent({
     }
 
     if (isAdminOrManager && !selectedUserId) {
-      setError('Bitte wähle einen Mitarbeiter aus.');
+      setFieldErrors({ member: 'Bitte wähle einen Mitarbeiter aus.' });
+      document.getElementById('manual-entry-member')?.focus();
       return;
     }
 
@@ -219,7 +222,8 @@ export function ManualEntryFormContent({
     }
 
     if (!selectedDate) {
-      setError('Bitte ein gültiges Datum wählen.');
+      setFieldErrors({ date: 'Bitte ein gültiges Datum wählen.' });
+      document.getElementById('manual-entry-date')?.focus();
       return;
     }
 
@@ -341,8 +345,7 @@ export function ManualEntryFormContent({
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         {!lockEntryMode && (
-          <div className="space-y-2">
-            <Label>Art des Eintrags</Label>
+          <Field label="Art des Eintrags">
             <Select
               value={entryMode}
               onValueChange={(value) => setEntryMode(value as EntryMode)}
@@ -358,14 +361,17 @@ export function ManualEntryFormContent({
                 <SelectItem value="clock_out">Nur Ausstempeln</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </Field>
         )}
 
         {isAdminOrManager && (
-          <div className="space-y-2">
-            <Label htmlFor="manual-entry-member">Mitarbeiter</Label>
+          <Field
+            label="Mitarbeiter"
+            htmlFor="manual-entry-member"
+            required
+            error={fieldErrors.member}
+          >
             <SearchableSelect
-              id="manual-entry-member"
               options={memberOptions}
               value={selectedUserId}
               onChange={setSelectedUserId}
@@ -376,12 +382,11 @@ export function ManualEntryFormContent({
               emptyMessage="Kein Mitarbeiter gefunden"
               disabled={isLoadingMembers}
             />
-          </div>
+          </Field>
         )}
 
         {canAssignJob && (
-          <div className="space-y-2">
-            <Label>Auftrag (optional)</Label>
+          <Field label="Auftrag (optional)">
             <SearchableSelect
               options={jobOpts}
               value={selectedJobId}
@@ -395,48 +400,47 @@ export function ManualEntryFormContent({
               allowNone
               noneLabel="Kein Auftrag"
             />
-          </div>
+          </Field>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="manual-entry-date">Datum</Label>
+        <Field
+          label="Datum"
+          htmlFor="manual-entry-date"
+          required
+          error={fieldErrors.date}
+        >
           <DatePicker
-            id="manual-entry-date"
             ariaLabel="Datum"
             value={selectedDate}
             onChange={setSelectedDate}
             placeholder="Datum wählen"
           />
-        </div>
+        </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {(entryMode === 'clock_in' || entryMode === 'both') && (
-            <div className="space-y-2">
-              <Label htmlFor="clockInTime">Einstempeln</Label>
+            <Field label="Einstempeln" htmlFor="clockInTime" required>
               <div className="relative">
                 <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
                 <TimeInput
-                  id="clockInTime"
                   value={clockInTime}
                   onChange={setClockInTime}
                   className="pl-10 pr-3"
                 />
               </div>
-            </div>
+            </Field>
           )}
           {(entryMode === 'clock_out' || entryMode === 'both') && (
-            <div className="space-y-2">
-              <Label htmlFor="clockOutTime">Ausstempeln</Label>
+            <Field label="Ausstempeln" htmlFor="clockOutTime" required>
               <div className="relative">
                 <Clock className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-foreground/80" />
                 <TimeInput
-                  id="clockOutTime"
                   value={clockOutTime}
                   onChange={setClockOutTime}
                   className="pl-10 pr-3"
                 />
               </div>
-            </div>
+            </Field>
           )}
         </div>
 

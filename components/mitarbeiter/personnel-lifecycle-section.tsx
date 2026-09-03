@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBanner } from "@/components/ui/banner";
@@ -111,6 +111,14 @@ function errorMessage(code: string): string {
   return ERROR_MESSAGES[code] ?? "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.";
 }
 
+/** Field errors are keyed by control id; the first key wins focus. */
+function focusFirstInvalid(errors: Record<string, string>): boolean {
+  const firstInvalidId = Object.keys(errors)[0];
+  if (!firstInvalidId) return false;
+  document.getElementById(firstInvalidId)?.focus();
+  return true;
+}
+
 function formatDate(value: string | null): string {
   if (!value) return "Nicht festgelegt";
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeZone: "Europe/Berlin" }).format(new Date(value));
@@ -156,6 +164,7 @@ export function PersonnelLifecycleSection({
   const [requirementOpen, setRequirementOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [accessKind, setAccessKind] = useState<PersonnelAccessTransitionKind>("schedule_activation");
   const [accessAt, setAccessAt] = useState(defaultAccessDateTime);
   const [employmentKind, setEmploymentKind] = useState<PersonnelEmploymentTransitionKind>("record_notice");
@@ -200,10 +209,11 @@ export function PersonnelLifecycleSection({
     const instant = isScheduledAccessTransition(accessKind)
       ? parseBerlinDateTimeInput(accessAt)?.toISOString()
       : new Date().toISOString();
-    if (!instant || reason.trim().length < 2) {
-      setError("Bitte gib Zeitpunkt und Grund an.");
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!instant) nextErrors["access-transition-date"] = "Bitte gib einen Zeitpunkt an.";
+    if (reason.trim().length < 2) nextErrors["access-reason"] = "Bitte gib einen Grund an.";
+    setFieldErrors(nextErrors);
+    if (focusFirstInvalid(nextErrors)) return;
     await run(async () => {
       const result = await setPersonnelAccessTransition({
         employeeRecordId: data.employeeRecordId,
@@ -225,10 +235,11 @@ export function PersonnelLifecycleSection({
 
   async function submitEmployment(): Promise<void> {
     setError(null);
-    if (!employmentDate || reason.trim().length < 2) {
-      setError("Bitte gib Datum und Grund an.");
-      return;
-    }
+    const nextErrors: Record<string, string> = {};
+    if (!employmentDate) nextErrors["employment-date"] = "Bitte gib ein Datum an.";
+    if (reason.trim().length < 2) nextErrors["employment-reason"] = "Bitte gib einen Grund an.";
+    setFieldErrors(nextErrors);
+    if (focusFirstInvalid(nextErrors) || !employmentDate) return;
     await run(async () => {
       const result = await setPersonnelEmploymentTransition({
         employeeRecordId: data.employeeRecordId,
@@ -252,6 +263,10 @@ export function PersonnelLifecycleSection({
 
   async function submitPlan(): Promise<void> {
     setError(null);
+    const nextErrors: Record<string, string> = {};
+    if (!planName.trim()) nextErrors["plan-name"] = "Bitte gib eine Bezeichnung an.";
+    setFieldErrors(nextErrors);
+    if (focusFirstInvalid(nextErrors)) return;
     await run(async () => {
       const result = await createPersonnelOnboardingPlan({
         employeeRecordId: data.employeeRecordId,
@@ -288,6 +303,10 @@ export function PersonnelLifecycleSection({
   async function submitRequirement(): Promise<void> {
     if (!currentPlan) return;
     setError(null);
+    const nextErrors: Record<string, string> = {};
+    if (!requirementTitle.trim()) nextErrors["requirement-title"] = "Bitte gib einen Titel an.";
+    setFieldErrors(nextErrors);
+    if (focusFirstInvalid(nextErrors)) return;
     await run(async () => {
       const result = await savePersonnelOnboardingRequirement({
         planId: currentPlan.id,
@@ -344,11 +363,12 @@ export function PersonnelLifecycleSection({
   }
 
   async function submitUpload(): Promise<void> {
-    if (!file || documentType.trim().length < 2) {
-      setError("Bitte wähle eine Datei und gib die Dokumentart an.");
-      return;
-    }
     setError(null);
+    const nextErrors: Record<string, string> = {};
+    if (!file) nextErrors["personnel-file"] = "Bitte wähle eine Datei aus.";
+    if (documentType.trim().length < 2) nextErrors["document-type"] = "Bitte gib die Dokumentart an.";
+    setFieldErrors(nextErrors);
+    if (focusFirstInvalid(nextErrors) || !file) return;
     await run(async () => {
       const result = await uploadPersonnelDocumentDirect({
         employeeRecordId: data.employeeRecordId,
@@ -427,7 +447,7 @@ export function PersonnelLifecycleSection({
                 ? "Noch keine kontrollierte Zugangsregel. Bestehender Mitgliedszugang bleibt unverändert."
                 : `Wirksam seit ${formatDate(data.access.effectiveAt)}`}
           </p>
-          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setAccessOpen(true); }}>Zugang steuern</Button> : null}
+          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setAccessOpen(true); }}>Zugang steuern</Button> : null}
         </div>
 
         <div className="rounded-md border p-3">
@@ -444,7 +464,7 @@ export function PersonnelLifecycleSection({
                 ? `Wirksam seit ${formatDate(data.employment.effectiveOn)}`
                 : "Eintritts- und Austrittsdaten bleiben bis zum ersten kontrollierten Übergang maßgeblich."}
           </p>
-          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setEmploymentOpen(true); }}>Übergang erfassen</Button> : null}
+          {canAdministerAccess ? <Button className="mt-3" size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setEmploymentOpen(true); }}>Übergang erfassen</Button> : null}
         </div>
       </div>
 
@@ -465,9 +485,9 @@ export function PersonnelLifecycleSection({
           </div>
           {canManage ? (
             currentPlan ? (
-              <Button size="sm" variant="outline" onClick={() => { setError(null); setRequirementOpen(true); }}><Plus className="size-4" /> Anforderung</Button>
+              <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setRequirementOpen(true); }}><Plus className="size-4" /> Anforderung</Button>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => { setError(null); setPlanOpen(true); }}><Plus className="size-4" /> Plan anlegen</Button>
+              <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setPlanOpen(true); }}><Plus className="size-4" /> Plan anlegen</Button>
             )
           ) : null}
         </div>
@@ -509,7 +529,7 @@ export function PersonnelLifecycleSection({
             <h3 className="flex items-center gap-2 text-sm font-medium"><FileLock2 className="size-4" /> Geschützte Personalunterlagen</h3>
             <p className="text-xs text-muted-foreground">Getrennt von „Dokumente & Bilder“ und an den Personalstammsatz gebunden.</p>
           </div>
-          {canManage ? <Button size="sm" variant="outline" onClick={() => { setError(null); setUploadOpen(true); }}><Plus className="size-4" /> Datei</Button> : null}
+          {canManage ? <Button size="sm" variant="outline" onClick={() => { setError(null); setFieldErrors({}); setUploadOpen(true); }}><Plus className="size-4" /> Datei</Button> : null}
         </div>
         {data.documents.length === 0 ? (
           <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Keine geschützten Personalunterlagen vorhanden.</p>
@@ -535,9 +555,9 @@ export function PersonnelLifecycleSection({
         <DialogContent>
           <DialogHeader><DialogTitle>Organisationszugang steuern</DialogTitle><DialogDescription>Die Änderung gilt nur für diese Organisation. Das globale Konto bleibt unberührt.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="access-transition-kind">Übergang</Label><SearchableSelect id="access-transition-kind" options={ACCESS_TRANSITIONS} value={accessKind} onChange={(value) => setAccessKind(value as PersonnelAccessTransitionKind)} searchPlaceholder="Übergang suchen…" /></div>
-            {isScheduledAccessTransition(accessKind) && <div className="space-y-2"><Label>Zeitpunkt</Label><DateTimeField idPrefix="access-transition" value={accessAt} onChange={setAccessAt} disabled={isPending} /></div>}
-            <div className="space-y-2"><Label htmlFor="access-reason">Grund</Label><Textarea id="access-reason" value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></div>
+            <Field label="Übergang" htmlFor="access-transition-kind"><SearchableSelect options={ACCESS_TRANSITIONS} value={accessKind} onChange={(value) => setAccessKind(value as PersonnelAccessTransitionKind)} searchPlaceholder="Übergang suchen…" /></Field>
+            {isScheduledAccessTransition(accessKind) && <Field label="Zeitpunkt" htmlFor="access-transition-date" required error={fieldErrors["access-transition-date"]}><DateTimeField idPrefix="access-transition" value={accessAt} onChange={setAccessAt} disabled={isPending} /></Field>}
+            <Field label="Grund" htmlFor="access-reason" required error={fieldErrors["access-reason"]}><Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter><Button variant="outline" onClick={() => setAccessOpen(false)} disabled={isPending}>Abbrechen</Button><Button onClick={() => void submitAccess()} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
@@ -548,9 +568,9 @@ export function PersonnelLifecycleSection({
         <DialogContent>
           <DialogHeader><DialogTitle>Beschäftigungsübergang erfassen</DialogTitle><DialogDescription>Historische Zuordnungen bleiben erhalten. Vollständiges Offboarding folgt separat.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="employment-transition-kind">Übergang</Label><SearchableSelect id="employment-transition-kind" options={EMPLOYMENT_TRANSITIONS} value={employmentKind} onChange={(value) => setEmploymentKind(value as PersonnelEmploymentTransitionKind)} searchPlaceholder="Übergang suchen…" /></div>
-            <div className="space-y-2"><Label>Wirksam am</Label><DatePicker value={employmentDate} onChange={setEmploymentDate} disabled={isPending} ariaLabel="Wirksam am" /></div>
-            <div className="space-y-2"><Label htmlFor="employment-reason">Grund</Label><Textarea id="employment-reason" value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></div>
+            <Field label="Übergang" htmlFor="employment-transition-kind"><SearchableSelect options={EMPLOYMENT_TRANSITIONS} value={employmentKind} onChange={(value) => setEmploymentKind(value as PersonnelEmploymentTransitionKind)} searchPlaceholder="Übergang suchen…" /></Field>
+            <Field label="Wirksam am" htmlFor="employment-date" required error={fieldErrors["employment-date"]}><DatePicker value={employmentDate} onChange={setEmploymentDate} disabled={isPending} ariaLabel="Wirksam am" /></Field>
+            <Field label="Grund" htmlFor="employment-reason" required error={fieldErrors["employment-reason"]}><Textarea value={reason} onChange={(event) => setReason(event.target.value)} disabled={isPending} /></Field>
             {hasUnresolvedWork ? <label className="flex items-start gap-2 rounded-md border p-3 text-sm"><Checkbox checked={acceptUnresolved} onCheckedChange={(value) => setAcceptUnresolved(value === true)} /><span>Offene Zuordnungen wurden geprüft und sollen sichtbar im Übergang erhalten bleiben. Es wird nichts still gelöscht.</span></label> : null}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
@@ -562,9 +582,9 @@ export function PersonnelLifecycleSection({
         <DialogContent>
           <DialogHeader><DialogTitle>Onboardingplan anlegen</DialogTitle><DialogDescription>Du kannst leer beginnen oder eine veröffentlichte Vorlage als bearbeitbare Kopie verwenden. Bestandsdaten gelten nie automatisch als erledigt.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="plan-name">Bezeichnung</Label><Input id="plan-name" value={planName} onChange={(event) => setPlanName(event.target.value)} /></div>
-            <div className="space-y-2"><Label htmlFor="onboarding-plan-template">Vorlage</Label><SearchableSelect id="onboarding-plan-template" options={[{ value: "", label: "Ohne Vorlage" }, ...data.templates.map((template) => ({ value: template.currentVersionId, label: `${template.name} · Version ${template.currentVersionNumber}` }))]} value={planTemplateVersionId} onChange={setPlanTemplateVersionId} searchPlaceholder="Vorlage suchen…" /></div>
-            <div className="space-y-2"><Label>Zieldatum</Label><DatePicker value={planStartDate} onChange={setPlanStartDate} disabled={isPending} ariaLabel="Zieldatum" /></div>
+            <Field label="Bezeichnung" htmlFor="plan-name" required error={fieldErrors["plan-name"]}><Input value={planName} onChange={(event) => setPlanName(event.target.value)} /></Field>
+            <Field label="Vorlage" htmlFor="onboarding-plan-template"><SearchableSelect options={[{ value: "", label: "Ohne Vorlage" }, ...data.templates.map((template) => ({ value: template.currentVersionId, label: `${template.name} · Version ${template.currentVersionNumber}` }))]} value={planTemplateVersionId} onChange={setPlanTemplateVersionId} searchPlaceholder="Vorlage suchen…" /></Field>
+            <Field label="Zieldatum" htmlFor="onboarding-plan-target-date"><DatePicker value={planStartDate} onChange={setPlanStartDate} disabled={isPending} ariaLabel="Zieldatum" /></Field>
             {data.templates.length === 0 ? <p className="text-xs text-muted-foreground">Keine veröffentlichte Vorlage. Der Plan startet leer.</p> : null}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
@@ -576,8 +596,8 @@ export function PersonnelLifecycleSection({
         <DialogContent>
           <DialogHeader><DialogTitle>Anforderung ergänzen</DialogTitle><DialogDescription>Die Anforderung verweist später auf vorhandene Nachweise. Sie kopiert keine Fachdaten.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="onboarding-requirement-type">Art</Label><SearchableSelect id="onboarding-requirement-type" options={REQUIREMENT_TYPES} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></div>
-            <div className="space-y-2"><Label htmlFor="requirement-title">Titel</Label><Input id="requirement-title" value={requirementTitle} onChange={(event) => setRequirementTitle(event.target.value)} /></div>
+            <Field label="Art" htmlFor="onboarding-requirement-type"><SearchableSelect options={REQUIREMENT_TYPES} value={requirementType} onChange={(value) => setRequirementType(value as PersonnelRequirementType)} searchPlaceholder="Art suchen…" /></Field>
+            <Field label="Titel" htmlFor="requirement-title" required error={fieldErrors["requirement-title"]}><Input value={requirementTitle} onChange={(event) => setRequirementTitle(event.target.value)} /></Field>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={requirementRequired} onCheckedChange={(value) => setRequirementRequired(value === true)} />Erforderlich</label>
             <label className="flex items-center gap-2 text-sm"><Checkbox checked={requirementBlocksAccess} onCheckedChange={(value) => setRequirementBlocksAccess(value === true)} />Blockiert die Zugangsaktivierung</label>
             <ErrorText>{error}</ErrorText>
@@ -590,9 +610,9 @@ export function PersonnelLifecycleSection({
         <DialogContent>
           <DialogHeader><DialogTitle>Geschützte Personalunterlage</DialogTitle><DialogDescription>Die Datei wird direkt in den privaten Speicher geladen. Sie erscheint nicht in der normalen Dokumentenbibliothek.</DialogDescription></DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <div className="space-y-2"><Label htmlFor="personnel-file">Datei</Label><Input id="personnel-file" type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} disabled={isPending} /></div>
-            <div className="space-y-2"><Label htmlFor="document-type">Dokumentart</Label><Input id="document-type" value={documentType} onChange={(event) => setDocumentType(event.target.value)} placeholder="z. B. Arbeitsvertrag" /></div>
-            <div className="space-y-2"><Label htmlFor="personnel-document-access-class">Zugriffsklasse</Label><SearchableSelect id="personnel-document-access-class" options={ACCESS_CLASS_OPTIONS} value={accessClass} onChange={(value) => setAccessClass(value as PersonnelDocumentAccessClass)} searchPlaceholder="Zugriffsklasse suchen…" /></div>
+            <Field label="Datei" htmlFor="personnel-file" required error={fieldErrors["personnel-file"]}><Input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} disabled={isPending} /></Field>
+            <Field label="Dokumentart" htmlFor="document-type" required error={fieldErrors["document-type"]}><Input value={documentType} onChange={(event) => setDocumentType(event.target.value)} placeholder="z. B. Arbeitsvertrag" /></Field>
+            <Field label="Zugriffsklasse" htmlFor="personnel-document-access-class"><SearchableSelect options={ACCESS_CLASS_OPTIONS} value={accessClass} onChange={(value) => setAccessClass(value as PersonnelDocumentAccessClass)} searchPlaceholder="Zugriffsklasse suchen…" /></Field>
             <p className="text-xs text-muted-foreground">Eine Empfangsbestätigung dokumentiert nur den Erhalt einer konkreten Version. Sie ist keine elektronische Unterschrift.</p>
             <ErrorText>{error}</ErrorText>
           </DialogBody>

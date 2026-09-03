@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   acknowledgeDispatch,
@@ -316,20 +316,20 @@ export function JobDispatchSection({
             noValidate
             className="space-y-4"
           >
-            <div className="space-y-2">
-              <Label htmlFor="dispatch-challenge-reason">Begründung</Label>
+            <Field
+              label="Begründung"
+              htmlFor="dispatch-challenge-reason"
+              required
+              description="Mindestens 8 Zeichen."
+              error={challengeError}
+            >
               <Textarea
-                id="dispatch-challenge-reason"
                 value={challengeReason}
                 onChange={(event) => setChallengeReason(event.target.value)}
                 placeholder="z. B. Terminüberschneidung mit anderem Einsatz"
                 maxLength={500}
               />
-              <p className="text-xs text-muted-foreground">
-                Mindestens 8 Zeichen.
-              </p>
-            </div>
-            <ErrorText>{challengeError}</ErrorText>
+            </Field>
             <DialogFooter>
               <Button
                 type="button"

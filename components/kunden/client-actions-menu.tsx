@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { deleteClient } from '@/lib/clients/actions';
 import type { Client } from '@/lib/jobs/types';
 
@@ -98,7 +99,7 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
               Zuordnung zu diesem Kunden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

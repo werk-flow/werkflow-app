@@ -17,7 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { getPlanningOptions } from '@/lib/planning/actions';
 import {
@@ -108,17 +109,23 @@ export function DispatchIssueDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Disabled only while the readiness check or the send is in flight; a
+  // missing recipient is reported on submit, not by greying the button.
   const canSubmit = useMemo(
-    () =>
-      readiness !== null &&
-      !isSubmitting &&
-      (!isJobTarget || selectedRecordIds.length > 0),
-    [readiness, isSubmitting, isJobTarget, selectedRecordIds]
+    () => readiness !== null && !isSubmitting,
+    [readiness, isSubmitting]
   );
 
   const handleSubmit = async () => {
-    setIsSubmitting(true);
     setSubmitError(null);
+    if (isJobTarget && selectedRecordIds.length === 0) {
+      setSubmitError('Bitte wähle mindestens eine Person als Empfänger aus.');
+      document
+        .querySelector<HTMLElement>('#dispatch-recipients [role="checkbox"]')
+        ?.focus();
+      return;
+    }
+    setIsSubmitting(true);
     try {
       const result = await issueDispatch({
         occurrenceId,
@@ -151,9 +158,7 @@ export function DispatchIssueDialog({
         </DialogHeader>
 
         {loadError ? (
-          <p role="alert" className="text-sm text-destructive">
-            {loadError}
-          </p>
+          <ErrorText>{loadError}</ErrorText>
         ) : !readiness ? (
           <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
@@ -208,7 +213,7 @@ export function DispatchIssueDialog({
             </ul>
 
             {isJobTarget && (
-              <fieldset className="space-y-2">
+              <fieldset id="dispatch-recipients" className="space-y-2">
                 <legend className="text-sm font-medium">Empfänger</legend>
                 <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
                   {options.length === 0 && (
@@ -251,24 +256,18 @@ export function DispatchIssueDialog({
               </fieldset>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="dispatch-note">Hinweis (optional)</Label>
+            <Field label="Hinweis (optional)" htmlFor="dispatch-note">
               <Textarea
-                id="dispatch-note"
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="z. B. Schlüssel beim Hausmeister abholen"
                 maxLength={2000}
               />
-            </div>
+            </Field>
           </>
         )}
 
-        {submitError && (
-          <p role="alert" className="text-sm text-destructive">
-            {submitError}
-          </p>
-        )}
+        <ErrorText>{submitError}</ErrorText>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

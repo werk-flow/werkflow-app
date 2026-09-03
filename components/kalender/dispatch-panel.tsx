@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -207,44 +207,35 @@ function CommitmentDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} noValidate className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="commitment-date">Zugesagter Tag</Label>
+          <Field label="Zugesagter Tag" htmlFor="commitment-date" required>
             <DatePicker
-              id="commitment-date"
               ariaLabel="Zugesagter Tag"
               value={committedDate}
               onChange={setCommittedDate}
             />
-          </div>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="commitment-window-start">
-                Zeitfenster von (optional)
-              </Label>
+            <Field label="Zeitfenster von (optional)" htmlFor="commitment-window-start">
               <TimeInput
-                id="commitment-window-start"
                 value={windowStart}
                 onChange={setWindowStart}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="commitment-window-end">bis</Label>
+            </Field>
+            <Field label="bis" htmlFor="commitment-window-end">
               <TimeInput
-                id="commitment-window-end"
                 value={windowEnd}
                 onChange={setWindowEnd}
               />
-            </div>
+            </Field>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="commitment-source">Wie vereinbart?</Label>
+          <Field label="Wie vereinbart?" htmlFor="commitment-source">
             <Select
               value={source}
               onValueChange={(value) =>
                 setSource(value as CustomerCommitmentSource)
               }
             >
-              <SelectTrigger id="commitment-source" className="w-full">
+              <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -257,7 +248,7 @@ function CommitmentDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
           <ErrorText>{error}</ErrorText>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -321,18 +312,18 @@ function ReasonDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleConfirm} noValidate className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="dispatch-reason-dialog">Begründung</Label>
+          <Field
+            label="Begründung"
+            htmlFor="dispatch-reason-dialog"
+            required
+            description={`Mindestens ${minLength} Zeichen.`}
+          >
             <Textarea
-              id="dispatch-reason-dialog"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               maxLength={1000}
             />
-            <p className="text-xs text-muted-foreground">
-              Mindestens {minLength} Zeichen.
-            </p>
-          </div>
+          </Field>
           <ErrorText>{error}</ErrorText>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
@@ -898,36 +889,29 @@ export function DispatchPanel({
             ausgewählt
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="batch-day-shift">Verschieben um (Tage)</Label>
+            <Field label="Verschieben um (Tage)" htmlFor="batch-day-shift" required>
               <QuantityStepper
                 id="batch-day-shift"
                 min={-366}
                 value={dayShiftText}
                 onChange={setDayShiftText}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="batch-new-time">
-                Neue Uhrzeit (optional)
-              </Label>
+            </Field>
+            <Field label="Neue Uhrzeit (optional)" htmlFor="batch-new-time">
               <TimeInput
-                id="batch-new-time"
                 value={newTime}
                 onChange={setNewTime}
               />
-            </div>
+            </Field>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="batch-reason">Begründung</Label>
+          <Field label="Begründung" htmlFor="batch-reason" required description="Mindestens 8 Zeichen.">
             <Textarea
-              id="batch-reason"
               value={batchReason}
               onChange={(event) => setBatchReason(event.target.value)}
               placeholder="z. B. Krankheitsbedingte Umplanung der Woche"
               maxLength={1000}
             />
-          </div>
+          </Field>
           <Button
             className="w-full"
             disabled={

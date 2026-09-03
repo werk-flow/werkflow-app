@@ -18,7 +18,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Separator } from '@/components/ui/separator';
 import { useBanner } from '@/components/ui/banner';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { JobMultiSelect } from './job-multi-select';
@@ -288,10 +288,8 @@ export function EditProjectDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-2">
-            <div className="grid gap-2">
-              <Label htmlFor="edit-project-name">Titel</Label>
+            <Field label="Titel" htmlFor="edit-project-name">
               <Input
-                id="edit-project-name"
                 placeholder="z.B. Sanierung Hauptgebäude"
                 value={name}
                 onChange={(e) => {
@@ -301,23 +299,23 @@ export function EditProjectDialog({
                 disabled={formDisabled}
                 aria-invalid={showContentError ? true : undefined}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-project-number">Projektnummer</Label>
+            <Field label="Projektnummer" htmlFor="edit-project-number">
               <Input
-                id="edit-project-number"
                 placeholder="z.B. P-2026-001"
                 value={projectNumber}
                 onChange={(e) => setProjectNumber(e.target.value)}
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-project-description">Beschreibung</Label>
+            <Field
+              label="Beschreibung"
+              htmlFor="edit-project-description"
+              error={showContentError ? contentError : null}
+            >
               <Textarea
-                id="edit-project-description"
                 placeholder="Optionale Beschreibung des Projekts..."
                 value={description}
                 onChange={(e) => {
@@ -325,21 +323,17 @@ export function EditProjectDialog({
                   if (contentError && e.target.value.trim()) setContentError(null);
                 }}
                 disabled={formDisabled}
-                aria-invalid={showContentError ? true : undefined}
               />
-              <ErrorText>{showContentError ? contentError : null}</ErrorText>
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-project-client">Kunde</Label>
+            <Field label="Kunde" htmlFor="edit-project-client">
               <ClientSelectWithCreate
                 clients={clients}
                 value={clientId}
                 onValueChange={handleClientChange}
                 disabled={formDisabled}
-                id="edit-project-client"
               />
-            </div>
+            </Field>
 
             <SiteContactFields
               clientId={clientId}
@@ -356,40 +350,36 @@ export function EditProjectDialog({
               Planung
             </p>
 
-            <div className="grid gap-2">
-              <Label>Geplanter Beginn</Label>
+            <Field label="Geplanter Beginn" htmlFor="edit-project-start-date">
               <DatePicker
                 value={plannedStartDate}
                 onChange={setPlannedStartDate}
                 placeholder="Startdatum wählen"
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label>Geplantes Ende</Label>
+            <Field label="Geplantes Ende" htmlFor="edit-project-end-date">
               <DatePicker
                 value={plannedEndDate}
                 onChange={setPlannedEndDate}
                 placeholder="Enddatum wählen"
                 disabled={formDisabled}
               />
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label>Zugewiesene Aufträge</Label>
+            <Field
+              label="Zugewiesene Aufträge"
+              htmlFor="edit-project-jobs"
+              description={isLoadingJobs ? 'Aufträge werden geladen...' : undefined}
+            >
               <JobMultiSelect
                 jobs={availableJobs}
                 selectedIds={selectedJobIds}
                 onSelectionChange={setSelectedJobIds}
                 disabled={formDisabled || isLoadingJobs}
               />
-              {isLoadingJobs && (
-                <p className="text-xs text-muted-foreground">
-                  Aufträge werden geladen...
-                </p>
-              )}
-            </div>
+            </Field>
 
             <ErrorText>{error}</ErrorText>
           </DialogBody>

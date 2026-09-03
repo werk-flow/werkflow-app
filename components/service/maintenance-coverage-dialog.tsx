@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 
+import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -13,15 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useServerAction } from "@/hooks/use-server-action";
 import { createMaintenanceCoverage } from "@/lib/maintenance/actions";
@@ -54,6 +50,7 @@ export function MaintenanceCoverageDialog({
   const [reviewDueDate, setReviewDueDate] = useState("");
   const [operationalNote, setOperationalNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const mutationIdentity = useRef({
     coverageId: crypto.randomUUID(),
     idempotencyKey: crypto.randomUUID(),
@@ -87,6 +84,21 @@ export function MaintenanceCoverageDialog({
     onOpenChange(false);
     router.refresh();
   });
+  const clientError =
+    attempted && !clientId ? "Bitte wähle einen Kunden." : undefined;
+  const siteError =
+    attempted && !siteId ? "Bitte wähle einen Einsatzort." : undefined;
+
+  function submit(): void {
+    setAttempted(true);
+    if (!clientId || !siteId) {
+      document
+        .getElementById(clientId ? "coverage-site" : "coverage-client")
+        ?.focus();
+      return;
+    }
+    void run();
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,132 +111,113 @@ export function MaintenanceCoverageDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="coverage-client">Kunde</Label>
-            <Select
+          <Field label="Kunde" htmlFor="coverage-client" required error={clientError}>
+            <ClientSelectWithCreate
+              clients={clients}
               value={clientId}
               onValueChange={(value) => {
                 setClientId(value);
                 setSiteId("");
               }}
-            >
-              <SelectTrigger id="coverage-client">
-                <SelectValue placeholder="Kunde wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-site">Einsatzort</Label>
-            <Select value={siteId} onValueChange={setSiteId} disabled={!client}>
-              <SelectTrigger id="coverage-site">
-                <SelectValue placeholder="Einsatzort wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {client?.sites.map((site) => (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="coverage-reference">
-              Vertrags- oder Referenznummer (optional)
-            </Label>
+            />
+          </Field>
+          <Field label="Einsatzort" htmlFor="coverage-site" required error={siteError}>
+            <SearchableSelect
+              value={siteId}
+              onChange={setSiteId}
+              options={(client?.sites ?? []).map((site) => ({
+                value: site.id,
+                label: site.name,
+                description: site.address,
+              }))}
+              disabled={!client}
+              placeholder="Einsatzort wählen"
+              searchPlaceholder="Einsatzort suchen…"
+              emptyMessage="Kein Einsatzort gefunden"
+            />
+          </Field>
+          <Field
+            label="Vertrags- oder Referenznummer (optional)"
+            htmlFor="coverage-reference"
+            className="sm:col-span-2"
+          >
             <Input
-              id="coverage-reference"
               value={reference}
               onChange={(event) => setReference(event.target.value)}
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="coverage-description">
-              Beschreibung (optional)
-            </Label>
+          </Field>
+          <Field
+            label="Beschreibung (optional)"
+            htmlFor="coverage-description"
+            className="sm:col-span-2"
+          >
             <Textarea
-              id="coverage-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-valid-from">Gültig ab</Label>
+          </Field>
+          <Field label="Gültig ab" htmlFor="coverage-valid-from">
             <DatePicker
-              id="coverage-valid-from"
               ariaLabel="Gültig ab"
               value={toLocalDate(validFrom)}
               onChange={(value) =>
                 setValidFrom(value ? formatBerlinLocalDate(value) : "")
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-valid-until">Gültig bis</Label>
+          </Field>
+          <Field label="Gültig bis" htmlFor="coverage-valid-until">
             <DatePicker
-              id="coverage-valid-until"
               ariaLabel="Gültig bis"
               value={toLocalDate(validUntil)}
               onChange={(value) =>
                 setValidUntil(value ? formatBerlinLocalDate(value) : "")
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-notice">Kündigungsfrist prüfen am</Label>
+          </Field>
+          <Field label="Kündigungsfrist prüfen am" htmlFor="coverage-notice">
             <DatePicker
-              id="coverage-notice"
               ariaLabel="Kündigungsfrist prüfen am"
               value={toLocalDate(noticeDate)}
               onChange={(value) =>
                 setNoticeDate(value ? formatBerlinLocalDate(value) : "")
               }
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="coverage-renewal">Verlängerung am</Label>
+          </Field>
+          <Field label="Verlängerung am" htmlFor="coverage-renewal">
             <DatePicker
-              id="coverage-renewal"
               ariaLabel="Verlängerung am"
               value={toLocalDate(renewalDate)}
               onChange={(value) =>
                 setRenewalDate(value ? formatBerlinLocalDate(value) : "")
               }
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="coverage-review">Interne Wiedervorlage</Label>
+          </Field>
+          <Field
+            label="Interne Wiedervorlage"
+            htmlFor="coverage-review"
+            className="sm:col-span-2"
+          >
             <DatePicker
-              id="coverage-review"
               ariaLabel="Interne Wiedervorlage"
               value={toLocalDate(reviewDueDate)}
               onChange={(value) =>
                 setReviewDueDate(value ? formatBerlinLocalDate(value) : "")
               }
             />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="coverage-note">Operativer Hinweis</Label>
+          </Field>
+          <Field
+            label="Operativer Hinweis"
+            htmlFor="coverage-note"
+            className="sm:col-span-2"
+          >
             <Textarea
-              id="coverage-note"
               value={operationalNote}
               onChange={(event) => setOperationalNote(event.target.value)}
               placeholder="Nur bestätigte Hinweise, keine vermutete Kostenübernahme"
             />
-          </div>
+          </Field>
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button
             type="button"
@@ -234,7 +227,7 @@ export function MaintenanceCoverageDialog({
           >
             Abbrechen
           </Button>
-          <Button type="button" onClick={() => void run()} disabled={isPending}>
+          <Button type="button" onClick={submit} disabled={isPending}>
             {isPending ? "Speichert…" : "Abdeckung speichern"}
           </Button>
         </DialogFooter>

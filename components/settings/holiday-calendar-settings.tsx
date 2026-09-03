@@ -14,8 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
@@ -87,6 +87,7 @@ export function HolidayCalendarSettings({
   const [closureDate, setClosureDate] = useState<string>('')
   const [closureLabel, setClosureLabel] = useState<string>('')
   const [isAddingClosure, setIsAddingClosure] = useState(false)
+  const [closureDateError, setClosureDateError] = useState<string | null>(null)
   const [removingClosureId, setRemovingClosureId] = useState<string | null>(null)
 
   const todayIso = toLocalDateString(new Date())
@@ -121,7 +122,12 @@ export function HolidayCalendarSettings({
 
   const handleAddClosureDay = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canEditClosureDays || isAddingClosure || !closureDate) return
+    if (!canEditClosureDays || isAddingClosure) return
+    if (!closureDate) {
+      setClosureDateError(CLOSURE_ERROR_MESSAGES.invalid_date)
+      document.getElementById('closure-date')?.focus()
+      return
+    }
     setIsAddingClosure(true)
     try {
       const result = await addClosureDay({
@@ -184,10 +190,13 @@ export function HolidayCalendarSettings({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pb-6">
-          <div className="grid gap-2 sm:max-w-sm">
-            <Label htmlFor="holiday-region">Bundesland</Label>
+          <Field
+            label="Bundesland"
+            htmlFor="holiday-region"
+            className="sm:max-w-sm"
+            description="Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten Kalenders, ersetzt aber keine rechtliche Prüfung."
+          >
             <SearchableSelect
-              id="holiday-region"
               disabled={!canEditRegion || isSavingRegion}
               options={[
                 { value: NO_REGION_VALUE, label: 'Kein Feiertagskalender' },
@@ -202,12 +211,7 @@ export function HolidayCalendarSettings({
               searchPlaceholder="Bundesland suchen …"
               emptyMessage="Kein Bundesland gefunden"
             />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht
-            rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten
-            Kalenders, ersetzt aber keine rechtliche Prüfung.
-          </p>
+          </Field>
         </CardContent>
         <CardFooter className="flex flex-col items-start gap-3 border-t sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
@@ -285,35 +289,41 @@ export function HolidayCalendarSettings({
               onSubmit={handleAddClosureDay}
               className="flex flex-col gap-3 sm:flex-row sm:items-end"
             >
-              <div className="grid gap-2">
-                <Label htmlFor="closure-date">Datum</Label>
+              <Field
+                label="Datum"
+                htmlFor="closure-date"
+                required
+                error={closureDateError}
+              >
                 <DatePicker
-                  id="closure-date"
                   ariaLabel="Datum der Betriebsruhe"
                   value={
                     closureDate ? new Date(`${closureDate}T00:00:00`) : undefined
                   }
-                  onChange={(date) =>
+                  onChange={(date) => {
+                    setClosureDateError(null)
                     setClosureDate(date ? toLocalDateString(date) : '')
-                  }
+                  }}
                   disabled={isAddingClosure}
                 />
-              </div>
-              <div className="grid flex-1 gap-2">
-                <Label htmlFor="closure-label">Bezeichnung (optional)</Label>
+              </Field>
+              <Field
+                label="Bezeichnung (optional)"
+                htmlFor="closure-label"
+                className="flex-1"
+              >
                 <Input
-                  id="closure-label"
                   placeholder="z. B. Betriebsferien"
                   value={closureLabel}
                   onChange={(e) => setClosureLabel(e.target.value)}
                   disabled={isAddingClosure}
                 />
-              </div>
+              </Field>
               <Button
                 type="submit"
                 variant="outline"
                 className="gap-1.5"
-                disabled={isAddingClosure || !closureDate}
+                disabled={isAddingClosure}
               >
                 {isAddingClosure ? (
                   <Loader2 className="size-4 animate-spin" />

@@ -27,6 +27,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { SectionError } from "@/components/ui/section-error";
 
 import { DetailPageHeader } from "@/components/shared/detail-page-header";
 import { PageBody, PageShell } from "@/components/shared/page-shell";
@@ -403,13 +405,10 @@ export function KundenDetailContent({
                 initialBundle={relationshipBundle}
               />
             ) : (
-              <p
-                role="alert"
-                className="rounded-md border border-destructive/30 px-4 py-3 text-sm text-destructive"
-              >
+              <SectionError>
                 Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten
                 nicht geladen werden.
-              </p>
+              </SectionError>
             )}
 
             <div className="space-y-4">
@@ -454,9 +453,7 @@ export function KundenDetailContent({
               zu diesem Kunden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {deleteError && (
-            <p className="text-sm text-destructive">{deleteError}</p>
-          )}
+          <ErrorText>{deleteError}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

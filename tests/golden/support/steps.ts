@@ -449,14 +449,16 @@ export async function createMaintenanceCoverageViaDialog(
   await page.goto("/service/wartung");
   await page.getByRole("button", { name: "Abdeckung erfassen" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.locator("#coverage-client").click();
-  await page
-    .getByRole("option", { name: options.clientName, exact: true })
-    .click();
-  await dialog.locator("#coverage-site").click();
-  await page
-    .getByRole("option", { name: options.siteName, exact: true })
-    .click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#coverage-client"),
+    options.clientName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#coverage-site"),
+    options.siteName,
+  );
   await dialog.locator("#coverage-reference").fill(options.reference);
   await typeIntoDatePickerById(
     dialog,
@@ -504,26 +506,28 @@ export async function createMaintenancePlanViaDialog(
   await page.goto("/service/wartung");
   await page.getByRole("button", { name: "Wartungsplan anlegen" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.locator("#maintenance-client").click();
-  await page
-    .getByRole("option", { name: options.clientName, exact: true })
-    .click();
-  await dialog.locator("#maintenance-site").click();
-  await page
-    .getByRole("option", { name: options.siteName, exact: true })
-    .click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-client"),
+    options.clientName,
+  );
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-site"),
+    options.siteName,
+  );
   if (options.coverageReference) {
-    await dialog.locator("#maintenance-coverage").click();
-    await page
-      .getByRole("option")
-      .filter({ hasText: options.coverageReference })
-      .click();
+    await selectFromSearchable(
+      page,
+      dialog.locator("#maintenance-coverage"),
+      options.coverageReference,
+    );
   }
-  await dialog.locator("#maintenance-template").click();
-  await page
-    .getByRole("option")
-    .filter({ hasText: options.templateName })
-    .click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#maintenance-template"),
+    options.templateName,
+  );
   await typeIntoDatePickerById(
     dialog,
     "maintenance-effective",
@@ -4663,12 +4667,12 @@ export async function createDirectServiceCase(
   await expect(
     dialog.getByRole("heading", { name: "Servicefall erfassen" }),
   ).toBeVisible();
-  await selectRadixOption(
+  await selectFromSearchable(
     page,
     dialog.locator("#service-client"),
     options.customerName,
   );
-  await selectRadixOption(
+  await selectFromSearchable(
     page,
     dialog.locator("#service-site"),
     options.siteName,
@@ -4780,10 +4784,10 @@ export async function updateServiceCaseViaDialog(
     );
   }
   if (options.jobNumber) {
-    await selectRadixOption(
+    await selectFromSearchable(
       page,
       dialog.locator("#service-job"),
-      new RegExp(`^${escapeRegExp(options.jobNumber)} · `),
+      options.jobNumber,
     );
   }
   if (options.accessInstructions !== undefined) {

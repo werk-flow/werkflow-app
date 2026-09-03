@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -428,10 +429,11 @@ export function WorkHandoverSection({
                 <ul className="list-disc space-y-1 pl-5">
                   {overrideable.map((gate) => <li key={gate.key}>{gate.label}: {gate.count}</li>)}
                 </ul>
-                <Label htmlFor="handover-override-reason">Begründung der Ausnahme</Label>
-                <Textarea id="handover-override-reason" value={overrideReason}
-                  onChange={(event) => setOverrideReason(event.target.value)}
-                  placeholder="Warum kann die kaufmännische Prüfung trotzdem beginnen?" />
+                <Field label="Begründung der Ausnahme" htmlFor="handover-override-reason" required>
+                  <Textarea value={overrideReason}
+                    onChange={(event) => setOverrideReason(event.target.value)}
+                    placeholder="Warum kann die kaufmännische Prüfung trotzdem beginnen?" />
+                </Field>
               </div>
             )}
             {warnings.length > 0 && (
@@ -442,11 +444,10 @@ export function WorkHandoverSection({
                 </ul>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="handover-reason">Übergabevermerk</Label>
-              <Textarea id="handover-reason" value={reason}
+            <Field label="Übergabevermerk" htmlFor="handover-reason" required>
+              <Textarea value={reason}
                 onChange={(event) => setReason(event.target.value)} />
-            </div>
+            </Field>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={createPreview}
                 disabled={pending || !canPreview || activeClocks > 0}>
@@ -490,10 +491,11 @@ export function WorkHandoverSection({
                 </Button>
               )}
             </div>
-            <Label htmlFor="handover-withdraw-reason">Grund für die Rücknahme</Label>
-            <Textarea id="handover-withdraw-reason" value={reopenReason}
-              onChange={(event) => setReopenReason(event.target.value)}
-              placeholder="Was muss in einer neuen Freigabe korrigiert werden?" />
+            <Field label="Grund für die Rücknahme" htmlFor="handover-withdraw-reason" required>
+              <Textarea value={reopenReason}
+                onChange={(event) => setReopenReason(event.target.value)}
+                placeholder="Was muss in einer neuen Freigabe korrigiert werden?" />
+            </Field>
             <Button type="button" variant="outline" onClick={() => reopen('withdraw')}
               disabled={pending || reopenReason.trim().length < 3}>
               <RotateCcw /> Übergabe zurücknehmen
@@ -504,10 +506,11 @@ export function WorkHandoverSection({
         {initialWorkspace.packageState === 'reopened'
           && initialWorkspace.executionState === 'execution_complete' && (
           <div className="space-y-2 border-t pt-4">
-            <Label htmlFor="handover-correction-reason">Ausführung erneut öffnen</Label>
-            <Textarea id="handover-correction-reason" value={reopenReason}
-              onChange={(event) => setReopenReason(event.target.value)}
-              placeholder="Welche Korrektur ist vor Ort erforderlich?" />
+            <Field label="Ausführung erneut öffnen" htmlFor="handover-correction-reason" required>
+              <Textarea value={reopenReason}
+                onChange={(event) => setReopenReason(event.target.value)}
+                placeholder="Welche Korrektur ist vor Ort erforderlich?" />
+            </Field>
             <Button type="button" variant="outline" onClick={() => reopen('correction')}
               disabled={pending || reopenReason.trim().length < 3}>
               <RotateCcw /> Zur Korrektur in Ausführung geben

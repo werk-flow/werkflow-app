@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Loader2 } from 'lucide-react';
 
@@ -14,8 +14,8 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -69,6 +69,7 @@ export function CreateClientDialog({
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { showBanner } = useBanner();
 
@@ -80,6 +81,7 @@ export function CreateClientDialog({
 
     if (!name.trim()) {
       setNameError('Bitte gib einen Namen ein.');
+      nameInputRef.current?.focus();
       return;
     }
 
@@ -159,10 +161,9 @@ export function CreateClientDialog({
         </DialogHeader>
         <form onSubmit={(e) => { e.stopPropagation(); handleSubmit(e); }} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="client-name">Name *</Label>
+            <Field label="Name" htmlFor="client-name" required error={showNameError || undefined}>
               <Input
-                id="client-name"
+                ref={nameInputRef}
                 placeholder="Kundenname"
                 value={name}
                 onChange={(e) => {
@@ -170,18 +171,15 @@ export function CreateClientDialog({
                   if (nameError) setNameError(null);
                 }}
                 disabled={isLoading}
-                aria-invalid={showNameError ? true : undefined}
               />
-              <ErrorText>{showNameError ? nameError : null}</ErrorText>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client-type">Typ</Label>
+            </Field>
+            <Field label="Typ" htmlFor="client-type">
               <Select
                 value={clientType}
                 onValueChange={(value) => setClientType(value as ClientType)}
                 disabled={isLoading}
               >
-                <SelectTrigger id="client-type">
+                <SelectTrigger>
                   <SelectValue placeholder="Typ auswählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -192,11 +190,9 @@ export function CreateClientDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client-email">E-Mail</Label>
+            </Field>
+            <Field label="E-Mail" htmlFor="client-email">
               <Input
-                id="client-email"
                 type="text"
                 inputMode="email"
                 placeholder="kunde@beispiel.de"
@@ -204,42 +200,36 @@ export function CreateClientDialog({
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client-phone">Telefon</Label>
+            </Field>
+            <Field label="Telefon" htmlFor="client-phone">
               <Input
-                id="client-phone"
                 type="tel"
                 placeholder="+49 123 456789"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client-address">Adresse</Label>
+            </Field>
+            <Field label="Adresse" htmlFor="client-address">
               <Input
-                id="client-address"
                 placeholder="Straße, PLZ Ort"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="client-notes">Notizen</Label>
+            </Field>
+            <Field label="Notizen" htmlFor="client-notes">
               <Textarea
-                id="client-notes"
                 placeholder="Optionale Notizen zum Kunden..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading || !name.trim()}>
+            <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="size-4 animate-spin" />}
               {isLoading ? 'Wird erstellt...' : 'Kunde erstellen'}
             </Button>

@@ -38,14 +38,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
+import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
   InputOTP,
@@ -608,11 +603,7 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
             />
 
             <div className="space-y-5 rounded-lg border bg-background p-5">
-              {formError ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {formError}
-                </div>
-              ) : null}
+              <ErrorText>{formError}</ErrorText>
 
               {wizardState.step === 'verify_current' ? (
                 <form
@@ -720,10 +711,10 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
 
                   {currentEmailVerificationWindowExpired ? (
                     <div className="space-y-4">
-                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                      <ErrorText>
                         Das Zeitfenster für diesen Schritt ist abgelaufen. Bitte
                         brich die E-Mail-Änderung ab und starte sie erneut.
-                      </div>
+                      </ErrorText>
                       <Button
                         type="button"
                         variant="outline"
@@ -749,19 +740,19 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                         <FormField
                           control={emailForm.control}
                           name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Neue E-Mail-Adresse</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="email"
-                                  autoComplete="email"
-                                  placeholder="beispiel@firma.de"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
+                          render={({ field, fieldState }) => (
+                            <Field
+                              label="Neue E-Mail-Adresse"
+                              required
+                              error={fieldState.error?.message}
+                            >
+                              <Input
+                                type="email"
+                                autoComplete="email"
+                                placeholder="beispiel@firma.de"
+                                {...field}
+                              />
+                            </Field>
                           )}
                         />
 

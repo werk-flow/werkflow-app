@@ -28,6 +28,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
   AlertDialog,
@@ -327,8 +329,7 @@ function DateTimePicker({
   };
 
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
+    <Field label={label}>
       <div className="flex gap-2">
         <div className="flex-1">
           {disableDateEditing ? (
@@ -348,7 +349,7 @@ function DateTimePicker({
           />
         </div>
       </div>
-    </div>
+    </Field>
   );
 }
 
@@ -1395,16 +1396,16 @@ export function EntryDetailsDialog({
           )}
 
           {isEditing && editedBlockDate && (
-            <div className="space-y-2 rounded-md border border-border/60 px-3 py-3">
-              <Label>Datum des Arbeitsblocks</Label>
+            <Field
+              label="Datum des Arbeitsblocks"
+              description="Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks."
+              className="rounded-md border border-border/60 px-3 py-3"
+            >
               <DatePicker
                 value={editedBlockDate}
                 onChange={handleBlockDateChange}
               />
-              <p className="text-xs text-muted-foreground">
-                Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks.
-              </p>
-            </div>
+            </Field>
           )}
 
           {startEntry && (
@@ -1810,11 +1811,7 @@ export function EntryDetailsDialog({
             </div>
           )}
 
-          {error && (
-            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
+          <ErrorText>{error}</ErrorText>
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">

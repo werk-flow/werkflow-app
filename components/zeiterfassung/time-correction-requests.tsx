@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -177,7 +178,7 @@ export function TimeCorrectionRequests({
   if (view.isLoading) {
     return <p className="py-6 text-sm text-muted-foreground">Zeitkorrekturen werden geladen …</p>;
   }
-  if (view.error) return <p role="alert" className="text-sm text-destructive">{view.error}</p>;
+  if (view.error) return <ErrorText>{view.error}</ErrorText>;
   if (requests.length === 0) {
     return mode === 'approvals'
       ? null
@@ -199,15 +200,13 @@ export function TimeCorrectionRequests({
 
       {mode === 'approvals' && selectedRequests.length > 0 ? (
         <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1 space-y-1">
-            <Label htmlFor="batch-correction-comment">Kommentar für Auswahl</Label>
+          <Field label="Kommentar für Auswahl" htmlFor="batch-correction-comment" className="min-w-0 flex-1">
             <Textarea
-              id="batch-correction-comment"
               value={comments.batch ?? ''}
               onChange={(event) => setComments((current) => ({ ...current, batch: event.target.value }))}
               placeholder="Nur bei Ablehnung erforderlich"
             />
-          </div>
+          </Field>
           <Button size="sm" onClick={() => void reviewBatch('approve')} disabled={Boolean(busyKey)}>
             Auswahl freigeben
           </Button>
@@ -269,12 +268,11 @@ export function TimeCorrectionRequests({
                 ) : null}
 
                 {request.canReview || request.status === 'clarification_required' ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`correction-comment-${request.id}`}>
-                      {request.status === 'clarification_required' ? 'Antwort' : 'Kommentar'}
-                    </Label>
+                  <Field
+                    label={request.status === 'clarification_required' ? 'Antwort' : 'Kommentar'}
+                    htmlFor={`correction-comment-${request.id}`}
+                  >
                     <Textarea
-                      id={`correction-comment-${request.id}`}
                       value={comments[request.id] ?? ''}
                       onChange={(event) => setComments((current) => ({
                         ...current,
@@ -284,7 +282,7 @@ export function TimeCorrectionRequests({
                         ? 'Für Rückfrage oder Ablehnung erforderlich'
                         : 'Ergänze die angeforderten Angaben'}
                     />
-                  </div>
+                  </Field>
                 ) : null}
 
                 <div className="flex flex-wrap justify-end gap-2">

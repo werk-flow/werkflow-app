@@ -32,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -264,6 +265,7 @@ function RecordSicknessDialog({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlapHint, setOverlapHint] = useState(false);
+  const [dateErrors, setDateErrors] = useState<{ start?: string; end?: string }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
 
@@ -272,12 +274,22 @@ function RecordSicknessDialog({
     if (isSaving) return;
     setError(null);
 
-    if (!startDate || (endKnown && !endDate)) {
-      setError('Bitte wähle die Daten aus.');
-      return;
-    }
-    if (endKnown && endDate < startDate) {
-      setError(SICKNESS_ERROR_MESSAGES.invalid_range);
+    const nextDateErrors = {
+      start: startDate ? undefined : 'Bitte wähle ein Datum aus.',
+      end:
+        endKnown && !endDate
+          ? 'Bitte wähle ein Datum aus.'
+          : endKnown && endDate < startDate
+            ? SICKNESS_ERROR_MESSAGES.invalid_range
+            : undefined,
+    };
+    setDateErrors(nextDateErrors);
+    if (nextDateErrors.start || nextDateErrors.end) {
+      document
+        .getElementById(
+          nextDateErrors.start ? 'record-sickness-start' : 'record-sickness-end'
+        )
+        ?.focus();
       return;
     }
 
@@ -335,8 +347,7 @@ function RecordSicknessDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="record-sickness-type">Art</Label>
+            <Field label="Art" htmlFor="record-sickness-type">
               <Select
                 value={absenceType}
                 onValueChange={(value) =>
@@ -344,7 +355,7 @@ function RecordSicknessDialog({
                 }
                 disabled={isSaving}
               >
-                <SelectTrigger id="record-sickness-type" aria-label="Art">
+                <SelectTrigger aria-label="Art">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -355,12 +366,15 @@ function RecordSicknessDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="record-sickness-start">Ab</Label>
+            <Field
+              label="Ab"
+              htmlFor="record-sickness-start"
+              required
+              error={dateErrors.start}
+            >
               <DatePicker
-                id="record-sickness-start"
                 ariaLabel="Ab"
                 value={startDate ? new Date(`${startDate}T00:00:00`) : undefined}
                 onChange={(date) => {
@@ -372,7 +386,7 @@ function RecordSicknessDialog({
                 }}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
 
             <div className="flex items-center gap-2">
               <Checkbox
@@ -390,10 +404,13 @@ function RecordSicknessDialog({
             </div>
 
             {endKnown ? (
-              <div className="grid gap-2">
-                <Label htmlFor="record-sickness-end">Bis</Label>
+              <Field
+                label="Bis"
+                htmlFor="record-sickness-end"
+                required
+                error={dateErrors.end}
+              >
                 <DatePicker
-                  id="record-sickness-end"
                   ariaLabel="Bis"
                   value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                   onChange={(date) =>
@@ -401,7 +418,7 @@ function RecordSicknessDialog({
                   }
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
             ) : (
               <p className="text-xs text-muted-foreground">
                 Ohne Enddatum gilt die Meldung bis auf Weiteres.
@@ -471,10 +488,7 @@ function RecordSicknessDialog({
                 >
                   Abbrechen
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={isSaving || !startDate || (endKnown && !endDate)}
-                >
+                <Button type="submit" disabled={isSaving}>
                   {isSaving && <Loader2 className="size-4 animate-spin" />}
                   {isSaving ? 'Wird gespeichert...' : 'Krankmeldung erfassen'}
                 </Button>
@@ -508,6 +522,7 @@ function ManagerEndDialog({
     setError(null);
     if (!endDate) {
       setError('Bitte wähle ein Enddatum aus.');
+      document.getElementById('manager-sickness-end')?.focus();
       return;
     }
 
@@ -549,10 +564,8 @@ function ManagerEndDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="manager-sickness-end">Letzter Tag</Label>
+            <Field label="Letzter Tag" htmlFor="manager-sickness-end" required>
               <DatePicker
-                id="manager-sickness-end"
                 ariaLabel="Letzter Tag"
                 value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                 onChange={(date) =>
@@ -560,7 +573,7 @@ function ManagerEndDialog({
                 }
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -572,7 +585,7 @@ function ManagerEndDialog({
             >
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving || !endDate}>
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird gespeichert...' : 'Enddatum speichern'}
             </Button>
@@ -603,6 +616,11 @@ function CorrectSicknessDialog({
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    start?: string;
+    end?: string;
+    reason?: string;
+  }>({});
 
   const isSingleDay = endKnown && startDate === endDate;
 
@@ -611,12 +629,23 @@ function CorrectSicknessDialog({
     if (isSaving) return;
     setError(null);
 
-    if (!startDate || (endKnown && !endDate)) {
-      setError('Bitte wähle die Daten aus.');
-      return;
-    }
-    if (!reason.trim()) {
-      setError('Bitte gib einen Grund für die Korrektur an.');
+    const nextFieldErrors = {
+      start: startDate ? undefined : 'Bitte wähle ein Datum aus.',
+      end: endKnown && !endDate ? 'Bitte wähle ein Datum aus.' : undefined,
+      reason: reason.trim()
+        ? undefined
+        : 'Bitte gib einen Grund für die Korrektur an.',
+    };
+    setFieldErrors(nextFieldErrors);
+    const firstInvalidId = nextFieldErrors.start
+      ? 'correct-sickness-start'
+      : nextFieldErrors.end
+        ? 'correct-sickness-end'
+        : nextFieldErrors.reason
+          ? 'correct-sickness-reason'
+          : null;
+    if (firstInvalidId) {
+      document.getElementById(firstInvalidId)?.focus();
       return;
     }
 
@@ -665,8 +694,7 @@ function CorrectSicknessDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="correct-sickness-type">Art</Label>
+            <Field label="Art" htmlFor="correct-sickness-type">
               <Select
                 value={absenceType}
                 onValueChange={(value) =>
@@ -674,7 +702,7 @@ function CorrectSicknessDialog({
                 }
                 disabled={isSaving}
               >
-                <SelectTrigger id="correct-sickness-type" aria-label="Art">
+                <SelectTrigger aria-label="Art">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -685,7 +713,7 @@ function CorrectSicknessDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </Field>
 
             <div className="flex items-center gap-2">
               <Checkbox
@@ -703,10 +731,13 @@ function CorrectSicknessDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="correct-sickness-start">Ab</Label>
+              <Field
+                label="Ab"
+                htmlFor="correct-sickness-start"
+                required
+                error={fieldErrors.start}
+              >
                 <DatePicker
-                  id="correct-sickness-start"
                   ariaLabel="Ab"
                   value={
                     startDate ? new Date(`${startDate}T00:00:00`) : undefined
@@ -720,12 +751,15 @@ function CorrectSicknessDialog({
                   }}
                   disabled={isSaving}
                 />
-              </div>
+              </Field>
               {endKnown && (
-                <div className="grid gap-2">
-                  <Label htmlFor="correct-sickness-end">Bis</Label>
+                <Field
+                  label="Bis"
+                  htmlFor="correct-sickness-end"
+                  required
+                  error={fieldErrors.end}
+                >
                   <DatePicker
-                    id="correct-sickness-end"
                     ariaLabel="Bis"
                     value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
                     onChange={(date) =>
@@ -733,7 +767,7 @@ function CorrectSicknessDialog({
                     }
                     disabled={isSaving}
                   />
-                </div>
+                </Field>
               )}
             </div>
 
@@ -758,17 +792,19 @@ function CorrectSicknessDialog({
               </div>
             )}
 
-            <div className="grid gap-2">
-              <Label htmlFor="correct-sickness-reason">Grund</Label>
+            <Field
+              label="Grund"
+              htmlFor="correct-sickness-reason"
+              required
+              error={fieldErrors.reason}
+            >
               <Textarea
-                id="correct-sickness-reason"
-                rows={2}
                 placeholder="z. B. Datum telefonisch korrigiert"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
 
             <ErrorText>{error}</ErrorText>
           </DialogBody>
@@ -781,12 +817,7 @@ function CorrectSicknessDialog({
             >
               Abbrechen
             </Button>
-            <Button
-              type="submit"
-              disabled={
-                isSaving || !startDate || (endKnown && !endDate) || !reason.trim()
-              }
-            >
+            <Button type="submit" disabled={isSaving}>
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird gespeichert...' : 'Korrektur speichern'}
             </Button>
@@ -929,13 +960,15 @@ function ManagerCancelDialog({
   const [reason, setReason] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reasonError, setReasonError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
     if (!reason.trim()) {
-      setError('Bitte gib einen Grund für die Stornierung an.');
+      setReasonError('Bitte gib einen Grund für die Stornierung an.');
+      document.getElementById('cancel-sickness-reason')?.focus();
       return;
     }
     setIsSaving(true);
@@ -980,17 +1013,22 @@ function ManagerCancelDialog({
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="cancel-sickness-reason">Grund</Label>
+            <Field
+              label="Grund"
+              htmlFor="cancel-sickness-reason"
+              required
+              error={reasonError}
+            >
               <Textarea
-                id="cancel-sickness-reason"
-                rows={2}
                 placeholder="z. B. versehentlich erfasst"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  setReasonError(null);
+                  setReason(e.target.value);
+                }}
                 disabled={isSaving}
               />
-            </div>
+            </Field>
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -1005,7 +1043,7 @@ function ManagerCancelDialog({
             <Button
               type="submit"
               variant="destructive"
-              disabled={isSaving || !reason.trim()}
+              disabled={isSaving}
             >
               {isSaving && <Loader2 className="size-4 animate-spin" />}
               {isSaving ? 'Wird storniert...' : 'Stornieren'}

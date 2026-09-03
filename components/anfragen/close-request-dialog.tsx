@@ -13,7 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -101,14 +102,13 @@ export function CloseRequestDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="close-reason">Grund *</Label>
+            <Field label="Grund" htmlFor="close-reason" required>
               <Select
                 value={reason}
                 onValueChange={(value) => setReason(value as RequestCloseReason)}
                 disabled={isLoading}
               >
-                <SelectTrigger id="close-reason">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -119,18 +119,16 @@ export function CloseRequestDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="close-note">Notiz</Label>
+            </Field>
+            <Field label="Notiz" htmlFor="close-note">
               <Textarea
-                id="close-note"
                 placeholder="Optionale Ergänzung, z. B. was stattdessen vereinbart wurde..."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={isLoading}
               />
-            </div>
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            </Field>
+            <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
             <Button

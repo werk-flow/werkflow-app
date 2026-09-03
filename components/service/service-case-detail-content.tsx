@@ -1,4 +1,5 @@
 "use client";
+import { SectionError } from "@/components/ui/section-error";
 
 import Link from "next/link";
 import { useState, type ReactElement } from "react";
@@ -8,8 +9,9 @@ import { ContextualDocumentsSection } from "@/components/dokumente/contextual-do
 import { Button } from "@/components/ui/button";
 import { DateTimeField } from "@/components/ui/date-time-field";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,11 +93,11 @@ function RelationDialog({ workspace, open, onOpenChange }: {
       <DialogContent>
         <DialogHeader><DialogTitle>Servicefälle verknüpfen</DialogTitle><DialogDescription>Beide Fälle bleiben eigenständig und vollständig nachvollziehbar.</DialogDescription></DialogHeader>
         <div className="space-y-4 py-2">
-          <div className="space-y-2"><Label>Servicefall</Label><SearchableSelect value={relatedId} onChange={setRelatedId} options={workspace.relatedCases.map((item) => ({ value: item.id, label: `${item.caseNumber} · ${item.summary}` }))} placeholder="Servicefall suchen" /></div>
-          <div className="space-y-2"><Label htmlFor="relation-type">Beziehung</Label><Select value={relationType} onValueChange={(value) => setRelationType(value as ServiceCaseRelationType)}><SelectTrigger id="relation-type"><SelectValue /></SelectTrigger><SelectContent>{SERVICE_CASE_RELATION_TYPES.map((value) => <SelectItem key={value} value={value}>{SERVICE_CASE_RELATION_LABELS[value]}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label htmlFor="relation-reason">Begründung</Label><Input id="relation-reason" value={reason} onChange={(event) => setReason(event.target.value)} /></div>
+          <Field label="Servicefall" htmlFor="relation-case" required><SearchableSelect value={relatedId} onChange={setRelatedId} options={workspace.relatedCases.map((item) => ({ value: item.id, label: `${item.caseNumber} · ${item.summary}` }))} placeholder="Servicefall suchen" /></Field>
+          <Field label="Beziehung" htmlFor="relation-type"><Select value={relationType} onValueChange={(value) => setRelationType(value as ServiceCaseRelationType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SERVICE_CASE_RELATION_TYPES.map((value) => <SelectItem key={value} value={value}>{SERVICE_CASE_RELATION_LABELS[value]}</SelectItem>)}</SelectContent></Select></Field>
+          <Field label="Begründung" htmlFor="relation-reason" required><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         </div>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <ErrorText>{error}</ErrorText>
         <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !relatedId || reason.trim().length < 3}>Verknüpfen</Button></DialogFooter>
       </DialogContent>
     </Dialog>
@@ -126,8 +128,7 @@ function EvidenceDialog({ workspace, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Arbeitsnachweis verknüpfen</DialogTitle><DialogDescription>Verknüpft wird genau diese Version aus dem zugeordneten Auftrag. Der Nachweis wird nicht kopiert.</DialogDescription></DialogHeader>
-        <div className="space-y-2 py-2">
-          <Label>Nachweisversion</Label>
+        <Field label="Nachweisversion" htmlFor="evidence-revision" required className="py-2">
           <SearchableSelect
             value={revisionId}
             onChange={setRevisionId}
@@ -138,8 +139,8 @@ function EvidenceDialog({ workspace, open, onOpenChange }: {
             placeholder="Arbeitsnachweis suchen"
             emptyMessage="Keine unverknüpfte Version gefunden"
           />
-        </div>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        </Field>
+        <ErrorText>{error}</ErrorText>
         <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !revisionId}>Verknüpfen</Button></DialogFooter>
       </DialogContent>
     </Dialog>
@@ -159,12 +160,10 @@ function FollowUpDialog({ workspace, open, onOpenChange }: {
   const [ownerUserId, setOwnerUserId] = useState(currentOwner?.userId ?? "");
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const { run, isPending } = useServerAction(async () => {
     const dueDate = parseBerlinDateTimeInput(dueAt);
-    if (!title.trim() || !ownerUserId || !dueDate) {
-      setError("Bitte fülle Titel, Zuständigkeit und Fälligkeit aus.");
-      return;
-    }
+    if (!dueDate) return;
     const result = await createCustomerFollowUp(workspace.serviceCase.clientId, {
       title,
       note,
@@ -179,17 +178,30 @@ function FollowUpDialog({ workspace, open, onOpenChange }: {
     }
     onOpenChange(false);
   });
+  const titleError = attempted && !title.trim() ? "Bitte gib einen Titel ein." : undefined;
+  const ownerError = attempted && !ownerUserId ? "Bitte wähle eine zuständige Person." : undefined;
+  const dueError = attempted && !parseBerlinDateTimeInput(dueAt) ? "Bitte gib eine Fälligkeit an." : undefined;
+  function submit(): void {
+    setError(null);
+    setAttempted(true);
+    const firstInvalidId = !title.trim() ? "service-follow-up-title" : !ownerUserId ? "service-follow-up-owner" : !parseBerlinDateTimeInput(dueAt) ? "service-follow-up-due-date" : null;
+    if (firstInvalidId) {
+      document.getElementById(firstInvalidId)?.focus();
+      return;
+    }
+    void run();
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader><DialogTitle>Nachfassaktion anlegen</DialogTitle><DialogDescription>Lege einen klaren nächsten Schritt für diesen Servicefall fest. Die Aktion erscheint in der bestehenden Aufgabenübersicht.</DialogDescription></DialogHeader>
-        <form onSubmit={(event) => { event.preventDefault(); void run(); }} className="space-y-4">
+        <form onSubmit={(event) => { event.preventDefault(); submit(); }} className="space-y-4">
           <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {workspace.serviceCase.caseNumber}</p>
-          <div className="space-y-2"><Label htmlFor="service-follow-up-title">Titel</Label><Input id="service-follow-up-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} autoFocus /></div>
-          <div className="space-y-2"><Label htmlFor="service-follow-up-owner">Zuständig</Label><SearchableSelect id="service-follow-up-owner" value={ownerUserId} onChange={setOwnerUserId} options={workspace.followUpOwners.map((owner) => ({ value: owner.userId, label: owner.name }))} placeholder="Person wählen" searchPlaceholder="Person suchen..." emptyMessage="Keine Person gefunden" /></div>
-          <div className="space-y-2"><Label>Fällig am</Label><DateTimeField idPrefix="service-follow-up-due" value={dueAt} onChange={setDueAt} dateAriaLabel="Fälligkeitsdatum" /></div>
-          <div className="space-y-2"><Label htmlFor="service-follow-up-note">Notiz</Label><Textarea id="service-follow-up-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={4} /></div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          <Field label="Titel" htmlFor="service-follow-up-title" required error={titleError}><Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} autoFocus /></Field>
+          <Field label="Zuständig" htmlFor="service-follow-up-owner" required error={ownerError}><SearchableSelect value={ownerUserId} onChange={setOwnerUserId} options={workspace.followUpOwners.map((owner) => ({ value: owner.userId, label: owner.name }))} placeholder="Person wählen" searchPlaceholder="Person suchen..." emptyMessage="Keine Person gefunden" /></Field>
+          <Field label="Fällig am" htmlFor="service-follow-up-due-date" required error={dueError}><DateTimeField idPrefix="service-follow-up-due" value={dueAt} onChange={setDueAt} dateAriaLabel="Fälligkeitsdatum" invalid={Boolean(dueError)} /></Field>
+          <Field label="Notiz" htmlFor="service-follow-up-note"><Textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} /></Field>
+          <ErrorText>{error}</ErrorText>
           <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="submit" disabled={isPending}>Speichern</Button></DialogFooter>
         </form>
       </DialogContent>
@@ -241,7 +253,7 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
             <dl className="mt-4 grid gap-4 sm:grid-cols-2"><Fact label="Vorläufiger Kostenkontext" value={SERVICE_CASE_CHARGE_CONTEXT_LABELS[item.chargeContext]} /><Fact label="Zugang und Hinweise vor Ort" value={item.accessInstructions} /><div className="sm:col-span-2"><Fact label="Interne Einschätzung" value={item.triageNote} /></div>{item.resolutionNote && <div className="sm:col-span-2"><Fact label="Abschlussbegründung" value={item.resolutionNote} /></div>}</dl>
             <p className="mt-4 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">Diese Einordnung dient nur der Einsatzplanung. Sie ist keine rechtliche Gewährleistungs- oder endgültige Kostenentscheidung.</p>
           </section>
-          {documentsLoadFailed ? <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">Dokumente und Bilder konnten nicht geladen werden.</p> : <ContextualDocumentsSection title="Dokumente & Bilder" description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie." documents={documents} documentTarget={{ kind: "service_case", serviceCaseId: item.id }} contextLabel={item.caseNumber} canUpload canManage keepUploadedDocumentsVisible />}
+          {documentsLoadFailed ? <SectionError>Dokumente und Bilder konnten nicht geladen werden.</SectionError> : <ContextualDocumentsSection title="Dokumente & Bilder" description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie." documents={documents} documentTarget={{ kind: "service_case", serviceCaseId: item.id }} contextLabel={item.caseNumber} canUpload canManage keepUploadedDocumentsVisible />}
           <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-evidence">
             <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Arbeitsnachweise</h2><p className="mt-1 text-sm text-muted-foreground">Exakte Versionen aus dem zugeordneten Auftrag.</p></div><Button type="button" variant="outline" size="sm" onClick={() => setEvidenceOpen(true)} disabled={live.isStale || !item.jobId || workspace.evidenceOptions.length === 0}><FileCheck2 className="size-4" />Verknüpfen</Button></div>
             {item.evidence.length ? <div className="mt-3 divide-y rounded-md border">{item.evidence.map((evidence) => <div key={evidence.id} className="p-3 text-sm"><span className="font-medium">{evidence.title}</span><span className="ml-2 text-xs text-muted-foreground">{WORK_ARTIFACT_KIND_LABELS[evidence.kind]} · Version {evidence.revisionNumber}</span></div>)}</div> : <p className="mt-3 text-sm text-muted-foreground">{item.jobId ? "Noch kein Arbeitsnachweis verknüpft." : "Ordne zuerst einen Auftrag zu."}</p>}
