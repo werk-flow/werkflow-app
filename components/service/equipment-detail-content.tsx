@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type ReactElement } from "react";
 import {
   ArrowLeft,
@@ -9,6 +8,7 @@ import {
   ExternalLink,
   History,
   LinkIcon,
+  Loader2,
   MapPin,
   Pencil,
   RefreshCw,
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { ListRow } from "@/components/ui/list-row";
 import { SectionError } from "@/components/ui/section-error";
 import {
@@ -49,8 +50,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { useLiveView } from "@/hooks/use-live-view";
-import { usePendingTask } from "@/hooks/use-server-action";
 import {
   correctInstalledEquipmentTerminalAction,
   getInstalledEquipmentSourceOptions,
@@ -97,6 +98,18 @@ const EVENT_LABELS: Record<string, string> = {
   document_linked: "Dokument verknüpft",
   document_unlinked: "Dokumentverknüpfung entfernt",
 };
+
+// One key per card or row that can be mid-change, so only the touched part of
+// the page shows pending and each dialog reports its own failure.
+type ActionScope =
+  | "details"
+  | "state"
+  | "work-link"
+  | "source"
+  | "source-options"
+  | "correction"
+  | "archive"
+  | `unlink:${string}`;
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "Nicht erfasst";
@@ -151,8 +164,7 @@ export function EquipmentDetailContent({
   jobs,
   projects,
 }: EquipmentDetailContentProps): ReactElement {
-  const router = useRouter();
-  const { run, isPending } = usePendingTask();
+  const busy = useBusyIds<ActionScope>();
   const [editOpen, setEditOpen] = useState(false);
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -170,7 +182,10 @@ export function EquipmentDetailContent({
   const [sourceValue, setSourceValue] = useState("");
   const [targetState, setTargetState] = useState<EquipmentState>("inactive");
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    scope: ActionScope;
+    message: string;
+  } | null>(null);
   const live = useLiveView({
     tables: ["installed_equipment"],
     initialData: initial,
@@ -190,40 +205,63 @@ export function EquipmentDetailContent({
       event.eventType === "replaced" || event.eventType === "decommissioned",
   );
   const transitionStates = getAllowedEquipmentTransitions(item.state);
+  const errorFor = (scope: ActionScope): string | null =>
+    error?.scope === scope ? error.message : null;
+  // Row and button actions outside a dialog report here; dialog actions
+  // report inside their dialog.
+  const pageError =
+    error &&
+    (error.scope === "source-options" || error.scope.startsWith("unlink:"))
+      ? error.message
+      : null;
+  const headerBusy =
+    busy.isBusy("state") || busy.isBusy("correction") || busy.isBusy("archive");
+  const workBusy =
+    busy.isBusy("work-link") ||
+    item.workLinks.some((link) => busy.isBusy(`unlink:${link.id}`));
 
+  // The scope stays busy through the settle read, so the touched card shows
+  // pending until the live view is authoritative again.
   function perform(
+    scope: ActionScope,
     task: () => Promise<{ success: boolean; error?: string }>,
     onSuccess?: () => void,
   ): void {
     setError(null);
-    void run(async () => {
-      const result = await task();
+    void busy.run(scope, async () => {
+      const result = await task().catch(() => ({
+        success: false as const,
+        error: undefined,
+      }));
       if (!result.success) {
-        setError(
-          getEquipmentMutationErrorMessage(
+        setError({
+          scope,
+          message: getEquipmentMutationErrorMessage(
             result.error,
             "Die Änderung konnte nicht gespeichert werden.",
           ),
-        );
+        });
         return;
       }
       setReason("");
-      setStatusOpen(false);
-      setCorrectionOpen(false);
-      setArchiveOpen(false);
-      await live.refresh();
       onSuccess?.();
-      router.refresh();
+      await live.refresh();
     });
   }
 
   function openSourceDialog(): void {
     setError(null);
     setReason("");
-    void run(async () => {
-      const result = await getInstalledEquipmentSourceOptions(item.id);
+    void busy.run("source-options", async () => {
+      const result = await getInstalledEquipmentSourceOptions(item.id).catch(
+        () => ({ success: false as const }),
+      );
       if (!result.success) {
-        setError("Verfügbare Herkunftsnachweise konnten nicht geladen werden.");
+        setError({
+          scope: "source-options",
+          message:
+            "Verfügbare Herkunftsnachweise konnten nicht geladen werden.",
+        });
         return;
       }
       setSourceOptions(result.options);
@@ -259,6 +297,10 @@ export function EquipmentDetailContent({
                   ? "Archiviert"
                   : EQUIPMENT_STATE_LABELS[item.state]}
               </span>
+              <InlinePending
+                active={headerBusy}
+                label="Änderungen werden übernommen"
+              />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {item.equipmentNumber} ·{" "}
@@ -318,12 +360,18 @@ export function EquipmentDetailContent({
             markiert. Seine Historie bleibt erhalten.
           </p>
         )}
-        <ErrorText>{error}</ErrorText>
+        <ErrorText>{pageError}</ErrorText>
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <div className="space-y-6">
             <section className="rounded-lg border p-4 shadow-xs">
-              <h2 className="text-base font-semibold">Anlagendaten</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold">Anlagendaten</h2>
+                <InlinePending
+                  active={busy.isBusy("details")}
+                  label="Änderungen werden übernommen"
+                />
+              </div>
               <dl className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <Fact
                   label="Kategorie"
@@ -395,6 +443,10 @@ export function EquipmentDetailContent({
               <div className="flex items-center gap-2">
                 <History className="size-4 text-muted-foreground" />
                 <h2 className="text-base font-semibold">Servicehistorie</h2>
+                <InlinePending
+                  active={busy.isBusy("source")}
+                  label="Änderungen werden übernommen"
+                />
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 Strukturierte Änderungen und exakte Bezüge, neueste zuerst.
@@ -548,15 +600,21 @@ export function EquipmentDetailContent({
             <section className="rounded-lg border p-4 shadow-xs">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-base font-semibold">Verknüpfte Arbeit</h2>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setWorkLinkOpen(true)}
-                >
-                  <LinkIcon className="size-4" />
-                  Verknüpfen
-                </Button>
+                <span className="flex items-center gap-2">
+                  <InlinePending
+                    active={workBusy}
+                    label="Änderungen werden übernommen"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setWorkLinkOpen(true)}
+                  >
+                    <LinkIcon className="size-4" />
+                    Verknüpfen
+                  </Button>
+                </span>
               </div>
               {item.workLinks.length > 0 ? (
                 <div className="mt-3 space-y-2">
@@ -568,14 +626,15 @@ export function EquipmentDetailContent({
                           <ExternalLink className="size-4 shrink-0" />
                         </Link>
                       </ListRow>
+                      <InlinePending active={busy.isBusy(`unlink:${link.id}`)} />
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         aria-label={`Verknüpfung ${link.label} entfernen`}
-                        disabled={isPending}
+                        disabled={busy.isBusy(`unlink:${link.id}`)}
                         onClick={() =>
-                          perform(() =>
+                          perform(`unlink:${link.id}`, () =>
                             setInstalledEquipmentWorkLink({
                               equipmentId: item.id,
                               expectedVersion: item.version,
@@ -604,9 +663,13 @@ export function EquipmentDetailContent({
               variant="outline"
               className="w-full"
               onClick={openSourceDialog}
-              disabled={isPending}
+              disabled={busy.isBusy("source-options")}
             >
-              <LinkIcon className="size-4" />
+              {busy.isBusy("source-options") ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <LinkIcon className="size-4" />
+              )}
               Herkunftsnachweis verknüpfen
             </Button>
             {terminalEvent && !item.archivedAt && (
@@ -650,6 +713,7 @@ export function EquipmentDetailContent({
           clients={clients}
           equipment={equipmentList}
           initial={item}
+          onSaved={() => void busy.run("details", live.refresh)}
         />
       )}
       {replaceOpen && (
@@ -697,25 +761,32 @@ export function EquipmentDetailContent({
               />
             </Field>
           </div>
+          <ErrorText>{errorFor("state")}</ErrorText>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStatusOpen(false)}>
               Abbrechen
             </Button>
             <Button
-              disabled={isPending || reason.trim().length < 3}
+              disabled={busy.isBusy("state") || reason.trim().length < 3}
               onClick={() =>
-                perform(() =>
-                  transitionInstalledEquipment({
-                    equipmentId: item.id,
-                    expectedVersion: item.version,
-                    toState: targetState,
-                    effectiveAt: new Date().toISOString(),
-                    reason,
-                    idempotencyKey: crypto.randomUUID(),
-                  }),
+                perform(
+                  "state",
+                  () =>
+                    transitionInstalledEquipment({
+                      equipmentId: item.id,
+                      expectedVersion: item.version,
+                      toState: targetState,
+                      effectiveAt: new Date().toISOString(),
+                      reason,
+                      idempotencyKey: crypto.randomUUID(),
+                    }),
+                  () => setStatusOpen(false),
                 )
               }
             >
+              {busy.isBusy("state") && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
               Änderung speichern
             </Button>
           </DialogFooter>
@@ -772,14 +843,16 @@ export function EquipmentDetailContent({
               />
             </Field>
           </div>
+          <ErrorText>{errorFor("work-link")}</ErrorText>
           <DialogFooter>
             <Button variant="outline" onClick={() => setWorkLinkOpen(false)}>
               Abbrechen
             </Button>
             <Button
-              disabled={isPending || !workTargetId}
+              disabled={busy.isBusy("work-link") || !workTargetId}
               onClick={() =>
                 perform(
+                  "work-link",
                   () =>
                     setInstalledEquipmentWorkLink({
                       equipmentId: item.id,
@@ -795,6 +868,9 @@ export function EquipmentDetailContent({
                 )
               }
             >
+              {busy.isBusy("work-link") && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
               Verknüpfen
             </Button>
           </DialogFooter>
@@ -838,18 +914,22 @@ export function EquipmentDetailContent({
               />
             </Field>
           </div>
+          <ErrorText>{errorFor("source")}</ErrorText>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSourceOpen(false)}>
               Abbrechen
             </Button>
             <Button
-              disabled={isPending || !sourceValue || reason.trim().length < 3}
+              disabled={
+                busy.isBusy("source") || !sourceValue || reason.trim().length < 3
+              }
               onClick={() => {
                 const option = sourceOptions.find(
                   (candidate) => candidate.value === sourceValue,
                 );
                 if (!option) return;
                 perform(
+                  "source",
                   () =>
                     linkInstalledEquipmentSource({
                       equipmentId: item.id,
@@ -864,6 +944,9 @@ export function EquipmentDetailContent({
                 );
               }}
             >
+              {busy.isBusy("source") && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
               Verknüpfen
             </Button>
           </DialogFooter>
@@ -885,25 +968,32 @@ export function EquipmentDetailContent({
               onChange={(event) => setReason(event.target.value)}
             />
           </Field>
+          <ErrorText>{errorFor("correction")}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
-              disabled={isPending || reason.trim().length < 3}
+              disabled={busy.isBusy("correction") || reason.trim().length < 3}
               onClick={(event) => {
                 event.preventDefault();
                 if (!terminalEvent) return;
-                perform(() =>
-                  correctInstalledEquipmentTerminalAction({
-                    equipmentId: item.id,
-                    expectedVersion: item.version,
-                    correctsEventId: terminalEvent.id,
-                    effectiveAt: new Date().toISOString(),
-                    reason,
-                    idempotencyKey: crypto.randomUUID(),
-                  }),
+                perform(
+                  "correction",
+                  () =>
+                    correctInstalledEquipmentTerminalAction({
+                      equipmentId: item.id,
+                      expectedVersion: item.version,
+                      correctsEventId: terminalEvent.id,
+                      effectiveAt: new Date().toISOString(),
+                      reason,
+                      idempotencyKey: crypto.randomUUID(),
+                    }),
+                  () => setCorrectionOpen(false),
                 );
               }}
             >
+              {busy.isBusy("correction") && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
               Korrektur festhalten
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -929,23 +1019,30 @@ export function EquipmentDetailContent({
               onChange={(event) => setReason(event.target.value)}
             />
           </Field>
+          <ErrorText>{errorFor("archive")}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
-              disabled={isPending || reason.trim().length < 3}
+              disabled={busy.isBusy("archive") || reason.trim().length < 3}
               onClick={(event) => {
                 event.preventDefault();
-                perform(() =>
-                  setInstalledEquipmentArchived({
-                    equipmentId: item.id,
-                    expectedVersion: item.version,
-                    archived: !item.archivedAt,
-                    reason,
-                    idempotencyKey: crypto.randomUUID(),
-                  }),
+                perform(
+                  "archive",
+                  () =>
+                    setInstalledEquipmentArchived({
+                      equipmentId: item.id,
+                      expectedVersion: item.version,
+                      archived: !item.archivedAt,
+                      reason,
+                      idempotencyKey: crypto.randomUUID(),
+                    }),
+                  () => setArchiveOpen(false),
                 );
               }}
             >
+              {busy.isBusy("archive") && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
               {item.archivedAt ? "Wiederherstellen" : "Archivieren"}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -3,19 +3,22 @@ import { SectionError } from "@/components/ui/section-error";
 
 import Link from "next/link";
 import { useState, type ReactElement } from "react";
-import { ArrowLeft, CalendarClock, ExternalLink, FileCheck2, History, LinkIcon, MapPin, Pencil, Wrench } from "lucide-react";
+import { ArrowLeft, CalendarClock, ExternalLink, FileCheck2, History, LinkIcon, Loader2, MapPin, Pencil, Wrench } from "lucide-react";
 
 import { ContextualDocumentsSection } from "@/components/dokumente/contextual-documents-section";
+import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { DateTimeField } from "@/components/ui/date-time-field";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
 import { Field } from "@/components/ui/field";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { useLiveView } from "@/hooks/use-live-view";
 import { useServerAction } from "@/hooks/use-server-action";
 import { createCustomerFollowUp } from "@/lib/customer-relationships/actions";
@@ -62,10 +65,12 @@ function Fact({ label, value }: { label: string; value: string | null | undefine
   return <div><dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm">{value || "Nicht erfasst"}</dd></div>;
 }
 
-function RelationDialog({ workspace, open, onOpenChange }: {
+function RelationDialog({ workspace, open, onOpenChange, onSaved }: {
   workspace: ServiceCaseDetailWorkspace;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after success so the section settles through the live read. */
+  onSaved: () => void;
 }): ReactElement {
   const [relatedId, setRelatedId] = useState("");
   const [relationType, setRelationType] = useState<ServiceCaseRelationType>("related");
@@ -88,6 +93,7 @@ function RelationDialog({ workspace, open, onOpenChange }: {
       return;
     }
     onOpenChange(false);
+    onSaved();
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,16 +105,18 @@ function RelationDialog({ workspace, open, onOpenChange }: {
           <Field label="Begründung" htmlFor="relation-reason" required><Input value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         </div>
         <ErrorText>{error}</ErrorText>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !relatedId || reason.trim().length < 3}>Verknüpfen</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !relatedId || reason.trim().length < 3}>{isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function EvidenceDialog({ workspace, open, onOpenChange }: {
+function EvidenceDialog({ workspace, open, onOpenChange, onSaved }: {
   workspace: ServiceCaseDetailWorkspace;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called after success so the section settles through the live read. */
+  onSaved: () => void;
 }): ReactElement {
   const [revisionId, setRevisionId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +132,7 @@ function EvidenceDialog({ workspace, open, onOpenChange }: {
       return;
     }
     onOpenChange(false);
+    onSaved();
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +151,7 @@ function EvidenceDialog({ workspace, open, onOpenChange }: {
           />
         </Field>
         <ErrorText>{error}</ErrorText>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !revisionId}>Verknüpfen</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="button" onClick={() => void run()} disabled={isPending || !revisionId}>{isPending && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -162,6 +171,7 @@ function FollowUpDialog({ workspace, open, onOpenChange }: {
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(async () => {
     const dueDate = parseBerlinDateTimeInput(dueAt);
     if (!dueDate) return;
@@ -178,6 +188,9 @@ function FollowUpDialog({ workspace, open, onOpenChange }: {
       return;
     }
     onOpenChange(false);
+    // The follow-up lives under Aufgaben, not on this page: the banner is the
+    // only confirmation the user gets here.
+    showBanner({ variant: "success", message: "Nachfassaktion wurde angelegt." });
   });
   const titleError = attempted && !title.trim() ? "Bitte gib einen Titel ein." : undefined;
   const ownerError = attempted && !ownerUserId ? "Bitte wähle eine zuständige Person." : undefined;
@@ -203,7 +216,7 @@ function FollowUpDialog({ workspace, open, onOpenChange }: {
           <Field label="Fällig am" htmlFor="service-follow-up-due-date" required error={dueError}><DateTimeField idPrefix="service-follow-up-due" value={dueAt} onChange={setDueAt} dateAriaLabel="Fälligkeitsdatum" invalid={Boolean(dueError)} /></Field>
           <Field label="Notiz" htmlFor="service-follow-up-note"><Textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} /></Field>
           <ErrorText>{error}</ErrorText>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="submit" disabled={isPending}>Speichern</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -231,6 +244,10 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
   });
   const workspace = live.data ?? initial;
   const item = workspace.serviceCase;
+  // Section-scoped settle window after a dialog action: the touched section
+  // shows the indicator until the live read lands.
+  const settling = useBusyIds<"case" | "relations" | "evidence">();
+  const settleOn = (section: "case" | "relations" | "evidence") => () => void settling.run(section, live.refresh);
   return (
     <div className="space-y-6">
       {live.isStale && <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">Der Servicefall konnte nicht aktualisiert werden. Angezeigt wird der letzte bekannte Stand.</p>}
@@ -238,7 +255,7 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
         <Link href="/service/faelle" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="size-4" />Servicefälle</Link>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div><div className="flex flex-wrap items-center gap-2"><span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span><span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{SERVICE_CASE_STATUS_LABELS[item.status]}</span><span className="text-sm text-muted-foreground">{SERVICE_CASE_URGENCY_LABELS[item.urgency]}</span></div><h2 className="mt-1 text-xl font-semibold">{item.summary}</h2><p className="mt-1 text-sm text-muted-foreground">{item.intakeType === "request" ? "Aus Anfrage übernommen" : "Direkt erfasst"} · Aktualisiert {formatDateTime(item.updatedAt)}</p></div>
-          <Button type="button" onClick={() => setEditOpen(true)} disabled={live.isStale}><Pencil className="size-4" />Bearbeiten</Button>
+          <span className="flex items-center gap-2"><InlinePending active={settling.isBusy("case")} label="Änderungen werden übernommen" /><Button type="button" onClick={() => setEditOpen(true)} disabled={live.isStale}><Pencil className="size-4" />Bearbeiten</Button></span>
         </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -256,11 +273,11 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
           </section>
           {documentsLoadFailed ? <SectionError>Dokumente und Bilder konnten nicht geladen werden.</SectionError> : <ContextualDocumentsSection title="Dokumente & Bilder" description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie." documents={documents} documentTarget={{ kind: "service_case", serviceCaseId: item.id }} contextLabel={item.caseNumber} canUpload canManage keepUploadedDocumentsVisible />}
           <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-evidence">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Arbeitsnachweise</h2><p className="mt-1 text-sm text-muted-foreground">Exakte Versionen aus dem zugeordneten Auftrag.</p></div><Button type="button" variant="outline" size="sm" onClick={() => setEvidenceOpen(true)} disabled={live.isStale || !item.jobId || workspace.evidenceOptions.length === 0}><FileCheck2 className="size-4" />Verknüpfen</Button></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Arbeitsnachweise</h2><p className="mt-1 text-sm text-muted-foreground">Exakte Versionen aus dem zugeordneten Auftrag.</p></div><span className="flex items-center gap-2"><InlinePending active={settling.isBusy("evidence")} label="Änderungen werden übernommen" /><Button type="button" variant="outline" size="sm" onClick={() => setEvidenceOpen(true)} disabled={live.isStale || !item.jobId || workspace.evidenceOptions.length === 0}><FileCheck2 className="size-4" />Verknüpfen</Button></span></div>
             {item.evidence.length ? <div className="mt-3 divide-y rounded-md border">{item.evidence.map((evidence) => <div key={evidence.id} className="p-3 text-sm"><span className="font-medium">{evidence.title}</span><span className="ml-2 text-xs text-muted-foreground">{WORK_ARTIFACT_KIND_LABELS[evidence.kind]} · Version {evidence.revisionNumber}</span></div>)}</div> : <p className="mt-3 text-sm text-muted-foreground">{item.jobId ? "Noch kein Arbeitsnachweis verknüpft." : "Ordne zuerst einen Auftrag zu."}</p>}
           </section>
           <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-relations">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Zusammenhänge</h2><p className="mt-1 text-sm text-muted-foreground">Duplikate und Folgefälle bleiben als eigene Vorgänge erhalten.</p></div><Button type="button" variant="outline" size="sm" onClick={() => setRelationOpen(true)} disabled={live.isStale || workspace.relatedCases.length === 0}><LinkIcon className="size-4" />Verknüpfen</Button></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-semibold">Zusammenhänge</h2><p className="mt-1 text-sm text-muted-foreground">Duplikate und Folgefälle bleiben als eigene Vorgänge erhalten.</p></div><span className="flex items-center gap-2"><InlinePending active={settling.isBusy("relations")} label="Änderungen werden übernommen" /><Button type="button" variant="outline" size="sm" onClick={() => setRelationOpen(true)} disabled={live.isStale || workspace.relatedCases.length === 0}><LinkIcon className="size-4" />Verknüpfen</Button></span></div>
             {item.relations.length ? <div className="mt-3 space-y-2">{item.relations.map((relation) => <ListRow key={relation.id} asChild interactive className="text-sm"><Link href={`/service/faelle/${relation.relatedCaseNumber}`}><span className="min-w-0"><span className="block font-medium">{SERVICE_CASE_RELATION_LABELS[relation.relationType]} {relation.relatedCaseNumber}</span><span className="block truncate text-xs text-muted-foreground">{relation.relatedSummary} · {relation.reason}</span></span><ExternalLink className="size-4 shrink-0" /></Link></ListRow>)}</div> : <p className="mt-3 text-sm text-muted-foreground">Noch keine verwandten Servicefälle.</p>}
           </section>
           <section className="rounded-lg border p-4 shadow-xs"><div className="flex items-center gap-2"><History className="size-4 text-muted-foreground" /><h2 className="text-base font-semibold">Verlauf</h2></div><div className="mt-4 divide-y">{item.events.map((event) => <div key={event.id} className="py-3 first:pt-0 last:pb-0"><div className="flex items-start justify-between gap-3"><span className="text-sm font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span><time className="text-xs text-muted-foreground">{formatDateTime(event.recordedAt)}</time></div><p className="mt-1 text-xs text-muted-foreground">{event.actorName}{event.reason ? ` · ${event.reason}` : ""}</p></div>)}</div></section>
@@ -272,9 +289,9 @@ export function ServiceCaseDetailContent({ initial, documents, documentsLoadFail
           <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-follow-up"><h2 className="text-base font-semibold">Nächster Schritt</h2><p className="mt-2 text-sm text-muted-foreground">Plane eine Büro-, Gewährleistungs- oder Kundenrückfrage als bestehende Nachfassaktion.</p><Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setFollowUpOpen(true)} disabled={live.isStale || workspace.followUpOwners.length === 0}><CalendarClock className="size-4" />Nachfassaktion anlegen</Button></section>
         </aside>
       </div>
-      {editOpen && <ServiceCaseFormDialog open onOpenChange={setEditOpen} clients={workspace.clients} initial={item} jobs={workspace.jobs} />}
-      {relationOpen && <RelationDialog open onOpenChange={setRelationOpen} workspace={workspace} />}
-      {evidenceOpen && <EvidenceDialog open onOpenChange={setEvidenceOpen} workspace={workspace} />}
+      {editOpen && <ServiceCaseFormDialog open onOpenChange={setEditOpen} clients={workspace.clients} initial={item} jobs={workspace.jobs} onSaved={settleOn("case")} />}
+      {relationOpen && <RelationDialog open onOpenChange={setRelationOpen} workspace={workspace} onSaved={settleOn("relations")} />}
+      {evidenceOpen && <EvidenceDialog open onOpenChange={setEvidenceOpen} workspace={workspace} onSaved={settleOn("evidence")} />}
       {followUpOpen && <FollowUpDialog open onOpenChange={setFollowUpOpen} workspace={workspace} />}
     </div>
   );

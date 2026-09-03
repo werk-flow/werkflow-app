@@ -42,8 +42,11 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { useBanner } from '@/components/ui/banner';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import {
   createCustomerFollowUp,
   getCustomerRelationshipBundle,
@@ -110,6 +113,11 @@ const TIMELINE_LABELS: Record<TimelineItem['kind'], string> = {
   follow_up_event: 'Nachfassaktion geändert',
   communication_preference_event: 'Kontaktvorgabe geändert',
 };
+
+// Busy ids for changes that have no row of their own (a create, the
+// communication settings) so the section header can show them settling.
+const FOLLOW_UP_LIST_ID = 'follow-ups';
+const COMMUNICATION_ID = 'communication';
 
 type FollowUpDraft = {
   id: string | null;
@@ -204,6 +212,10 @@ export function CustomerRelationshipWorkspace({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [preferenceOpen, setPreferenceOpen] = useState(false);
   const { run: runRelationshipTask, isPending } = usePendingTask();
+  // Row actions (erledigen, abbrechen) and the settle window after a dialog
+  // save mark only the affected follow-up; the other rows stay usable.
+  const { run: runRowTask, isBusy } = useBusyIds();
+  const waitForBundle = useSettleOnChange(initialBundle);
   const { showBanner } = useBanner();
 
   const bundle = useMemo(() => {
@@ -336,6 +348,7 @@ export function CustomerRelationshipWorkspace({
       setFollowUpDraft(null);
       showBanner({ variant: 'success', message: 'Nachfassaktion gespeichert.' });
       router.refresh();
+      void runRowTask(followUpDraft.id ?? FOLLOW_UP_LIST_ID, waitForBundle);
     });
   }
 
@@ -343,7 +356,7 @@ export function CustomerRelationshipWorkspace({
     followUp: ClientFollowUp,
     status: 'completed' | 'cancelled'
   ) {
-    void runRelationshipTask(async () => {
+    void runRowTask(followUp.id, async () => {
       const result = await transitionCustomerFollowUp(clientId, followUp.id, status);
       if (!result.success) {
         showBanner({
@@ -360,6 +373,7 @@ export function CustomerRelationshipWorkspace({
             : 'Nachfassaktion abgebrochen.',
       });
       router.refresh();
+      await waitForBundle();
     });
   }
 
@@ -371,6 +385,7 @@ export function CustomerRelationshipWorkspace({
             <h3 id="follow-ups-heading" className="flex items-center gap-2 text-sm font-semibold">
               <CalendarClock className="size-4 text-muted-foreground" />
               Nachfassaktionen
+              <InlinePending active={isBusy(FOLLOW_UP_LIST_ID)} />
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Sichtbare nächste Schritte mit Zuständigkeit und Fälligkeit.
@@ -401,6 +416,7 @@ export function CustomerRelationshipWorkspace({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-medium">{followUp.title}</p>
+                        <InlinePending active={isBusy(followUp.id)} />
                         {overdue && (
                           <Badge
                             variant="outline"
@@ -432,10 +448,10 @@ export function CustomerRelationshipWorkspace({
                       <Button variant="ghost" size="icon" className="size-8" onClick={() => openExistingFollowUp(followUp)} aria-label={`Nachfassaktion ${followUp.title} bearbeiten`}>
                         <Pencil className="size-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8" disabled={isPending} onClick={() => transitionFollowUp(followUp, 'completed')} aria-label={`Nachfassaktion ${followUp.title} erledigen`}>
+                      <Button variant="ghost" size="icon" className="size-8" disabled={isBusy(followUp.id)} onClick={() => transitionFollowUp(followUp, 'completed')} aria-label={`Nachfassaktion ${followUp.title} erledigen`}>
                         <Check className="size-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="size-8" disabled={isPending} onClick={() => transitionFollowUp(followUp, 'cancelled')} aria-label={`Nachfassaktion ${followUp.title} abbrechen`}>
+                      <Button variant="ghost" size="icon" className="size-8" disabled={isBusy(followUp.id)} onClick={() => transitionFollowUp(followUp, 'cancelled')} aria-label={`Nachfassaktion ${followUp.title} abbrechen`}>
                         <X className="size-3.5" />
                       </Button>
                     </div>
@@ -473,9 +489,13 @@ export function CustomerRelationshipWorkspace({
         settingsOpen={settingsOpen}
         preferenceOpen={preferenceOpen}
         isPending={isPending}
+        isSettling={isBusy(COMMUNICATION_ID)}
         onSettingsOpenChange={setSettingsOpen}
         onPreferenceOpenChange={setPreferenceOpen}
-        onSaved={() => router.refresh()}
+        onSaved={() => {
+          router.refresh();
+          void runRowTask(COMMUNICATION_ID, waitForBundle);
+        }}
         runTask={runRelationshipTask}
       />
 
@@ -645,6 +665,7 @@ function CommunicationPreferencesSection({
   settingsOpen,
   preferenceOpen,
   isPending,
+  isSettling,
   onSettingsOpenChange,
   onPreferenceOpenChange,
   onSaved,
@@ -656,6 +677,8 @@ function CommunicationPreferencesSection({
   settingsOpen: boolean;
   preferenceOpen: boolean;
   isPending: boolean;
+  /** A save was confirmed and the refreshed bundle has not landed yet. */
+  isSettling: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   onPreferenceOpenChange: (open: boolean) => void;
   onSaved: () => void;
@@ -736,6 +759,7 @@ function CommunicationPreferencesSection({
           <h3 id="communication-heading" className="flex items-center gap-2 text-sm font-semibold">
             <MessageSquareWarning className="size-4 text-muted-foreground" />
             Kontaktvorgaben
+            <InlinePending active={isSettling} />
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">Hinweise für zukünftige Kontakte. Es werden keine Nachrichten versendet.</p>
         </div>

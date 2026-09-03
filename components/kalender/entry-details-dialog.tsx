@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { usePendingTask } from '@/hooks/use-server-action';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { TimeInput } from '@/components/ui/time-input';
 import { Label } from '@/components/ui/label';
@@ -401,7 +402,14 @@ export function EntryDetailsDialog({
   jobName,
   entryUserRole
 }: EntryDetailsDialogProps) {
-  const { run: runPendingTask, isPending } = usePendingTask();
+  // One flow per action id so the clicked button carries the spinner while
+  // the other footer buttons only lock (feedback canon: edit from a dialog).
+  const {
+    run: runAction,
+    isBusy,
+    anyBusy: isPending
+  } = useBusyIds<'save' | 'delete' | 'approve' | 'reject'>();
+  const { showBanner } = useBanner();
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editedClockIn, setEditedClockIn] = useState<Date | null>(null);
@@ -920,7 +928,7 @@ export function EntryDetailsDialog({
       return;
     }
 
-    void runPendingTask(async () => {
+    void runAction('save', async () => {
       let requestCreated = false;
       const appliedUpdates: Array<{
         entryId: string;
@@ -1176,10 +1184,15 @@ export function EntryDetailsDialog({
         }
 
         setIsEditing(false);
+        showBanner({
+          variant: 'success',
+          message: 'Arbeitszeit wurde gespeichert.'
+        });
         onRefresh();
-      } catch (err) {
-        console.error('Error updating entry:', err);
-        setError('Ein Fehler ist aufgetreten.');
+      } catch {
+        setError(
+          'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.'
+        );
       }
     });
   };
@@ -1188,7 +1201,7 @@ export function EntryDetailsDialog({
     setError(null);
     setSuccessMessage(null);
 
-    void runPendingTask(async () => {
+    void runAction('delete', async () => {
       try {
         let requestCreated = false;
         const shouldConvertActiveBreakBoundaryToClockOut =
@@ -1223,6 +1236,10 @@ export function EntryDetailsDialog({
           }
 
           onOpenChange(false);
+          showBanner({
+            variant: 'success',
+            message: 'Arbeitsblock wurde gelöscht.'
+          });
           onRefresh();
           return;
         }
@@ -1262,48 +1279,46 @@ export function EntryDetailsDialog({
         }
 
         onOpenChange(false);
+        showBanner({
+          variant: 'success',
+          message: 'Arbeitsblock wurde gelöscht.'
+        });
         onRefresh();
-      } catch (err) {
-        console.error('Error deleting entry:', err);
-        setError('Ein Fehler ist aufgetreten.');
+      } catch {
+        setError(
+          'Der Arbeitsblock konnte nicht gelöscht werden. Bitte versuche es erneut.'
+        );
       }
     });
   };
 
-  const handleApprove = async () => {
-    void runPendingTask(async () => {
+  const handleReview = (decision: 'approved' | 'rejected') => {
+    setError(null);
+    setSuccessMessage(null);
+    const isApproval = decision === 'approved';
+    void runAction(isApproval ? 'approve' : 'reject', async () => {
       try {
         for (const entry of pendingEntries) {
-          const result = await reviewEntry(entry.id, 'approved');
+          const result = await reviewEntry(entry.id, decision);
           if (!result.success) {
-            setError(result.error);
+            setError(formatActionError(result.error));
             return;
           }
         }
 
+        showBanner({
+          variant: 'success',
+          message: isApproval
+            ? 'Eintrag wurde genehmigt.'
+            : 'Eintrag wurde abgelehnt.'
+        });
         onRefresh();
-      } catch (err) {
-        console.error('Error approving entry:', err);
-        setError('Ein Fehler ist aufgetreten.');
-      }
-    });
-  };
-
-  const handleReject = async () => {
-    void runPendingTask(async () => {
-      try {
-        for (const entry of pendingEntries) {
-          const result = await reviewEntry(entry.id, 'rejected');
-          if (!result.success) {
-            setError(result.error);
-            return;
-          }
-        }
-
-        onRefresh();
-      } catch (err) {
-        console.error('Error rejecting entry:', err);
-        setError('Ein Fehler ist aufgetreten.');
+      } catch {
+        setError(
+          isApproval
+            ? 'Die Genehmigung konnte nicht gespeichert werden. Bitte versuche es erneut.'
+            : 'Die Ablehnung konnte nicht gespeichert werden. Bitte versuche es erneut.'
+        );
       }
     });
   };
@@ -1820,21 +1835,29 @@ export function EntryDetailsDialog({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleApprove}
+                onClick={() => handleReview('approved')}
                 disabled={isPending}
                 className="gap-1"
               >
-                <Check className="h-4 w-4" />
+                {isBusy('approve') ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
                 Genehmigen
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleReject}
+                onClick={() => handleReview('rejected')}
                 disabled={isPending}
                 className="gap-1 text-destructive hover:text-destructive"
               >
-                <X className="h-4 w-4" />
+                {isBusy('reject') ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <X className="h-4 w-4" />
+                )}
                 Ablehnen
               </Button>
             </div>
@@ -1861,7 +1884,11 @@ export function EntryDetailsDialog({
                       disabled={isPending}
                       className="gap-1 text-destructive hover:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {isBusy('delete') ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                       Löschen
                     </Button>
                   </AlertDialogTrigger>
@@ -1900,7 +1927,9 @@ export function EntryDetailsDialog({
                 Abbrechen
               </Button>
               <Button size="sm" onClick={handleSaveEdit} disabled={isPending}>
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isBusy('save') && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 Speichern
               </Button>
             </div>

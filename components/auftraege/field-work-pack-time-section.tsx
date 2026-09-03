@@ -2,14 +2,16 @@
 
 import { Clock3, Loader2, LogIn, LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 
 import { useClockState } from '@/components/clock-state-provider';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
+import { usePendingTask } from '@/hooks/use-server-action';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 
@@ -43,7 +45,12 @@ export function FieldWorkPackTimeSection({
   const router = useRouter();
   const { showBanner } = useBanner();
   const { state, isLoading, isPending, statusError, clockIn, clockOut, switchJob } = useClockState();
-  const [isRefreshing, startRefresh] = useTransition();
+  const { refresh: refreshRoute, isPending: isRefreshing } = useRouterRefresh();
+  // The provider's `isPending` ends with the server call; the clock-state
+  // refresh it awaits afterwards is part of the same click, so the button
+  // stays in its pending state until the new label can be shown.
+  const { run: runClockChange, isPending: isChangingClock } = usePendingTask();
+  const isClockBusy = isLoading || isPending || isChangingClock;
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
   const sessions = calculateWorkSessions(
     entries.filter((entry) => entry.userId === currentUserId)
@@ -109,14 +116,13 @@ export function FieldWorkPackTimeSection({
               type="button"
               className="min-h-11"
               disabled={
-                isLoading ||
-                isPending ||
+                isClockBusy ||
                 Boolean(statusError) ||
                 !state?.organizationId
               }
-              onClick={() => void changeClock()}
+              onClick={() => void runClockChange(changeClock)}
             >
-              {isLoading || isPending ? (
+              {isClockBusy ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : isClockedIntoThisJob ? (
                 <LogOut className="size-4" />
@@ -134,8 +140,7 @@ export function FieldWorkPackTimeSection({
               variant="outline"
               className="min-h-11"
               disabled={
-                isLoading ||
-                isPending ||
+                isClockBusy ||
                 Boolean(statusError) ||
                 !state?.organizationId
               }
@@ -156,7 +161,7 @@ export function FieldWorkPackTimeSection({
       {loadError ? (
         <SectionError
           className="mt-4"
-          onRetry={() => startRefresh(() => router.refresh())}
+          onRetry={refreshRoute}
           retryPending={isRefreshing}
         >
           Deine bisherigen Zeiten zu diesem Auftrag konnten nicht geladen werden.

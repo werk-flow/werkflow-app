@@ -12,6 +12,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { ErrorText } from '@/components/ui/error-text';
+import { useServerAction } from '@/hooks/use-server-action';
+
+const CONFIRM_FAILED_MESSAGE =
+  'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.';
 
 interface ParkConfirmationDialogProps {
   open: boolean;
@@ -32,16 +37,21 @@ export function ParkConfirmationDialog({
   mode = 'manual-park',
   onConfirm,
 }: ParkConfirmationDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const { run: runConfirm, isPending: isLoading } = useServerAction(onConfirm);
+  const [error, setError] = useState<string | null>(null);
 
+  // A rejected confirm keeps the dialog open with the failure visible; the
+  // parent's own result handling (a form error under this dialog) closes it
+  // normally because that path resolves instead of throwing.
   const handleConfirm = async () => {
-    setIsLoading(true);
+    setError(null);
     try {
-      await onConfirm();
-      onOpenChange(false);
-    } finally {
-      setIsLoading(false);
+      await runConfirm();
+    } catch {
+      setError(CONFIRM_FAILED_MESSAGE);
+      return;
     }
+    onOpenChange(false);
   };
 
   const displayName = identifier ? `${identifier} – ${title}` : title;
@@ -87,7 +97,13 @@ export function ParkConfirmationDialog({
   const loadingLabel = isAutoParkDateRemoval ? 'Wird gespeichert...' : 'Wird geparkt...';
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setError(null);
+        onOpenChange(nextOpen);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
@@ -103,12 +119,14 @@ export function ParkConfirmationDialog({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <ErrorText>{error}</ErrorText>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {
               // Keep the dialog open (with its loading state) until the async
-              // confirm resolves; handleConfirm closes it on completion.
+              // confirm resolves; handleConfirm closes it on success and
+              // surfaces every failure itself, so nothing is discarded here.
               event.preventDefault();
               void handleConfirm();
             }}

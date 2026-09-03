@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, ExternalLink, Trash2, Loader2 } from 'lucide-react';
+import { MoreHorizontal, ExternalLink, Pencil, Trash2, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,35 +22,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
-import { deleteClient } from '@/lib/clients/actions';
+import { EditClientDialog } from './edit-client-dialog';
 import type { Client } from '@/lib/jobs/types';
 
 interface ClientActionsMenuProps {
   client: Client;
+  /** The row has a change in flight (edit settling, delete running). */
+  isBusy?: boolean;
+  /** An edit was confirmed by the server; the list keeps the row marked until props land. */
+  onSaved: (clientId: string) => void;
+  /** The list owns the optimistic removal, its rollback, and the feedback. */
+  onDelete: (client: Client) => Promise<void>;
 }
 
-export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
+export function ClientActionsMenu({
+  client,
+  isBusy = false,
+  onSaved,
+  onDelete,
+}: ClientActionsMenuProps) {
   const router = useRouter();
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleDelete = async () => {
-    if (isDeleting) return;
-    setIsDeleting(true);
-    setError(null);
-
-    const result = await deleteClient(client.id);
-
-    if (result.success) {
-      setShowDeleteDialog(false);
-      router.push(`/kunden?deleted_client=${encodeURIComponent(client.name)}`);
-    } else {
-      setError(result.error || 'Fehler beim Löschen des Kunden');
-      setIsDeleting(false);
-    }
-  };
 
   return (
     <>
@@ -60,9 +53,9 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
             variant="ghost"
             size="sm"
             className="h-8 w-8 p-0"
-            disabled={isDeleting}
+            disabled={isBusy}
           >
-            {isDeleting ? (
+            {isBusy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <MoreHorizontal className="size-4" />
@@ -77,6 +70,10 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
             <ExternalLink className="size-4" />
             Details anzeigen
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+            <Pencil className="size-4" />
+            Bearbeiten
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"
@@ -87,6 +84,13 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <EditClientDialog
+        client={client}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        onSaved={() => onSaved(client.id)}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
@@ -99,24 +103,15 @@ export function ClientActionsMenu({ client }: ClientActionsMenuProps) {
               Zuordnung zu diesem Kunden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ErrorText>{error}</ErrorText>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>
-              Abbrechen
-            </AlertDialogCancel>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            {/* The row leaves the list at once; the list rolls it back and
+                reports a failure, so the confirm can close immediately. */}
             <AlertDialogAction
-              onClick={handleDelete}
-              disabled={isDeleting}
+              onClick={() => void onDelete(client)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Wird gelöscht...
-                </>
-              ) : (
-                'Löschen'
-              )}
+              Löschen
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

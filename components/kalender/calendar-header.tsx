@@ -4,11 +4,11 @@ import { useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
   CalendarPlus,
   Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { ManualEntryDialog } from '@/components/manual-entry-dialog';
 import { CalendarEntryDialog } from './calendar-entry-dialog';
 import { ParkplatzButton } from './parkplatz-button';
@@ -18,11 +18,11 @@ import type { CalendarView } from './calendar-container';
 interface CalendarHeaderProps {
   currentDate: Date;
   view: CalendarView;
-  isLoading?: boolean;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
-  onRefresh: () => void;
+  /** Awaited by the RefreshButton; the container owns the fetches. */
+  onRefresh: () => Promise<void>;
   onManualEntrySuccess?: (entries: TimeEntry[]) => void | Promise<void>;
   isAdminOrManager?: boolean;
   onJobSuccess?: () => void | Promise<void>;
@@ -110,7 +110,6 @@ function getStartOfWeek(date: Date): Date {
 export function CalendarHeader({
   currentDate,
   view,
-  isLoading = false,
   onPrevious,
   onNext,
   onToday,
@@ -162,18 +161,11 @@ export function CalendarHeader({
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onRefresh()}
-            disabled={isLoading}
-            title="Aktualisieren"
+          <RefreshButton
+            onRefresh={onRefresh}
+            withRouteRefresh={false}
             className="ml-2"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`}
-            />
-          </Button>
+          />
           <span className="ml-2 text-sm font-medium text-muted-foreground sm:text-base whitespace-nowrap">
             {formatDateDisplay(currentDate, view)}
           </span>

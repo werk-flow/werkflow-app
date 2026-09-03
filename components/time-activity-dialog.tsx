@@ -27,6 +27,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useServerAction } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
 import { TIME_ACTIVITY_LABELS } from '@/lib/time-tracking/types';
 import type {
@@ -114,6 +115,10 @@ function TimeActivityDialogForm({
   const [standbyContext, setStandbyContext] = useState<TimeStandbyContext>(current?.standbyContext ?? 'unspecified');
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Each footer button spins for its own call; the shared clock `isPending`
+  // only gates both against a double submit.
+  const submitAction = useServerAction(submit);
+  const endAction = useServerAction(endNow);
 
   const availableOptions = ACTIVITY_OPTIONS.filter((option) =>
     option.kind !== 'break' || (
@@ -305,12 +310,13 @@ function TimeActivityDialogForm({
           </DialogBody>
           <DialogFooter>
             {state?.isClockedIn && (
-              <Button type="button" variant="outline" disabled={isPending} onClick={() => void endNow()}>
+              <Button type="button" variant="outline" disabled={isPending} onClick={() => void endAction.run()}>
+                {endAction.isPending && <Loader2 className="size-4 animate-spin" />}
                 Erfassung beenden
               </Button>
             )}
-            <Button type="button" disabled={isPending} onClick={() => void submit()}>
-              {isPending && <Loader2 className="size-4 animate-spin" />}
+            <Button type="button" disabled={isPending} onClick={() => void submitAction.run()}>
+              {submitAction.isPending && <Loader2 className="size-4 animate-spin" />}
               {recovery ? 'Prüfen und fortsetzen' : state?.isClockedIn ? 'Aktivität wechseln' : 'Starten'}
             </Button>
           </DialogFooter>

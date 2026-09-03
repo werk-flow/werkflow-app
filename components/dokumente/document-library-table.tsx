@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   SkeletonList,
@@ -169,6 +170,7 @@ type DocumentLibraryTableProps = {
   selectedDocumentIds: Set<string>;
   isTrashView: boolean;
   isPending: boolean;
+  isItemPending: (itemId: string) => boolean;
   onOpenFolder: (folder: DocumentFolder) => void;
   onOpenDocument: (document: OrganizationDocument) => void;
   onRenameFolder: (folder: DocumentFolder) => void;
@@ -595,6 +597,7 @@ export function DocumentLibraryTable({
   selectedDocumentIds,
   isTrashView,
   isPending,
+  isItemPending,
   onOpenFolder,
   onOpenDocument,
   onRenameFolder,
@@ -1221,6 +1224,7 @@ export function DocumentLibraryTable({
                         >
                           <Folder className="size-4 shrink-0 text-muted-foreground" />
                           <span className="truncate">{folder.name}</span>
+                          <InlinePending active={isItemPending(folder.id)} />
                         </button>
                       </TableCell>
                       <TableCell className="hidden text-muted-foreground md:table-cell">
@@ -1241,7 +1245,7 @@ export function DocumentLibraryTable({
                       <TableCell data-table-interactive="true">
                         <FolderActionsMenu
                           folder={folder}
-                          disabled={isPending}
+                          disabled={isPending || isItemPending(folder.id)}
                           handlers={handlers}
                           onOpenChange={() => {
                             if (!(isSelected && selectedItemCount > 1)) {
@@ -1325,6 +1329,7 @@ export function DocumentLibraryTable({
                       >
                         <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                         <span className="truncate">{document.displayName}</span>
+                        <InlinePending active={isItemPending(document.id)} />
                       </button>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
@@ -1364,7 +1369,7 @@ export function DocumentLibraryTable({
                       <DocumentActionsMenu
                         document={document}
                         isTrashView={isTrashView}
-                        disabled={isPending}
+                        disabled={isPending || isItemPending(document.id)}
                         handlers={handlers}
                         onOpenChange={() => {
                           if (!(isSelected && selectedItemCount > 1)) {

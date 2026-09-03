@@ -77,6 +77,8 @@ interface ConvertRequestDialogProps {
   clients: Client[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fires after the server confirmed; the page marks itself until refreshed props land. */
+  onSaved?: () => void;
 }
 
 // Deliberate once-only conversion: everything the request captured is
@@ -86,6 +88,7 @@ export function ConvertRequestDialog({
   clients,
   open,
   onOpenChange,
+  onSaved,
 }: ConvertRequestDialogProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
@@ -205,6 +208,7 @@ export function ConvertRequestDialog({
           return;
         }
         onOpenChange(false);
+        onSaved?.();
         showBanner({
           variant: 'success',
           message: 'Anfrage wurde in einen Auftrag umgewandelt.',
@@ -225,6 +229,7 @@ export function ConvertRequestDialog({
           return;
         }
         onOpenChange(false);
+        onSaved?.();
         showBanner({
           variant: 'success',
           message: 'Anfrage wurde in ein Projekt umgewandelt.',

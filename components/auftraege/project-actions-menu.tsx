@@ -38,6 +38,9 @@ import {
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
 
+export const PROJECT_DELETE_FAILED_MESSAGE =
+  'Das Projekt konnte nicht gelöscht werden.';
+
 interface ProjectActionsMenuProps {
   project: ProjectWithDetails;
   detailHref: string;
@@ -48,6 +51,12 @@ interface ProjectActionsMenuProps {
     selectedJobIds?: string[];
   }) => void | Promise<void>;
   onProjectDeleted?: (projectId: string) => void | Promise<void>;
+  /**
+   * Optimistic list mode (feedback canon): the confirm closes at once and the
+   * list owns the delete — row removal, server call, rollback, banners.
+   * `onProjectDeleted` is not called on that path.
+   */
+  onDeleteRequested?: (projectId: string) => void;
 }
 
 export function ProjectActionsMenu({
@@ -57,6 +66,7 @@ export function ProjectActionsMenu({
   jobs,
   onProjectUpdated,
   onProjectDeleted,
+  onDeleteRequested,
 }: ProjectActionsMenuProps) {
   const router = useRouter();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -66,20 +76,31 @@ export function ProjectActionsMenu({
 
   const handleDelete = async () => {
     if (isDeleting) return;
+    if (onDeleteRequested) {
+      setShowDeleteDialog(false);
+      onDeleteRequested(project.id);
+      return;
+    }
     setIsDeleting(true);
     setError(null);
 
-    const result = await deleteProject(project.id);
+    try {
+      const result = await deleteProject(project.id);
 
-    if (result.success) {
+      if (!result.success) {
+        setError(PROJECT_DELETE_FAILED_MESSAGE);
+        setIsDeleting(false);
+        return;
+      }
+
       setShowDeleteDialog(false);
       if (onProjectDeleted) {
         await onProjectDeleted(project.id);
       } else {
         router.push(`/auftraege?deleted_project=${encodeURIComponent(project.name)}`);
       }
-    } else {
-      setError(result.error || 'Fehler beim Löschen des Projekts');
+    } catch {
+      setError(PROJECT_DELETE_FAILED_MESSAGE);
       setIsDeleting(false);
     }
   };
@@ -124,7 +145,13 @@ export function ProjectActionsMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) setError(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Projekt löschen?</AlertDialogTitle>

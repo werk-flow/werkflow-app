@@ -13,7 +13,9 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
+import { PendingRow } from '@/components/ui/pending-row';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
@@ -320,6 +322,80 @@ export function auftraegeColumns(
   });
 }
 
+/**
+ * Per-row feedback the list owner derives from its optimistic overlay
+ * (feedback canon): drafts the server has not confirmed render as a
+ * `PendingRow` / dimmed card; rows saved through a dialog keep an inline
+ * indicator until the authoritative read lands.
+ */
+export interface AuftraegeRowFeedback {
+  pendingIds: ReadonlySet<string>;
+  settlingIds: ReadonlySet<string>;
+}
+
+const NO_ROW_FEEDBACK: AuftraegeRowFeedback = {
+  pendingIds: new Set(),
+  settlingIds: new Set(),
+};
+
+const SETTLING_LABEL = 'Wird aktualisiert';
+
+function SettlingIndicator({ active, className }: { active: boolean; className?: string }) {
+  return <InlinePending active={active} label={SETTLING_LABEL} className={className} />;
+}
+
+/** Known draft values for a pending job row; unknown columns stay bars. */
+function jobPendingCells(job: Job, clientName: string): Partial<Record<AuftraegeTableColumnId, React.ReactNode>> {
+  return {
+    selection: '',
+    nr: <span className="font-mono text-xs text-muted-foreground">{job.jobNumber || '—'}</span>,
+    bezeichnung: <span className="font-medium">{getJobDisplayTitle(job)}</span>,
+    kunde: clientName,
+    status: (
+      <Badge variant="secondary" className={getJobStatusClass(job)}>
+        {getJobStatusLabel(job)}
+      </Badge>
+    ),
+    prioritaet: (
+      <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
+        {JOB_PRIORITY_LABELS[job.priority]}
+      </Badge>
+    ),
+    datum: <span className="text-muted-foreground">{formatDate(job.plannedDate)}</span>,
+    actions: '',
+  };
+}
+
+function projectPendingCells(
+  project: ProjectWithDetails,
+  clientName: string,
+): Partial<Record<AuftraegeTableColumnId, React.ReactNode>> {
+  return {
+    selection: '',
+    nr: <span className="font-mono text-xs text-muted-foreground">{project.projectNumber || '—'}</span>,
+    bezeichnung: <span className="font-medium">{getProjectDisplayTitle(project)}</span>,
+    kunde: clientName,
+    status: (
+      <Badge
+        variant="secondary"
+        className={cn('max-w-48 justify-center truncate', getProjectStatusClass(project, getEffectiveProjectStatusFromCounts(project)))}
+      >
+        {getProjectStatusLabel(project)}
+      </Badge>
+    ),
+    prioritaet: '',
+    mitarbeiter: '',
+    datum: (
+      <span className="text-muted-foreground">
+        {project.plannedStartDate || project.plannedEndDate
+          ? `${formatDate(project.plannedStartDate)} – ${formatDate(project.plannedEndDate)}`
+          : '—'}
+      </span>
+    ),
+    actions: '',
+  };
+}
+
 function isSortableColumn(columnId: AuftraegeTableColumnId): columnId is SortColumn {
   return columnId !== 'selection' && columnId !== 'actions' && columnId !== 'mitarbeiter';
 }
@@ -419,6 +495,7 @@ function StandaloneJobRow({
   clientName,
   isAdminOrManager,
   isActive,
+  isSettling,
   memberLookup,
   assignedUserIds,
   visibleColumns,
@@ -427,11 +504,13 @@ function StandaloneJobRow({
   projects,
   onJobUpdated,
   onJobDeleted,
+  onJobDeleteRequested,
 }: {
   job: Job;
   clientName: string;
   isAdminOrManager: boolean;
   isActive: boolean;
+  isSettling: boolean;
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
   visibleColumns: AuftraegeColumnId[];
@@ -443,6 +522,7 @@ function StandaloneJobRow({
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onJobDeleteRequested?: (jobId: string) => void;
 }) {
   const router = useRouter();
   const detailHref = `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
@@ -462,6 +542,7 @@ function StandaloneJobRow({
               {getJobDisplayTitle(job)}
             </span>
             {isActive && <ActiveWorkIndicator />}
+            <SettlingIndicator active={isSettling} className="mt-0.5" />
           </div>
         </TableCell>
       )}
@@ -500,6 +581,7 @@ function StandaloneJobRow({
             projects={projects}
             onJobUpdated={onJobUpdated}
             onJobDeleted={onJobDeleted}
+            onDeleteRequested={onJobDeleteRequested}
           />
         </TableCell>
       )}
@@ -516,6 +598,8 @@ function ProjectRow({
   onToggle,
   clientMap,
   activeJobIds,
+  rowFeedback,
+  columns,
   memberLookup,
   jobAssignmentMap,
   visibleColumns,
@@ -525,8 +609,10 @@ function ProjectRow({
   projects,
   onJobUpdated,
   onJobDeleted,
+  onJobDeleteRequested,
   onProjectUpdated,
   onProjectDeleted,
+  onProjectDeleteRequested,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -536,6 +622,8 @@ function ProjectRow({
   onToggle: () => void;
   clientMap: Record<string, string>;
   activeJobIds: Set<string>;
+  rowFeedback: AuftraegeRowFeedback;
+  columns: readonly AuftraegeTableColumn[];
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
   visibleColumns: AuftraegeColumnId[];
@@ -548,11 +636,13 @@ function ProjectRow({
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onJobDeleteRequested?: (jobId: string) => void;
   onProjectUpdated?: (payload: {
     project: Project;
     selectedJobIds?: string[];
   }) => void | Promise<void>;
   onProjectDeleted?: (projectId: string) => void | Promise<void>;
+  onProjectDeleteRequested?: (projectId: string) => void;
 }) {
   const router = useRouter();
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
@@ -601,6 +691,7 @@ function ProjectRow({
               {getProjectDisplayTitle(project)}
             </span>
             {childJobs.some((j) => activeJobIds.has(j.id)) && <ActiveWorkIndicator />}
+            <SettlingIndicator active={rowFeedback.settlingIds.has(project.id)} className="mt-0.5" />
           </div>
           </TableCell>
         )}
@@ -649,6 +740,7 @@ function ProjectRow({
               jobs={jobs}
               onProjectUpdated={onProjectUpdated}
               onProjectDeleted={onProjectDeleted}
+              onDeleteRequested={onProjectDeleteRequested}
             />
           </TableCell>
         )}
@@ -656,6 +748,17 @@ function ProjectRow({
 
       {isExpanded &&
         childJobs.map((job) => {
+          const childClientName = job.clientId ? clientMap[job.clientId] || '—' : clientName;
+          if (rowFeedback.pendingIds.has(job.id)) {
+            return (
+              <PendingRow
+                key={job.id}
+                columns={columns}
+                cells={jobPendingCells(job, childClientName)}
+                interactive
+              />
+            );
+          }
           const childHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}/${encodeURIComponent(job.jobNumber!)}`;
           const childAssigned = jobAssignmentMap[job.id] ?? [];
           return (
@@ -678,13 +781,12 @@ function ProjectRow({
                       {getJobDisplayTitle(job)}
                     </span>
                     {activeJobIds.has(job.id) && <ActiveWorkIndicator />}
+                    <SettlingIndicator active={rowFeedback.settlingIds.has(job.id)} className="mt-0.5" />
                   </div>
                 </TableCell>
               )}
               {isAuftraegeColumnVisible(visibleColumns, 'kunde') && (
-                <TableCell>
-                  {job.clientId ? clientMap[job.clientId] || '—' : clientName}
-                </TableCell>
+                <TableCell>{childClientName}</TableCell>
               )}
               {isAuftraegeColumnVisible(visibleColumns, 'status') && (
                 <TableCell>
@@ -720,6 +822,7 @@ function ProjectRow({
                     projects={projects}
                     onJobUpdated={onJobUpdated}
                     onJobDeleted={onJobDeleted}
+                    onDeleteRequested={onJobDeleteRequested}
                   />
                 </TableCell>
               )}
@@ -741,6 +844,8 @@ function JobCard({
   indented,
   projectNumber,
   isActive,
+  isPending = false,
+  isSettling = false,
   memberLookup,
   assignedUserIds,
   clients,
@@ -748,6 +853,7 @@ function JobCard({
   projects,
   onJobUpdated,
   onJobDeleted,
+  onJobDeleteRequested,
 }: {
   job: Job;
   clientName: string;
@@ -755,6 +861,9 @@ function JobCard({
   indented?: boolean;
   projectNumber?: string;
   isActive?: boolean;
+  /** A draft the server has not confirmed: dimmed, not navigable, no actions. */
+  isPending?: boolean;
+  isSettling?: boolean;
   memberLookup: Map<string, OrgMemberOption>;
   assignedUserIds: string[];
   clients: Client[];
@@ -765,6 +874,7 @@ function JobCard({
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onJobDeleteRequested?: (jobId: string) => void;
 }) {
   const router = useRouter();
   const detailHref = projectNumber
@@ -773,12 +883,15 @@ function JobCard({
 
   return (
     <ListRow
-      interactive
-      className={cn('items-start', indented && 'ml-6')}
-      onClick={() => router.push(detailHref)}
+      interactive={!isPending}
+      role={isPending ? 'status' : undefined}
+      aria-label={isPending ? 'Wird gespeichert' : undefined}
+      className={cn('items-start', indented && 'ml-6', isPending && 'opacity-70')}
+      onClick={isPending ? undefined : () => router.push(detailHref)}
     >
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
+          <InlinePending active={isPending || isSettling} label={isPending ? 'Wird gespeichert' : SETTLING_LABEL} />
           {job.jobNumber && (
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
               {job.jobNumber}
@@ -814,7 +927,7 @@ function JobCard({
           )}
         </div>
       </div>
-      {isAdminOrManager && (
+      {isAdminOrManager && !isPending && (
         <div onClick={(e) => e.stopPropagation()}>
           <JobActionsMenu
             job={job}
@@ -824,6 +937,7 @@ function JobCard({
             projects={projects}
             onJobUpdated={onJobUpdated}
             onJobDeleted={onJobDeleted}
+            onDeleteRequested={onJobDeleteRequested}
           />
         </div>
       )}
@@ -838,6 +952,7 @@ function ProjectCard({
   isAdminOrManager,
   clientMap,
   activeJobIds,
+  rowFeedback,
   memberLookup,
   jobAssignmentMap,
   clients,
@@ -846,8 +961,10 @@ function ProjectCard({
   projects,
   onJobUpdated,
   onJobDeleted,
+  onJobDeleteRequested,
   onProjectUpdated,
   onProjectDeleted,
+  onProjectDeleteRequested,
 }: {
   project: ProjectWithDetails;
   childJobs: Job[];
@@ -855,6 +972,7 @@ function ProjectCard({
   isAdminOrManager: boolean;
   clientMap: Record<string, string>;
   activeJobIds: Set<string>;
+  rowFeedback: AuftraegeRowFeedback;
   memberLookup: Map<string, OrgMemberOption>;
   jobAssignmentMap: Record<string, string[]>;
   clients: Client[];
@@ -866,14 +984,17 @@ function ProjectCard({
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  onJobDeleteRequested?: (jobId: string) => void;
   onProjectUpdated?: (payload: {
     project: Project;
     selectedJobIds?: string[];
   }) => void | Promise<void>;
   onProjectDeleted?: (projectId: string) => void | Promise<void>;
+  onProjectDeleteRequested?: (projectId: string) => void;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
+  const isPending = rowFeedback.pendingIds.has(project.id);
   const projectHref = `/auftraege/projekt/${encodeURIComponent(project.projectNumber!)}`;
   const effectiveStatus = project.statusOverride ?? getEffectiveProjectStatusFromCounts(project);
   const progress = project.jobCount > 0
@@ -890,27 +1011,34 @@ function ProjectCard({
   return (
     <div>
       <ListRow
-        interactive
-        className="items-start gap-2 bg-muted/30"
-        onClick={() => router.push(projectHref)}
+        interactive={!isPending}
+        role={isPending ? 'status' : undefined}
+        aria-label={isPending ? 'Wird gespeichert' : undefined}
+        className={cn('items-start gap-2 bg-muted/30', isPending && 'opacity-70')}
+        onClick={isPending ? undefined : () => router.push(projectHref)}
       >
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setExpanded(!expanded);
-          }}
-          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
-          aria-label={expanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
-        >
-          <ChevronRight
-            className={cn(
-              'size-3.5 text-muted-foreground transition-transform duration-200',
-              expanded && 'rotate-90'
-            )}
-          />
-        </button>
+        {isPending ? (
+          <InlinePending active className="mt-0.5" />
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
+            aria-label={expanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
+          >
+            <ChevronRight
+              className={cn(
+                'size-3.5 text-muted-foreground transition-transform duration-200',
+                expanded && 'rotate-90'
+              )}
+            />
+          </button>
+        )}
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
+            <SettlingIndicator active={rowFeedback.settlingIds.has(project.id)} />
             {project.projectNumber && (
               <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                 {project.projectNumber}
@@ -952,7 +1080,7 @@ function ProjectCard({
             )}
           </div>
         </div>
-        {isAdminOrManager && (
+        {isAdminOrManager && !isPending && (
           <div onClick={(e) => e.stopPropagation()}>
             <ProjectActionsMenu
               project={project}
@@ -961,6 +1089,7 @@ function ProjectCard({
               jobs={jobs}
               onProjectUpdated={onProjectUpdated}
               onProjectDeleted={onProjectDeleted}
+              onDeleteRequested={onProjectDeleteRequested}
             />
           </div>
         )}
@@ -977,6 +1106,8 @@ function ProjectCard({
               indented
               projectNumber={project.projectNumber!}
               isActive={activeJobIds.has(job.id)}
+              isPending={rowFeedback.pendingIds.has(job.id)}
+              isSettling={rowFeedback.settlingIds.has(job.id)}
               memberLookup={memberLookup}
               assignedUserIds={jobAssignmentMap[job.id] ?? []}
               clients={clients}
@@ -984,6 +1115,7 @@ function ProjectCard({
               projects={projects}
               onJobUpdated={onJobUpdated}
               onJobDeleted={onJobDeleted}
+              onJobDeleteRequested={onJobDeleteRequested}
             />
           ))}
         </div>
@@ -1033,8 +1165,6 @@ interface UnifiedAuftraegeTableProps {
   entries: UnifiedListEntry[];
   clientMap: Record<string, string>;
   isAdminOrManager: boolean;
-  isLoading?: boolean;
-  skeletonCount?: number;
   sortColumn: SortColumn;
   sortDirection: 'asc' | 'desc';
   onSort: (column: SortColumn) => void;
@@ -1044,24 +1174,27 @@ interface UnifiedAuftraegeTableProps {
   members?: OrgMemberOption[];
   hideClientColumn?: boolean;
   visibleColumns: AuftraegeColumnId[];
+  /** Pending drafts and settling rows from the owner's optimistic overlay. */
+  rowFeedback?: AuftraegeRowFeedback;
   onJobUpdated?: (payload: {
     job: Job;
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  /** Optimistic delete owned by the list; see `JobActionsMenu`. */
+  onJobDeleteRequested?: (jobId: string) => void;
   onProjectUpdated?: (payload: {
     project: Project;
     selectedJobIds?: string[];
   }) => void | Promise<void>;
   onProjectDeleted?: (projectId: string) => void | Promise<void>;
+  onProjectDeleteRequested?: (projectId: string) => void;
 }
 
 export function UnifiedAuftraegeTable({
   entries,
   clientMap,
   isAdminOrManager,
-  isLoading = false,
-  skeletonCount = 0,
   sortColumn,
   sortDirection,
   onSort,
@@ -1071,10 +1204,13 @@ export function UnifiedAuftraegeTable({
   clients = [],
   hideClientColumn = false,
   visibleColumns,
+  rowFeedback = NO_ROW_FEEDBACK,
   onJobUpdated,
   onJobDeleted,
+  onJobDeleteRequested,
   onProjectUpdated,
   onProjectDeleted,
+  onProjectDeleteRequested,
 }: UnifiedAuftraegeTableProps) {
   const { activeJobIds } = useActiveJobs();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -1114,18 +1250,11 @@ export function UnifiedAuftraegeTable({
   };
 
   const sort: AuftraegeSortState = { column: sortColumn, direction: sortDirection, onSort, isArchive };
+  const columns = auftraegeColumns(effectiveVisibleColumns, isAdminOrManager);
 
-  if (isLoading && skeletonCount > 0) {
-    return (
-      <AuftraegeTableSkeleton
-        count={skeletonCount}
-        showActions={isAdminOrManager}
-        visibleColumns={effectiveVisibleColumns}
-        sort={sort}
-      />
-    );
-  }
-
+  // No loading prop on purpose: the table never turns into a skeleton over
+  // data it already has (feedback canon); `AuftraegeTableSkeleton` serves the
+  // loading files.
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1155,6 +1284,8 @@ export function UnifiedAuftraegeTable({
                 clientName={entry.job.clientId ? clientMap[entry.job.clientId] || '—' : '—'}
                 isAdminOrManager={isAdminOrManager}
                 isActive={activeJobIds.has(entry.job.id)}
+                isPending={rowFeedback.pendingIds.has(entry.job.id)}
+                isSettling={rowFeedback.settlingIds.has(entry.job.id)}
                 memberLookup={memberLookup}
                 assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
                 clients={clients}
@@ -1162,6 +1293,7 @@ export function UnifiedAuftraegeTable({
                 projects={allProjects}
                 onJobUpdated={onJobUpdated}
                 onJobDeleted={onJobDeleted}
+                onJobDeleteRequested={onJobDeleteRequested}
               />
             );
           }
@@ -1174,6 +1306,7 @@ export function UnifiedAuftraegeTable({
               isAdminOrManager={isAdminOrManager}
               clientMap={clientMap}
               activeJobIds={activeJobIds}
+              rowFeedback={rowFeedback}
               memberLookup={memberLookup}
               jobAssignmentMap={jobAssignmentMap}
               clients={clients}
@@ -1182,8 +1315,10 @@ export function UnifiedAuftraegeTable({
               projects={allProjects}
               onJobUpdated={onJobUpdated}
               onJobDeleted={onJobDeleted}
+              onJobDeleteRequested={onJobDeleteRequested}
               onProjectUpdated={onProjectUpdated}
               onProjectDeleted={onProjectDeleted}
+              onProjectDeleteRequested={onProjectDeleteRequested}
             />
           );
         })}
@@ -1193,21 +1328,30 @@ export function UnifiedAuftraegeTable({
       <div className="hidden md:block">
         <Table>
           <TableHeader>
-            <AuftraegeTableHeaderRow
-              columns={auftraegeColumns(effectiveVisibleColumns, isAdminOrManager)}
-              sort={sort}
-            />
+            <AuftraegeTableHeaderRow columns={columns} sort={sort} />
           </TableHeader>
           <TableBody>
             {entries.map((entry) => {
               if (entry.type === 'standalone-job') {
+                const clientName = entry.job.clientId ? clientMap[entry.job.clientId] || '—' : '—';
+                if (rowFeedback.pendingIds.has(entry.job.id)) {
+                  return (
+                    <PendingRow
+                      key={`job-${entry.job.id}`}
+                      columns={columns}
+                      cells={jobPendingCells(entry.job, clientName)}
+                      interactive
+                    />
+                  );
+                }
                 return (
                   <StandaloneJobRow
                     key={`job-${entry.job.id}`}
                     job={entry.job}
-                    clientName={entry.job.clientId ? clientMap[entry.job.clientId] || '—' : '—'}
+                    clientName={clientName}
                     isAdminOrManager={isAdminOrManager}
                     isActive={activeJobIds.has(entry.job.id)}
+                    isSettling={rowFeedback.settlingIds.has(entry.job.id)}
                     memberLookup={memberLookup}
                     assignedUserIds={jobAssignmentMap[entry.job.id] ?? []}
                     visibleColumns={effectiveVisibleColumns}
@@ -1216,6 +1360,18 @@ export function UnifiedAuftraegeTable({
                     projects={allProjects}
                     onJobUpdated={onJobUpdated}
                     onJobDeleted={onJobDeleted}
+                    onJobDeleteRequested={onJobDeleteRequested}
+                  />
+                );
+              }
+              const clientName = entry.project.clientId ? clientMap[entry.project.clientId] || '—' : '—';
+              if (rowFeedback.pendingIds.has(entry.project.id)) {
+                return (
+                  <PendingRow
+                    key={`project-${entry.project.id}`}
+                    columns={columns}
+                    cells={projectPendingCells(entry.project, clientName)}
+                    interactive
                   />
                 );
               }
@@ -1224,12 +1380,14 @@ export function UnifiedAuftraegeTable({
                   key={`project-${entry.project.id}`}
                   project={entry.project}
                   childJobs={entry.childJobs}
-                  clientName={entry.project.clientId ? clientMap[entry.project.clientId] || '—' : '—'}
+                  clientName={clientName}
                   isAdminOrManager={isAdminOrManager}
                   isExpanded={expandedProjects.has(entry.project.id)}
                   onToggle={() => toggleProject(entry.project.id)}
                   clientMap={clientMap}
                   activeJobIds={activeJobIds}
+                  rowFeedback={rowFeedback}
+                  columns={columns}
                   memberLookup={memberLookup}
                   jobAssignmentMap={jobAssignmentMap}
                   visibleColumns={effectiveVisibleColumns}
@@ -1239,8 +1397,10 @@ export function UnifiedAuftraegeTable({
                   projects={allProjects}
                   onJobUpdated={onJobUpdated}
                   onJobDeleted={onJobDeleted}
+                  onJobDeleteRequested={onJobDeleteRequested}
                   onProjectUpdated={onProjectUpdated}
                   onProjectDeleted={onProjectDeleted}
+                  onProjectDeleteRequested={onProjectDeleteRequested}
                 />
               );
             })}

@@ -272,6 +272,12 @@ export function ProfileAvatarSection() {
         message: 'Dein Profilbild wurde entfernt.',
         variant: 'success',
       });
+    } catch (error) {
+      console.error('Error removing profile avatar:', error);
+      showBanner({
+        message: 'Das Profilbild konnte nicht entfernt werden.',
+        variant: 'error',
+      });
     } finally {
       setIsRemoving(false);
     }

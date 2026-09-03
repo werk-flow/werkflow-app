@@ -65,29 +65,34 @@ export function PersonnelOnboardingTemplateSettings({ templates }: { templates: 
       document.getElementById(nextFieldErrors.name ? "template-name" : "template-item-title")?.focus();
       return;
     }
-    const result = await run({
-      templateId: null,
-      expectedVersion: 0,
-      name,
-      description: null,
-      items: [{
-        requirementType,
-        title: itemTitle,
+    try {
+      const result = await run({
+        templateId: null,
+        expectedVersion: 0,
+        name,
         description: null,
-        isRequired: required,
-        blocksAccess,
-        dueOffsetDays: null,
-      }],
-      operationId: crypto.randomUUID(),
-    });
-    if (!result.success) {
-      setError(result.error === "invalid_input" ? "Bitte gib einen Namen und einen ersten Punkt an." : "Die Vorlage konnte nicht veröffentlicht werden.");
-      return;
+        items: [{
+          requirementType,
+          title: itemTitle,
+          description: null,
+          isRequired: required,
+          blocksAccess,
+          dueOffsetDays: null,
+        }],
+        operationId: crypto.randomUUID(),
+      });
+      if (!result.success) {
+        setError(result.error === "invalid_input" ? "Bitte gib einen Namen und einen ersten Punkt an." : "Die Vorlage konnte nicht veröffentlicht werden.");
+        return;
+      }
+      setOpen(false);
+      setName("");
+      setItemTitle("");
+      showBanner({ variant: "success", message: "Onboardingvorlage wurde veröffentlicht." });
+    } catch (submitError) {
+      console.error("Unexpected error publishing the onboarding template:", submitError);
+      setError("Die Vorlage konnte nicht veröffentlicht werden.");
     }
-    setOpen(false);
-    setName("");
-    setItemTitle("");
-    showBanner({ variant: "success", message: "Onboardingvorlage wurde veröffentlicht." });
   }
 
   return (

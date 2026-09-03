@@ -17,6 +17,7 @@ import { ErrorText } from '@/components/ui/error-text';
 // Aliased: this file already has a local text-field helper named `Field`.
 import { Field } from '@/components/ui/field';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
@@ -27,8 +28,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView } from '@/hooks/use-live-view';
-import { usePendingTask } from '@/hooks/use-server-action';
 import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import {
@@ -58,6 +59,7 @@ const ACTION_LABELS: Partial<Record<WorkArtifactActionType, string>> = {
   customer_refused: 'Vom Kunden abgelehnt', customer_reserved: 'Mit Vorbehalt bestätigt',
   signature_captured: 'Unterschrift erfasst', exported: 'Export erstellt', voided: 'Ungültig gesetzt',
 };
+const LOAD_FAILED_MESSAGE = 'Der Arbeitsnachweis konnte nicht geladen werden. Schließe den Dialog und öffne ihn erneut.';
 const DOCUMENT_RELATION_LABELS = {
   supporting_evidence: 'Nachweis', closure_proof: 'Abschlussnachweis',
   signature_mark: 'Unterschrift', rendered_export: 'Gerenderter Export',
@@ -265,13 +267,16 @@ function WorkArtifactDialog({
   );
   const [removedFulfillmentIds, setRemovedFulfillmentIds] = useState(() => new Set<string>());
   const [error, setError] = useState<string | null>(null);
-  const { run: runArtifactTask, isPending } = usePendingTask();
+  // Keyed by the button that was clicked (or `evidence:<requirementId>` per
+  // evidence row) so only that control spins; `anyBusy` still gates the rest
+  // of the dialog because most flows reload the shared detail afterwards.
+  const { run: runArtifactTask, isBusy, anyBusy } = useBusyIds();
 
   async function load(id: string) {
     setLoading(true);
-    const result = await getWorkArtifactDetail(id);
+    const result = await getWorkArtifactDetail(id).catch(() => null);
     setLoading(false);
-    if (!result.success) { setError('Der Arbeitsnachweis konnte nicht geladen werden.'); return; }
+    if (!result?.success) { setError(LOAD_FAILED_MESSAGE); return; }
     setDetail(result.artifact);
     setKind(result.artifact.kind);
     const revision = result.artifact.revisions.find((entry) => entry.id === result.artifact.current_revision_id);
@@ -286,7 +291,7 @@ function WorkArtifactDialog({
     void getWorkArtifactDetail(artifactId).then((result) => {
       if (!active) return;
       setLoading(false);
-      if (!result.success) { setError('Der Arbeitsnachweis konnte nicht geladen werden.'); return; }
+      if (!result.success) { setError(LOAD_FAILED_MESSAGE); return; }
       setDetail(result.artifact);
       setKind(result.artifact.kind);
       const revision = result.artifact.revisions.find((entry) => entry.id === result.artifact.current_revision_id);
@@ -294,6 +299,11 @@ function WorkArtifactDialog({
         setVisibility(revision.visibility); setTitle(revision.title);
         setCapturedAt(localDateTime(revision.captured_at)); setContent(contentFromDetail(result.artifact));
       }
+    }).catch(() => {
+      // A thrown read (network, aborted action) must not leave the skeleton up forever.
+      if (!active) return;
+      setLoading(false);
+      setError(LOAD_FAILED_MESSAGE);
     });
     return () => { active = false; };
   }, [artifactId]);
@@ -327,7 +337,7 @@ function WorkArtifactDialog({
 
   function save(submit: boolean) {
     setError(null);
-    void runArtifactTask(async () => {
+    void runArtifactTask(submit ? 'submit' : 'draft', async () => {
       const id = detail?.id ?? draftArtifactIdRef.current;
       const result = await saveWorkArtifact({
         artifactId: id, revisionId: crypto.randomUUID(), expectedVersion: detail?.version ?? null,
@@ -351,7 +361,7 @@ function WorkArtifactDialog({
   function act(actionType: WorkArtifactActionType, reason?: string) {
     if (!detail || !currentRevision) return;
     setError(null);
-    void runArtifactTask(async () => {
+    void runArtifactTask(actionType, async () => {
       const result = await recordWorkArtifactAction({ artifactId: detail.id, revisionId: currentRevision.id,
         actionId: crypto.randomUUID(), expectedVersion: detail.version, actionType, reason });
       if (await handleMutationFailure(result, 'Die Aktion konnte nicht gespeichert werden. Prüfe Berechtigung und aktuellen Stand.')) return;
@@ -362,7 +372,7 @@ function WorkArtifactDialog({
   function customerAction(actionType: 'customer_acknowledged' | 'customer_refused' | 'customer_reserved') {
     if (!detail || !currentRevision) return;
     setError(null);
-    void runArtifactTask(async () => {
+    void runArtifactTask(actionType, async () => {
       const result = await recordWorkArtifactAction({
         artifactId: detail.id, revisionId: currentRevision.id, actionId: crypto.randomUUID(),
         expectedVersion: detail.version, actionType,
@@ -379,7 +389,7 @@ function WorkArtifactDialog({
   function captureSignature() {
     if (!detail || !currentRevision || !signatureFile) return;
     setError(null);
-    void runArtifactTask(async () => {
+    void runArtifactTask('signature', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
       if (!signatureDocumentId) {
         const uploaded = await uploadDocumentDirect({ file: signatureFile,
@@ -401,15 +411,28 @@ function WorkArtifactDialog({
 
   async function closeDialog() {
     if (pendingSignatureDocumentId) {
-      await discardUnlinkedWorkArtifactSignature(pendingSignatureDocumentId);
+      const discarded = await discardUnlinkedWorkArtifactSignature(pendingSignatureDocumentId)
+        .catch(() => ({ success: false as const }));
+      if (!discarded.success) {
+        // The dialog is closing, so the banner is the only surface left; the
+        // orphaned upload stays reachable in the library.
+        showBanner({
+          variant: 'error',
+          message: 'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden. Sie bleibt unter Dokumente sichtbar und kann dort gelöscht werden.',
+        });
+      }
       setPendingSignatureDocumentId(null);
     }
     onClose();
   }
 
+  function requestClose() {
+    void runArtifactTask('close', closeDialog);
+  }
+
   function linkDocument() {
     if (!detail || !currentRevision || !documentId) return;
-    void runArtifactTask(async () => {
+    void runArtifactTask('document', async () => {
       const result = await linkWorkArtifactDocument({ artifactId: detail.id, revisionId: currentRevision.id,
         linkId: crypto.randomUUID(), expectedVersion: detail.version, documentId, relation: documentRelation });
       if (await handleMutationFailure(result, 'Das Dokument konnte nicht verknüpft werden.')) return;
@@ -419,7 +442,7 @@ function WorkArtifactDialog({
 
   function exportArtifact() {
     if (!detail) return;
-    void runArtifactTask(async () => {
+    void runArtifactTask('export', async () => {
       const result = await exportWorkArtifact({ artifactId: detail.id, expectedVersion: detail.version,
         linkId: crypto.randomUUID(), actionId: crypto.randomUUID(), documentId: crypto.randomUUID() });
       if (await handleMutationFailure(result, 'Der Export konnte nicht erstellt werden.')) return;
@@ -433,7 +456,7 @@ function WorkArtifactDialog({
       (option) => option.id === timeSourceId,
     );
     if (!selectedTimeSource) return;
-    void runArtifactTask(async () => {
+    void runArtifactTask('time', async () => {
       const result = await linkWorkArtifactSource({ artifactId: detail.id, revisionId: currentRevision.id,
         linkId: crypto.randomUUID(), expectedVersion: detail.version,
         ...(selectedTimeSource.sourceType === 'time_segment'
@@ -448,7 +471,8 @@ function WorkArtifactDialog({
 
   function fulfill(requirementId: string) {
     if (!currentRevision) return;
-    void runArtifactTask(async () => {
+    setError(null);
+    void runArtifactTask(`evidence:${requirementId}`, async () => {
       const fulfillmentId = crypto.randomUUID();
       const result = await fulfillInstructionEvidence({ fulfillmentId,
         evidenceRequirementId: requirementId, artifactRevisionId: currentRevision.id });
@@ -460,7 +484,8 @@ function WorkArtifactDialog({
   }
 
   function removeFulfillment(requirement: EvidenceRequirement, fulfillment: { id: string; version: number }) {
-    void runArtifactTask(async () => {
+    setError(null);
+    void runArtifactTask(`evidence:${requirement.id}`, async () => {
       const result = await removeInstructionEvidenceFulfillment({ fulfillmentId: fulfillment.id,
         expectedVersion: fulfillment.version, reason: actionReason });
       if (!result.success) { setError('Die Nachweiserfüllung konnte nicht entfernt werden.'); return; }
@@ -473,7 +498,8 @@ function WorkArtifactDialog({
 
   function setVoid() {
     if (!detail) return;
-    void runArtifactTask(async () => {
+    setError(null);
+    void runArtifactTask('void', async () => {
       const result = await voidWorkArtifact({ artifactId: detail.id, actionId: crypto.randomUUID(),
         expectedVersion: detail.version, reason: actionReason });
       if (await handleMutationFailure(result, 'Der Arbeitsnachweis konnte nicht ungültig gesetzt werden.')) return;
@@ -482,7 +508,7 @@ function WorkArtifactDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open && !isPending) void closeDialog(); }}>
+    <Dialog open onOpenChange={(open) => { if (!open && !anyBusy) requestClose(); }}>
       <DialogContent className="sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>{detail ? currentRevision?.title ?? 'Arbeitsnachweis' : 'Arbeitsnachweis erstellen'}</DialogTitle>
@@ -492,9 +518,9 @@ function WorkArtifactDialog({
           {hasRemoteUpdate && detail && (
             <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3 text-sm">
               <p>Dieser Arbeitsnachweis wurde zwischenzeitlich geändert.</p>
-              <Button type="button" size="sm" variant="outline" onClick={async () => {
-                await load(detail.id); onRemoteUpdateHandled();
-              }}>Aktualisieren</Button>
+              <Button type="button" size="sm" variant="outline" disabled={anyBusy} onClick={() => {
+                void runArtifactTask('reload', async () => { await load(detail.id); onRemoteUpdateHandled(); });
+              }}>{isBusy('reload') && <Loader2 className="size-4 animate-spin" />}Aktualisieren</Button>
             </div>
           )}
           {loading ? (
@@ -522,22 +548,22 @@ function WorkArtifactDialog({
           {!readOnly && !editing && detail && currentRevision && detail.status !== 'voided' && (
             <div className="space-y-4 border-t pt-4">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => setEditing(true)}>Neue Version</Button>
+                <Button type="button" variant="outline" onClick={() => setEditing(true)} disabled={anyBusy}>Neue Version</Button>
                 {detail.status === 'draft' && (
-                  <Button type="button" onClick={() => act('review_requested')}>Zur Prüfung einreichen</Button>
+                  <Button type="button" onClick={() => act('review_requested')} disabled={anyBusy}>{isBusy('review_requested') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen</Button>
                 )}
                 {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
-                  <><Button type="button" onClick={() => act('internal_approved')} disabled={isPending}>Intern freigeben</Button>
-                    <Button type="button" variant="outline" onClick={() => act('correction_requested', actionReason)} disabled={isPending || actionReason.trim().length < 3}>Korrektur anfordern</Button></>
+                  <><Button type="button" onClick={() => act('internal_approved')} disabled={anyBusy}>{isBusy('internal_approved') && <Loader2 className="size-4 animate-spin" />}Intern freigeben</Button>
+                    <Button type="button" variant="outline" onClick={() => act('correction_requested', actionReason)} disabled={anyBusy || actionReason.trim().length < 3}>{isBusy('correction_requested') && <Loader2 className="size-4 animate-spin" />}Korrektur anfordern</Button></>
                 )}
                 {detail.status === 'submitted' && (isManager || detail.actions.some((action) => action.revision_id === currentRevision.id && action.action_type === 'review_requested' && action.created_by === currentUserId)) && (
-                  <Button type="button" variant="outline" onClick={() => act('review_withdrawn')} disabled={isPending}>Prüfung zurückziehen</Button>
+                  <Button type="button" variant="outline" onClick={() => act('review_withdrawn')} disabled={anyBusy}>{isBusy('review_withdrawn') && <Loader2 className="size-4 animate-spin" />}Prüfung zurückziehen</Button>
                 )}
-                <Button type="button" variant="outline" onClick={exportArtifact} disabled={isPending}><Download className="size-4" />Export</Button>
+                <Button type="button" variant="outline" onClick={exportArtifact} disabled={anyBusy}>{isBusy('export') ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}Export</Button>
               </div>
               <Field label="Begründung für Ablehnung, Korrektur, Vorbehalt oder Ungültigkeit" htmlFor="artifact-action-reason"><Textarea value={actionReason} onChange={(event) => setActionReason(event.target.value)} /></Field>
               {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
-                <Button type="button" variant="destructive" onClick={() => act('internal_rejected', actionReason)} disabled={isPending || actionReason.trim().length < 3}>Ablehnen</Button>
+                <Button type="button" variant="destructive" onClick={() => act('internal_rejected', actionReason)} disabled={anyBusy || actionReason.trim().length < 3}>{isBusy('internal_rejected') && <Loader2 className="size-4 animate-spin" />}Ablehnen</Button>
               )}
               {currentRevision.visibility === 'customer_facing' && (
                 <FormDisclosure label="Kundenentscheidung und Unterschrift">
@@ -545,10 +571,10 @@ function WorkArtifactDialog({
                     <p className="text-xs text-muted-foreground">{WORK_ARTIFACT_LEGAL_NOTICE}</p>
                     <div className="grid gap-3 sm:grid-cols-2"><Field label="Name" htmlFor="artifact-customer-name"><Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></Field><Field label="Rolle/Funktion" htmlFor="artifact-customer-role"><Input value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} /></Field></div>
                     <Field label="Bezug zum Kunden" htmlFor="artifact-customer-relationship"><Input value={customerRelationship} onChange={(event) => setCustomerRelationship(event.target.value)} /></Field>
-                    <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => customerAction('customer_acknowledged')} disabled={isPending || customerName.trim().length < 2}>Bestätigung erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_reserved')} disabled={isPending || customerName.trim().length < 2 || actionReason.trim().length < 3}>Vorbehalt erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_refused')} disabled={isPending || customerName.trim().length < 2 || actionReason.trim().length < 3}>Ablehnung erfassen</Button></div>
-                    <SignaturePad disabled={isPending || Boolean(pendingSignatureDocumentId)} onChange={setSignatureFile} />
+                    <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => customerAction('customer_acknowledged')} disabled={anyBusy || customerName.trim().length < 2}>{isBusy('customer_acknowledged') && <Loader2 className="size-4 animate-spin" />}Bestätigung erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_reserved')} disabled={anyBusy || customerName.trim().length < 2 || actionReason.trim().length < 3}>{isBusy('customer_reserved') && <Loader2 className="size-4 animate-spin" />}Vorbehalt erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_refused')} disabled={anyBusy || customerName.trim().length < 2 || actionReason.trim().length < 3}>{isBusy('customer_refused') && <Loader2 className="size-4 animate-spin" />}Ablehnung erfassen</Button></div>
+                    <SignaturePad disabled={anyBusy || Boolean(pendingSignatureDocumentId)} onChange={setSignatureFile} />
                     {pendingSignatureDocumentId && <p className="text-xs text-muted-foreground">Der Upload ist bereit. Du kannst das Speichern erneut versuchen.</p>}
-                    <Button type="button" onClick={captureSignature} disabled={isPending || !signatureFile || customerName.trim().length < 2}>Unterschrift speichern</Button>
+                    <Button type="button" onClick={captureSignature} disabled={anyBusy || !signatureFile || customerName.trim().length < 2}>{isBusy('signature') && <Loader2 className="size-4 animate-spin" />}Unterschrift speichern</Button>
                   </div>
                 </FormDisclosure>
               )}
@@ -557,7 +583,7 @@ function WorkArtifactDialog({
                   <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_180px_auto]">
                     <SearchableSelect ariaLabel="Dokument auswählen" options={documents.map((document) => ({ value: document.id, label: document.displayName }))} value={documentId} onChange={setDocumentId} placeholder="Dokument wählen" searchPlaceholder="Dokument suchen…" emptyMessage="Kein Dokument gefunden" />
                     <Select value={documentRelation} onValueChange={(value) => setDocumentRelation(value as typeof documentRelation)}><SelectTrigger aria-label="Dokumentbezug"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="supporting_evidence">Nachweis</SelectItem><SelectItem value="closure_proof">Abschlussnachweis</SelectItem></SelectContent></Select>
-                    <Button type="button" variant="outline" onClick={linkDocument} disabled={isPending || !documentId}>Verknüpfen</Button>
+                    <Button type="button" variant="outline" onClick={linkDocument} disabled={anyBusy || !documentId}>{isBusy('document') && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button>
                   </div>
                 </FormDisclosure>
               )}
@@ -565,23 +591,28 @@ function WorkArtifactDialog({
                 <FormDisclosure label="Zeiteintrag verknüpfen">
                   <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_auto]">
                     <SearchableSelect ariaLabel="Zeiteintrag auswählen" options={timeEntryOptions.map((entry) => ({ value: entry.id, label: entry.label }))} value={timeSourceId} onChange={setTimeSourceId} placeholder="Zeiteintrag wählen" searchPlaceholder="Zeiteintrag suchen…" emptyMessage="Kein Zeiteintrag gefunden" />
-                    <Button type="button" variant="outline" onClick={linkTimeEntry} disabled={isPending || !timeSourceId}>Verknüpfen</Button>
+                    <Button type="button" variant="outline" onClick={linkTimeEntry} disabled={anyBusy || !timeSourceId}>{isBusy('time') && <Loader2 className="size-4 animate-spin" />}Verknüpfen</Button>
                   </div>
                 </FormDisclosure>
               )}
               {evidenceRequirements.length > 0 && (
                 <FormDisclosure label="Nachweiserwartung erfüllen">
-                  <div className="divide-y rounded-md border">{evidenceRequirements.map((requirement) => { const fulfillment = removedFulfillmentIds.has(requirement.id) ? null : localFulfillments.get(requirement.id) ?? requirement.fulfillment ?? null; return <div key={requirement.id} className="flex items-center justify-between gap-3 p-3"><p className="text-sm">{requirement.description}</p>{fulfillment ? <Button type="button" size="sm" variant="outline" onClick={() => removeFulfillment(requirement, fulfillment)} disabled={isPending || actionReason.trim().length < 3}>Erfüllung entfernen</Button> : <Button type="button" size="sm" variant="outline" onClick={() => fulfill(requirement.id)} disabled={isPending}>{`Mit Version ${currentRevision.revision_number} erfüllen`}</Button>}</div>; })}</div>
+                  <div className="divide-y rounded-md border">{evidenceRequirements.map((requirement) => {
+                    const fulfillment = removedFulfillmentIds.has(requirement.id) ? null : localFulfillments.get(requirement.id) ?? requirement.fulfillment ?? null;
+                    // Row action: only this row's button is gated, the other rows stay usable.
+                    const rowBusy = isBusy(`evidence:${requirement.id}`);
+                    return <div key={requirement.id} className="flex items-center justify-between gap-3 p-3"><p className="text-sm">{requirement.description}</p><span className="flex shrink-0 items-center gap-2"><InlinePending active={rowBusy} />{fulfillment ? <Button type="button" size="sm" variant="outline" onClick={() => removeFulfillment(requirement, fulfillment)} disabled={rowBusy || actionReason.trim().length < 3}>Erfüllung entfernen</Button> : <Button type="button" size="sm" variant="outline" onClick={() => fulfill(requirement.id)} disabled={rowBusy}>{`Mit Version ${currentRevision.revision_number} erfüllen`}</Button>}</span></div>;
+                  })}</div>
                 </FormDisclosure>
               )}
-              {canVoid && <div className="flex justify-end"><Button type="button" variant="ghost" className="text-destructive" onClick={setVoid} disabled={isPending || actionReason.trim().length < 3}><Trash2 className="size-4" />Ungültig setzen</Button></div>}
+              {canVoid && <div className="flex justify-end"><Button type="button" variant="ghost" className="text-destructive" onClick={setVoid} disabled={anyBusy || actionReason.trim().length < 3}>{isBusy('void') ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}Ungültig setzen</Button></div>}
             </div>
           )}
           <ErrorText>{error}</ErrorText>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => void closeDialog()} disabled={isPending}>Schließen</Button>
-          {!readOnly && editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="button" onClick={() => save(true)} disabled={isPending}>Zur Prüfung einreichen</Button></>}
+          <Button type="button" variant="outline" onClick={requestClose} disabled={anyBusy}>{isBusy('close') && <Loader2 className="size-4 animate-spin" />}Schließen</Button>
+          {!readOnly && editing && <><Button type="button" variant="outline" onClick={() => save(false)} disabled={anyBusy}>{isBusy('draft') && <Loader2 className="size-4 animate-spin" />}Als Entwurf speichern</Button><Button type="button" onClick={() => save(true)} disabled={anyBusy}>{isBusy('submit') && <Loader2 className="size-4 animate-spin" />}Zur Prüfung einreichen</Button></>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

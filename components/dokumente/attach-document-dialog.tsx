@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, FileText, LinkIcon, Search } from "lucide-react";
+import { Check, FileText, LinkIcon, Loader2, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
 import { Input } from "@/components/ui/input";
 import {
   getAttachableDocuments,
@@ -72,11 +73,16 @@ export function AttachDocumentDialog({
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(
     new Set(),
   );
+  // Both failures render inside the dialog (feedback canon: the error sits at
+  // the point of action and the dialog never closes on failure).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   function handleDialogOpenChange(nextOpen: boolean) {
     if (!nextOpen) {
       setSearchQuery("");
       setSelectedDocumentIds(new Set());
+      setAttachError(null);
     }
     onOpenChange(nextOpen);
   }
@@ -86,28 +92,33 @@ export function AttachDocumentDialog({
 
     let cancelled = false;
     void (async () => {
-      const result = await getAttachableDocuments({
-        targetType,
-        targetId,
-        searchQuery,
-        category: "all",
-      });
+      try {
+        const result = await getAttachableDocuments({
+          targetType,
+          targetId,
+          searchQuery,
+          category: "all",
+        });
+        if (cancelled) return;
 
-      if (cancelled) return;
-
-      if (result.success) {
-        setDocuments(result.documents);
-        return;
+        if (result.success) {
+          setDocuments(result.documents);
+          setLoadError(null);
+          return;
+        }
+        setDocuments([]);
+        setLoadError("Dokumente konnten nicht geladen werden.");
+      } catch {
+        if (cancelled) return;
+        setDocuments([]);
+        setLoadError("Dokumente konnten nicht geladen werden.");
       }
-
-      setDocuments([]);
-      onAttached("error", "Dokumente konnten nicht geladen werden.");
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, onAttached, searchQuery, targetId, targetType]);
+  }, [open, searchQuery, targetId, targetType]);
 
   function toggleDocument(documentId: string) {
     setSelectedDocumentIds((current) => {
@@ -120,20 +131,27 @@ export function AttachDocumentDialog({
 
   function handleAttach() {
     if (selectedDocumentIds.size === 0) return;
+    setAttachError(null);
 
     void (async () => {
       const documentIds = [...selectedDocumentIds];
-      const result = await runLinkDocuments({
-        documentIds,
-        jobId: targetType === "job" ? targetId : undefined,
-        projectId: targetType === "project" ? targetId : undefined,
-        clientId: targetType === "client" ? targetId : undefined,
-        employeeId: targetType === "employee" ? targetId : undefined,
-        equipmentId: targetType === "equipment" ? targetId : undefined,
-        serviceCaseId: targetType === "service_case" ? targetId : undefined,
-        maintenanceCoverageId:
-          targetType === "maintenance_coverage" ? targetId : undefined,
-      });
+      let result: Awaited<ReturnType<typeof linkDocumentsToTarget>>;
+      try {
+        result = await runLinkDocuments({
+          documentIds,
+          jobId: targetType === "job" ? targetId : undefined,
+          projectId: targetType === "project" ? targetId : undefined,
+          clientId: targetType === "client" ? targetId : undefined,
+          employeeId: targetType === "employee" ? targetId : undefined,
+          equipmentId: targetType === "equipment" ? targetId : undefined,
+          serviceCaseId: targetType === "service_case" ? targetId : undefined,
+          maintenanceCoverageId:
+            targetType === "maintenance_coverage" ? targetId : undefined,
+        });
+      } catch {
+        setAttachError("Die Dokumente konnten nicht verknüpft werden.");
+        return;
+      }
 
       if (result.success) {
         onAttached(
@@ -146,16 +164,14 @@ export function AttachDocumentDialog({
         return;
       }
 
-      if (result.linkedCount > 0) {
-        onAttached(
-          "error",
-          `${result.linkedCount} Dokument(e) verknüpft, ${result.failedCount} fehlgeschlagen.`,
-        );
-        handleDialogOpenChange(false);
-        return;
-      }
-
-      onAttached("error", "Die Dokumente konnten nicht verknüpft werden.");
+      // Partial success stays open too: the linked documents are persisted
+      // and reach the page through the Realtime refresh; the failed ones stay
+      // selected so the user can retry or cancel.
+      setAttachError(
+        result.linkedCount > 0
+          ? `${result.linkedCount} Dokument(e) verknüpft, ${result.failedCount} fehlgeschlagen.`
+          : "Die Dokumente konnten nicht verknüpft werden.",
+      );
     })();
   }
 
@@ -184,7 +200,11 @@ export function AttachDocumentDialog({
           </div>
 
           <div className="max-h-80 overflow-auto rounded-md border">
-            {documents.length === 0 ? (
+            {loadError ? (
+              <ErrorText className="px-4 py-10 text-center">
+                {loadError}
+              </ErrorText>
+            ) : documents.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 Keine verknüpfbaren Dokumente gefunden.
               </div>
@@ -226,6 +246,8 @@ export function AttachDocumentDialog({
               </div>
             )}
           </div>
+
+          <ErrorText>{attachError}</ErrorText>
         </div>
 
         <DialogFooter>
@@ -244,7 +266,11 @@ export function AttachDocumentDialog({
             onClick={handleAttach}
             disabled={isPending || selectedDocumentIds.size === 0}
           >
-            <LinkIcon className="size-4" />
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <LinkIcon className="size-4" />
+            )}
             Verknüpfen
           </Button>
         </DialogFooter>

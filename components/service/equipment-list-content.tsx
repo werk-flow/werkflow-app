@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { MapPin, Plus, Search, Wrench } from "lucide-react";
 
+import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
+import { PendingRow } from "@/components/ui/pending-row";
 import {
   Select,
   SelectContent,
@@ -35,7 +38,22 @@ import {
   type EquipmentClientOption,
   type EquipmentListItem,
 } from "@/lib/installed-equipment/types";
-import { EquipmentFormDialog } from "./equipment-form-dialog";
+import {
+  EquipmentFormDialog,
+  type EquipmentCreateSubmission,
+  type EquipmentPendingDraft,
+} from "./equipment-form-dialog";
+
+// The page mounts the create button in its own Suspense tree beside the
+// heading, so a submission reaches the list through this module channel
+// instead of props. The list is the one listener: it renders the pending
+// row, settles through its live read, and shows the failure banner.
+const submissionListeners = new Set<
+  (submission: EquipmentCreateSubmission) => void
+>();
+function announceSubmission(submission: EquipmentCreateSubmission): void {
+  for (const listener of submissionListeners) listener(submission);
+}
 
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
@@ -94,6 +112,37 @@ export function EquipmentListContent({
     },
   });
   const equipment = live.data ?? initialEquipment;
+  const { showBanner } = useBanner();
+  const [pendingCreates, setPendingCreates] = useState<EquipmentPendingDraft[]>(
+    [],
+  );
+  const liveRefresh = live.refresh;
+  const liveInvalidate = live.invalidate;
+  useEffect(() => {
+    const listener = ({ draft, result }: EquipmentCreateSubmission) => {
+      liveInvalidate();
+      setPendingCreates((current) => [...current, draft]);
+      void result
+        .then(async (outcome) => {
+          if (outcome.success) await liveRefresh();
+          else showBanner({ variant: "error", message: outcome.message });
+        })
+        .finally(() =>
+          setPendingCreates((current) =>
+            current.filter((item) => item.id !== draft.id),
+          ),
+        );
+    };
+    submissionListeners.add(listener);
+    return () => {
+      submissionListeners.delete(listener);
+    };
+  }, [liveInvalidate, liveRefresh, showBanner]);
+  // Equipment numbers ascend, so a new record lands last; a Realtime read
+  // that arrives before the settle read drops the placeholder by id.
+  const visiblePending = pendingCreates.filter(
+    (draft) => !equipment.some((item) => item.id === draft.id),
+  );
   const normalizedSearch = search.trim().toLocaleLowerCase("de-DE");
   const filtered = useMemo(
     () =>
@@ -170,7 +219,7 @@ export function EquipmentListContent({
           </Button>
         </div>
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && visiblePending.length === 0 ? (
           <div className="rounded-lg border border-dashed px-6 py-12 text-center">
             <Wrench className="mx-auto size-8 text-muted-foreground" />
             <h2 className="mt-3 text-lg font-semibold">
@@ -199,6 +248,28 @@ export function EquipmentListContent({
                       {stateLabel(item)}
                     </span>
                   </Link>
+                </ListRow>
+              ))}
+              {visiblePending.map((draft) => (
+                <ListRow
+                  key={draft.id}
+                  role="status"
+                  aria-label="Wird gespeichert"
+                  data-pending-row=""
+                  className="opacity-70"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 font-medium">
+                      <InlinePending active />
+                      <span className="truncate">{draft.name}</span>
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {draft.clientName} · {draft.siteName}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                    {EQUIPMENT_STATE_LABELS[draft.state]}
+                  </span>
                 </ListRow>
               ))}
             </div>
@@ -255,6 +326,45 @@ export function EquipmentListContent({
                       </TableRow>
                     );
                   })}
+                  {visiblePending.map((draft) => (
+                    <PendingRow
+                      key={draft.id}
+                      columns={EQUIPMENT_COLUMNS}
+                      cells={{
+                        equipment: (
+                          <span>
+                            <span className="block font-medium">
+                              {draft.name}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {EQUIPMENT_CATEGORY_LABELS[draft.category]}
+                            </span>
+                          </span>
+                        ),
+                        site: (
+                          <span>
+                            <span className="block">{draft.clientName}</span>
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <MapPin className="size-3 shrink-0" />
+                              {draft.siteName}
+                            </span>
+                          </span>
+                        ),
+                        manufacturer: (
+                          <span className="text-muted-foreground">
+                            {[draft.manufacturer, draft.model]
+                              .filter(Boolean)
+                              .join(" · ") || "Nicht erfasst"}
+                          </span>
+                        ),
+                        state: (
+                          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                            {EQUIPMENT_STATE_LABELS[draft.state]}
+                          </span>
+                        ),
+                      }}
+                    />
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -278,6 +388,7 @@ export function EquipmentListContent({
           mode="create"
           clients={clients}
           equipment={equipment}
+          onSubmitted={announceSubmission}
         />
       )}
     </>
@@ -305,6 +416,7 @@ export function EquipmentCreateButton({
           mode="create"
           clients={clients}
           equipment={equipment}
+          onSubmitted={announceSubmission}
         />
       )}
     </>

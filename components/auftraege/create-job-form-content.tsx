@@ -55,7 +55,7 @@ const PRIORITY_OPTIONS: { value: JobPriority; label: string }[] = [
   { value: 'hoch', label: JOB_PRIORITY_LABELS.hoch }
 ];
 
-const ERROR_MESSAGES: Record<string, string> = {
+export const CREATE_JOB_ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
@@ -71,6 +71,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_template_reference_unavailable: 'Die Arbeitsvorlage verweist auf nicht mehr aktive Stammdaten.',
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
+};
+
+/** A validated create request the landing list runs itself (deferred submit). */
+export type CreateJobSubmission = {
+  input: CreateJobInput;
+  assignedUserIds: string[];
 };
 
 export interface CreateJobFormContentProps {
@@ -91,6 +97,13 @@ export interface CreateJobFormContentProps {
     assignedUserIds: string[];
   }) => void | Promise<void>;
   onDraftChange?: (draft: CalendarEntryDraft | null) => void;
+  /**
+   * Deferred submit (feedback canon, create from a dialog): the form hands the
+   * validated input over instead of awaiting the server, so the caller closes
+   * the dialog at once and shows a pending row. The caller then owns the
+   * result — the qualification confirm step, the banners, the rollback.
+   */
+  onSubmitDeferred?: (submission: CreateJobSubmission) => void;
   /** Whether the form is active/visible. Controls data-fetching effects. Defaults to true. */
   isActive?: boolean;
 }
@@ -110,6 +123,7 @@ export function CreateJobFormContent({
   defaultDurationHours,
   onSuccess,
   onDraftChange,
+  onSubmitDeferred,
   isActive = true,
 }: CreateJobFormContentProps) {
   const previousInitialJobNumberRef = useRef(initialJobNumber ?? '');
@@ -252,36 +266,41 @@ export function CreateJobFormContent({
       return;
     }
 
+    const durationMinutes = parseHoursInputToMinutes(estimatedHours);
+    const plannedWorkingMinutes = plannedWorkingTouched
+      ? parseHoursInputToMinutes(plannedWorkingHours)
+      : suggestedPlannedWorkingMinutes;
+
+    const input: CreateJobInput = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      clientId: clientId || undefined,
+      projectId: projectId || undefined,
+      jobNumber: jobNumber.trim() || undefined,
+      priority,
+      plannedDate: plannedDate
+        ? toLocalDateString(plannedDate)
+        : undefined,
+      plannedTime: plannedTime || undefined,
+      estimatedDurationMinutes: durationMinutes ?? undefined,
+      plannedWorkingMinutes,
+      location: location.trim() || undefined,
+      siteId,
+      contactId,
+      selectedUserIds: selectedEmployees,
+      assignmentApproval: approval ?? null,
+      assignmentTeamSourceId,
+      templateVersionId: templateVersionId || undefined,
+    };
+
+    if (onSubmitDeferred) {
+      onSubmitDeferred({ input, assignedUserIds: selectedEmployees });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const durationMinutes = parseHoursInputToMinutes(estimatedHours);
-      const plannedWorkingMinutes = plannedWorkingTouched
-        ? parseHoursInputToMinutes(plannedWorkingHours)
-        : suggestedPlannedWorkingMinutes;
-
-      const input: CreateJobInput = {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        clientId: clientId || undefined,
-        projectId: projectId || undefined,
-        jobNumber: jobNumber.trim() || undefined,
-        priority,
-        plannedDate: plannedDate
-          ? toLocalDateString(plannedDate)
-          : undefined,
-        plannedTime: plannedTime || undefined,
-        estimatedDurationMinutes: durationMinutes ?? undefined,
-        plannedWorkingMinutes,
-        location: location.trim() || undefined,
-        siteId,
-        contactId,
-        selectedUserIds: selectedEmployees,
-        assignmentApproval: approval ?? null,
-        assignmentTeamSourceId,
-        templateVersionId: templateVersionId || undefined,
-      };
-
       const result = await createJob(input);
 
       if (!result.success) {
@@ -297,12 +316,12 @@ export function CreateJobFormContent({
           result.error === 'job_number_required' ||
           result.error === 'job_number_taken'
         ) {
-          setJobNumberError(ERROR_MESSAGES[result.error]);
+          setJobNumberError(CREATE_JOB_ERROR_MESSAGES[result.error]);
         } else if (result.error === 'title_or_description_required') {
-          setContentError(ERROR_MESSAGES[result.error]);
+          setContentError(CREATE_JOB_ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            CREATE_JOB_ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
           );
         }
         return;

@@ -91,16 +91,16 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <OrganizationProvider
-      initialMemberships={memberships}
-      initialActiveOrgId={activeOrgId}
-      initialIsSubscribed={isSubscribed}
-    >
-      <RealtimeProvider>
-        <UserProfileProvider initialProfile={profile}>
-          <OpenDialogProvider>
-            <OrganizationRealtimeBridge />
-            <BannerProvider>
+    <BannerProvider>
+      <OrganizationProvider
+        initialMemberships={memberships}
+        initialActiveOrgId={activeOrgId}
+        initialIsSubscribed={isSubscribed}
+      >
+        <RealtimeProvider>
+          <UserProfileProvider initialProfile={profile}>
+            <OpenDialogProvider>
+              <OrganizationRealtimeBridge />
               <ActiveJobsProvider
                 initialActiveJobIds={initialRuntimeState.activeJobIds}
                 initialOrganizationId={activeOrgId}
@@ -115,11 +115,11 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
                   <ClockFAB />
                 </ClockStateProvider>
               </ActiveJobsProvider>
-            </BannerProvider>
-          </OpenDialogProvider>
-        </UserProfileProvider>
-      </RealtimeProvider>
-    </OrganizationProvider>
+            </OpenDialogProvider>
+          </UserProfileProvider>
+        </RealtimeProvider>
+      </OrganizationProvider>
+    </BannerProvider>
   );
 }
 

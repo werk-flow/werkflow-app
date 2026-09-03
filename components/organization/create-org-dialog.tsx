@@ -12,8 +12,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { createOrganization } from '@/lib/org/actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -44,27 +44,34 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     setIsLoading(true);
     setError(null);
 
-    const result = await createOrganization(name);
+    try {
+      const result = await createOrganization(name);
 
-    if (result.success && result.organizationId) {
-      // Use hard navigation to ensure cookies are properly read on the new page
-      // This is critical for production environments where cookie timing can be an issue
-      window.location.href = `/dashboard?created=${result.organizationId}`;
-    } else {
-      // Check if it's a subscription error - show upgrade prompt
-      if (result.error === 'subscription_required') {
-        setError(ERROR_MESSAGES.subscription_required);
+      if (result.success && result.organizationId) {
+        // Use hard navigation to ensure cookies are properly read on the new page
+        // This is critical for production environments where cookie timing can be an issue
+        window.location.href = `/dashboard?created=${result.organizationId}`;
       } else {
-        setError(
-          ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
-            ERROR_MESSAGES.unexpected_error
-        );
+        // Check if it's a subscription error - show upgrade prompt
+        if (result.error === 'subscription_required') {
+          setError(ERROR_MESSAGES.subscription_required);
+        } else {
+          setError(
+            ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
+              ERROR_MESSAGES.unexpected_error
+          );
+        }
       }
+    } catch (submitError) {
+      console.error('Unexpected error creating an organization:', submitError);
+      setError(ERROR_MESSAGES.unexpected_error);
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleOpenChange = (newOpen: boolean) => {
+    if (isLoading && !newOpen) return;
     if (!newOpen) {
       // Reset form when closing
       setName('');
@@ -87,8 +94,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="dialog-org-name">Name der Organisation</Label>
+          <Field label="Name der Organisation" htmlFor="dialog-org-name" required>
             <Input
               id="dialog-org-name"
               type="text"
@@ -99,7 +105,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
               autoFocus
               autoComplete="organization"
             />
-          </div>
+          </Field>
 
           <ErrorText>{error}</ErrorText>
 
@@ -128,6 +134,5 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     </Dialog>
   );
 }
-
 
 

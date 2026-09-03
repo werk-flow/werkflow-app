@@ -2,12 +2,12 @@
 
 // P1-12: Parkplatz context. Deliberate parking should record WHY, WHO is
 // responsible, and WHEN to review. Dismissing keeps the job parked with the
-// visible "Kontext fehlt" state — nothing is fabricated.
+// visible "Kontext fehlt" state — nothing is fabricated. The success banner
+// belongs to the calendar container (`onSaved`), which also owns the undo.
 
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
-import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
@@ -52,6 +52,8 @@ export function ParkingContextDialog({
   expectedExecutionVersion,
   isAlreadyParked,
   onClose,
+  onSaveStart,
+  onSaveFailed,
   onSaved,
 }: {
   jobId: string;
@@ -60,9 +62,10 @@ export function ParkingContextDialog({
   expectedExecutionVersion: number;
   isAlreadyParked: boolean;
   onClose: () => void;
+  onSaveStart?: () => void;
+  onSaveFailed?: () => void;
   onSaved: () => void;
 }) {
-  const { showBanner } = useBanner();
   const [reason, setReason] = useState<JobParkingReason>(
     existingContext?.reason ?? 'other'
   );
@@ -128,6 +131,7 @@ export function ParkingContextDialog({
     }
     setFieldErrors({});
     setIsSaving(true);
+    onSaveStart?.();
     try {
       const result = existingContext
         ? await setJobParkingContext({
@@ -147,18 +151,16 @@ export function ParkingContextDialog({
             nextReviewDate: reviewDate ? toLocalIsoDate(reviewDate) : '',
           });
       if (!result.success) {
+        onSaveFailed?.();
         setError(
           PARKING_ERROR_MESSAGES[result.error] ??
             PARKING_ERROR_MESSAGES.unexpected_error
         );
         return;
       }
-      showBanner({
-        variant: 'success',
-        message: 'Parkplatz-Kontext wurde gespeichert.',
-      });
       onSaved();
     } catch {
+      onSaveFailed?.();
       setError(PARKING_ERROR_MESSAGES.unexpected_error);
     } finally {
       setIsSaving(false);
@@ -166,7 +168,7 @@ export function ParkingContextDialog({
   };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Parkplatz-Kontext</DialogTitle>
@@ -246,7 +248,12 @@ export function ParkingContextDialog({
           <ErrorText>{error}</ErrorText>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSaving}
+            >
               {isAlreadyParked ? 'Ohne Kontext lassen' : 'Abbrechen'}
             </Button>
             <Button type="submit" disabled={isSaving}>

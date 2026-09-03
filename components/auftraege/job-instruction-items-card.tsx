@@ -21,6 +21,9 @@ import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, Dia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { ErrorText } from '@/components/ui/error-text';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { useBusyIds } from '@/hooks/use-busy-id';
+import { useServerAction } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
 import {
   createJobInstructionItem,
@@ -120,16 +123,15 @@ export function JobInstructionItemsCard({
       : null
   );
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
-  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
-  const [reorderingItemId, setReorderingItemId] = useState<string | null>(null);
   const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
   const [detailsItem, setDetailsItem] = useState<JobInstructionItemWithDetails | null>(null);
   const { showBanner } = useBanner();
-  const reorderInFlightRef = useRef(false);
+  // One busy set for every row mutation (toggle, edit, delete, reorder, and
+  // the optimistic create row): the spinner sits on the affected row and the
+  // other rows stay usable.
+  const { run: runOnRow, isBusy, anyBusy } = useBusyIds();
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const itemTextareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
-  const togglesInFlightRef = useRef(new Set<string>());
-  const [toggleIdsInFlight, setToggleIdsInFlight] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setItems(initialItems);
@@ -218,6 +220,17 @@ export function JobInstructionItemsCard({
     setItems((currentItems) => [...currentItems, nextItem]);
   }
 
+  function clearEditingValue(itemId: string) {
+    setEditingValues((current) => {
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+  }
+
+  // Never rejects: a failed or thrown save resets the row to the server
+  // value and reports through the banner, so blur callers can drop the
+  // returned flag.
   async function handleSaveExistingItem(item: JobInstructionItemWithDetails): Promise<boolean> {
     const nextValue = editingValues[item.id];
     if (nextValue === undefined || nextValue === item.content) {
@@ -226,39 +239,30 @@ export function JobInstructionItemsCard({
 
     const trimmed = nextValue.trim();
     if (!trimmed) {
-      setEditingValues((current) => {
-        const next = { ...current };
-        delete next[item.id];
-        return next;
-      });
+      clearEditingValue(item.id);
       showErrorBanner(ERROR_MESSAGES.content_required);
       return false;
     }
 
-    const result = await updateJobInstructionItemContent({
-      itemId: item.id,
-      content: nextValue,
-    });
-
-    if (!result.success) {
-      await syncItemsFromServer();
-      setEditingValues((current) => {
-        const next = { ...current };
-        delete next[item.id];
-        return next;
-      });
-      showErrorBanner(getErrorMessage(result.error));
-      return false;
+    let errorMessage: string | null = null;
+    try {
+      const result = await runOnRow(item.id, () =>
+        updateJobInstructionItemContent({ itemId: item.id, content: nextValue })
+      );
+      if (result.success) {
+        replaceItem(result.item);
+        clearEditingValue(item.id);
+        return true;
+      }
+      errorMessage = getErrorMessage(result.error);
+    } catch {
+      errorMessage = ERROR_MESSAGES.update_failed;
     }
 
-    replaceItem(result.item);
-    setEditingValues((current) => {
-      const next = { ...current };
-      delete next[item.id];
-      return next;
-    });
-
-    return true;
+    await syncItemsFromServer();
+    clearEditingValue(item.id);
+    showErrorBanner(errorMessage);
+    return false;
   }
 
   function focusDraft() {
@@ -314,32 +318,38 @@ export function JobInstructionItemsCard({
       setFocusedDraftId(nextDraftId);
     }
 
-    const result = projectId
-      ? await createProjectInstructionItem({ projectId, content: draftSnapshot.content })
-      : await createJobInstructionItem({ jobId: jobId!, content: draftSnapshot.content });
-
-    if (!result.success) {
-      setItems((currentItems) =>
-        currentItems.filter((item) => item.id !== optimisticId)
+    let errorMessage: string | null = null;
+    try {
+      const result = await runOnRow(optimisticId, () =>
+        projectId
+          ? createProjectInstructionItem({ projectId, content: draftSnapshot.content })
+          : createJobInstructionItem({ jobId: jobId!, content: draftSnapshot.content })
       );
-      await syncItemsFromServer();
-      setDraft({
-        draftId: generateDraftId(),
-        content: draftSnapshot.content,
-      });
-      showErrorBanner(getErrorMessage(result.error));
-      return;
+      if (result.success) {
+        setItems((currentItems) =>
+          currentItems.map((item) => (item.id === optimisticId ? result.item : item))
+        );
+        return;
+      }
+      errorMessage = getErrorMessage(result.error);
+    } catch {
+      errorMessage = ERROR_MESSAGES.create_failed;
     }
 
+    // Roll the optimistic row back and hand the typed text back to the draft.
     setItems((currentItems) =>
-      currentItems.map((item) => (item.id === optimisticId ? result.item : item))
+      currentItems.filter((item) => item.id !== optimisticId)
     );
+    await syncItemsFromServer();
+    setDraft({
+      draftId: generateDraftId(),
+      content: draftSnapshot.content,
+    });
+    showErrorBanner(errorMessage);
   }
 
   async function handleToggleItem(item: JobInstructionItemWithDetails) {
-    if (togglesInFlightRef.current.has(item.id)) return;
-    togglesInFlightRef.current.add(item.id);
-    setToggleIdsInFlight((current) => new Set(current).add(item.id));
+    if (isBusy(item.id)) return;
     const optimisticTimestamp = new Date().toISOString();
 
     replaceItem({
@@ -352,50 +362,48 @@ export function JobInstructionItemsCard({
       updatedAt: optimisticTimestamp,
     });
 
+    // Optimistic flip: roll back to the previous row and surface the error
+    // when the server rejects or the call throws.
+    let errorMessage: string | null = null;
     try {
-      const result = await toggleJobInstructionItemCompletion({
-        itemId: item.id,
-        isCompleted: !item.isCompleted,
-      });
-
-      if (!result.success) {
-        replaceItem(item);
-        await syncItemsFromServer();
-        showErrorBanner(getErrorMessage(result.error));
+      const result = await runOnRow(item.id, () =>
+        toggleJobInstructionItemCompletion({
+          itemId: item.id,
+          isCompleted: !item.isCompleted,
+        })
+      );
+      if (result.success) {
+        replaceItem(result.item);
         return;
       }
-
-      replaceItem(result.item);
+      errorMessage = getErrorMessage(result.error);
     } catch {
-      replaceItem(item);
-      await syncItemsFromServer();
-      showErrorBanner(ERROR_MESSAGES.toggle_failed);
-    } finally {
-      togglesInFlightRef.current.delete(item.id);
-      setToggleIdsInFlight((current) => {
-        const next = new Set(current);
-        next.delete(item.id);
-        return next;
-      });
+      errorMessage = ERROR_MESSAGES.toggle_failed;
     }
+
+    replaceItem(item);
+    await syncItemsFromServer();
+    showErrorBanner(errorMessage);
   }
 
   async function handleDeleteItem(item: JobInstructionItemWithDetails) {
-    setDeletingItemId(item.id);
-    const result = await deleteJobInstructionItem({ itemId: item.id });
-    setDeletingItemId(null);
-
-    if (!result.success) {
-      showErrorBanner(getErrorMessage(result.error));
-      return;
+    try {
+      const result = await runOnRow(item.id, () =>
+        deleteJobInstructionItem({ itemId: item.id })
+      );
+      if (!result.success) {
+        showErrorBanner(getErrorMessage(result.error));
+        return;
+      }
+      setItems((currentItems) => currentItems.filter((entry) => entry.id !== item.id));
+    } catch {
+      showErrorBanner(ERROR_MESSAGES.delete_failed);
     }
-
-    const remainingItems = items.filter((entry) => entry.id !== item.id);
-    setItems(remainingItems);
   }
 
   async function handleMoveItem(itemId: string, direction: -1 | 1) {
-    if (reorderInFlightRef.current || items.some((item) => item.isOptimistic)) return;
+    // A reorder sends the full id list, so it waits for any row mutation.
+    if (anyBusy || items.some((item) => item.isOptimistic)) return;
 
     const currentIndex = items.findIndex((item) => item.id === itemId);
     const nextIndex = currentIndex + direction;
@@ -409,33 +417,29 @@ export function JobInstructionItemsCard({
     ];
 
     setItems(nextItems.map((item, index) => ({ ...item, sortOrder: index })));
-    reorderInFlightRef.current = true;
-    setReorderingItemId(itemId);
+    let errorMessage: string | null = null;
     try {
-      const result = projectId
-        ? await reorderProjectInstructionItems({ projectId, itemIds: nextItems.map((item) => item.id) })
-        : await reorderJobInstructionItems({ jobId: jobId!, itemIds: nextItems.map((item) => item.id) });
-
+      const itemIds = nextItems.map((item) => item.id);
+      const result = await runOnRow(itemId, () =>
+        projectId
+          ? reorderProjectInstructionItems({ projectId, itemIds })
+          : reorderJobInstructionItems({ jobId: jobId!, itemIds })
+      );
       if (result.success) {
         await syncItemsFromServer();
         return;
       }
-
-      setItems(previousItems);
-      await syncItemsFromServer();
-      showErrorBanner(getErrorMessage(result.error));
+      errorMessage = getErrorMessage(result.error);
     } catch {
-      setItems(previousItems);
-      await syncItemsFromServer();
-      showErrorBanner(getErrorMessage('reorder_failed'));
-    } finally {
-      reorderInFlightRef.current = false;
-      setReorderingItemId(null);
+      errorMessage = ERROR_MESSAGES.reorder_failed;
     }
+
+    setItems(previousItems);
+    await syncItemsFromServer();
+    showErrorBanner(errorMessage);
   }
 
-  const isReorderingDisabled =
-    reorderingItemId !== null || items.some((item) => item.isOptimistic);
+  const isReorderingDisabled = anyBusy || items.some((item) => item.isOptimistic);
 
   return (
     <>
@@ -512,8 +516,7 @@ export function JobInstructionItemsCard({
               const item = entry.item;
               const itemIndex = items.findIndex((currentItem) => currentItem.id === item.id);
               const editingValue = editingValues[item.id] ?? item.content;
-              const isDeleting = deletingItemId === item.id;
-              const isToggling = toggleIdsInFlight.has(item.id);
+              const isRowBusy = isBusy(item.id);
               const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatDateTime(item.createdAt)}`;
               const statusLabel = item.lastStatusChangedAt
                 ? `Zuletzt ${item.isCompleted ? 'erledigt' : 'offen'} von ${getActorName(item.lastStatusChangedByProfile)} · ${formatDateTime(item.lastStatusChangedAt)}`
@@ -535,8 +538,8 @@ export function JobInstructionItemsCard({
                       onClick={() => {
                         if (!readOnly) void handleToggleItem(item);
                       }}
-                      disabled={readOnly || isToggling}
-                      aria-busy={isToggling}
+                      disabled={readOnly || isRowBusy}
+                      aria-busy={isRowBusy}
                       aria-label={
                         readOnly
                           ? item.isCompleted ? 'Punkt erledigt' : 'Punkt offen'
@@ -602,6 +605,7 @@ export function JobInstructionItemsCard({
                           <p className="break-words">{creatorLabel}</p>
                           {statusLabel && <p className="mt-1 break-words">{statusLabel}</p>}
                         </div>
+                        <InlinePending active={isRowBusy} className="self-center" />
                         {isAdminOrManager && (
                           <div className="flex shrink-0 self-end gap-0.5">
                             <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground" onPointerDown={(event) => event.preventDefault()} onClick={() => setDetailsItem(item)} aria-label="Eintragsdetails bearbeiten"><Settings2 className="size-3.5" /></Button>
@@ -628,11 +632,7 @@ export function JobInstructionItemsCard({
                               }
                               aria-label="Punkt nach unten verschieben"
                             >
-                              {reorderingItemId === item.id ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <ArrowDown className="size-3.5" />
-                              )}
+                              <ArrowDown className="size-3.5" />
                             </Button>
                             <Button
                               type="button"
@@ -640,14 +640,10 @@ export function JobInstructionItemsCard({
                               size="icon"
                               className="size-7 text-muted-foreground hover:text-destructive"
                               onClick={() => handleDeleteItem(item)}
-                              disabled={isDeleting}
+                              disabled={isRowBusy}
                               aria-label="Punkt löschen"
                             >
-                              {isDeleting ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="size-3.5" />
-                              )}
+                              <Trash2 className="size-3.5" />
                             </Button>
                           </div>
                         )}
@@ -686,14 +682,17 @@ function InstructionItemDetailsDialog({ item, allItems, onClose, onSaved }: { it
   const [predecessorIds, setPredecessorIds] = useState(item?.predecessors.map((entry) => entry.id) ?? []);
   const [evidence, setEvidence] = useState(item?.evidenceRequirements.map((entry, index) => ({ ...entry, sortOrder: index })) ?? []);
   const [error, setError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const { run: runSaveDetails, isPending } = useServerAction(updateInstructionItemDetails);
   if (!item) return null;
   async function save(event: React.FormEvent) {
-    event.preventDefault(); setError(null); setIsPending(true);
-    const result = await updateInstructionItemDetails({ itemId: item!.id, itemKind, requirementState, groupLabel, notes, evidence, predecessorItemIds: predecessorIds });
-    setIsPending(false);
-    if (!result.success) { setError(result.error === 'instruction_dependency_cycle' ? 'Abhängigkeiten dürfen keinen Kreis bilden.' : 'Die Eintragsdetails konnten nicht gespeichert werden.'); return; }
-    onSaved(result.item);
+    event.preventDefault(); setError(null);
+    try {
+      const result = await runSaveDetails({ itemId: item!.id, itemKind, requirementState, groupLabel, notes, evidence, predecessorItemIds: predecessorIds });
+      if (!result.success) { setError(result.error === 'instruction_dependency_cycle' ? 'Abhängigkeiten dürfen keinen Kreis bilden.' : 'Die Eintragsdetails konnten nicht gespeichert werden.'); return; }
+      onSaved(result.item);
+    } catch {
+      setError('Die Eintragsdetails konnten nicht gespeichert werden.');
+    }
   }
   return <Dialog open onOpenChange={(open) => !open && !isPending && onClose()}><DialogContent className="sm:max-w-xl"><form onSubmit={save} className="contents"><DialogHeader><DialogTitle>Eintragsdetails bearbeiten</DialogTitle><DialogDescription>Die Angaben gehören zu diesem Auftrag oder Projekt und ändern die Vorlage nicht.</DialogDescription></DialogHeader><DialogBody className="space-y-4 py-1"><div className="grid gap-3 sm:grid-cols-2"><Field label="Art" htmlFor="instruction-kind"><Select value={itemKind} onValueChange={(value) => setItemKind(value as typeof itemKind)}><SelectTrigger id="instruction-kind"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="task">Aufgabe</SelectItem><SelectItem value="checklist">Checkliste</SelectItem></SelectContent></Select></Field><Field label="Verbindlichkeit" htmlFor="instruction-requirement"><Select value={requirementState} onValueChange={(value) => setRequirementState(value as typeof requirementState)}><SelectTrigger id="instruction-requirement"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="required">Erforderlich</SelectItem><SelectItem value="optional">Optional</SelectItem></SelectContent></Select></Field></div><Field label="Gruppe" htmlFor="instruction-group"><Input value={groupLabel} onChange={(event) => setGroupLabel(event.target.value)} /></Field><Field label="Voraussetzungen"><SearchableMultiSelect ariaLabel="Voraussetzungen" options={allItems.filter((entry) => entry.id !== item.id).map((entry) => ({ value: entry.id, label: entry.content }))} selectedIds={predecessorIds} onSelectionChange={setPredecessorIds} placeholder="Keine Voraussetzungen" searchPlaceholder="Eintrag suchen…" emptyMessage="Kein anderer Eintrag" /></Field><Field label="Hinweise" htmlFor="instruction-notes"><Textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></Field><div className="space-y-2"><div className="flex items-center justify-between"><Label>Erwartete Nachweise</Label><Button type="button" variant="ghost" size="sm" onClick={() => setEvidence((current) => [...current, { id: generateDraftId(), description: '', documentCategory: 'photo', sortOrder: current.length }])}>Nachweis ergänzen</Button></div>{evidence.map((entry) => <div key={entry.id} className="grid gap-2 sm:grid-cols-[1fr_140px_auto]"><Input aria-label="Nachweisbeschreibung" value={entry.description} onChange={(event) => setEvidence((current) => current.map((value) => value.id === entry.id ? { ...value, description: event.target.value } : value))} /><Select value={entry.documentCategory} onValueChange={(value) => setEvidence((current) => current.map((currentEntry) => currentEntry.id === entry.id ? { ...currentEntry, documentCategory: value } : currentEntry))}><SelectTrigger aria-label="Nachweiskategorie"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="photo">Foto</SelectItem><SelectItem value="report">Bericht</SelectItem><SelectItem value="contract">Vertrag</SelectItem><SelectItem value="offer">Angebot</SelectItem><SelectItem value="invoice">Rechnung</SelectItem><SelectItem value="other">Sonstiges</SelectItem></SelectContent></Select><Button type="button" size="icon" variant="ghost" aria-label="Nachweis entfernen" onClick={() => setEvidence((current) => current.filter((value) => value.id !== entry.id))}><Trash2 className="size-4" /></Button></div>)}</div><ErrorText>{error}</ErrorText></DialogBody><DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Abbrechen</Button><Button type="submit" disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button></DialogFooter></form></DialogContent></Dialog>;
 }

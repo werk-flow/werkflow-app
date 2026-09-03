@@ -359,6 +359,38 @@ const productFiles = [
   "lib/**/*.{ts,tsx}",
 ];
 
+// Pending state binds to the awaited server call (useServerAction) or to a
+// list's live read, never to a router transition: router-entangled pending
+// flags turned loaded tables into skeletons after the user's own refresh
+// click (UI/UX hardening Phase 5, 2026-09-03). The transition primitive lives
+// in components/ui/refresh-button.tsx; the named exceptions below are the
+// organization switch and the document library's folder navigation, both of
+// which track a route change rather than a mutation.
+const sonnerImportPath = {
+  name: "sonner",
+  message:
+    "Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.",
+};
+const transitionMessage =
+  "useTransition is banned in product code: pending state comes from useServerAction / useBusyIds, and a route refresh spins through RefreshButton or useRouterRefresh (components/ui/refresh-button). See the feedback canon in the werkflow-design skill.";
+const transitionSelectors = [
+  {
+    selector:
+      'ImportDeclaration[source.value="react"] > ImportSpecifier[imported.name="useTransition"]',
+    message: transitionMessage,
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="React"][callee.property.name="useTransition"]',
+    message: transitionMessage,
+  },
+];
+const transitionExemptFiles = [
+  "components/ui/refresh-button.tsx",
+  "components/organization/organization-context.tsx",
+  "components/dokumente/document-library-content.tsx",
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -432,19 +464,9 @@ const eslintConfig = defineConfig([
         ...prodRefSelectors,
         ...realtimeSelectors,
         ...stylingSelectors,
+        ...transitionSelectors,
       ],
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            {
-              name: "sonner",
-              message:
-                "Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.",
-            },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { paths: [sonnerImportPath] }],
     },
   },
   // Product JSX outside the registry itself additionally carries the registry
@@ -455,6 +477,37 @@ const eslintConfig = defineConfig([
     plugins: { ui: uiRules },
     rules: {
       "ui/label-in-spaced-container": "error",
+      "no-restricted-syntax": [
+        "error",
+        ...alwaysOnSelectors,
+        ...prodRefSelectors,
+        ...realtimeSelectors,
+        ...stylingSelectors,
+        ...shellSelectors,
+        ...registrySelectors,
+        ...hoverSelectors,
+        ...transitionSelectors,
+      ],
+    },
+  },
+  // The named router-transition homes keep every other product rule. The
+  // refresh primitive sits under components/ui (product set only); the two
+  // product files carry the full JSX set minus the transition ban.
+  {
+    files: ["components/ui/refresh-button.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...alwaysOnSelectors,
+        ...prodRefSelectors,
+        ...realtimeSelectors,
+        ...stylingSelectors,
+      ],
+    },
+  },
+  {
+    files: transitionExemptFiles.filter((file) => !file.startsWith("components/ui/")),
+    rules: {
       "no-restricted-syntax": [
         "error",
         ...alwaysOnSelectors,
@@ -553,11 +606,7 @@ const eslintConfig = defineConfig([
         "error",
         {
           paths: [
-            {
-              name: "sonner",
-              message:
-                "Toasts are removed by the UI/UX consolidation — use the Banner primitive (components/ui/banner) per the feedback policy matrix.",
-            },
+            sonnerImportPath,
             {
               name: "@/components/realtime/realtime-provider",
               importNames: ["useRealtimeEvent", "useRealtimeSubscribe"],

@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/vacation/actions';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { VACATION_PORTION_LABELS } from '@/lib/vacation/types';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
 const DECISION_ERROR_MESSAGES: Record<string, string> = {
@@ -73,7 +75,9 @@ type ApproverVacationLists = {
 
 export function VacationApprovals() {
   const [actionError, setActionError] = useState<string | null>(null);
-  const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  // Row-scoped pending: the decided card spins until the live read confirms;
+  // the other cards stay actionable.
+  const busy = useBusyIds();
   const [reasonDialog, setReasonDialog] = useState<ReasonDialogState>({
     mode: 'closed',
   });
@@ -114,66 +118,66 @@ export function VacationApprovals() {
   }, []);
 
   const handleApprove = async (item: ApproverVacationRequest) => {
-    if (busyRequestId) return;
+    if (busy.isBusy(item.request.id)) return;
     setActionError(null);
-    setBusyRequestId(item.request.id);
-    try {
-      const result = await decideVacationRequest({
-        requestId: item.request.id,
-        decision: 'approve',
-      });
-      if (!result.success) {
+    await busy.run(item.request.id, async () => {
+      try {
+        const result = await decideVacationRequest({
+          requestId: item.request.id,
+          decision: 'approve',
+        });
+        if (!result.success) {
+          reportActionError(
+            result.error,
+            'Die Freigabe konnte nicht gespeichert werden.'
+          );
+        }
+      } catch (error) {
+        console.error('Error approving vacation request:', error);
         reportActionError(
-          result.error,
+          'unexpected_error',
           'Die Freigabe konnte nicht gespeichert werden.'
         );
       }
-    } catch (error) {
-      console.error('Error approving vacation request:', error);
-      reportActionError(
-        'unexpected_error',
-        'Die Freigabe konnte nicht gespeichert werden.'
-      );
-    } finally {
-      setBusyRequestId(null);
-    }
-    await refetch();
+      await refetch();
+    });
   };
 
   const handleReasonSubmit = async (reason: string) => {
     if (reasonDialog.mode === 'closed') return;
-    const { item } = reasonDialog;
+    const { item, mode } = reasonDialog;
     setActionError(null);
-    setBusyRequestId(item.request.id);
-    try {
-      const result =
-        reasonDialog.mode === 'reject'
-          ? await decideVacationRequest({
-              requestId: item.request.id,
-              decision: 'reject',
-              comment: reason,
-            })
-          : await cancelApprovedVacationRequest({
-              requestId: item.request.id,
-              reason,
-            });
-      if (!result.success) {
+    await busy.run(item.request.id, async () => {
+      try {
+        const result =
+          mode === 'reject'
+            ? await decideVacationRequest({
+                requestId: item.request.id,
+                decision: 'reject',
+                comment: reason,
+              })
+            : await cancelApprovedVacationRequest({
+                requestId: item.request.id,
+                reason,
+              });
+        if (!result.success) {
+          reportActionError(
+            result.error,
+            'Die Entscheidung konnte nicht gespeichert werden.'
+          );
+        }
+      } catch (error) {
+        console.error('Error deciding vacation request:', error);
         reportActionError(
-          result.error,
+          'unexpected_error',
           'Die Entscheidung konnte nicht gespeichert werden.'
         );
       }
-    } catch (error) {
-      console.error('Error deciding vacation request:', error);
-      reportActionError(
-        'unexpected_error',
-        'Die Entscheidung konnte nicht gespeichert werden.'
-      );
-    } finally {
-      setBusyRequestId(null);
-    }
-    setReasonDialog({ mode: 'closed' });
-    await refetch();
+      // The dialog closes once the server answered; the card keeps its
+      // spinner until the refetch lands.
+      setReasonDialog({ mode: 'closed' });
+      await refetch();
+    });
   };
 
   if (isLoading) {
@@ -219,7 +223,10 @@ export function VacationApprovals() {
           <CardContent className="p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-medium">{item.personName}</p>
+                <p className="flex items-center gap-2 font-medium">
+                  {item.personName}
+                  <InlinePending active={busy.isBusy(item.request.id)} />
+                </p>
                 <p className="mt-0.5 text-sm text-muted-foreground tabular-nums">
                   {formatRange(item.request.startDate, item.request.endDate)}
                   {` · ${VACATION_PORTION_LABELS[item.request.dayPortion]}`}
@@ -267,7 +274,7 @@ export function VacationApprovals() {
                   size="sm"
                   className="gap-1.5"
                   onClick={() => setReasonDialog({ mode: 'reject', item })}
-                  disabled={busyRequestId !== null}
+                  disabled={busy.isBusy(item.request.id)}
                   aria-label={`Urlaubsantrag von ${item.personName} ablehnen`}
                 >
                   <X className="size-3.5" />
@@ -277,14 +284,10 @@ export function VacationApprovals() {
                   size="sm"
                   className="gap-1.5"
                   onClick={() => void handleApprove(item)}
-                  disabled={busyRequestId !== null}
+                  disabled={busy.isBusy(item.request.id)}
                   aria-label={`Urlaubsantrag von ${item.personName} genehmigen`}
                 >
-                  {busyRequestId === item.request.id ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Check className="size-3.5" />
-                  )}
+                  <Check className="size-3.5" />
                   Genehmigen
                 </Button>
               </div>
@@ -302,7 +305,10 @@ export function VacationApprovals() {
             <Card key={item.request.id}>
               <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">{item.personName}</p>
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    {item.personName}
+                    <InlinePending active={busy.isBusy(item.request.id)} />
+                  </p>
                   <p className="text-xs text-muted-foreground tabular-nums">
                     {formatRange(item.request.startDate, item.request.endDate)}
                     {` · ${formatVacationDays(item.totalDays)}`}
@@ -313,7 +319,7 @@ export function VacationApprovals() {
                   size="sm"
                   className="gap-1.5"
                   onClick={() => setReasonDialog({ mode: 'cancel', item })}
-                  disabled={busyRequestId !== null}
+                  disabled={busy.isBusy(item.request.id)}
                   aria-label={`Genehmigten Urlaub von ${item.personName} stornieren`}
                 >
                   <Undo2 className="size-3.5" />
@@ -340,7 +346,7 @@ export function VacationApprovals() {
           confirmLabel={
             reasonDialog.mode === 'reject' ? 'Ablehnen' : 'Stornieren'
           }
-          isBusy={busyRequestId !== null}
+          isBusy={busy.isBusy(reasonDialog.item.request.id)}
           onConfirm={handleReasonSubmit}
           onClose={() => setReasonDialog({ mode: 'closed' })}
         />

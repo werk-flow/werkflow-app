@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,8 +35,12 @@ import {
   VACATION_STATUS_LABELS,
   type VacationRequestStatus,
 } from '@/lib/vacation/types';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { cn, toLocalDateString } from '@/lib/utils';
+
+// Settle key for a request that has no row yet; request ids are UUIDs.
+const NEW_REQUEST_ID = 'new';
 
 const REQUEST_ERROR_MESSAGES: Record<string, string> = {
   invalid_dates: 'Bitte gib gültige Daten an.',
@@ -95,7 +100,9 @@ function formatRange(startDate: string, endDate: string): string {
 
 export function VacationSection() {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
-  const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  // Row-scoped pending for withdrawals and the settle window after the
+  // request dialog closed; the header carries it for a brand-new request.
+  const busy = useBusyIds();
   const [listError, setListError] = useState<string | null>(null);
 
   const view = useLiveView<OwnVacationOverview>({
@@ -116,18 +123,18 @@ export function VacationSection() {
   const refetch = view.refresh;
 
   const handleWithdraw = async (request: VacationRequestListItem) => {
-    if (withdrawingId) return;
+    if (busy.isBusy(request.id)) return;
     setListError(null);
-    setWithdrawingId(request.id);
-    const result = await withdrawVacationRequest({ requestId: request.id });
-    setWithdrawingId(null);
-    if (!result.success) {
-      setListError(
-        REQUEST_ERROR_MESSAGES[result.error] ??
-          'Der Antrag konnte nicht zurückgezogen werden.'
-      );
-    }
-    await refetch();
+    await busy.run(request.id, async () => {
+      const result = await withdrawVacationRequest({ requestId: request.id });
+      if (!result.success) {
+        setListError(
+          REQUEST_ERROR_MESSAGES[result.error] ??
+            'Der Antrag konnte nicht zurückgezogen werden.'
+        );
+      }
+      await refetch();
+    });
   };
 
   const balance = overview?.balance ?? null;
@@ -142,8 +149,9 @@ export function VacationSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-medium text-muted-foreground px-1">
+      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
         Urlaub & Abwesenheit
+        <InlinePending active={busy.isBusy(NEW_REQUEST_ID)} />
       </h3>
 
       <Card>
@@ -246,6 +254,7 @@ export function VacationSection() {
                         >
                           {VACATION_STATUS_LABELS[request.status]}
                         </span>
+                        <InlinePending active={busy.isBusy(request.id)} />
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {VACATION_PORTION_LABELS[request.dayPortion]}
@@ -270,12 +279,9 @@ export function VacationSection() {
                         variant="outline"
                         size="sm"
                         onClick={() => void handleWithdraw(request)}
-                        disabled={withdrawingId !== null}
+                        disabled={busy.isBusy(request.id)}
                         aria-label={`Urlaubsantrag vom ${formatRange(request.startDate, request.endDate)} zurückziehen`}
                       >
-                        {withdrawingId === request.id ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : null}
                         Zurückziehen
                       </Button>
                     )}
@@ -293,7 +299,7 @@ export function VacationSection() {
           hasEntitlement={hasEntitlement}
           onClose={(saved) => {
             setShowRequestDialog(false);
-            if (saved) void refetch();
+            if (saved) void busy.run(NEW_REQUEST_ID, refetch);
           }}
         />
       )}

@@ -88,6 +88,12 @@ export function LocationSelectWithCreate({
   );
 }
 
+function getCreateLocationErrorMessage(error: string): string {
+  if (error === 'name_required') return 'Bitte gib einen Namen ein.';
+  if (error === 'not_authorized') return 'Du hast keine Berechtigung, Lager anzulegen.';
+  return 'Das Lager konnte nicht erstellt werden. Prüfe den Namen und versuche es erneut.';
+}
+
 function CreateLocationDialog({
   open,
   onOpenChange,
@@ -101,6 +107,8 @@ function CreateLocationDialog({
   const [description, setDescription] = useState('');
   const [locationType, setLocationType] = useState<InventoryLocationType>('room');
   const [error, setError] = useState<string | null>(null);
+  // `isPending` is set before the first await, so the button spins in the
+  // first frame; the parent select adopts the new location via onCreated.
   const { run: runCreateLocation, isPending } = useServerAction(
     createInventoryLocation
   );
@@ -108,14 +116,15 @@ function CreateLocationDialog({
   function handleSave() {
     setError(null);
     void (async () => {
+      // A thrown call (network, aborted request) must surface like a failed one.
       const result = await runCreateLocation({
         name,
         description,
         locationType,
-      });
+      }).catch(() => null);
 
-      if (!result.success) {
-        setError('Das Lager konnte nicht erstellt werden. Prüfe den Namen und versuche es erneut.');
+      if (!result?.success) {
+        setError(getCreateLocationErrorMessage(result?.error ?? 'create_failed'));
         return;
       }
 

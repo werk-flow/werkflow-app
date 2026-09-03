@@ -28,12 +28,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { useBanner } from '@/components/ui/banner';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { ClientSelectWithCreate } from '@/components/auftraege/client-select-with-create';
 import { SiteContactFields } from '@/components/auftraege/site-contact-fields';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import {
   promoteCallerToClient,
   reopenClientRequest,
@@ -100,6 +103,10 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const router = useRouter();
   const { request } = data;
   const { run: runPendingTask, isPending } = usePendingTask();
+  // After a confirmed change the header keeps its indicator until the
+  // refreshed request lands (settling), without disabling the actions.
+  const { run: runSettle, isPending: isSettling } = usePendingTask();
+  const waitForChange = useSettleOnChange(request);
   const { showBanner } = useBanner();
   const [convertOpen, setConvertOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
@@ -108,6 +115,10 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const [matchClientId, setMatchClientId] = useState('');
   const [matchSiteId, setMatchSiteId] = useState('');
   const [matchContactId, setMatchContactId] = useState('');
+  // Failures render where the action was taken: header, customer card, dialog.
+  const [headerError, setHeaderError] = useState<string | null>(null);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
+  const [matchError, setMatchError] = useState<string | null>(null);
 
   useRealtimeRouterRefresh({
     tables: ['client_requests', 'documents', 'document_links'],
@@ -115,53 +126,78 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
 
-  function showFeedback(variant: 'success' | 'error', message: string) {
-    showBanner({ variant, message });
+  function markSettling() {
+    void runSettle(waitForChange);
   }
 
-  function handleStatusToggle() {
-    const nextStatus = request.status === 'offen' ? 'in_klaerung' : 'offen';
+  function changeStatus(
+    nextStatus: 'offen' | 'in_klaerung',
+    previousStatus: 'offen' | 'in_klaerung'
+  ) {
+    setHeaderError(null);
     void runPendingTask(async () => {
       const result = await updateClientRequest(request.id, { status: nextStatus });
       if (!result.success) {
-        showFeedback('error', 'Der Status konnte nicht geändert werden.');
+        setHeaderError('Der Status konnte nicht geändert werden.');
         return;
       }
+      showBanner({
+        variant: 'success',
+        message:
+          nextStatus === 'in_klaerung'
+            ? 'Anfrage ist jetzt in Klärung.'
+            : 'Anfrage ist wieder offen.',
+        actionLabel: 'Rückgängig',
+        onAction: () => changeStatus(previousStatus, nextStatus),
+      });
       router.refresh();
+      markSettling();
     });
   }
 
+  function handleStatusToggle() {
+    if (request.status !== 'offen' && request.status !== 'in_klaerung') return;
+    changeStatus(request.status === 'offen' ? 'in_klaerung' : 'offen', request.status);
+  }
+
   function handleReopen() {
+    setHeaderError(null);
     void runPendingTask(async () => {
       const result = await reopenClientRequest(request.id);
       if (!result.success) {
-        showFeedback('error', 'Die Anfrage konnte nicht wieder geöffnet werden.');
+        setHeaderError('Die Anfrage konnte nicht wieder geöffnet werden.');
         return;
       }
-      showFeedback('success', 'Anfrage wurde wieder geöffnet.');
+      showBanner({ variant: 'success', message: 'Anfrage wurde wieder geöffnet.' });
       router.refresh();
+      markSettling();
     });
   }
 
   function handlePromote() {
+    setPromoteError(null);
     void runPendingTask(async () => {
       const result = await promoteCallerToClient(request.id);
       if (!result.success) {
-        showFeedback(
-          'error',
+        setPromoteError(
           result.error === 'caller_name_required'
             ? 'Zum Anlegen wird mindestens der Name der Anruferin / des Anrufers benötigt.'
             : 'Der Kunde konnte nicht angelegt werden.'
         );
         return;
       }
-      showFeedback('success', 'Kunde wurde angelegt und der Anfrage zugeordnet.');
+      showBanner({
+        variant: 'success',
+        message: 'Kunde wurde angelegt und der Anfrage zugeordnet.',
+      });
       router.refresh();
+      markSettling();
     });
   }
 
   function handleMatchConfirm() {
     if (!matchClientId) return;
+    setMatchError(null);
     void runPendingTask(async () => {
       const result = await updateClientRequest(request.id, {
         clientId: matchClientId,
@@ -169,15 +205,16 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         contactId: matchContactId || null,
       });
       if (!result.success) {
-        showFeedback('error', 'Der Kunde konnte nicht zugeordnet werden.');
+        setMatchError('Der Kunde konnte nicht zugeordnet werden.');
         return;
       }
       setMatchOpen(false);
       setMatchClientId('');
       setMatchSiteId('');
       setMatchContactId('');
-      showFeedback('success', 'Kunde wurde zugeordnet.');
+      showBanner({ variant: 'success', message: 'Kunde wurde zugeordnet.' });
       router.refresh();
+      markSettling();
     });
   }
 
@@ -198,6 +235,10 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         }
         actions={
           <>
+            <InlinePending
+              active={isPending || isSettling}
+              label="Anfrage wird gespeichert"
+            />
             {isEditable && (
               <>
                 <Button
@@ -256,6 +297,9 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
           </>
         }
       />
+      {headerError ? (
+        <ErrorText className="mx-4 mt-4 sm:mx-6">{headerError}</ErrorText>
+      ) : null}
 
       <PageBody maxWidth="content">
         <div className="space-y-4">
@@ -397,6 +441,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                       </Button>
                     </div>
                   )}
+                  <ErrorText>{promoteError}</ErrorText>
                 </div>
               )}
             </div>
@@ -475,12 +520,14 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         clients={data.clients}
         open={convertOpen}
         onOpenChange={setConvertOpen}
+        onSaved={markSettling}
       />
 
       <CloseRequestDialog
         requestId={request.id}
         open={closeOpen}
         onOpenChange={setCloseOpen}
+        onSaved={markSettling}
       />
 
       <EditRequestDialog
@@ -488,6 +535,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         assignees={data.assignees}
         open={editOpen}
         onOpenChange={setEditOpen}
+        onSaved={markSettling}
       />
 
       {/* Match an existing customer to an unknown-caller request */}
@@ -499,6 +547,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
             setMatchClientId('');
             setMatchSiteId('');
             setMatchContactId('');
+            setMatchError(null);
           }
         }}
       >
@@ -534,6 +583,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                 idPrefix="match"
               />
             )}
+            <ErrorText>{matchError}</ErrorText>
           </div>
           <DialogFooter>
             <Button

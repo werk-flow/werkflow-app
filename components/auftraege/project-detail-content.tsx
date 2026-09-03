@@ -23,7 +23,7 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useBanner } from '@/components/ui/banner';
+import { ErrorText } from '@/components/ui/error-text';
 import { ListRow } from '@/components/ui/list-row';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -216,12 +216,13 @@ export function ProjectDetailContent({
   originRequest,
 }: ProjectDetailContentProps) {
   const router = useRouter();
-  const { showBanner } = useBanner();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { run: runDeleteTask, isPending: isDeleting } = usePendingTask();
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
+  const [clientSaveError, setClientSaveError] = useState<string | null>(null);
   const [showAssignJobsDialog, setShowAssignJobsDialog] = useState(false);
   const { run: runClientUpdateTask, isPending: isUpdatingClient } = usePendingTask();
   const { run: runAssignJobsTask, isPending: isAssigningJobs } = usePendingTask();
@@ -467,33 +468,29 @@ export function ProjectDetailContent({
   }, [liveJobs, liveProject]);
 
   const handleDelete = () => {
+    setDeleteError(null);
     void runDeleteTask(async () => {
-      const result = await deleteProject(project.id);
-      if (result.success) {
+      const result = await deleteProject(project.id).catch(() => null);
+      if (result?.success) {
         // Hard navigation — see the deletion-stall note in kunden-detail-content.
         window.location.assign(
           `/auftraege?deleted_project=${encodeURIComponent(project.name)}`
         );
         return;
       }
-      showBanner({
-        variant: 'error',
-        message: 'Das Projekt konnte nicht gelöscht werden.',
-      });
+      setDeleteError('Das Projekt konnte nicht gelöscht werden.');
     });
   };
 
   const handleClientSave = async (clientId: string) => {
+    setClientSaveError(null);
     void runClientUpdateTask(async () => {
       const result = await updateProject(project.id, {
         clientId,
-      });
-      if (!result.success) {
+      }).catch(() => null);
+      if (!result?.success) {
         // The dialog stays open on failure (no silent close-and-drop).
-        showBanner({
-          variant: 'error',
-          message: 'Der Kunde konnte nicht gespeichert werden.',
-        });
+        setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
         return;
       }
       setShowClientDialog(false);
@@ -1073,11 +1070,15 @@ export function ProjectDetailContent({
 
       <ClientAssignmentDialog
         open={showClientDialog}
-        onOpenChange={setShowClientDialog}
+        onOpenChange={(open) => {
+          setShowClientDialog(open);
+          if (!open) setClientSaveError(null);
+        }}
         clients={dialogClients}
         currentClientId={liveProject.clientId}
         title="Kunde zum Projekt hinzufügen"
         isSaving={isUpdatingClient}
+        saveError={clientSaveError}
         onSave={handleClientSave}
       />
 
@@ -1097,7 +1098,10 @@ export function ProjectDetailContent({
         onSave={handleAssignJobsSave}
       />
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open);
+        if (!open) setDeleteError(null);
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Projekt löschen?</AlertDialogTitle>
@@ -1107,6 +1111,7 @@ export function ProjectDetailContent({
               Projektzuordnung wird entfernt.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <ErrorText>{deleteError}</ErrorText>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>
               Abbrechen

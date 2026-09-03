@@ -63,6 +63,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { ListRow } from "@/components/ui/list-row";
@@ -100,14 +102,19 @@ import {
   type DocumentLibraryView,
   type DocumentFolder,
   type DocumentDetailsResult,
+  type DocumentMutationResult,
   type OrganizationDocument,
 } from "@/lib/documents/types";
 import { cn } from "@/lib/utils";
 import { useBanner } from "@/components/ui/banner";
 import { DokumenteTabContentSkeleton } from "@/components/loading-states/dokumente-page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useBatchProgress } from "@/hooks/use-batch-progress";
+import { useBusyIds } from "@/hooks/use-busy-id";
+import { useOptimisticList } from "@/hooks/use-optimistic-list";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
-import { usePendingTask } from "@/hooks/use-server-action";
+import { useServerAction } from "@/hooks/use-server-action";
+import { useSettleOnChange } from "@/hooks/use-settle-on-change";
 import {
   DocumentUploadDialog,
   type DocumentUploadItem,
@@ -196,6 +203,13 @@ type BrowserFileSystemDirectoryEntry = BrowserFileSystemEntry & {
 type DataTransferItemWithEntry = DataTransferItem & {
   webkitGetAsEntry?: () => BrowserFileSystemEntry | null;
 };
+
+/** One step of a client-iterated bulk operation; a failed result throws so the batch counts it. */
+type BulkStep = () => Promise<{ success: boolean }>;
+
+function getDocumentId(document: OrganizationDocument): string {
+  return document.id;
+}
 
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
@@ -537,6 +551,9 @@ type MoveDestinationDialogProps = {
   selectedFolders: DocumentFolder[];
   sourceFolderId: string | null;
   isPending: boolean;
+  /** 0 to 100 while the bulk operation runs, null otherwise. */
+  progress: number | null;
+  error: string | null;
   onOpenChange: (open: boolean) => void;
   onConfirm: (targetFolderId: string | null) => void;
   onCreateFolder: (parentFolderId: string | null) => void;
@@ -554,6 +571,8 @@ function MoveDestinationDialog({
   selectedFolders,
   sourceFolderId,
   isPending,
+  progress,
+  error,
   onOpenChange,
   onConfirm,
   onCreateFolder,
@@ -840,10 +859,38 @@ function MoveDestinationDialog({
             </div>
 
             <div className="flex flex-col gap-3 border-t bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-h-5 text-sm text-muted-foreground">
-                {disabledReason ??
-                  "Wähle den Zielordner und bestätige den Vorgang."}
-              </p>
+              {progress !== null ? (
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div
+                    className="h-2 w-full max-w-xs overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-label={
+                      mode === "copy"
+                        ? "Fortschritt beim Kopieren"
+                        : "Fortschritt beim Verschieben"
+                    }
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress}
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    {progress} %
+                  </span>
+                </div>
+              ) : (
+                <div className="min-w-0">
+                  <p className="min-h-5 text-sm text-muted-foreground">
+                    {disabledReason ??
+                      "Wähle den Zielordner und bestätige den Vorgang."}
+                  </p>
+                  <ErrorText>{error}</ErrorText>
+                </div>
+              )}
               <div className="flex shrink-0 justify-end gap-2">
                 <Button
                   type="button"
@@ -878,7 +925,7 @@ export function DocumentLibraryContent({
   breadcrumbs,
   folders,
   allFolders,
-  documents,
+  documents: serverDocuments,
   jobs,
   projects,
   clients,
@@ -894,15 +941,32 @@ export function DocumentLibraryContent({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
   const suppressNextSelectionClearRef = useRef(false);
-  const { run: runDocumentTask, isPending } = usePendingTask();
+  // Pending feedback (canon, 2026-09-03): trash/restore drop the row at once
+  // through the optimistic overlay and roll back on failure; every other row
+  // action marks its own row busy until the refreshed props land; the
+  // move/copy dialog reports a determinate batch.
+  const documentList = useOptimisticList({
+    items: serverDocuments,
+    getId: getDocumentId,
+  });
+  const documents = useMemo(
+    () => documentList.items.map((entry) => entry.item),
+    [documentList.items],
+  );
+  const busy = useBusyIds();
+  const waitForDocuments = useSettleOnChange(serverDocuments);
+  const moveCopyBatch = useBatchProgress<BulkStep>();
+  const createFolder = useServerAction(createDocumentFolder);
   const [isNavigationPending, startNavigationTransition] = useTransition();
   const { showBanner } = useBanner();
-  const [isMoveCopySubmitting, setIsMoveCopySubmitting] = useState(false);
+  const [moveCopyError, setMoveCopyError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [folderError, setFolderError] = useState<string | null>(null);
   const [renameDialog, setRenameDialog] = useState<RenameDialogState>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [moveCopyDialog, setMoveCopyDialog] =
@@ -915,6 +979,9 @@ export function DocumentLibraryContent({
     { success: true }
   > | null>(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const isRenamePending = renameDialog ? busy.isBusy(renameDialog.id) : false;
+  const isDetailsBusy = detailsDialog ? busy.isBusy(detailsDialog.id) : false;
   const [viewerDocument, setViewerDocument] =
     useState<OrganizationDocument | null>(initialDocument);
   const initialDocumentIdRef = useRef(initialDocumentId);
@@ -959,6 +1026,8 @@ export function DocumentLibraryContent({
   });
 
   useEffect(() => {
+    // Route props are the authoritative state after folder or filter navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchQuery(initialSearchQuery);
     setPendingNavigation(null);
   }, [category, currentFolderId, initialSearchQuery, linkFilter, view]);
@@ -970,6 +1039,8 @@ export function DocumentLibraryContent({
       initialDocumentIdRef.current !== initialDocumentId;
     initialDocumentIdRef.current = initialDocumentId;
     if (initialDocumentChanged || viewingInitialDocument) {
+      // Keep an open viewer synchronized with the authoritative route payload.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewerDocument(initialDocument);
     }
   }, [initialDocument, initialDocumentId, viewerDocument?.id]);
@@ -1031,15 +1102,113 @@ export function DocumentLibraryContent({
     showBanner({ variant, message });
   }
 
-  // Long-running operations run through the global banner's progress variant;
-  // the follow-up success/error banner simply replaces it in the single slot.
-  function showOperationBanner(
-    status: "loading" | "success" | "error",
-    message: string,
-  ) {
+  function showUndoBanner(message: string, onUndo: () => Promise<void>) {
     showBanner({
-      variant: status === "loading" ? "progress" : status,
+      variant: "success",
       message,
+      actionLabel: "Rückgängig",
+      actionIcon: <Undo2 className="size-3.5" />,
+      onAction: () => {
+        void onUndo().catch(() =>
+          showFeedback(
+            "error",
+            "Die Aktion konnte nicht rückgängig gemacht werden.",
+          ),
+        );
+      },
+    });
+  }
+
+  /** Runs one mutation under the row's busy id; a thrown action counts as a failure. */
+  function runMutation(
+    id: string,
+    mutation: () => Promise<{ success: boolean }>,
+  ): Promise<boolean> {
+    return busy
+      .run(id, mutation)
+      .then((result) => result.success)
+      .catch(() => false);
+  }
+
+  async function settleAfterRefresh() {
+    refreshDocuments();
+    await waitForDocuments();
+  }
+
+  // Drops the rows at once, runs the mutation per document, and restores the
+  // rows whose mutation failed. Used for trash and restore in both directions.
+  async function mutateDocuments(
+    documentsToMutate: OrganizationDocument[],
+    mutation: (documentId: string) => Promise<DocumentMutationResult>,
+  ): Promise<{ failedCount: number }> {
+    for (const document of documentsToMutate) {
+      documentList.remove(document.id);
+    }
+    let failedCount = 0;
+    for (const document of documentsToMutate) {
+      const succeeded = await runMutation(document.id, () =>
+        mutation(document.id),
+      );
+      if (succeeded) continue;
+      failedCount++;
+      documentList.rollback(document.id);
+    }
+    return { failedCount };
+  }
+
+  async function trashDocuments(documentsToTrash: OrganizationDocument[]) {
+    const total = documentsToTrash.length;
+    const { failedCount } = await mutateDocuments(
+      documentsToTrash,
+      deleteDocument,
+    );
+    if (failedCount > 0) {
+      showFeedback(
+        "error",
+        total === 1
+          ? "Die Datei konnte nicht gelöscht werden."
+          : `${failedCount} von ${total} Dateien konnten nicht gelöscht werden.`,
+      );
+    } else {
+      showUndoBanner(
+        total === 1
+          ? "Datei wurde in den Papierkorb verschoben."
+          : `${total} Dateien wurden in den Papierkorb verschoben.`,
+        () => restoreDocuments(documentsToTrash),
+      );
+    }
+    refreshDocuments();
+  }
+
+  async function restoreDocuments(documentsToRestore: OrganizationDocument[]) {
+    const total = documentsToRestore.length;
+    const { failedCount } = await mutateDocuments(
+      documentsToRestore,
+      restoreDocument,
+    );
+    if (failedCount > 0) {
+      showFeedback(
+        "error",
+        total === 1
+          ? "Die Datei konnte nicht wiederhergestellt werden."
+          : `${failedCount} von ${total} Dateien konnten nicht wiederhergestellt werden.`,
+      );
+    } else {
+      showUndoBanner(
+        total === 1
+          ? "Datei wurde wiederhergestellt."
+          : `${total} Dateien wurden wiederhergestellt.`,
+        () => trashDocuments(documentsToRestore),
+      );
+    }
+    refreshDocuments();
+  }
+
+  function removeDocumentsFromSelection(documentIds: string[]) {
+    setSelectedDocumentIds((current) => {
+      const next = new Set(current);
+      for (const documentId of documentIds) next.delete(documentId);
+      return next;
     });
   }
 
@@ -1092,14 +1261,15 @@ export function DocumentLibraryContent({
     destinationFolderId: string | null;
     onSuccess: () => void;
   }) {
-    if (isMoveCopySubmitting) return;
+    if (moveCopyBatch.isRunning) return;
 
     const itemCount = documentsToProcess.length + foldersToProcess.length;
     if (itemCount === 0) return;
 
+    // Validation and failures render inside the destination dialog, which
+    // stays open until the batch succeeds.
     if (targetContainsSelectedFolder(foldersToProcess, destinationFolderId)) {
-      showFeedback(
-        "error",
+      setMoveCopyError(
         mode === "copy"
           ? "Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner kopiert werden."
           : "Ein Ordner kann nicht in sich selbst oder einen eigenen Unterordner verschoben werden.",
@@ -1115,8 +1285,7 @@ export function DocumentLibraryContent({
         destinationFolderId,
       })
     ) {
-      showFeedback(
-        "error",
+      setMoveCopyError(
         "Einträge können nicht in ihren aktuellen Ordner verschoben werden.",
       );
       return;
@@ -1127,77 +1296,68 @@ export function DocumentLibraryContent({
       allFolders,
     );
     const actionLabel = mode === "copy" ? "kopiert" : "verschoben";
-    setIsMoveCopySubmitting(true);
-    showOperationBanner(
-      "loading",
-      itemCount === 1
-        ? `1 Eintrag wird ${actionLabel}...`
-        : `${itemCount} Einträge werden ${actionLabel}...`,
-    );
+    setMoveCopyError(null);
 
-    try {
-      let failedCount = 0;
-
-      for (const document of documentsToProcess) {
-        const result =
+    const steps: Array<{ id: string; item: BulkStep }> = [
+      ...documentsToProcess.map((document) => ({
+        id: document.id,
+        item: () =>
           mode === "move"
-            ? await moveDocument({
+            ? moveDocument({
                 documentId: document.id,
                 folderId: destinationFolderId,
               })
-            : await copyDocument({
+            : copyDocument({
                 documentId: document.id,
                 targetFolderId: destinationFolderId,
-              });
-
-        if (!result.success) failedCount++;
-      }
-
-      for (const folder of topLevelFoldersToProcess) {
-        const result =
+              }),
+      })),
+      ...topLevelFoldersToProcess.map((folder) => ({
+        id: folder.id,
+        item: () =>
           mode === "move"
-            ? await moveDocumentFolder({
+            ? moveDocumentFolder({
                 folderId: folder.id,
                 parentFolderId: destinationFolderId,
               })
-            : await copyDocumentFolder({
+            : copyDocumentFolder({
                 folderId: folder.id,
                 targetParentFolderId: destinationFolderId,
-              });
+              }),
+      })),
+    ];
 
-        if (!result.success) failedCount++;
-      }
+    const { failures } = await moveCopyBatch.start(steps, async (perform) => {
+      const result = await perform();
+      if (!result.success) throw new Error("bulk_step_failed");
+    });
 
-      if (failedCount > 0) {
-        const failedItemLabel =
-          failedCount === 1 ? "1 Eintrag" : `${failedCount} Einträge`;
-        showFeedback(
-          "error",
-          `${failedItemLabel} ${failedCount === 1 ? "konnte" : "konnten"} nicht ${actionLabel} werden.`,
-        );
-        return;
-      }
-
-      onSuccess();
-      clearSelection();
-      refreshDocuments();
-      showFeedback(
-        "success",
-        itemCount === 1
-          ? `1 Eintrag wurde ${actionLabel}.`
-          : `${itemCount} Einträge wurden ${actionLabel}.`,
+    if (failures > 0) {
+      const failedItemLabel =
+        failures === 1 ? "1 Eintrag" : `${failures} Einträge`;
+      setMoveCopyError(
+        `${failedItemLabel} ${failures === 1 ? "konnte" : "konnten"} nicht ${actionLabel} werden.`,
       );
-    } catch (error) {
-      console.error("Failed to run document move/copy operation:", error);
-      showFeedback(
-        "error",
-        mode === "copy"
-          ? "Die Auswahl konnte nicht kopiert werden."
-          : "Die Auswahl konnte nicht verschoben werden.",
-      );
-    } finally {
-      setIsMoveCopySubmitting(false);
+      // The steps that went through are persisted; show them.
+      if (failures < steps.length) refreshDocuments();
+      return;
     }
+
+    // Moved documents leave the current folder before the refresh lands.
+    if (mode === "move" && visibleView === "folders") {
+      for (const document of documentsToProcess) {
+        documentList.remove(document.id);
+      }
+    }
+    onSuccess();
+    clearSelection();
+    refreshDocuments();
+    showFeedback(
+      "success",
+      itemCount === 1
+        ? `1 Eintrag wurde ${actionLabel}.`
+        : `${itemCount} Einträge wurden ${actionLabel}.`,
+    );
   }
 
   function refreshDocuments() {
@@ -1260,26 +1420,31 @@ export function DocumentLibraryContent({
     detailsDialogIdRef.current = document.id;
     setDetailsDialog(document);
     setDetailsData(null);
+    setDetailsError(null);
     setIsDetailsLoading(true);
 
-    void runDocumentTask(async () => {
-      const result = await getDocumentDetails(document.id);
-      if (!result.success) {
-        showFeedback("error", "Die Dateidetails konnten nicht geladen werden.");
+    const detailsFailure = "Die Dateidetails konnten nicht geladen werden.";
+    void getDocumentDetails(document.id)
+      .then((result) => {
+        // The dialog may have moved on to another document meanwhile.
+        if (detailsDialogIdRef.current !== document.id) return;
         setIsDetailsLoading(false);
-        return;
-      }
-
-      // The table row that seeded this dialog is mount-time data; the fetch
-      // is the authority (freshness contract rule 3). Reopening right after
-      // a mutation must not show the pre-mutation row while the route
-      // refresh is still rendering.
-      if (detailsDialogIdRef.current === document.id) {
+        if (!result.success) {
+          setDetailsError(detailsFailure);
+          return;
+        }
+        // The table row that seeded this dialog is mount-time data; the fetch
+        // is the authority (freshness contract rule 3). Reopening right after
+        // a mutation must not show the pre-mutation row while the route
+        // refresh is still rendering.
         setDetailsDialog(result.document);
-      }
-      setDetailsData(result);
-      setIsDetailsLoading(false);
-    });
+        setDetailsData(result);
+      })
+      .catch(() => {
+        if (detailsDialogIdRef.current !== document.id) return;
+        setIsDetailsLoading(false);
+        setDetailsError(detailsFailure);
+      });
   }
 
   function updateSearch({
@@ -1317,21 +1482,21 @@ export function DocumentLibraryContent({
         ? currentFolderId
         : folderDialogParentFolderId;
 
-    void runDocumentTask(async () => {
-      const result = await createDocumentFolder({
-        name,
-        parentFolderId,
-      });
-      if (!result.success) {
-        showFeedback("error", "Der Ordner konnte nicht erstellt werden.");
-        return;
-      }
-
-      setFolderName("");
-      setFolderDialogOpen(false);
-      setFolderDialogParentFolderId(undefined);
-      refreshDocuments();
-    });
+    const folderFailure = "Der Ordner konnte nicht erstellt werden.";
+    setFolderError(null);
+    void createFolder
+      .run({ name, parentFolderId })
+      .then((result) => {
+        if (!result.success) {
+          setFolderError(folderFailure);
+          return;
+        }
+        setFolderName("");
+        setFolderDialogOpen(false);
+        setFolderDialogParentFolderId(undefined);
+        refreshDocuments();
+      })
+      .catch(() => setFolderError(folderFailure));
   }
 
   function openCreateFolderDialog(
@@ -1381,6 +1546,7 @@ export function DocumentLibraryContent({
   }
 
   function openRenameFolderDialog(folder: DocumentFolder) {
+    setRenameError(null);
     setRenameDialog({
       kind: "folder",
       id: folder.id,
@@ -1391,6 +1557,7 @@ export function DocumentLibraryContent({
 
   function openRenameDocumentDialog(document: OrganizationDocument) {
     if (isTrashView) return;
+    setRenameError(null);
     setRenameDialog({
       kind: "document",
       id: document.id,
@@ -1412,28 +1579,32 @@ export function DocumentLibraryContent({
       return;
     }
 
-    void runDocumentTask(async () => {
-      const result =
-        renameDialog.kind === "folder"
-          ? await renameDocumentFolder({
-              folderId: renameDialog.id,
-              name: nextName,
-            })
-          : await renameDocument({
-              documentId: renameDialog.id,
-              displayName: nextName,
-            });
-      if (!result.success) {
-        showFeedback(
-          "error",
-          renameDialog.kind === "folder"
-            ? "Der Ordner konnte nicht umbenannt werden."
-            : "Die Datei konnte nicht umbenannt werden.",
-        );
-      }
-      setRenameDialog(null);
-      refreshDocuments();
-    });
+    const target = renameDialog;
+    const renameFailure =
+      target.kind === "folder"
+        ? "Der Ordner konnte nicht umbenannt werden."
+        : "Die Datei konnte nicht umbenannt werden.";
+    setRenameError(null);
+    void busy
+      .run(target.id, async () => {
+        const result =
+          target.kind === "folder"
+            ? await renameDocumentFolder({
+                folderId: target.id,
+                name: nextName,
+              })
+            : await renameDocument({
+                documentId: target.id,
+                displayName: nextName,
+              });
+        if (!result.success) {
+          setRenameError(renameFailure);
+          return;
+        }
+        setRenameDialog(null);
+        await settleAfterRefresh();
+      })
+      .catch(() => setRenameError(renameFailure));
   }
 
   function handleDeleteFolder(folder: DocumentFolder) {
@@ -1442,40 +1613,56 @@ export function DocumentLibraryContent({
       description: `Der Ordner „${folder.name}“ und alle enthaltenen Dateien werden in den Papierkorb verschoben.`,
       confirmLabel: "Ordner löschen",
       onConfirm: () => {
-        void runDocumentTask(async () => {
+        setSelectedFolderIds((current) => {
+          const next = new Set(current);
+          next.delete(folder.id);
+          return next;
+        });
+        void runMutation(folder.id, async () => {
           const result = await deleteDocumentFolder(folder.id);
           if (!result.success) {
             showFeedback("error", "Der Ordner konnte nicht gelöscht werden.");
+            return result;
           }
-          setSelectedFolderIds((current) => {
-            const next = new Set(current);
-            next.delete(folder.id);
-            return next;
-          });
-          refreshDocuments();
+          showFeedback("success", "Ordner wurde in den Papierkorb verschoben.");
+          await settleAfterRefresh();
+          return result;
         });
       },
     });
   }
 
+  // The select flips at once; a failure puts the previous category back and
+  // explains itself beside the control.
   function handleUpdateCategory(
     document: OrganizationDocument,
     category: DocumentCategory,
   ) {
     if (isTrashView) return;
-    void runDocumentTask(async () => {
-      const result = await updateDocumentCategory({
-        documentId: document.id,
-        category,
-      });
-
-      if (!result.success) {
-        showFeedback("error", "Die Kategorie konnte nicht geändert werden.");
-      }
-
-      setDetailsDialog(result.success ? result.document : document);
-      refreshDocuments();
-    });
+    const categoryFailure = "Die Kategorie konnte nicht geändert werden.";
+    const revert = () => {
+      if (detailsDialogIdRef.current !== document.id) return;
+      setDetailsDialog(document);
+      setDetailsError(categoryFailure);
+    };
+    setDetailsError(null);
+    setDetailsDialog({ ...document, category });
+    void busy
+      .run(document.id, async () => {
+        const result = await updateDocumentCategory({
+          documentId: document.id,
+          category,
+        });
+        if (!result.success) {
+          revert();
+          return;
+        }
+        if (detailsDialogIdRef.current === document.id) {
+          setDetailsDialog(result.document);
+        }
+        refreshDocuments();
+      })
+      .catch(revert);
   }
 
   function handleDeleteDocument(document: OrganizationDocument) {
@@ -1484,40 +1671,15 @@ export function DocumentLibraryContent({
       description: `„${document.displayName}“ wird in den Papierkorb verschoben und kann dort wiederhergestellt werden.`,
       confirmLabel: "Datei löschen",
       onConfirm: () => {
-        void runDocumentTask(async () => {
-          const result = await deleteDocument(document.id);
-          if (!result.success) {
-            showFeedback("error", "Die Datei konnte nicht gelöscht werden.");
-          }
-          setSelectedDocumentIds((current) => {
-            const next = new Set(current);
-            next.delete(document.id);
-            return next;
-          });
-          refreshDocuments();
-        });
+        removeDocumentsFromSelection([document.id]);
+        void trashDocuments([document]);
       },
     });
   }
 
   function handleRestoreDocument(document: OrganizationDocument) {
-    void runDocumentTask(async () => {
-      const result = await restoreDocument(document.id);
-      if (!result.success) {
-        showFeedback(
-          "error",
-          "Die Datei konnte nicht wiederhergestellt werden.",
-        );
-      } else {
-        showFeedback("success", "Datei wurde wiederhergestellt.");
-      }
-      setSelectedDocumentIds((current) => {
-        const next = new Set(current);
-        next.delete(document.id);
-        return next;
-      });
-      refreshDocuments();
-    });
+    removeDocumentsFromSelection([document.id]);
+    void restoreDocuments([document]);
   }
 
   function handlePermanentDeleteDocument(document: OrganizationDocument) {
@@ -1526,23 +1688,28 @@ export function DocumentLibraryContent({
       description: `„${document.displayName}“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`,
       confirmLabel: "Endgültig löschen",
       onConfirm: () => {
-        void runDocumentTask(async () => {
-          const result = await permanentlyDeleteDocument(document.id);
-          if (!result.success) {
-            showFeedback(
-              "error",
-              result.error === "document_has_equipment_history"
-                ? "Die Datei gehört zur Anlagenhistorie und kann nicht endgültig gelöscht werden. Entferne zuerst die Anlagenverknüpfung."
-                : "Die Datei konnte nicht endgültig gelöscht werden.",
-            );
-          }
-          setSelectedDocumentIds((current) => {
-            const next = new Set(current);
-            next.delete(document.id);
-            return next;
+        removeDocumentsFromSelection([document.id]);
+        documentList.remove(document.id);
+        void busy
+          .run(document.id, () => permanentlyDeleteDocument(document.id))
+          .catch((): DocumentMutationResult => ({
+            success: false,
+            error: "request_failed",
+          }))
+          .then((result) => {
+            if (!result.success) {
+              documentList.rollback(document.id);
+              showFeedback(
+                "error",
+                result.error === "document_has_equipment_history"
+                  ? "Die Datei gehört zur Anlagenhistorie und kann nicht endgültig gelöscht werden. Entferne zuerst die Anlagenverknüpfung."
+                  : "Die Datei konnte nicht endgültig gelöscht werden.",
+              );
+              return;
+            }
+            showFeedback("success", "Datei wurde endgültig gelöscht.");
+            refreshDocuments();
           });
-          refreshDocuments();
-        });
       },
     });
   }
@@ -1605,19 +1772,26 @@ export function DocumentLibraryContent({
       destinationFolderId,
       onSuccess: () => {
         setMoveCopyDialog(null);
+        moveCopyBatch.reset();
       },
     });
   }
-  function handleDownload(document: OrganizationDocument) {
-    void runDocumentTask(async () => {
-      const result = await getDocumentSignedUrl(document.id);
-      if (!result.success) {
-        showFeedback("error", "Die Datei konnte nicht geöffnet werden.");
-        return;
-      }
 
-      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
-    });
+  // The details dialog's own actions: the button spins under the row's busy
+  // id and failures render inside the dialog.
+  function handleDownload(document: OrganizationDocument) {
+    const downloadFailure = "Die Datei konnte nicht geöffnet werden.";
+    setDetailsError(null);
+    void busy
+      .run(document.id, async () => {
+        const result = await getDocumentSignedUrl(document.id);
+        if (!result.success) {
+          setDetailsError(downloadFailure);
+          return;
+        }
+        window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+      })
+      .catch(() => setDetailsError(downloadFailure));
   }
 
   function handleVersionUpload(files: FileList | null) {
@@ -1626,19 +1800,23 @@ export function DocumentLibraryContent({
     const file = files[0];
     const activeDocument = detailsDialog;
     const documentId = activeDocument.id;
+    const uploadFailure = "Die neue Version konnte nicht hochgeladen werden.";
+    setDetailsError(null);
 
-    void runDocumentTask(async () => {
-      const result = await uploadDocumentVersionDirect({
-        documentId,
-        file,
-      });
+    void busy
+      .run(documentId, async () => {
+        const result = await uploadDocumentVersionDirect({
+          documentId,
+          file,
+        });
 
-      if (!result.success) {
-        showFeedback(
-          "error",
-          "Die neue Version konnte nicht hochgeladen werden.",
-        );
-      } else {
+        if (!result.success) {
+          if (detailsDialogIdRef.current === documentId) {
+            setDetailsError(uploadFailure);
+          }
+          return;
+        }
+
         showFeedback("success", "Neue Version wurde hochgeladen.");
         if (detailsDialogIdRef.current === documentId) {
           const refreshedDocument = {
@@ -1663,32 +1841,39 @@ export function DocumentLibraryContent({
                 document: refreshedDocument,
               });
             } else {
-              showFeedback(
-                "error",
-                "Die Dateidetails konnten nicht geladen werden.",
-              );
+              setDetailsError("Die Dateidetails konnten nicht geladen werden.");
             }
             setIsDetailsLoading(false);
           }
         }
-      }
-
-      if (versionInputRef.current) versionInputRef.current.value = "";
-      refreshDocuments();
-    });
+        refreshDocuments();
+      })
+      .catch(() => {
+        if (detailsDialogIdRef.current === documentId) {
+          setDetailsError(uploadFailure);
+          setIsDetailsLoading(false);
+        }
+      })
+      .finally(() => {
+        if (versionInputRef.current) versionInputRef.current.value = "";
+      });
   }
 
   function handleDownloadVersion(versionId: string) {
-    void runDocumentTask(async () => {
-      const result = await getDocumentVersionSignedUrl(versionId, {
-        download: true,
-      });
-      if (!result.success) {
-        showFeedback("error", "Die Version konnte nicht geöffnet werden.");
-        return;
-      }
-      window.open(result.signedUrl, "_blank", "noopener,noreferrer");
-    });
+    const downloadFailure = "Die Version konnte nicht geöffnet werden.";
+    setDetailsError(null);
+    void busy
+      .run(versionId, async () => {
+        const result = await getDocumentVersionSignedUrl(versionId, {
+          download: true,
+        });
+        if (!result.success) {
+          setDetailsError(downloadFailure);
+          return;
+        }
+        window.open(result.signedUrl, "_blank", "noopener,noreferrer");
+      })
+      .catch(() => setDetailsError(downloadFailure));
   }
 
   function hasExternalFileDrag(dataTransfer: DataTransfer): boolean {
@@ -1763,37 +1948,54 @@ export function DocumentLibraryContent({
     if (documentsToUse.length === 0 && filteredFoldersToMove.length === 0)
       return;
 
-    void runDocumentTask(async () => {
+    // A dropped document leaves the current folder at once (folder view
+    // only: in "Alle Dateien" it stays listed); a failed move brings it back.
+    const leavesCurrentList = visibleView === "folders";
+    if (leavesCurrentList) {
+      for (const document of documentsToUse) {
+        documentList.remove(document.id);
+      }
+    }
+    clearSelection();
+
+    void (async () => {
       let failedCount = 0;
 
       for (const document of documentsToUse) {
-        const result = await moveDocument({
-          documentId: document.id,
-          folderId: targetFolderId,
-        });
-        if (!result.success) failedCount++;
+        const succeeded = await runMutation(document.id, () =>
+          moveDocument({
+            documentId: document.id,
+            folderId: targetFolderId,
+          }),
+        );
+        if (succeeded) continue;
+        failedCount++;
+        documentList.rollback(document.id);
       }
 
       for (const folder of filteredFoldersToMove) {
-        const result = await moveDocumentFolder({
-          folderId: folder.id,
-          parentFolderId: targetFolderId,
-        });
-        if (!result.success) failedCount++;
+        const succeeded = await runMutation(folder.id, () =>
+          moveDocumentFolder({
+            folderId: folder.id,
+            parentFolderId: targetFolderId,
+          }),
+        );
+        if (!succeeded) failedCount++;
       }
 
       if (failedCount > 0) {
         showFeedback(
           "error",
-          `${failedCount} Eintrag/Einträge konnten nicht verschoben werden.`,
+          failedCount === 1
+            ? "1 Eintrag konnte nicht verschoben werden."
+            : `${failedCount} Einträge konnten nicht verschoben werden.`,
         );
       } else {
         showFeedback("success", "Auswahl wurde verschoben.");
       }
 
-      clearSelection();
       refreshDocuments();
-    });
+    })();
   }
 
   async function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -1907,18 +2109,27 @@ export function DocumentLibraryContent({
       } in den Papierkorb verschoben.`,
       confirmLabel: "Einträge löschen",
       onConfirm: () => {
-        void runDocumentTask(async () => {
-          let failedCount = 0;
+        clearSelection();
+        // Documents only: the undoable path. Folders have no restore action,
+        // so a mixed selection reports without offering „Rückgängig".
+        if (foldersToDelete.length === 0) {
+          void trashDocuments(documentsToDelete);
+          return;
+        }
+
+        void (async () => {
+          const { failedCount: failedDocumentCount } = await mutateDocuments(
+            documentsToDelete,
+            deleteDocument,
+          );
+          let failedCount = failedDocumentCount;
           for (const folder of foldersToDelete) {
-            const result = await deleteDocumentFolder(folder.id);
-            if (!result.success) failedCount++;
-          }
-          for (const document of documentsToDelete) {
-            const result = await deleteDocument(document.id);
-            if (!result.success) failedCount++;
+            const succeeded = await runMutation(folder.id, () =>
+              deleteDocumentFolder(folder.id),
+            );
+            if (!succeeded) failedCount++;
           }
 
-          clearSelection();
           if (failedCount > 0) {
             const failedItemLabel =
               failedCount === 1 ? "1 Eintrag" : `${failedCount} Einträge`;
@@ -1928,9 +2139,16 @@ export function DocumentLibraryContent({
                 failedCount === 1 ? "konnte" : "konnten"
               } nicht gelöscht werden.`,
             );
+          } else {
+            showFeedback(
+              "success",
+              `${selectedItemLabel} ${
+                itemCount === 1 ? "wurde" : "wurden"
+              } in den Papierkorb verschoben.`,
+            );
           }
           refreshDocuments();
-        });
+        })();
       },
     });
   }
@@ -1944,23 +2162,9 @@ export function DocumentLibraryContent({
 
   function handleBatchRestore() {
     if (selectedDocuments.length === 0) return;
-
-    void runDocumentTask(async () => {
-      let failedCount = 0;
-      for (const document of selectedDocuments) {
-        const result = await restoreDocument(document.id);
-        if (!result.success) failedCount++;
-      }
-
-      clearSelection();
-      if (failedCount > 0) {
-        showFeedback(
-          "error",
-          `${failedCount} Datei(en) konnten nicht wiederhergestellt werden.`,
-        );
-      }
-      refreshDocuments();
-    });
+    const documentsToRestore = selectedDocuments;
+    clearSelection();
+    void restoreDocuments(documentsToRestore);
   }
 
   function openBatchMoveSelectionDialog() {
@@ -2131,9 +2335,7 @@ export function DocumentLibraryContent({
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                disabled={
-                  isPending || isNavigationPending || !canUseUploadActions
-                }
+                disabled={isNavigationPending || !canUseUploadActions}
                 className="sm:mt-1"
               >
                 <Plus className="size-4" />
@@ -2310,7 +2512,7 @@ export function DocumentLibraryContent({
                   size="icon-sm"
                   className="size-9 rounded-md"
                   onClick={handleBatchRestore}
-                  disabled={isPending || selectedDocuments.length === 0}
+                  disabled={busy.anyBusy || selectedDocuments.length === 0}
                 >
                   <Undo2 className="size-4" />
                   <span className="sr-only">Wiederherstellen</span>
@@ -2323,7 +2525,7 @@ export function DocumentLibraryContent({
                     size="icon-sm"
                     className="size-9 rounded-md"
                     onClick={openBatchMoveSelectionDialog}
-                    disabled={isPending}
+                    disabled={busy.anyBusy}
                   >
                     <MoveRight className="size-4" />
                     <span className="sr-only">Verschieben</span>
@@ -2334,7 +2536,7 @@ export function DocumentLibraryContent({
                     size="icon-sm"
                     className="size-9 rounded-md"
                     onClick={openBatchCopySelectionDialog}
-                    disabled={isPending}
+                    disabled={busy.anyBusy}
                   >
                     <Copy className="size-4" />
                     <span className="sr-only">Kopieren</span>
@@ -2345,7 +2547,7 @@ export function DocumentLibraryContent({
                     size="icon-sm"
                     className="size-9 rounded-md text-destructive hover:text-destructive"
                     onClick={handleBatchDelete}
-                    disabled={isPending}
+                    disabled={busy.anyBusy}
                   >
                     <Trash2 className="size-4" />
                     <span className="sr-only">Löschen</span>
@@ -2512,7 +2714,8 @@ export function DocumentLibraryContent({
           projects={projects}
           clients={clients}
           employees={employees}
-          isPending={isPending}
+          isPending={false}
+          isItemPending={busy.isBusy}
           onOpenDocument={openDocumentViewer}
           onDetailsDocument={openDetailsDialog}
           onRenameDocument={openRenameDocumentDialog}
@@ -2561,8 +2764,9 @@ export function DocumentLibraryContent({
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <Folder className="size-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {folder.name}
+                          <p className="flex items-center gap-2 text-sm font-medium">
+                            <span className="truncate">{folder.name}</span>
+                            <InlinePending active={busy.isBusy(folder.id)} />
                           </p>
                           <p className="text-xs text-muted-foreground">
                             Ordner · {formatDate(folder.createdAt)}
@@ -2572,7 +2776,7 @@ export function DocumentLibraryContent({
                       <div onClick={(event) => event.stopPropagation()}>
                         <FolderActionsMenu
                           folder={folder}
-                          disabled={isPending}
+                          disabled={busy.isBusy(folder.id)}
                           handlers={handlers}
                         />
                       </div>
@@ -2626,8 +2830,11 @@ export function DocumentLibraryContent({
                       <div className="flex min-w-0 flex-1 items-center gap-2">
                         <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {document.displayName}
+                          <p className="flex items-center gap-2 text-sm font-medium">
+                            <span className="truncate">
+                              {document.displayName}
+                            </span>
+                            <InlinePending active={busy.isBusy(document.id)} />
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {DOCUMENT_CATEGORY_LABELS[document.category]} ·{" "}
@@ -2648,7 +2855,7 @@ export function DocumentLibraryContent({
                         <DocumentActionsMenu
                           document={document}
                           isTrashView={isTrashView}
-                          disabled={isPending}
+                          disabled={busy.isBusy(document.id)}
                           handlers={handlers}
                         />
                       </div>
@@ -2676,7 +2883,8 @@ export function DocumentLibraryContent({
             selectedFolderIds={selectedFolderIds}
             selectedDocumentIds={selectedDocumentIds}
             isTrashView={isTrashView}
-            isPending={isPending}
+            isPending={false}
+            isItemPending={busy.isBusy}
             onOpenFolder={(folder) => navigateToFolder(folder.id)}
             onOpenDocument={openDocumentViewer}
             onRenameFolder={openRenameFolderDialog}
@@ -2787,7 +2995,11 @@ export function DocumentLibraryContent({
 
       <Dialog
         open={!!renameDialog}
-        onOpenChange={(open) => !open && setRenameDialog(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setRenameDialog(null);
+          setRenameError(null);
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -2814,8 +3026,10 @@ export function DocumentLibraryContent({
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
               placeholder="Name"
+              aria-invalid={renameError ? true : undefined}
               autoFocus
             />
+            <ErrorText>{renameError}</ErrorText>
             <DialogFooter>
               <Button
                 type="button"
@@ -2824,7 +3038,8 @@ export function DocumentLibraryContent({
               >
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" disabled={isRenamePending}>
+                {isRenamePending && <Loader2 className="size-4 animate-spin" />}
                 Umbenennen
               </Button>
             </DialogFooter>
@@ -2863,7 +3078,9 @@ export function DocumentLibraryContent({
         open={folderDialogOpen}
         onOpenChange={(open) => {
           setFolderDialogOpen(open);
-          if (!open) setFolderDialogParentFolderId(undefined);
+          if (open) return;
+          setFolderDialogParentFolderId(undefined);
+          setFolderError(null);
         }}
       >
         <DialogContent>
@@ -2885,7 +3102,9 @@ export function DocumentLibraryContent({
               value={folderName}
               onChange={(event) => setFolderName(event.target.value)}
               placeholder="Ordnername"
+              aria-invalid={folderError ? true : undefined}
             />
+            <ErrorText>{folderError}</ErrorText>
             <DialogFooter>
               <Button
                 type="button"
@@ -2894,7 +3113,10 @@ export function DocumentLibraryContent({
               >
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" disabled={createFolder.isPending}>
+                {createFolder.isPending && (
+                  <Loader2 className="size-4 animate-spin" />
+                )}
                 Erstellen
               </Button>
             </DialogFooter>
@@ -2928,9 +3150,14 @@ export function DocumentLibraryContent({
         selectedDocuments={moveCopyDialog?.documents ?? []}
         selectedFolders={moveCopyDialog?.folders ?? []}
         sourceFolderId={moveCopyDialog?.sourceFolderId ?? null}
-        isPending={isPending || isMoveCopySubmitting}
+        isPending={moveCopyBatch.isRunning}
+        progress={moveCopyBatch.isRunning ? moveCopyBatch.progress : null}
+        error={moveCopyError}
         onOpenChange={(open) => {
-          if (!open && !isMoveCopySubmitting) setMoveCopyDialog(null);
+          if (open || moveCopyBatch.isRunning) return;
+          setMoveCopyDialog(null);
+          setMoveCopyError(null);
+          moveCopyBatch.reset();
         }}
         onConfirm={handleMoveCopyConfirm}
         onCreateFolder={openCreateFolderDialog}
@@ -2944,6 +3171,7 @@ export function DocumentLibraryContent({
           detailsDialogIdRef.current = null;
           setDetailsDialog(null);
           setDetailsData(null);
+          setDetailsError(null);
           setIsDetailsLoading(false);
         }}
       >
@@ -2954,6 +3182,7 @@ export function DocumentLibraryContent({
               Metadaten und Verknüpfungen zu dieser Datei.
             </DialogDescription>
           </DialogHeader>
+          <ErrorText>{detailsError}</ErrorText>
           {detailsDialog && (
             <div className="space-y-3 text-sm">
               <div>
@@ -2997,7 +3226,7 @@ export function DocumentLibraryContent({
                           value as DocumentCategory,
                         )
                       }
-                      disabled={isPending || isTrashView}
+                      disabled={isDetailsBusy || isTrashView}
                     >
                       <SelectTrigger
                         className="w-full"
@@ -3083,8 +3312,11 @@ export function DocumentLibraryContent({
                           variant="outline"
                           size="sm"
                           onClick={() => versionInputRef.current?.click()}
-                          disabled={isPending}
+                          disabled={isDetailsBusy}
                         >
+                          {isDetailsBusy && (
+                            <Loader2 className="size-4 animate-spin" />
+                          )}
                           Neue Version
                         </Button>
                         <input
@@ -3114,8 +3346,13 @@ export function DocumentLibraryContent({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDownload(detailsDialog)}
+                      disabled={isDetailsBusy}
                     >
-                      <Download className="size-4" />
+                      {isDetailsBusy ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
                       Download
                     </Button>
                   </div>
@@ -3151,8 +3388,13 @@ export function DocumentLibraryContent({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDownloadVersion(version.id)}
+                            disabled={busy.isBusy(version.id)}
                           >
-                            <Download className="size-4" />
+                            {busy.isBusy(version.id) ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Download className="size-4" />
+                            )}
                             Download
                           </Button>
                         </div>

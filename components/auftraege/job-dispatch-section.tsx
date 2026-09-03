@@ -5,13 +5,23 @@
 // that this person saw this exact work instruction revision — never
 // attendance, time, or a customer promise.
 
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { CalendarCheck, Loader2, MessageSquare, Send } from 'lucide-react';
 
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useServerAction } from '@/hooks/use-server-action';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { InlinePending } from '@/components/ui/inline-pending';
 import {
   Dialog,
   DialogContent,
@@ -79,8 +89,14 @@ export function JobDispatchSection({
   onStateChange?: (state: FieldDispatchState) => void;
 }): ReactElement | null {
   const router = useRouter();
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busyDispatchId, setBusyDispatchId] = useState<string | null>(null);
+  // The acknowledge failure belongs to the card it was clicked on.
+  const [actionError, setActionError] = useState<{
+    dispatchId: string;
+    message: string;
+  } | null>(null);
+  const { run: runOnCard, isBusy: isCardBusy } = useBusyIds();
+  const { run: runChallenge, isPending: isChallenging } =
+    useServerAction(challengeDispatch);
   const [challengeTarget, setChallengeTarget] =
     useState<EmployeeDispatchCard | null>(null);
   const [challengeReason, setChallengeReason] = useState('');
@@ -132,55 +148,59 @@ export function JobDispatchSection({
 
   const handleAcknowledge = useCallback(
     async (card: EmployeeDispatchCard) => {
-      setBusyDispatchId(card.dispatchId);
       setActionError(null);
-      const result = await acknowledgeDispatch(
-        card.dispatchId,
-        card.revisionNumber
-      );
-      setBusyDispatchId(null);
-      if (!result.success) {
-        setActionError(dispatchErrorMessage(result.error));
-      } else {
-        router.refresh();
+      try {
+        const result = await runOnCard(card.dispatchId, () =>
+          acknowledgeDispatch(card.dispatchId, card.revisionNumber)
+        );
+        if (!result.success) {
+          setActionError({
+            dispatchId: card.dispatchId,
+            message: dispatchErrorMessage(result.error),
+          });
+        } else {
+          router.refresh();
+        }
+      } catch {
+        setActionError({
+          dispatchId: card.dispatchId,
+          message: dispatchErrorMessage('unexpected_error'),
+        });
       }
+      // Re-read either way: a rejected acknowledgement usually means the
+      // card itself changed (new revision, withdrawn dispatch).
       await refresh();
     },
-    [refresh, router]
+    [refresh, router, runOnCard]
   );
 
   const [challengeError, setChallengeError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!readOnly) return;
-    setChallengeTarget(null);
-    setChallengeError(null);
-  }, [readOnly]);
-
-  const handleChallenge = useCallback(async () => {
-    if (readOnly || !challengeTarget) return;
-    setBusyDispatchId(challengeTarget.dispatchId);
-    setChallengeError(null);
-    try {
-      const result = await challengeDispatch(
-        challengeTarget.dispatchId,
-        challengeTarget.revisionNumber,
-        challengeReason
-      );
-      if (!result.success) {
-        // Shown inside the still-open dialog so the typed reason survives.
-        setChallengeError(dispatchErrorMessage(result.error));
-        return;
+  const handleChallenge = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (readOnly || !challengeTarget) return;
+      setChallengeError(null);
+      try {
+        const result = await runChallenge(
+          challengeTarget.dispatchId,
+          challengeTarget.revisionNumber,
+          challengeReason
+        );
+        if (!result.success) {
+          // Shown inside the still-open dialog so the typed reason survives.
+          setChallengeError(dispatchErrorMessage(result.error));
+          return;
+        }
+        setChallengeTarget(null);
+        setChallengeReason('');
+        router.refresh();
+        await refresh();
+      } catch {
+        setChallengeError(dispatchErrorMessage('unexpected_error'));
       }
-      setChallengeTarget(null);
-      setChallengeReason('');
-      router.refresh();
-      await refresh();
-    } catch {
-      setChallengeError(dispatchErrorMessage('unexpected_error'));
-    } finally {
-      setBusyDispatchId(null);
-    }
-  }, [challengeTarget, challengeReason, readOnly, refresh, router]);
+    },
+    [challengeTarget, challengeReason, readOnly, refresh, router, runChallenge]
+  );
 
   // An initial load failure must stay visible instead of silently reading as
   // "kein Einsatz".
@@ -218,7 +238,6 @@ export function JobDispatchSection({
         <Send className="size-4" />
         Mein Einsatz
       </h3>
-      <ErrorText className="mb-3">{actionError}</ErrorText>
       <div className="space-y-3">
         {cards.map((card) => (
           <div
@@ -250,6 +269,11 @@ export function JobDispatchSection({
                   : ''}
               </p>
             )}
+            <ErrorText className="mt-2">
+              {actionError?.dispatchId === card.dispatchId
+                ? actionError.message
+                : null}
+            </ErrorText>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {card.myState === 'ausstehend' && !readOnly ? (
                 <>
@@ -257,18 +281,15 @@ export function JobDispatchSection({
                     data-testid={card.dispatchId === primaryPendingDispatchId ? 'field-primary-next-action' : undefined}
                     variant={card.dispatchId === primaryPendingDispatchId ? 'default' : 'outline'}
                     className="min-h-11 flex-1 sm:flex-none"
-                    disabled={busyDispatchId === card.dispatchId}
+                    disabled={isCardBusy(card.dispatchId)}
                     onClick={() => void handleAcknowledge(card)}
                   >
-                    {busyDispatchId === card.dispatchId ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : null}
                     Einsatz bestätigen
                   </Button>
                   <Button
                     variant="outline"
                     className="min-h-11"
-                    disabled={busyDispatchId === card.dispatchId}
+                    disabled={isCardBusy(card.dispatchId)}
                     onClick={() => {
                       setChallengeReason('');
                       setChallengeTarget(card);
@@ -277,6 +298,10 @@ export function JobDispatchSection({
                     <MessageSquare className="size-4" />
                     Rückfrage stellen
                   </Button>
+                  <InlinePending
+                    active={isCardBusy(card.dispatchId)}
+                    label="Einsatz wird bestätigt"
+                  />
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -292,7 +317,7 @@ export function JobDispatchSection({
       </div>
 
       <Dialog
-        open={challengeTarget !== null}
+        open={!readOnly && challengeTarget !== null}
         onOpenChange={(open) => {
           if (!open) {
             setChallengeTarget(null);
@@ -308,14 +333,7 @@ export function JobDispatchSection({
               bis das Büro entscheidet.
             </DialogDescription>
           </DialogHeader>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleChallenge();
-            }}
-            noValidate
-            className="space-y-4"
-          >
+          <form onSubmit={handleChallenge} noValidate className="space-y-4">
             <Field
               label="Begründung"
               htmlFor="dispatch-challenge-reason"
@@ -346,9 +364,10 @@ export function JobDispatchSection({
                 disabled={
                   readOnly ||
                   challengeReason.trim().length < 8 ||
-                  busyDispatchId === challengeTarget?.dispatchId
+                  isChallenging
                 }
               >
+                {isChallenging && <Loader2 className="size-4 animate-spin" />}
                 Rückfrage senden
               </Button>
             </DialogFooter>

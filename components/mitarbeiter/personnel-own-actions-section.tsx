@@ -18,6 +18,7 @@ import { ErrorText } from "@/components/ui/error-text";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { useLiveView, type LiveViewResult } from "@/hooks/use-live-view";
 import { useServerAction } from "@/hooks/use-server-action";
 import { uploadPersonnelDocumentDirect } from "@/lib/documents/upload-client";
@@ -31,7 +32,7 @@ import {
 import { REQUIREMENT_STATE_LABELS } from "@/lib/personnel/lifecycle";
 
 export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisible?: boolean }) {
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { run: runBusy, isBusy } = useBusyIds();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState("Krankheitsnachweis");
@@ -63,9 +64,9 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   if (!forceVisible && requirements.length === 0 && documents.length === 0) return null;
 
   async function acknowledge(requirementId: string, requirementVersion: number): Promise<void> {
-    setBusyId(requirementId);
     setError(null);
-    try {
+    await runBusy(requirementId, async () => {
+      try {
       const result = await acknowledgePersonnelRequirement({
         requirementId,
         requirementVersion,
@@ -74,33 +75,31 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       });
       if (!result.success) setError(result.error === "stale_version" ? "Die Aufgabe wurde inzwischen geändert." : "Die Bestätigung konnte nicht gespeichert werden.");
       await view.refresh();
-    } catch {
-      setError("Die Bestätigung konnte nicht gespeichert werden.");
-    } finally {
-      setBusyId(null);
-    }
+      } catch {
+        setError("Die Bestätigung konnte nicht gespeichert werden.");
+      }
+    });
   }
 
-  async function download(documentId: string): Promise<void> {
-    setBusyId(documentId);
-    try {
+  async function download(rowId: string, documentId: string): Promise<void> {
+    await runBusy(rowId, async () => {
+      try {
       const result = await getPersonnelDocumentSignedUrl(documentId);
       if (!result.success) {
         setError("Das Dokument konnte nicht geöffnet werden.");
         return;
       }
       window.location.assign(result.data.signedUrl);
-    } catch {
-      setError("Das Dokument konnte nicht geöffnet werden.");
-    } finally {
-      setBusyId(null);
-    }
+      } catch {
+        setError("Das Dokument konnte nicht geöffnet werden.");
+      }
+    });
   }
 
   async function acknowledgeDocument(personnelDocumentId: string, version: number): Promise<void> {
-    setBusyId(personnelDocumentId);
     setError(null);
-    try {
+    await runBusy(personnelDocumentId, async () => {
+      try {
       const result = await acknowledgePersonnelDocument({
         personnelDocumentId,
         documentVersionNumber: version,
@@ -112,11 +111,10 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       } else {
         await view.refresh();
       }
-    } catch {
-      setError("Die Empfangsbestätigung konnte nicht gespeichert werden.");
-    } finally {
-      setBusyId(null);
-    }
+      } catch {
+        setError("Die Empfangsbestätigung konnte nicht gespeichert werden.");
+      }
+    });
   }
 
   async function uploadEvidence(): Promise<void> {
@@ -175,8 +173,8 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
                 <Badge variant={requirement.state === "blocked" ? "destructive" : "secondary"}>{REQUIREMENT_STATE_LABELS[requirement.state]}</Badge>
                 {requirement.requirementType === "acknowledgement" &&
                 (requirement.state === "missing" || requirement.state === "pending") ? (
-                  <Button size="sm" onClick={() => void acknowledge(requirement.id, requirement.version)} disabled={busyId !== null}>
-                    {busyId === requirement.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Bestätigen
+                  <Button size="sm" onClick={() => void acknowledge(requirement.id, requirement.version)} disabled={isBusy(requirement.id)}>
+                    {isBusy(requirement.id) ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Bestätigen
                   </Button>
                 ) : null}
               </div>
@@ -190,8 +188,8 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
             <li key={document.id} className="flex items-center justify-between gap-3 p-3">
               <div className="min-w-0"><p className="truncate text-sm font-medium">{document.displayName}</p><p className="text-xs text-muted-foreground">{document.documentType} · Version {document.currentVersionNumber}</p></div>
               <div className="flex flex-wrap justify-end gap-1">
-                <Button size="sm" variant="ghost" onClick={() => void download(document.documentId)} disabled={busyId !== null}><Download className="size-4" /> Öffnen</Button>
-                <Button size="sm" variant="outline" onClick={() => void acknowledgeDocument(document.id, document.currentVersionNumber)} disabled={busyId !== null}><Check className="size-4" /> Erhalt bestätigen</Button>
+                <Button size="sm" variant="ghost" onClick={() => void download(document.id, document.documentId)} disabled={isBusy(document.id)}>{isBusy(document.id) ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Öffnen</Button>
+                <Button size="sm" variant="outline" onClick={() => void acknowledgeDocument(document.id, document.currentVersionNumber)} disabled={isBusy(document.id)}>{isBusy(document.id) ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Erhalt bestätigen</Button>
               </div>
             </li>
           ))}

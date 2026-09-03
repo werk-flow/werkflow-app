@@ -64,6 +64,8 @@ interface EditRequestDialogProps {
   assignees: Array<{ userId: string; name: string }>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fires after the server confirmed; the page marks itself until refreshed props land. */
+  onSaved?: () => void;
 }
 
 export function EditRequestDialog({
@@ -71,6 +73,7 @@ export function EditRequestDialog({
   assignees,
   open,
   onOpenChange,
+  onSaved,
 }: EditRequestDialogProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
@@ -152,6 +155,7 @@ export function EditRequestDialog({
       }
 
       onOpenChange(false);
+      onSaved?.();
       showBanner({ variant: 'success', message: 'Änderungen gespeichert.' });
       router.refresh();
     } catch {

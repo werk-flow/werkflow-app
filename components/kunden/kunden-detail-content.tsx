@@ -44,7 +44,11 @@ import { CustomerRelationshipWorkspace } from "@/components/kunden/customer-rela
 import { useCommunicationContactGuard } from "@/components/kunden/use-communication-contact-guard";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
 
-import { updateClient, deleteClient } from "@/lib/clients/actions";
+import {
+  updateClient,
+  deleteClient,
+  type UpdateClientInput,
+} from "@/lib/clients/actions";
 import type { ClientContact, ClientSite } from "@/lib/clients/types";
 import {
   CLIENT_TYPE_LABELS,
@@ -66,6 +70,13 @@ function formatDate(dateStr: string): string {
     year: "numeric",
   });
 }
+
+const CLIENT_SAVE_ERROR_MESSAGES: Record<string, string> = {
+  not_authorized: "Du bist nicht berechtigt, Kunden zu bearbeiten.",
+  name_required: "Bitte gib einen Namen ein.",
+  client_not_found: "Der Kunde wurde nicht gefunden.",
+  customer_number_taken: "Diese Kundennummer ist bereits vergeben.",
+};
 
 interface KundenDetailContentProps {
   client: Client;
@@ -171,6 +182,18 @@ export function KundenDetailContent({
     { value: "gewerblich", label: CLIENT_TYPE_LABELS.gewerblich },
   ];
 
+  // A rejected save must surface in the field (MetadataSection catches the
+  // throw); a discarded result would close the editor over unsaved data.
+  const saveClientField = async (input: UpdateClientInput): Promise<void> => {
+    const result = await updateClient(client.id, input);
+    if (!result.success) {
+      throw new MetadataSaveError(
+        CLIENT_SAVE_ERROR_MESSAGES[result.error] ??
+          "Die Änderung konnte nicht gespeichert werden.",
+      );
+    }
+  };
+
   const metadataFields: MetadataField[] = [
     {
       label: "Name",
@@ -178,9 +201,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "text",
         currentValue: client.name,
-        onSave: async (v) => {
-          await updateClient(client.id, { name: v });
-        },
+        onSave: (v) => saveClientField({ name: v }),
       },
     },
     {
@@ -193,9 +214,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "select",
         currentValue: client.clientType,
-        onSave: async (v) => {
-          await updateClient(client.id, { clientType: v as ClientType });
-        },
+        onSave: (v) => saveClientField({ clientType: v as ClientType }),
         options: clientTypeOptions,
       },
     },
@@ -205,16 +224,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "text",
         currentValue: client.customerNumber ?? "",
-        onSave: async (v) => {
-          const result = await updateClient(client.id, { customerNumber: v });
-          if (!result.success) {
-            throw new MetadataSaveError(
-              result.error === "customer_number_taken"
-                ? "Diese Kundennummer ist bereits vergeben."
-                : "Kundennummer konnte nicht gespeichert werden.",
-            );
-          }
-        },
+        onSave: (v) => saveClientField({ customerNumber: v }),
         placeholder: "z. B. K-1001",
       },
     },
@@ -224,9 +234,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "text",
         currentValue: client.email ?? "",
-        onSave: async (v) => {
-          await updateClient(client.id, { email: v });
-        },
+        onSave: (v) => saveClientField({ email: v }),
         placeholder: "E-Mail-Adresse",
       },
     },
@@ -236,9 +244,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "text",
         currentValue: client.phone ?? "",
-        onSave: async (v) => {
-          await updateClient(client.id, { phone: v });
-        },
+        onSave: (v) => saveClientField({ phone: v }),
         placeholder: "Telefonnummer",
       },
     },
@@ -248,9 +254,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "textarea",
         currentValue: client.address ?? "",
-        onSave: async (v) => {
-          await updateClient(client.id, { address: v });
-        },
+        onSave: (v) => saveClientField({ address: v }),
         placeholder: "Straße, PLZ, Ort",
       },
     },
@@ -260,9 +264,7 @@ export function KundenDetailContent({
       editableConfig: {
         type: "textarea",
         currentValue: client.notes ?? "",
-        onSave: async (v) => {
-          await updateClient(client.id, { notes: v });
-        },
+        onSave: (v) => saveClientField({ notes: v }),
         placeholder: "Interne Notizen",
       },
     },
@@ -332,6 +334,7 @@ export function KundenDetailContent({
               sites={sites}
               isAdminOrManager={isAdminOrManager}
               onRequestContact={contactGuard.requestContact}
+              isCheckingContact={contactGuard.isCheckingContact}
               equipment={equipment}
               equipmentLoadFailed={equipmentLoadFailed}
             />

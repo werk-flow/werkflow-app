@@ -30,13 +30,16 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { usePendingTask } from '@/hooks/use-server-action';
+import { useServerAction } from '@/hooks/use-server-action';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import {
   createJobMaterialLine,
   createProjectMaterialLine,
@@ -315,12 +318,10 @@ export function JobMaterialsSection({
   const { showBanner } = useBanner();
   const [dialog, setDialog] = useState<MaterialDialogState | null>(null);
   const [sectionError, setSectionError] = useState<string | null>(null);
-  const { run: runMaterialTask, isPending } = usePendingTask();
   const [pickerItems, setPickerItems] = useState(inventoryItems);
   const [pickerLocations, setPickerLocations] = useState(locations);
   const [isPickerLoading, setIsPickerLoading] = useState(false);
   const loadedFieldSearchesRef = useRef(new Set<string>());
-  const [isFieldSaving, setIsFieldSaving] = useState(false);
   const isProjectContext = Boolean(projectId && !jobId);
   // Field workers cannot router.refresh their way to fresh lines, so their
   // view refetches; managers keep the server-rendered props.
@@ -338,6 +339,30 @@ export function JobMaterialsSection({
   const displayedLines = isAdminOrManager
     ? initialLines
     : (fieldView.data ?? initialLines);
+
+  // The authoritative read after a booking: managers wait for the refreshed
+  // route props, field workers for the live view's own read.
+  const waitForLines = useSettleOnChange(initialLines);
+  const busyLines = useBusyIds();
+  function readFreshLines(): Promise<void> {
+    if (!isAdminOrManager) return fieldView.refresh();
+    router.refresh();
+    return waitForLines();
+  }
+  // The dialog save: `isSaving` drives the dialog's button spinner; after the
+  // dialog closes, the booked lines (or the section header, when new lines
+  // were planned) stay marked until the fresh lines are on screen.
+  const { run: runDialogSave, isPending: isSaving, isSettling } = useServerAction(
+    async (task: () => Promise<string[] | null>) => task(),
+    {
+      settle: async (savedLineIds) => {
+        if (!savedLineIds) return;
+        const read = readFreshLines();
+        for (const lineId of savedLineIds) void busyLines.run(lineId, () => read);
+        await read;
+      },
+    }
+  );
 
   async function loadPickerOptions(): Promise<{
     items: InventoryPickerOption[];
@@ -465,12 +490,12 @@ export function JobMaterialsSection({
     if (!dialog) return;
 
     setDialog({ ...dialog, error: null });
-    if (!isAdminOrManager) setIsFieldSaving(true);
-    void runMaterialTask(async () => {
+    // Resolves with the booked line ids on success (the settle read marks
+    // them), null when the dialog stays open with an error.
+    void runDialogSave(async () => {
       if (dialog.rows.length === 0) {
-        setIsFieldSaving(false);
         updateDialogError('item_required', dialog.mode);
-        return;
+        return null;
       }
 
       const validatedRows: Array<{ row: MaterialDialogRow; quantity: number }> = [];
@@ -478,19 +503,16 @@ export function JobMaterialsSection({
       for (const row of dialog.rows) {
         const quantity = decimalFromInput(row.quantity);
         if (!row.itemId) {
-          setIsFieldSaving(false);
           updateDialogError('item_required', dialog.mode);
-          return;
+          return null;
         }
         if (quantity <= 0) {
-          setIsFieldSaving(false);
           updateDialogError('quantity_required', dialog.mode);
-          return;
+          return null;
         }
         if ((dialog.mode === 'take' || dialog.mode === 'return') && !row.locationId) {
-          setIsFieldSaving(false);
           updateDialogError('location_required', dialog.mode);
-          return;
+          return null;
         }
 
         validatedRows.push({ row, quantity });
@@ -557,7 +579,6 @@ export function JobMaterialsSection({
         }
 
         if (!result.success) {
-          setIsFieldSaving(false);
           setDialog((current) =>
             current
               ? {
@@ -567,18 +588,11 @@ export function JobMaterialsSection({
                 }
               : current
           );
-          return;
+          return null;
         }
 
       }
 
-      if (!isAdminOrManager && jobId) {
-        // A failed refresh keeps the last-known lines and surfaces the stale
-        // hint below; the booking itself already succeeded.
-        await fieldView.refresh();
-      }
-
-      setIsFieldSaving(false);
       setDialog(null);
       showBanner({
         variant: 'success',
@@ -589,18 +603,20 @@ export function JobMaterialsSection({
               ? 'Das Material wurde zurückgelegt.'
               : 'Die Materialplanung wurde gespeichert.',
       });
-      if (isAdminOrManager) {
-        router.refresh();
-      }
-    });
+      return dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : []));
+    }).catch(() => updateDialogError('unexpected_error', dialog.mode));
   }
 
   function handleDelete(lineId: string) {
-    setSectionError(null);
-    void runMaterialTask(async () => {
-      const result = await deleteJobMaterialLine(lineId);
-      if (!result.success) {
-        setSectionError(getActionErrorMessage(result.error, 'edit'));
+    // Row action: the indicator sits on this line and the others stay usable;
+    // the line stays marked until the refreshed props drop it.
+    void busyLines.run(lineId, async () => {
+      const result = await deleteJobMaterialLine(lineId).catch(() => null);
+      if (!result?.success) {
+        showBanner({
+          variant: 'error',
+          message: getActionErrorMessage(result?.error ?? 'delete_failed', 'edit'),
+        });
         return;
       }
       showBanner({
@@ -608,6 +624,7 @@ export function JobMaterialsSection({
         message: 'Die Materialposition wurde entfernt.',
       });
       router.refresh();
+      await waitForLines();
     });
   }
 
@@ -621,6 +638,10 @@ export function JobMaterialsSection({
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <ClipboardList className="size-4" />
             Material &amp; Inventar
+            <InlinePending
+              active={isSettling && !busyLines.anyBusy}
+              label="Material wird aktualisiert"
+            />
           </h3>
           {isProjectContext && totals.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -646,10 +667,9 @@ export function JobMaterialsSection({
             size="sm"
             className={cn('gap-1 text-xs', isAdminOrManager ? 'h-8' : 'min-h-11')}
             onClick={() => void openDialog('take')}
-            aria-busy={isPickerLoading || isFieldSaving}
+            aria-busy={isPickerLoading}
             disabled={
               isPickerLoading ||
-              isFieldSaving ||
               (isAdminOrManager && inventoryItems.length === 0)
             }
           >
@@ -680,12 +700,12 @@ export function JobMaterialsSection({
               key={line.id}
               line={line}
               isAdminOrManager={isAdminOrManager}
-              isPending={isAdminOrManager ? isPending : isPickerLoading || isFieldSaving}
+              isBusy={busyLines.isBusy(line.id)}
               locations={pickerLocations}
               readOnly={readOnly}
-              onTake={() => void openDialog('take', line)}
-              onReturn={() => void openDialog('return', line)}
-              onEdit={() => void openDialog('edit', line)}
+              onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
+              onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
+              onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
               onDelete={() => handleDelete(line.id)}
             />
           ))}
@@ -715,7 +735,7 @@ export function JobMaterialsSection({
                     line={line}
                     isAdminOrManager={false}
                     showBillableData={isAdminOrManager}
-                    isPending={isPending}
+                    isBusy={false}
                     locations={locations}
                     readOnly
                     onTake={() => undefined}
@@ -780,7 +800,7 @@ export function JobMaterialsSection({
         setDialog={setDialog}
         items={pickerItems}
         locations={pickerLocations}
-        isSaving={isAdminOrManager ? isPending : isFieldSaving}
+        isSaving={isSaving}
         isSearching={!isAdminOrManager && isPickerLoading}
         onSave={handleDialogSave}
       />
@@ -792,7 +812,7 @@ function MaterialLineRow({
   line,
   isAdminOrManager,
   showBillableData = isAdminOrManager,
-  isPending,
+  isBusy,
   locations,
   readOnly = false,
   onTake,
@@ -803,7 +823,8 @@ function MaterialLineRow({
   line: JobMaterialLine;
   isAdminOrManager: boolean;
   showBillableData?: boolean;
-  isPending: boolean;
+  /** This line's own action is in flight or settling; other lines stay usable. */
+  isBusy: boolean;
   locations: InventoryLocation[];
   readOnly?: boolean;
   onTake: () => void;
@@ -820,6 +841,7 @@ function MaterialLineRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{line.itemName}</p>
+            <InlinePending active={isBusy} />
             <Badge variant="secondary" className="text-xs">
               {INVENTORY_ITEM_TYPE_LABELS[line.itemType]}
             </Badge>
@@ -872,7 +894,7 @@ function MaterialLineRow({
               size="sm"
               className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onTake}
-              disabled={isPending || (isAdminOrManager && locations.length === 0)}
+              disabled={isBusy || (isAdminOrManager && locations.length === 0)}
             >
               <CheckCircle2 className="size-3.5" />
               Entnahme buchen
@@ -882,7 +904,7 @@ function MaterialLineRow({
               size="sm"
               className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onReturn}
-              disabled={isPending || !canReturn}
+              disabled={isBusy || !canReturn}
             >
               <RotateCcw className="size-3.5" />
               Zurücklegen
@@ -894,7 +916,7 @@ function MaterialLineRow({
                   size="icon"
                   className="size-8 text-muted-foreground"
                   onClick={onEdit}
-                  disabled={isPending}
+                  disabled={isBusy}
                   title="Position bearbeiten"
                 >
                   <Pencil className="size-3.5" />
@@ -905,7 +927,7 @@ function MaterialLineRow({
                   size="icon"
                   className="size-8 text-muted-foreground hover:text-destructive"
                   onClick={onDelete}
-                  disabled={isPending}
+                  disabled={isBusy}
                   title="Plan entfernen"
                 >
                   <Trash2 className="size-3.5" />

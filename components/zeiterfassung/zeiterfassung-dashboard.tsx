@@ -8,9 +8,12 @@ import {
   Clock,
   ChevronRight,
 } from 'lucide-react';
+import { useBanner } from '@/components/ui/banner';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
+import { useServerAction } from '@/hooks/use-server-action';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { JobPickerModal } from '@/components/job-picker-modal';
@@ -28,9 +31,17 @@ import { VacationSection } from './vacation-section';
 import { SicknessSection } from './sickness-section';
 import type {
   ClockTimelineSegment,
+  TimeTransitionResult,
   ZeiterfassungOverview
 } from '@/lib/time-tracking/types';
 import { ZeiterfassungDashboardSkeleton } from '@/components/loading-states/zeiterfassung-dashboard-skeleton';
+
+const TRANSITION_ERROR_MESSAGES: Record<string, string> = {
+  time_transition_stale_version:
+    'Der Stand hat sich geändert. Bitte prüfe die aktuelle Erfassung und versuche es erneut.',
+  time_transition_working_other_org:
+    'Bereits in anderer Organisation eingestempelt: Bitte beende dort zuerst die laufende Zeiterfassung.',
+};
 
 interface ZeiterfassungDashboardProps {
   organizationId: string;
@@ -113,6 +124,25 @@ export function ZeiterfassungDashboard({
   const [showJobPicker, setShowJobPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'switch' | 'resume'>('switch');
   const [activityDialogOpen, setActivityDialogOpen] = useState(false);
+  const { showBanner } = useBanner();
+  // Own pending flag for the break tile: the shared clock `isPending` also
+  // covers the job picker's transitions.
+  const breakAction = useServerAction(startBreak);
+
+  // The transition helpers resolve to a result instead of throwing; a
+  // discarded failure would leave the tile silent (no-silent-failures rule).
+  const reportTransition = (result: TimeTransitionResult, fallback: string) => {
+    if (!result.success) {
+      showBanner({
+        variant: 'error',
+        message: TRANSITION_ERROR_MESSAGES[result.error] ?? fallback,
+      });
+      return;
+    }
+    // An unusually long capture must be reviewed before it continues; the
+    // activity dialog carries that review flow.
+    if (result.outcome === 'recovery_required') setActivityDialogOpen(true);
+  };
 
   const liveTimelineSegments: ClockTimelineSegment[] = (() => {
     const segments = [...(effectiveState.timelineSegments ?? [])];
@@ -139,17 +169,15 @@ export function ZeiterfassungDashboard({
       return;
     }
 
-    try {
-      if (pickerMode === 'resume') {
-        await endBreak(jobId);
-      } else {
-        await switchJob(jobId);
-      }
-    } catch (err) {
-      console.error('Error updating active job state:', err);
-    } finally {
-      setShowJobPicker(false);
-    }
+    const result =
+      pickerMode === 'resume' ? await endBreak(jobId) : await switchJob(jobId);
+    setShowJobPicker(false);
+    reportTransition(
+      result,
+      pickerMode === 'resume'
+        ? 'Die Arbeit konnte nicht fortgesetzt werden. Bitte versuche es erneut.'
+        : 'Der Auftrag konnte nicht gewechselt werden. Bitte versuche es erneut.'
+    );
   };
 
   useEffect(() => {
@@ -419,13 +447,19 @@ export function ZeiterfassungDashboard({
             active={effectiveState.isOnBreak}
             disabled={!effectiveState.isClockedIn}
             disabledHint="Stemple zuerst ein"
+            pending={breakAction.isPending}
             onClick={() => {
               if (!effectiveState.isClockedIn) return;
               if (effectiveState.isOnBreak) {
                 setPickerMode('resume');
                 setShowJobPicker(true);
               } else {
-                void startBreak();
+                void breakAction.run().then((result) =>
+                  reportTransition(
+                    result,
+                    'Die Pause konnte nicht gestartet werden. Bitte versuche es erneut.'
+                  )
+                );
               }
             }}
           />
@@ -557,6 +591,8 @@ interface MenuCardProps {
   disabled?: boolean;
   disabledHint?: string;
   active?: boolean;
+  /** The tile's own server call is in flight: spinner instead of the chevron. */
+  pending?: boolean;
   onClick?: () => void;
 }
 
@@ -567,6 +603,7 @@ function MenuCard({
   disabled,
   disabledHint,
   active,
+  pending = false,
   onClick
 }: MenuCardProps) {
   // A menu tile is a row that acts on click; a disabled tile keeps its hint
@@ -581,7 +618,7 @@ function MenuCard({
         active && 'ring-1 ring-primary/30'
       )}
     >
-      <button type="button" disabled={disabled} onClick={onClick}>
+      <button type="button" disabled={disabled || pending} onClick={onClick}>
         <div className="flex items-center gap-3">
           <div
             className={cn(
@@ -606,7 +643,11 @@ function MenuCard({
             </p>
           </div>
         </div>
-        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        {pending ? (
+          <InlinePending active className="size-5" />
+        ) : (
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+        )}
       </button>
     </ListRow>
   );

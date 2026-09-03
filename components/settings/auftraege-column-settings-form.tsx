@@ -18,6 +18,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { ErrorText } from '@/components/ui/error-text'
 import { Form, FormField } from '@/components/ui/form'
+import { InlinePending } from '@/components/ui/inline-pending'
 import { saveAuftraegeColumnPreferences } from '@/lib/jobs/auftraege-column-preferences-actions'
 import {
   AUFTRAEGE_TABLE_COLUMNS,
@@ -94,6 +95,9 @@ export function AuftraegeColumnSettingsForm({
         message: 'Deine Aufträge-Spalten wurden gespeichert.',
         variant: 'success',
       })
+    } catch (error) {
+      console.error('Unexpected error saving job-column settings:', error)
+      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' })
     } finally {
       setIsSaving(false)
     }
@@ -103,7 +107,10 @@ export function AuftraegeColumnSettingsForm({
     <div className="space-y-6 pb-28">
       <Card>
         <CardHeader>
-          <CardTitle>Sichtbare Spalten</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Sichtbare Spalten
+            <InlinePending active={isSaving} label="Spaltenansicht wird gespeichert" />
+          </CardTitle>
           <CardDescription>
             Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle
             zeigen soll.

@@ -1,8 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useTransition, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 
+import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { SectionError } from '@/components/ui/section-error';
 
 export function FieldWorkPackLoadError({
@@ -12,14 +12,9 @@ export function FieldWorkPackLoadError({
   title: string;
   description: string;
 }): ReactElement {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const { refresh, isPending } = useRouterRefresh();
   return (
-    <SectionError
-      title={title}
-      onRetry={() => startTransition(() => router.refresh())}
-      retryPending={pending}
-    >
+    <SectionError title={title} onRetry={refresh} retryPending={isPending}>
       {description}
     </SectionError>
   );

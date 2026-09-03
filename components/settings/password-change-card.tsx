@@ -201,6 +201,9 @@ export function PasswordChangeCard() {
       await verificationClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
       currentPasswordRef.current = values.currentPassword;
       setStep('set_new');
+    } catch (error) {
+      console.error('Unexpected error verifying the current password:', error);
+      setFormError('Das aktuelle Passwort konnte nicht geprüft werden. Bitte versuche es erneut.');
     } finally {
       setIsCurrentPasswordSubmitting(false);
     }
@@ -259,6 +262,9 @@ export function PasswordChangeCard() {
           : 'Dein Passwort wurde aktualisiert. Andere Sitzungen wurden abgemeldet.',
         variant: 'success',
       });
+    } catch (error) {
+      console.error('Unexpected error changing the password:', error);
+      setFormError('Das Passwort konnte nicht aktualisiert werden. Bitte versuche es erneut.');
     } finally {
       setIsPasswordSubmitting(false);
     }

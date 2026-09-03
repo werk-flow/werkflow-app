@@ -43,6 +43,12 @@ import {
 } from '@/lib/jobs/types';
 import type { OrgMemberOption } from './employee-multi-select';
 
+export function describeJobDeleteError(error: string): string {
+  return error === 'planning_history_exists'
+    ? JOB_DELETE_HISTORY_MESSAGE
+    : JOB_DELETE_FAILED_MESSAGE;
+}
+
 interface JobActionsMenuProps {
   job: Job;
   detailHref: string;
@@ -54,6 +60,12 @@ interface JobActionsMenuProps {
     selectedEmployeeIds?: string[];
   }) => void | Promise<void>;
   onJobDeleted?: (jobId: string) => void | Promise<void>;
+  /**
+   * Optimistic list mode (feedback canon): the confirm closes at once and the
+   * list owns the delete — row removal, server call, rollback, banners.
+   * `onJobDeleted` is not called on that path.
+   */
+  onDeleteRequested?: (jobId: string) => void;
 }
 
 export function JobActionsMenu({
@@ -64,6 +76,7 @@ export function JobActionsMenu({
   projects,
   onJobUpdated,
   onJobDeleted,
+  onDeleteRequested,
 }: JobActionsMenuProps) {
   const router = useRouter();
   const displayTitle = getJobDisplayTitle(job);
@@ -74,24 +87,31 @@ export function JobActionsMenu({
 
   const handleDelete = async () => {
     if (isDeleting) return;
+    if (onDeleteRequested) {
+      setShowDeleteDialog(false);
+      onDeleteRequested(job.id);
+      return;
+    }
     setIsDeleting(true);
     setError(null);
 
-    const result = await deleteJob(job.id);
+    try {
+      const result = await deleteJob(job.id);
 
-    if (result.success) {
+      if (!result.success) {
+        setError(describeJobDeleteError(result.error));
+        setIsDeleting(false);
+        return;
+      }
+
       setShowDeleteDialog(false);
       if (onJobDeleted) {
         await onJobDeleted(job.id);
       } else {
         router.push(`/auftraege?deleted_job=${encodeURIComponent(displayTitle)}`);
       }
-    } else {
-      setError(
-        result.error === 'planning_history_exists'
-          ? JOB_DELETE_HISTORY_MESSAGE
-          : JOB_DELETE_FAILED_MESSAGE
-      );
+    } catch {
+      setError(JOB_DELETE_FAILED_MESSAGE);
       setIsDeleting(false);
     }
   };

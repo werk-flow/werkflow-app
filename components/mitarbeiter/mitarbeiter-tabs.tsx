@@ -1,26 +1,25 @@
 'use client';
 
-import {
-  useState,
-  useCallback,
-  useEffect,
-  useTransition,
-  useMemo
-} from 'react';
+import { useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
 import { useBanner } from '@/components/ui/banner';
 import { ErrorText } from '@/components/ui/error-text';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
 import { MembersTable, type OrgMember } from './members-table';
 import { InvitationsTable, type Invite } from './invitations-table';
+import { inviteCreations } from './invite-dialog';
 import { getRoleLabel } from '@/lib/roles';
 import { QuickStats } from './quick-stats';
 import { PersonnelRecordsSection } from './personnel-records-section';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useMemberStatus } from '@/hooks/use-member-status';
+import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
+import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import type { OrgRole } from '@/lib/members/actions';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
+import { updateMemberRole, type OrgRole } from '@/lib/members/actions';
+import { getMemberActionErrorMessage } from '@/lib/members/errors';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
@@ -44,6 +43,12 @@ interface MitarbeiterTabsProps {
   qualificationWorkspace: QualificationWorkspace | null;
 }
 
+const getMemberId = (member: OrgMember) => member.user_id;
+const getInviteId = (invite: Invite) => invite.id;
+// The server lists invites newest first; a just-sent one lands on top.
+const compareInvitesNewestFirst = (a: Invite, b: Invite) =>
+  b.created_at.localeCompare(a.created_at);
+
 export function MitarbeiterTabs({
   members: initialMembers,
   invites: initialInvites,
@@ -60,15 +65,27 @@ export function MitarbeiterTabs({
   qualificationWorkspace,
 }: MitarbeiterTabsProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { showBanner } = useBanner();
 
-  // Sync members and invites state with props (for when server data refreshes)
-  const [members, setMembers] = useState<OrgMember[]>(initialMembers);
-  const [invites, setInvites] = useState<Invite[]>(initialInvites);
-
-  // Track previous counts for skeleton display during refresh
-  const [prevMemberCount, setPrevMemberCount] = useState(initialMembers.length);
-  const [prevInviteCount, setPrevInviteCount] = useState(initialInvites.length);
+  // Server props are the authority; the overlays hold a role change until the
+  // refreshed list carries it and an invite just sent until the list has it.
+  const memberList = useOptimisticList({ items: initialMembers, getId: getMemberId });
+  const inviteList = useOptimisticList({
+    items: initialInvites,
+    getId: getInviteId,
+    compare: compareInvitesNewestFirst,
+  });
+  useOptimisticChannel(inviteCreations, inviteList);
+  const members = useMemo(
+    () => memberList.items.map((row) => row.item),
+    [memberList.items]
+  );
+  const invites = useMemo(
+    () => inviteList.items.map((row) => row.item),
+    [inviteList.items]
+  );
+  const { run: runBusy, busyIds } = useBusyIds();
+  const waitForMembers = useSettleOnChange(initialMembers);
 
   // Get member IDs for status polling
   const memberIds = useMemo(() => members.map((m) => m.user_id), [members]);
@@ -111,29 +128,6 @@ export function MitarbeiterTabs({
       .length;
   }, [statusMap]);
 
-  // Update state when props change (after router.refresh())
-  useEffect(() => {
-    setMembers(initialMembers);
-    setPrevMemberCount(initialMembers.length);
-  }, [initialMembers]);
-
-  useEffect(() => {
-    setInvites(initialInvites);
-    setPrevInviteCount(initialInvites.length);
-  }, [initialInvites]);
-
-  const { showBanner } = useBanner();
-
-  // Handle manual refresh
-  const handleRefresh = useCallback(() => {
-    setPrevMemberCount(members.length);
-    setPrevInviteCount(invites.length);
-    refetchStatus();
-    startTransition(() => {
-      router.refresh();
-    });
-  }, [router, members.length, invites.length, refetchStatus]);
-
   // Reload server-rendered records and break-policy props. Member status
   // refetches time entries itself, then recomputes when these props change.
   useRealtimeRouterRefresh({
@@ -155,29 +149,40 @@ export function MitarbeiterTabs({
     ],
   });
 
-  // Handle role change with optimistic update
+  // Role change: the row flips at once and stays marked until the refreshed
+  // list lands; the banner fires only after the server confirmed, and a
+  // failure rolls the role back and reports at list level.
+  const { update: updateMember, rollback: rollbackMember } = memberList;
   const handleRoleChange = useCallback(
     (
       memberId: string,
       newRole: OrgRole,
       firstName: string,
       lastName: string
-    ) => {
-      // Optimistically update the members list
-      setMembers((prevMembers) =>
-        prevMembers.map((member) =>
-          member.user_id === memberId ? { ...member, role: newRole } : member
-        )
-      );
-
-      const displayName =
-        `${firstName} ${lastName}`.trim() || 'Mitglied';
-      showBanner({
-        variant: 'success',
-        message: `Die Rolle von ${displayName} wurde erfolgreich zu ${getRoleLabel(newRole)} geändert.`,
+    ): Promise<void> => {
+      const member = members.find((candidate) => candidate.user_id === memberId);
+      if (!member) return Promise.resolve();
+      const displayName = `${firstName} ${lastName}`.trim() || 'Mitglied';
+      updateMember(memberId, { ...member, role: newRole });
+      return runBusy(memberId, async () => {
+        const result = await updateMemberRole(memberId, newRole).catch(() => null);
+        if (!result || !result.success) {
+          rollbackMember(memberId);
+          showBanner({
+            variant: 'error',
+            message: `Die Rolle von ${displayName} konnte nicht geändert werden: ${getMemberActionErrorMessage(result?.error)}`,
+          });
+          return;
+        }
+        showBanner({
+          variant: 'success',
+          message: `Die Rolle von ${displayName} wurde erfolgreich zu ${getRoleLabel(newRole)} geändert.`,
+        });
+        router.refresh();
+        await waitForMembers();
       });
     },
-    [showBanner]
+    [members, updateMember, rollbackMember, runBusy, router, showBanner, waitForMembers]
   );
 
   // Count pending invites for the badge
@@ -214,19 +219,14 @@ export function MitarbeiterTabs({
             <TabsTrigger value="qualifications">Qualifikationen</TabsTrigger>
           </TabsList>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isPending}
-            className="h-8 w-8 shrink-0"
-            title="Tabellen aktualisieren"
-          >
-            <RefreshCw
-              className={`size-4 ${isPending ? 'animate-spin' : ''}`}
-            />
-            <span className="sr-only">Aktualisieren</span>
-          </Button>
+          {/* Route refresh plus the member status refetch; rows stay on screen. */}
+          <RefreshButton
+            label="Tabellen aktualisieren"
+            onRefresh={async () => {
+              await refetchStatus();
+            }}
+            withRouteRefresh
+          />
         </div>
 
         <TabsContent value="members" className="mt-4">
@@ -235,9 +235,9 @@ export function MitarbeiterTabs({
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             onRoleChange={handleRoleChange}
-            isLoading={isPending || isStatusLoading}
-            skeletonCount={prevMemberCount}
             statusMap={statusMap}
+            isStatusLoading={isStatusLoading}
+            busyMemberIds={busyIds}
             targetsByUserId={targetsByUserId}
             personnelByUserId={personnelByUserId}
             removalBlockedByUserId={removalBlockedByUserId}
@@ -248,11 +248,7 @@ export function MitarbeiterTabs({
           />
         </TabsContent>
         <TabsContent value="invitations" className="mt-4">
-          <InvitationsTable
-            invites={invites}
-            isLoading={isPending}
-            skeletonCount={prevInviteCount}
-          />
+          <InvitationsTable rows={inviteList.items} />
         </TabsContent>
         <TabsContent value="teams" className="mt-4">
           {qualificationWorkspace ? (

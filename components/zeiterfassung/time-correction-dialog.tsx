@@ -5,6 +5,7 @@ import { Loader2, Pencil, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DateTimeField } from '@/components/ui/date-time-field';
+import { ErrorText } from '@/components/ui/error-text';
 import {
   Dialog,
   DialogBody,
@@ -126,12 +127,16 @@ export function TimeCorrectionDialog({
     entry?.activityKind ?? 'work'
   );
   const [fieldErrors, setFieldErrors] = useState<{ person?: string; reason?: string }>({});
+  // Save failures stay inside the dialog at the point of action; the dialog
+  // never closes on failure.
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setLoadingOptions(true);
     setLoadedOptions(null);
+    setSubmitError(null);
     setSubjectEmployeeRecordId('');
     setTargetEmployeeRecordId('');
     setJobId(entry?.jobId ?? 'none');
@@ -228,6 +233,7 @@ export function TimeCorrectionDialog({
     }
 
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const result = await submitTimeCorrection({
         organizationId,
@@ -239,11 +245,10 @@ export function TimeCorrectionDialog({
         operationId: crypto.randomUUID(),
       });
       if (!result.success) {
-        showBanner({
-          variant: 'error',
-          message: CORRECTION_ERROR_MESSAGES[result.error]
-            ?? 'Die Korrektur konnte nicht gespeichert werden.',
-        });
+        setSubmitError(
+          CORRECTION_ERROR_MESSAGES[result.error]
+            ?? 'Die Korrektur konnte nicht gespeichert werden.'
+        );
         return;
       }
       showBanner({
@@ -256,10 +261,7 @@ export function TimeCorrectionDialog({
       setReason('');
       onSubmitted?.();
     } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Die Korrektur konnte nicht gespeichert werden.',
-      });
+      setSubmitError('Die Korrektur konnte nicht gespeichert werden.');
     } finally {
       setSubmitting(false);
     }
@@ -404,6 +406,7 @@ export function TimeCorrectionDialog({
                   maxLength={2000}
                 />
               </Field>
+              <ErrorText>{submitError}</ErrorText>
             </>
           )}
         </DialogBody>

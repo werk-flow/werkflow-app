@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
+import { useBanner } from '@/components/ui/banner';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -44,6 +45,8 @@ interface CloseRequestDialogProps {
   requestId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fires after the server confirmed; the page marks itself until refreshed props land. */
+  onSaved?: () => void;
 }
 
 // Closing without work keeps the request and its history; only the reason is
@@ -52,8 +55,10 @@ export function CloseRequestDialog({
   requestId,
   open,
   onOpenChange,
+  onSaved,
 }: CloseRequestDialogProps) {
   const router = useRouter();
+  const { showBanner } = useBanner();
   const [reason, setReason] = useState<RequestCloseReason>('kein_bedarf');
   const [note, setNote] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -82,6 +87,8 @@ export function CloseRequestDialog({
         return;
       }
       handleOpenChange(false);
+      onSaved?.();
+      showBanner({ variant: 'success', message: 'Anfrage wurde geschlossen.' });
       router.refresh();
     } catch {
       setError('Ein unerwarteter Fehler ist aufgetreten.');

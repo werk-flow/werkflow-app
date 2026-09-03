@@ -12,6 +12,7 @@ import { useOrganization } from '@/components/organization/organization-context'
 import { useLiveView } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import { getCurrentClockState } from '@/lib/time-tracking/actions';
+import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
 import {
   transitionTimeActivity,
   type TimeTransitionInput,
@@ -22,6 +23,79 @@ import type {
   TimeActivitySelection,
   TimeTransitionResult,
 } from '@/lib/time-tracking/types';
+
+/**
+ * Optimistic echo of a successful transition (feedback canon: the user's own
+ * clock action reflects in the first frame after the server answers, not
+ * after the follow-up read). The result carries ids and the outcome, not a
+ * full state, so the echo flips the activity, closes the running segment
+ * into today's totals with the same arithmetic the dashboard uses for its
+ * live counters, and leaves everything it cannot know (a newly chosen job's
+ * title) empty until the refresh reconciles.
+ */
+function applyTransitionEcho(
+  previous: LiveClockState,
+  selection: TimeActivitySelection | null,
+  result: Extract<TimeTransitionResult, { success: true }>
+): LiveClockState {
+  if (result.outcome !== 'active' && result.outcome !== 'ended') return previous;
+  const now = new Date().toISOString();
+  const elapsedMinutes =
+    previous.isClockedIn && previous.statusStartedAt
+      ? getNonNegativeElapsedMs(previous.statusStartedAt) / 60_000
+      : 0;
+  const wasBreak = previous.status === 'on_break';
+  const previousKind = previous.currentActivity?.kind;
+  const countIf = (kind: typeof previousKind) => (previousKind === kind ? elapsedMinutes : 0);
+  const closed: LiveClockState = {
+    ...previous,
+    todayMinutes: previous.todayMinutes + elapsedMinutes,
+    workMinutes: previous.workMinutes + (wasBreak ? 0 : elapsedMinutes),
+    breakMinutes: previous.breakMinutes + (wasBreak ? elapsedMinutes : 0),
+    travelMinutes: previous.travelMinutes + countIf('travel'),
+    standbyMinutes: previous.standbyMinutes + countIf('standby'),
+    calloutMinutes: previous.calloutMinutes + countIf('callout'),
+    internalMinutes: previous.internalMinutes + countIf('internal_activity'),
+    timelineSegments:
+      elapsedMinutes > 0
+        ? [...previous.timelineSegments, { type: wasBreak ? 'break' : 'work', minutes: elapsedMinutes }]
+        : previous.timelineSegments,
+    sessionId: result.sessionId,
+    sessionVersion: result.version,
+    currentSegmentId: result.segmentId,
+    recoveryReason: result.recoveryReason,
+    legacyOpen: false,
+    fetchedAt: now,
+  };
+  if (result.outcome === 'ended') {
+    return {
+      ...closed,
+      status: 'clocked_out',
+      isClockedIn: false,
+      isOnBreak: false,
+      clockInTime: null,
+      statusStartedAt: null,
+      breakStartTime: null,
+      currentActivity: null,
+      activeJobId: null,
+      activeJobInfo: null,
+    };
+  }
+  const isBreak = selection?.kind === 'break';
+  const jobId = selection?.allocationKind === 'job' ? selection.jobId : null;
+  return {
+    ...closed,
+    status: isBreak ? 'on_break' : 'working',
+    isClockedIn: true,
+    isOnBreak: isBreak,
+    clockInTime: previous.clockInTime ?? now,
+    statusStartedAt: now,
+    breakStartTime: isBreak ? now : null,
+    currentActivity: selection,
+    activeJobId: jobId,
+    activeJobInfo: jobId !== null && previous.activeJobId === jobId ? previous.activeJobInfo : null,
+  };
+}
 
 type ClockStateContextValue = {
   state: LiveClockState | null;
@@ -64,7 +138,7 @@ export function ClockStateProvider({
     resetKey: activeOrgId,
   });
   const { run, isPending } = useServerAction(transitionTimeActivity);
-  const refresh = view.refresh;
+  const { refresh, invalidate, setData } = view;
   const currentState =
     view.data?.organizationId === activeOrgId ? view.data : null;
   const sessionId = currentState?.sessionId ?? null;
@@ -94,6 +168,13 @@ export function ClockStateProvider({
       } catch {
         return { success: false, error: 'time_transition_failed' };
       }
+      if (result.success) {
+        // Echo first so no in-flight read overwrites it, then read fresh.
+        invalidate();
+        setData((previous) =>
+          previous ? applyTransitionEcho(previous, selection, result) : previous
+        );
+      }
       if (
         result.success ||
         (!result.success && result.error === 'time_transition_stale_version')
@@ -102,7 +183,7 @@ export function ClockStateProvider({
       }
       return result;
     },
-    [activeOrgId, refresh, run, sessionId, sessionVersion]
+    [activeOrgId, invalidate, refresh, run, sessionId, sessionVersion, setData]
   );
 
   const transitionActivity = useCallback(

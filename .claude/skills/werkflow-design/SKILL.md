@@ -65,6 +65,8 @@ The first question for any control is: **does this list contain entities or a fi
 | Spinner at the point of change | `InlinePending` + `useBusyIds` for per-row pending | `components/ui/inline-pending`, `hooks/use-busy-id` |
 | Instant local echo of a list mutation | `useOptimisticList` (insert/update/remove with rollback and self-expiry) | `hooks/use-optimistic-list` |
 | Progress over N items | `useBatchProgress` | `hooks/use-batch-progress` |
+| Manual refresh of a list or a section retry | `RefreshButton` / `useRouterRefresh` (the one home of a router transition; rows stay on screen) | `components/ui/refresh-button` |
+| Settle read for a props-driven list (refreshed server props, no live view) | `useSettleOnChange(value)` → pass as `useServerAction`'s `settle` | `hooks/use-settle-on-change` |
 | Single choice from an entity list | `SearchableSelect` | `components/ui/searchable-select` |
 | Multi choice from an entity list | `SearchableMultiSelect` | `components/ui/searchable-select` |
 | Entity choice with inline create | `SelectWithCreate` | `components/ui/select-with-create` |
@@ -169,10 +171,10 @@ No interaction may leave the user wondering whether anything happened, even for 
 | Section-level edit | `InlinePending` in the section header (`useServerAction`'s `isPending`) |
 | Edit from a dialog | Button spinner while pending; on success the dialog closes and the changed row shows `isSettling` through an inline indicator until the authoritative read lands |
 | N-item operation (import, batch review, bulk move, upload) | `useBatchProgress` rendered as `role="progressbar"`, never a bare spinner |
-| Manual list refresh | Icon spins; rows stay on screen. Never a skeleton over existing data |
+| Manual list refresh | `RefreshButton`: the icon spins; rows stay on screen. Never a skeleton over existing data (the list components carry no loading prop) |
 | Direct manipulation with undo (drag, park) | Optimistic move; the success banner fires after persistence, not before |
 
-Pending state binds to the awaited server call (`useServerAction`), never to a router transition: `useTransition` is banned in product code. The optimistic echo is reconciled by id and expires by itself when the server list catches up; every optimistic path has a rollback and shows the failure at the point of action.
+Pending state binds to the awaited server call (`useServerAction`), never to a router transition: `useTransition` is lint-banned in product code. Its one home is `components/ui/refresh-button.tsx` (`RefreshButton`, `useRouterRefresh` for `SectionError` retries); the two named exceptions track a route change rather than a mutation (the organization switch, the document library's folder navigation). Props-driven lists get their settle read from `useSettleOnChange`. The optimistic echo is reconciled by id and expires by itself when the server list catches up; every optimistic path has a rollback and shows the failure at the point of action.
 
 ### No silent failures
 

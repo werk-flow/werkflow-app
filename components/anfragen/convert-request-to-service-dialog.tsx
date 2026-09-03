@@ -2,7 +2,7 @@
 
 import { useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
-import { Wrench } from "lucide-react";
+import { Loader2, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,11 @@ export function ConvertRequestToServiceDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Stays true while the navigation to the new case is in flight, so a second
+  // click cannot start a second conversion.
+  const [hasConverted, setHasConverted] = useState(false);
   const { run, isPending } = useServerAction(async () => {
+    setError(null);
     const result = await createServiceCase({
       serviceCaseId: crypto.randomUUID(),
       idempotencyKey: crypto.randomUUID(),
@@ -45,8 +49,10 @@ export function ConvertRequestToServiceDialog({
       );
       return;
     }
+    setHasConverted(true);
     router.push(`/service/faelle/${result.serviceCase.case_number}`);
   });
+  const isBusy = isPending || hasConverted;
   if (!enabled) return null;
   return (
     <>
@@ -54,7 +60,7 @@ export function ConvertRequestToServiceDialog({
         <Wrench className="size-4" />
         Als Servicefall übernehmen
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(next) => { if (!isBusy) setOpen(next); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Anfrage als Servicefall übernehmen?</DialogTitle>
@@ -66,8 +72,8 @@ export function ConvertRequestToServiceDialog({
           </DialogHeader>
           <ErrorText>{error}</ErrorText>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>Abbrechen</Button>
-            <Button type="button" onClick={() => void run()} disabled={isPending}>{isPending ? "Übernimmt…" : "Übernehmen"}</Button>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isBusy}>Abbrechen</Button>
+            <Button type="button" onClick={() => void run()} disabled={isBusy}>{isBusy && <Loader2 className="size-4 animate-spin" />}{isBusy ? "Übernimmt…" : "Übernehmen"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

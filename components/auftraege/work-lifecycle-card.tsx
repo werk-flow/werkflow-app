@@ -4,7 +4,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  useTransition,
   type ReactElement,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -22,7 +21,8 @@ import {
 } from "lucide-react";
 
 import { useLiveView } from "@/hooks/use-live-view";
-import { usePendingTask } from "@/hooks/use-server-action";
+import { useBusyIds } from "@/hooks/use-busy-id";
+import { usePendingTask, useServerAction } from "@/hooks/use-server-action";
 import { useBanner } from "@/components/ui/banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { SectionError } from "@/components/ui/section-error";
+import { useRouterRefresh } from "@/components/ui/refresh-button";
 import { FormDisclosure } from "@/components/ui/form-disclosure";
 import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -106,6 +108,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_action_failed: "Die Änderung konnte nicht gespeichert werden.",
 };
 
+// Read failures inside the dialogs are not save failures; they get their own copy.
+const PREDECESSOR_SEARCH_FAILED_MESSAGE =
+  "Die Suche konnte gerade nicht ausgeführt werden. Tippe erneut, um es noch einmal zu versuchen.";
+const APPROVALS_LOAD_FAILED_MESSAGE =
+  "Die Freigaben konnten nicht geladen werden. Schließe den Dialog und öffne ihn erneut.";
+
 function fromIsoDate(value?: string): Date | undefined {
   if (!value) return undefined;
   const [year, month, day] = value.split("-").map(Number);
@@ -138,6 +146,7 @@ function TransitionDialog({
   isManager,
   onClose,
   onChanged,
+  onStale,
 }: {
   snapshot: WorkLifecycleSnapshot;
   targetLabel: string;
@@ -145,6 +154,8 @@ function TransitionDialog({
   isManager: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  /** Reloads the snapshot after a version conflict without the success surface of `onChanged`. */
+  onStale: () => Promise<void>;
 }) {
   const [reason, setReason] = useState("");
   const [override, setOverride] = useState(false);
@@ -176,7 +187,7 @@ function TransitionDialog({
         setError(
           ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_action_failed,
         );
-        if (result.error.includes("stale_version")) await onChanged();
+        if (result.error.includes("stale_version")) await onStale();
         return;
       }
       await onChanged();
@@ -520,25 +531,28 @@ function DependencyDialog({
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { run: runDependencyTask, isPending: pending } = usePendingTask();
+  const { run: runSearch, isPending: searching } = useServerAction(
+    searchWorkPredecessors,
+  );
   useEffect(() => {
     if (type === "declared" || search.trim().length < 2) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      void searchWorkPredecessors({ type, query: search })
+      void runSearch({ type, query: search })
         .then((result) => {
           if (cancelled) return;
           if (result.success) setRemoteOptions(result.options);
-          else setError(ERROR_MESSAGES.work_action_failed);
+          else setError(PREDECESSOR_SEARCH_FAILED_MESSAGE);
         })
         .catch(() => {
-          if (!cancelled) setError(ERROR_MESSAGES.work_action_failed);
+          if (!cancelled) setError(PREDECESSOR_SEARCH_FAILED_MESSAGE);
         });
     }, 200);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [search, type]);
+  }, [runSearch, search, type]);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     void runDependencyTask(async () => {
@@ -615,7 +629,9 @@ function DependencyDialog({
                 }}
                 placeholder="Voraussetzung auswählen"
                 searchPlaceholder="Voraussetzung suchen…"
-                emptyMessage="Keine passende Voraussetzung"
+                emptyMessage={
+                  searching ? "Suche läuft…" : "Keine passende Voraussetzung"
+                }
               />
             </Field>
             {type === "declared" && (
@@ -701,12 +717,12 @@ function ArtifactApprovalDependencyDialog({
         if (result.success) setOptions(result.options);
         else {
           setOptions([]);
-          setError(ERROR_MESSAGES.work_action_failed);
+          setError(APPROVALS_LOAD_FAILED_MESSAGE);
         }
       }).catch(() => {
         if (!active) return;
         setOptions([]);
-        setError(ERROR_MESSAGES.work_action_failed);
+        setError(APPROVALS_LOAD_FAILED_MESSAGE);
       });
     return () => { active = false; };
   }, [snapshot.targetId, snapshot.targetType]);
@@ -750,13 +766,12 @@ type WorkLifecycleCardProps = {
 };
 
 export function WorkLifecycleLoadError(): ReactElement {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const { refresh, isPending } = useRouterRefresh();
   return (
     <SectionError
       title="Arbeitsstand nicht verfügbar"
-      onRetry={() => startTransition(() => router.refresh())}
-      retryPending={pending}
+      onRetry={refresh}
+      retryPending={isPending}
     >
       Auftrag oder Projekt bleiben sichtbar. Der Arbeitsstand konnte gerade
       nicht geladen werden und wird nicht als erfüllt angenommen.
@@ -779,6 +794,7 @@ export function WorkLifecycleCard({
   // catch-up read runs then anyway), with no state cleanup effect.
   const [remoteUpdateDialog, setRemoteUpdateDialog] = useState<DialogState | null>(null);
   const { showBanner } = useBanner();
+  const rowBusy = useBusyIds();
   const view = useLiveView<WorkLifecycleSnapshot>({
     tables: [
       initialSnapshot.targetType === "job" ? "jobs" : "projects",
@@ -883,6 +899,8 @@ export function WorkLifecycleCard({
     if (fieldMode) router.refresh();
     if (message) showBanner({ variant: "success", message });
   };
+  const changedRow = async (rowId: string, message: string) =>
+    rowBusy.run(rowId, () => changed(message));
 
   return (
     <Card id="arbeitsstand" className="gap-4 p-4" data-testid="work-lifecycle-card">
@@ -929,11 +947,13 @@ export function WorkLifecycleCard({
             type="button"
             size="sm"
             variant="outline"
+            disabled={view.isRefreshing}
             onClick={() => {
               setRemoteUpdateDialog(null);
               void refresh();
             }}
           >
+            <InlinePending active={view.isRefreshing} label="Wird aktualisiert" />
             Aktualisieren
           </Button>
         </div>
@@ -1092,12 +1112,14 @@ export function WorkLifecycleCard({
                       ownOwnerId !== null &&
                       blocker.responsible_employee_record_id ===
                         ownOwnerId)) && (
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1">
+                      <InlinePending active={rowBusy.isBusy(blocker.id)} label="Blocker wird aktualisiert" />
                       {blocker.kind === "parking" ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
+                          disabled={rowBusy.isBusy(blocker.id)}
                           onClick={() => setDialog({ type: "unpark", blocker })}
                         >
                           Weiterplanen
@@ -1108,6 +1130,7 @@ export function WorkLifecycleCard({
                             type="button"
                             size="sm"
                             variant="ghost"
+                            disabled={rowBusy.isBusy(blocker.id)}
                             onClick={() =>
                               setDialog({ type: "blocker", blocker })
                             }
@@ -1118,6 +1141,7 @@ export function WorkLifecycleCard({
                             type="button"
                             size="sm"
                             variant="outline"
+                            disabled={rowBusy.isBusy(blocker.id)}
                             onClick={() =>
                               setDialog({ type: "resolve-blocker", blocker })
                             }
@@ -1170,9 +1194,10 @@ export function WorkLifecycleCard({
                     </p>
                   </div>
                   {isManager && (
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1">
+                      <InlinePending active={rowBusy.isBusy(dependency.id)} label="Voraussetzung wird aktualisiert" />
                       {dependency.declared_kind === "approval" && !dependency.artifact_approval_action_id && !dependency.is_satisfied ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ type: "artifact-approval-dependency", dependency })}>
+                        <Button type="button" size="sm" variant="outline" disabled={rowBusy.isBusy(dependency.id)} onClick={() => setDialog({ type: "artifact-approval-dependency", dependency })}>
                           Freigabe verknüpfen
                         </Button>
                       ) : dependency.declared_kind && (
@@ -1180,6 +1205,7 @@ export function WorkLifecycleCard({
                           type="button"
                           size="sm"
                           variant="outline"
+                          disabled={rowBusy.isBusy(dependency.id)}
                           onClick={() =>
                             setDialog({
                               type: "dependency-state",
@@ -1200,6 +1226,7 @@ export function WorkLifecycleCard({
                         size="icon"
                         variant="ghost"
                         aria-label="Voraussetzung entfernen"
+                        disabled={rowBusy.isBusy(dependency.id)}
                         onClick={() =>
                           setDialog({ type: "remove-dependency", dependency })
                         }
@@ -1327,6 +1354,7 @@ export function WorkLifecycleCard({
           onChanged={() =>
             changed("Arbeitsstand wurde aktualisiert.", dialog.state)
           }
+          onStale={refresh}
         />
       )}
       {dialog?.type === "blocker" && (
@@ -1336,7 +1364,11 @@ export function WorkLifecycleCard({
           blocker={dialog.blocker}
           isManager={isManager}
           onClose={() => setDialog(null)}
-          onChanged={() => changed("Blocker wurde gespeichert.")}
+          onChanged={() =>
+            dialog.blocker
+              ? changedRow(dialog.blocker.id, "Blocker wurde gespeichert.")
+              : changed("Blocker wurde gespeichert.")
+          }
         />
       )}
       {dialog?.type === "parking" && (
@@ -1357,7 +1389,7 @@ export function WorkLifecycleCard({
       )}
       {dialog?.type === "artifact-approval-dependency" && (
         <ArtifactApprovalDependencyDialog snapshot={snapshot} dependency={dialog.dependency}
-          onClose={() => setDialog(null)} onChanged={() => changed("Freigabe wurde mit der Voraussetzung verknüpft.")} />
+          onClose={() => setDialog(null)} onChanged={() => changedRow(dialog.dependency.id, "Freigabe wurde mit der Voraussetzung verknüpft.")} />
       )}
       {dialog?.type === "resolve-blocker" && (
         <ReasonDialog
@@ -1371,7 +1403,8 @@ export function WorkLifecycleCard({
               expectedVersion: dialog.blocker.version,
               resolutionNote: reason,
             });
-            if (result.success) await changed("Blocker wurde gelöst.");
+            if (result.success)
+              await changedRow(dialog.blocker.id, "Blocker wurde gelöst.");
             return result;
           }}
         />
@@ -1389,7 +1422,8 @@ export function WorkLifecycleCard({
               blockerVersion: dialog.blocker.version,
               reason,
             });
-            if (result.success) await changed("Arbeit ist nicht mehr geparkt.");
+            if (result.success)
+              await changedRow(dialog.blocker.id, "Arbeit ist nicht mehr geparkt.");
             return result;
           }}
         />
@@ -1406,7 +1440,8 @@ export function WorkLifecycleCard({
               expectedVersion: dialog.blocker.version,
               reason,
             });
-            if (result.success) await changed("Blocker wurde wieder geöffnet.");
+            if (result.success)
+              await changedRow(dialog.blocker.id, "Blocker wurde wieder geöffnet.");
             return result;
           }}
         />
@@ -1443,7 +1478,10 @@ export function WorkLifecycleCard({
                       : dependency,
                   ),
                 });
-              await changed("Voraussetzung wurde aktualisiert.");
+              await changedRow(
+                dialog.dependency.id,
+                "Voraussetzung wurde aktualisiert.",
+              );
             }
             return result;
           }}
@@ -1469,7 +1507,10 @@ export function WorkLifecycleCard({
                     (dependency) => dependency.id !== dialog.dependency.id,
                   ),
                 });
-              await changed("Voraussetzung wurde entfernt.");
+              await changedRow(
+                dialog.dependency.id,
+                "Voraussetzung wurde entfernt.",
+              );
             }
             return result;
           }}

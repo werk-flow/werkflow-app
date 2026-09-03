@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Plus, Users, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
@@ -52,7 +52,6 @@ export function TeamManagementSection({
 }: TeamManagementSectionProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [isPending, startTransition] = useTransition();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
@@ -84,7 +83,7 @@ export function TeamManagementSection({
   );
 
   const refresh = useCallback(() => {
-    startTransition(() => router.refresh());
+    router.refresh();
   }, [router]);
   useBusinessDayRefresh(refresh);
   const activeMembershipsByTeam = useMemo(() => {
@@ -215,7 +214,7 @@ export function TeamManagementSection({
             type="button"
             className="self-end"
             onClick={() => void handleCreate()}
-            disabled={pendingAction !== null || isPending}
+            disabled={pendingAction !== null}
           >
             <Plus className="size-4" />
             Team anlegen

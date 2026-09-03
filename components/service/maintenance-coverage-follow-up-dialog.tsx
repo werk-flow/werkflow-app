@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, type ReactElement } from "react";
+import { Loader2 } from "lucide-react";
 
+import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { DateTimeField } from "@/components/ui/date-time-field";
 import {
@@ -53,6 +55,7 @@ export function MaintenanceCoverageFollowUpDialog({
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const { showBanner } = useBanner();
   const { run, isPending } = useServerAction(async () => {
     const dueDate = parseBerlinDateTimeInput(dueAt);
     if (!dueDate) return;
@@ -69,6 +72,9 @@ export function MaintenanceCoverageFollowUpDialog({
       return;
     }
     onOpenChange(false);
+    // The follow-up lives under Aufgaben, not on this page: the banner is the
+    // only confirmation the user gets here.
+    showBanner({ variant: "success", message: "Nachfassaktion wurde angelegt." });
   });
   const titleError =
     attempted && !title.trim() ? "Bitte gib einen Titel ein." : undefined;
@@ -179,6 +185,7 @@ export function MaintenanceCoverageFollowUpDialog({
               Abbrechen
             </Button>
             <Button type="submit" disabled={isPending}>
+              {isPending && <Loader2 className="size-4 animate-spin" />}
               Speichern
             </Button>
           </DialogFooter>

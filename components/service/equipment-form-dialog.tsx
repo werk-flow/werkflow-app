@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -51,6 +52,25 @@ import {
 
 type EquipmentFormMode = "create" | "edit" | "replace";
 
+/** The values a list can show for a record before the server confirms it. */
+export type EquipmentPendingDraft = Pick<
+  EquipmentListItem,
+  | "id"
+  | "name"
+  | "category"
+  | "state"
+  | "clientName"
+  | "siteName"
+  | "manufacturer"
+  | "model"
+>;
+
+export type EquipmentCreateSubmission = {
+  draft: EquipmentPendingDraft;
+  /** Never rejects; a failure carries the German message for the caller's banner. */
+  result: Promise<{ success: true } | { success: false; message: string }>;
+};
+
 type EquipmentFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +78,14 @@ type EquipmentFormDialogProps = {
   clients: EquipmentClientOption[];
   equipment: EquipmentListItem[];
   initial?: EquipmentDetail | null;
+  /**
+   * Create from a list (feedback canon): the dialog closes at once and the
+   * caller renders the pending row until `result` settles. Without it a
+   * create navigates to the new record.
+   */
+  onSubmitted?: (submission: EquipmentCreateSubmission) => void;
+  /** Edit settled by the caller (a live-view refresh) instead of a route refresh. */
+  onSaved?: () => void;
 };
 
 type FormState = EquipmentFormInput & {
@@ -92,13 +120,20 @@ const EMPTY_FORM: FormState = {
   operatorNumber: "",
 };
 
+const GENERIC_ERROR = "Die Anlage konnte nicht gespeichert werden.";
+
 const ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_input_invalid: "Bitte prüfe die markierten Angaben.",
   installed_equipment_duplicate_identifier:
     "Diese Kennung wird bereits verwendet.",
-  installed_equipment_action_failed:
-    "Die Anlage konnte nicht gespeichert werden.",
+  installed_equipment_action_failed: GENERIC_ERROR,
 };
+
+function errorMessage(code: string): string {
+  return (
+    ERROR_MESSAGES[code] ?? getEquipmentMutationErrorMessage(code, GENERIC_ERROR)
+  );
+}
 
 type RequiredField = "clientId" | "siteId" | "name" | "parentEquipmentId" | "reason";
 
@@ -182,6 +217,8 @@ export function EquipmentFormDialog({
   clients,
   equipment,
   initial,
+  onSubmitted,
+  onSaved,
 }: EquipmentFormDialogProps): ReactElement {
   const router = useRouter();
   const { run: runCreate, isPending: isCreating } = useServerAction(
@@ -269,6 +306,36 @@ export function EquipmentFormDialog({
     }
     const idempotencyKey = crypto.randomUUID();
     const effectiveAt = new Date().toISOString();
+    if (mode === "create" && onSubmitted) {
+      const equipmentId = crypto.randomUUID();
+      onSubmitted({
+        draft: {
+          id: equipmentId,
+          name: form.name.trim(),
+          category: form.category,
+          state: form.state,
+          clientName: selectedClient?.name ?? "",
+          siteName:
+            siteOptions.find((site) => site.id === form.siteId)?.name ?? "",
+          manufacturer: form.manufacturer || null,
+          model: form.model || null,
+        },
+        result: runCreate({
+          ...payload,
+          equipmentId,
+          idempotencyKey,
+          effectiveAt,
+        }).then(
+          (created) =>
+            created.success
+              ? { success: true as const }
+              : { success: false as const, message: errorMessage(created.error) },
+          () => ({ success: false as const, message: GENERIC_ERROR }),
+        ),
+      });
+      onOpenChange(false);
+      return;
+    }
     const result =
       mode === "create"
         ? await runCreate({
@@ -300,16 +367,14 @@ export function EquipmentFormDialog({
                 error: "installed_equipment_action_failed",
               };
     if (!result.success) {
-      setError(
-        ERROR_MESSAGES[result.error] ??
-          getEquipmentMutationErrorMessage(
-            result.error,
-            "Die Anlage konnte nicht gespeichert werden.",
-          ),
-      );
+      setError(errorMessage(result.error));
       return;
     }
     onOpenChange(false);
+    if (mode === "edit" && onSaved) {
+      onSaved();
+      return;
+    }
     router.push(
       `/service/anlagen/${encodeURIComponent(result.equipment.equipment_number)}`,
     );
@@ -652,11 +717,8 @@ export function EquipmentFormDialog({
             onClick={() => void handleSubmit()}
             disabled={isPending}
           >
-            {isPending
-              ? "Wird gespeichert..."
-              : mode === "replace"
-                ? "Nachfolger anlegen"
-                : "Speichern"}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            {mode === "replace" ? "Nachfolger anlegen" : "Speichern"}
           </Button>
         </DialogFooter>
       </DialogContent>

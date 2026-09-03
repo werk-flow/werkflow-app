@@ -48,12 +48,15 @@ interface EditClientDialogProps {
   client: Client;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fires after the server confirmed; the list marks the row until refreshed props land. */
+  onSaved?: () => void;
 }
 
 export function EditClientDialog({
   client,
   open,
-  onOpenChange
+  onOpenChange,
+  onSaved
 }: EditClientDialogProps) {
   const [name, setName] = useState(client.name);
   const [clientType, setClientType] = useState<ClientType>(client.clientType);
@@ -111,6 +114,7 @@ export function EditClientDialog({
 
       if (result.success) {
         onOpenChange(false);
+        onSaved?.();
         showBanner({ variant: 'success', message: 'Kunde gespeichert.' });
         router.refresh();
       } else {

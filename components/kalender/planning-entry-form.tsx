@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Repeat2, Users } from 'lucide-react';
+import { CalendarDays, Loader2, Repeat2, Users } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -493,6 +493,7 @@ export function PlanningEntryForm({
 
       <DialogFooter className="pt-4">
         <Button type="submit" className="w-full" disabled={submitting}>
+          {submitting && <Loader2 className="size-4 animate-spin" />}
           {submitting ? 'Planung wird geprüft …' : conflicts.length > 0 ? 'Mit Begründung planen' : 'Planung prüfen und speichern'}
         </Button>
       </DialogFooter>

@@ -12,8 +12,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { joinOrganization } from '@/lib/org/actions';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -42,22 +42,29 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
     setIsLoading(true);
     setError(null);
 
-    const result = await joinOrganization(code);
+    try {
+      const result = await joinOrganization(code);
 
-    if (result.success && result.organizationId) {
-      // Use hard navigation to ensure cookies are properly read on the new page
-      // This is critical for production environments where cookie timing can be an issue
-      window.location.href = `/dashboard?joined=${result.organizationId}`;
-    } else {
-      setError(
-        ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
-          ERROR_MESSAGES.unexpected_error
-      );
+      if (result.success && result.organizationId) {
+        // Use hard navigation to ensure cookies are properly read on the new page
+        // This is critical for production environments where cookie timing can be an issue
+        window.location.href = `/dashboard?joined=${result.organizationId}`;
+      } else {
+        setError(
+          ERROR_MESSAGES[result.error ?? 'unexpected_error'] ??
+            ERROR_MESSAGES.unexpected_error
+        );
+      }
+    } catch (submitError) {
+      console.error('Unexpected error joining an organization:', submitError);
+      setError(ERROR_MESSAGES.unexpected_error);
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleOpenChange = (newOpen: boolean) => {
+    if (isLoading && !newOpen) return;
     if (!newOpen) {
       // Reset form when closing
       setCode('');
@@ -80,8 +87,7 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="dialog-org-code">Organisationscode</Label>
+          <Field label="Organisationscode" htmlFor="dialog-org-code" required>
             <Input
               id="dialog-org-code"
               type="text"
@@ -93,7 +99,7 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
               autoComplete="off"
               className="uppercase"
             />
-          </div>
+          </Field>
 
           <ErrorText>{error}</ErrorText>
 
@@ -122,4 +128,3 @@ export function JoinOrgDialog({ open, onOpenChange }: JoinOrgDialogProps) {
     </Dialog>
   );
 }
-

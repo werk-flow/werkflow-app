@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -22,6 +23,7 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { useBanner } from '@/components/ui/banner';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -273,9 +275,13 @@ export function JobDetailContent({
   const [showAssignDialog, setShowAssignDialog] = useState(false);
   const [showClientDialog, setShowClientDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState(false);
-  const [unassigningUserId, setUnassigningUserId] = useState<string | null>(
-    null
-  );
+  // Dialog-scoped failures: each stays visible inside its open dialog.
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [clientSaveError, setClientSaveError] = useState<string | null>(null);
+  const [projectSaveError, setProjectSaveError] = useState<string | null>(null);
+  const [qualificationOverrideError, setQualificationOverrideError] =
+    useState<string | null>(null);
+  const { run: runUnassign, isBusy: isUnassigning } = useBusyIds();
   const [assignSelectedIds, setAssignSelectedIds] = useState<string[]>([]);
   const [qualificationWarning, setQualificationWarning] =
     useState<AssignmentEvaluation | null>(null);
@@ -669,30 +675,36 @@ export function JobDetailContent({
     isDeletingRef.current = true;
     suppressRefreshRef.current = true;
     void runDeleteTask(async () => {
-      const result = await deleteJob(liveJob.id);
-      if (result.success) {
-        const deletedParam = `?deleted_job=${encodeURIComponent(displayTitle)}`;
-        // Hard navigation — see the deletion-stall note in kunden-detail-content.
-        if (projectInfo?.projectNumber) {
-          window.location.assign(
-            `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
-          );
-        } else {
-          window.location.assign(`/auftraege${deletedParam}`);
+      let errorMessage: string | null = null;
+      try {
+        const result = await deleteJob(liveJob.id);
+        if (result.success) {
+          const deletedParam = `?deleted_job=${encodeURIComponent(displayTitle)}`;
+          // Hard navigation — see the deletion-stall note in kunden-detail-content.
+          if (projectInfo?.projectNumber) {
+            window.location.assign(
+              `/auftraege/projekt/${encodeURIComponent(projectInfo.projectNumber!)}${deletedParam}`
+            );
+          } else {
+            window.location.assign(`/auftraege${deletedParam}`);
+          }
+          return;
         }
-      } else {
-        isDeletingRef.current = false;
-        suppressRefreshRef.current = false;
-        setDeleteError(
+        errorMessage =
           result.error === 'planning_history_exists'
             ? JOB_DELETE_HISTORY_MESSAGE
-            : JOB_DELETE_FAILED_MESSAGE
-        );
+            : JOB_DELETE_FAILED_MESSAGE;
+      } catch {
+        errorMessage = JOB_DELETE_FAILED_MESSAGE;
       }
+      isDeletingRef.current = false;
+      suppressRefreshRef.current = false;
+      setDeleteError(errorMessage);
     });
   };
 
   const handleAssignEmployees = () => {
+    setAssignError(null);
     void runAssignTask(async () => {
       const newIds = assignSelectedIds.filter(
         (id) => !liveJob.assignments.some((a) => a.userId === id)
@@ -701,12 +713,18 @@ export function JobDetailContent({
         ...liveJob.assignments.map((assignment) => assignment.userId),
         ...newIds,
       ];
-      const result = await updateJobAssignments(
-        liveJob.id,
-        nextIds,
-        null,
-        assignmentTeamSourceId
-      );
+      let result: Awaited<ReturnType<typeof updateJobAssignments>>;
+      try {
+        result = await updateJobAssignments(
+          liveJob.id,
+          nextIds,
+          null,
+          assignmentTeamSourceId
+        );
+      } catch {
+        setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
+        return;
+      }
       if (!result.success) {
         if (
           (result.error === 'qualification_warning' ||
@@ -716,7 +734,7 @@ export function JobDetailContent({
           setPendingAssignmentIds(nextIds);
           setQualificationWarning(result.evaluation);
         } else {
-          showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
+          setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
         }
         return;
       }
@@ -764,12 +782,18 @@ export function JobDetailContent({
   };
 
   const handleUnassign = async (userId: string) => {
-    setUnassigningUserId(userId);
     const nextIds = liveJob.assignments
       .map((assignment) => assignment.userId)
       .filter((id) => id !== userId);
-    const result = await updateJobAssignments(liveJob.id, nextIds);
-    setUnassigningUserId(null);
+    let result: Awaited<ReturnType<typeof updateJobAssignments>>;
+    try {
+      result = await runUnassign(userId, () =>
+        updateJobAssignments(liveJob.id, nextIds)
+      );
+    } catch {
+      showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
+      return;
+    }
     if (
       !result.success &&
       (result.error === 'qualification_warning' ||
@@ -784,28 +808,27 @@ export function JobDetailContent({
       showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
       return;
     }
-    if (result.success) {
-      setLiveJob((current) => {
-        const nextAssignments = current.assignments.filter(
-          (assignment) => assignment.userId !== userId
-        );
+    setLiveJob((current) => {
+      const nextAssignments = current.assignments.filter(
+        (assignment) => assignment.userId !== userId
+      );
 
-        return {
-          ...current,
-          assignments: nextAssignments,
-          plannedWorkingMinutes: calculatePlannedWorkingMinutes(
-            current.estimatedDurationMinutes,
-            nextAssignments.length
-          ),
-        };
-      });
-    }
+      return {
+        ...current,
+        assignments: nextAssignments,
+        plannedWorkingMinutes: calculatePlannedWorkingMinutes(
+          current.estimatedDurationMinutes,
+          nextAssignments.length
+        ),
+      };
+    });
   };
 
   const handleQualificationOverride = async (
     approval: AssignmentApproval
   ) => {
     setIsQualificationOverrideSaving(true);
+    setQualificationOverrideError(null);
     try {
       const result = await updateJobAssignments(
         liveJob.id,
@@ -821,10 +844,9 @@ export function JobDetailContent({
         ) {
           setQualificationWarning(result.evaluation);
         } else {
-          showBanner({
-            variant: 'error',
-            message: 'Die begründete Zuweisung konnte nicht gespeichert werden.',
-          });
+          setQualificationOverrideError(
+            'Die begründete Zuweisung konnte nicht gespeichert werden.'
+          );
         }
         return;
       }
@@ -835,32 +857,44 @@ export function JobDetailContent({
       setAssignmentTeamSourceId(null);
       router.refresh();
     } catch {
-      showBanner({
-        variant: 'error',
-        message: 'Die begründete Zuweisung konnte nicht gespeichert werden.',
-      });
+      setQualificationOverrideError(
+        'Die begründete Zuweisung konnte nicht gespeichert werden.'
+      );
     } finally {
       setIsQualificationOverrideSaving(false);
     }
   };
 
   const handleClientSave = async (clientId: string) => {
+    setClientSaveError(null);
     void runClientUpdateTask(async () => {
-      if (parentProject?.id) {
-        await updateProject(parentProject.id, { clientId });
-      } else {
-        const result = await updateJob(liveJob.id, {
-          clientId,
-        });
-        if (result.success) {
-          applyLiveJobPatch({
-            ...result.job,
-            clientId: result.job.clientId,
-            client: result.job.clientId
-              ? clients.find((client) => client.id === result.job.clientId) ?? null
-              : null,
-          });
+      // The dialog stays open with the failure on any rejected or thrown save.
+      try {
+        if (parentProject?.id) {
+          const result = await updateProject(parentProject.id, { clientId });
+          if (!result.success) {
+            setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+            return;
+          }
+        } else {
+          const result = await updateJob(liveJob.id, { clientId });
+          if (!result.success && result.error !== 'no_changes') {
+            setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+            return;
+          }
+          if (result.success) {
+            applyLiveJobPatch({
+              ...result.job,
+              clientId: result.job.clientId,
+              client: result.job.clientId
+                ? clients.find((client) => client.id === result.job.clientId) ?? null
+                : null,
+            });
+          }
         }
+      } catch {
+        setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+        return;
       }
       setShowClientDialog(false);
       if (parentProject?.id) {
@@ -870,16 +904,21 @@ export function JobDetailContent({
   };
 
   const handleProjectSave = async (projectId: string) => {
+    setProjectSaveError(null);
     void runProjectUpdateTask(async () => {
       suppressRefreshRef.current = true;
-      const result = await updateJob(liveJob.id, { projectId });
+      let result: Awaited<ReturnType<typeof updateJob>>;
+      try {
+        result = await updateJob(liveJob.id, { projectId });
+      } catch {
+        suppressRefreshRef.current = false;
+        setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
+        return;
+      }
       if (!result.success && result.error !== 'no_changes') {
         // The dialog stays open and the failure is visible (no silent close).
         suppressRefreshRef.current = false;
-        showBanner({
-          variant: 'error',
-          message: 'Das Projekt konnte nicht gespeichert werden.',
-        });
+        setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
         return;
       }
       setShowProjectDialog(false);
@@ -1438,20 +1477,22 @@ export function JobDetailContent({
                         )}
                       </div>
                       {isAdminOrManager && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 shrink-0"
-                          aria-label={`Zuweisung für ${getSessionPersonName(a)} entfernen`}
-                          onClick={() => handleUnassign(a.userId)}
-                          disabled={unassigningUserId === a.userId}
-                        >
-                          {unassigningUserId === a.userId ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
+                        <>
+                          <InlinePending
+                            active={isUnassigning(a.userId)}
+                            label="Zuweisung wird entfernt"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-6 shrink-0"
+                            aria-label={`Zuweisung für ${getSessionPersonName(a)} entfernen`}
+                            onClick={() => handleUnassign(a.userId)}
+                            disabled={isUnassigning(a.userId)}
+                          >
                             <X className="size-3" />
-                          )}
-                        </Button>
+                          </Button>
+                        </>
                       )}
                     </div>
                   ))}
@@ -1755,7 +1796,12 @@ export function JobDetailContent({
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={(event) => {
+                // Radix closes on click by default; stay open so the spinner
+                // and a failure are visible where the user acted.
+                event.preventDefault();
+                handleDelete();
+              }}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -1774,6 +1820,7 @@ export function JobDetailContent({
           if (!open) {
             setAssignmentTeamSourceId(null);
             setIsExpandingAssignmentTeam(false);
+            setAssignError(null);
           }
         }}
       >
@@ -1796,6 +1843,7 @@ export function JobDetailContent({
                 <Skeleton className="h-8 w-2/3" />
               </div>
             )}
+            <ErrorText className="mt-3">{assignError}</ErrorText>
           </div>
           <div className="flex justify-end gap-2">
             <Button
@@ -1824,7 +1872,10 @@ export function JobDetailContent({
 
       <ClientAssignmentDialog
         open={showClientDialog}
-        onOpenChange={setShowClientDialog}
+        onOpenChange={(open) => {
+          setShowClientDialog(open);
+          if (!open) setClientSaveError(null);
+        }}
         clients={dialogClients}
         currentClientId={liveJob.clientId}
         title={
@@ -1833,17 +1884,22 @@ export function JobDetailContent({
             : 'Kunde zum Auftrag hinzufügen'
         }
         isSaving={isUpdatingClient}
+        saveError={clientSaveError}
         onSave={handleClientSave}
       />
 
       <ProjectAssignmentDialog
         open={showProjectDialog}
-        onOpenChange={setShowProjectDialog}
+        onOpenChange={(open) => {
+          setShowProjectDialog(open);
+          if (!open) setProjectSaveError(null);
+        }}
         projects={dialogProjects}
         currentProjectId={liveJob.projectId}
         currentClientId={liveJob.clientId}
         title="Projekt zum Auftrag hinzufügen"
         isSaving={isUpdatingProject}
+        saveError={projectSaveError}
         onSave={handleProjectSave}
       />
 
@@ -1888,9 +1944,11 @@ export function JobDetailContent({
       <QualificationWarningDialog
         evaluation={qualificationWarning}
         isSubmitting={isAssigning || isQualificationOverrideSaving}
+        error={qualificationOverrideError}
         onCancel={() => {
           setQualificationWarning(null);
           setPendingAssignmentIds([]);
+          setQualificationOverrideError(null);
         }}
         onConfirm={handleQualificationOverride}
       />

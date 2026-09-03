@@ -1,7 +1,6 @@
 'use client';
 import { SectionError } from '@/components/ui/section-error';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import {
   CalendarClock,
@@ -10,7 +9,6 @@ import {
   ClipboardCheck,
   Clock,
   Inbox,
-  Loader2,
   MessageSquare,
   Palmtree,
   ParkingSquare,
@@ -21,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
 import { Card } from '@/components/ui/card';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
@@ -41,6 +40,7 @@ import {
   REQUEST_URGENCY_LABELS,
 } from '@/lib/requests/types';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
 import { PersonnelOwnActionsSection } from '@/components/mitarbeiter/personnel-own-actions-section';
@@ -49,6 +49,8 @@ const MARK_READ_ERROR =
   'Die Benachrichtigung konnte nicht als gelesen markiert werden.';
 const MARK_ALL_READ_ERROR =
   'Die Benachrichtigungen konnten nicht als gelesen markiert werden.';
+// Busy id for „Alle als gelesen markieren“; source ids are UUIDs, so no clash.
+const ALL_NOTIFICATIONS_ID = '__all__';
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
@@ -124,7 +126,7 @@ function certificationNotificationText(
 
 export function AufgabenContent() {
   const { showBanner } = useBanner();
-  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const busy = useBusyIds();
   const { refreshAttentionCounts } = useAttentionCounts();
 
   // Keep last-known data on transient failures; only a failed initial
@@ -164,45 +166,59 @@ export function AufgabenContent() {
   const overview = view.data ?? null;
   const refetch = view.refresh;
 
-  const handleMarkRead = async (notification: AttentionNotification) => {
-    if (busyKey) return;
-    setBusyKey(notification.sourceId);
-    try {
-      const result = await markAttentionNotificationRead({
-        sourceType: notification.sourceType,
-        sourceId: notification.sourceId,
-        stateVersion: notification.stateVersion,
-      });
-      if (!result.success) {
-        showBanner({ variant: 'error', message: MARK_READ_ERROR });
+  // Mark-as-read is a micro-toggle: the dot disappears at once (optimistic
+  // echo on the live view), the failure restores the snapshot and shows an
+  // error banner, and the follow-up read reconciles with the server.
+  const markRead = async (
+    sourceId: string | null,
+    action: () => Promise<{ success: boolean }>,
+    errorMessage: string
+  ) => {
+    const busyId = sourceId ?? ALL_NOTIFICATIONS_ID;
+    if (busy.isBusy(busyId)) return;
+    const snapshot = view.data;
+    view.invalidate();
+    view.setData((previous) =>
+      previous && {
+        ...previous,
+        notifications: previous.notifications.map((notification) =>
+          sourceId === null || notification.sourceId === sourceId
+            ? { ...notification, unread: false }
+            : notification
+        ),
       }
-    } catch (error) {
-      console.error('Error marking notification read:', error);
-      showBanner({ variant: 'error', message: MARK_READ_ERROR });
-    } finally {
-      setBusyKey(null);
-    }
-    await refetch();
-    void refreshAttentionCounts();
+    );
+    await busy.run(busyId, async () => {
+      let succeeded = false;
+      try {
+        succeeded = (await action()).success;
+      } catch {
+        succeeded = false;
+      }
+      if (!succeeded) {
+        view.setData(() => snapshot);
+        showBanner({ variant: 'error', message: errorMessage });
+        return;
+      }
+      await refetch();
+      void refreshAttentionCounts();
+    });
   };
 
-  const handleMarkAllRead = async () => {
-    if (busyKey) return;
-    setBusyKey('__all__');
-    try {
-      const result = await markAllAttentionNotificationsRead();
-      if (!result.success) {
-        showBanner({ variant: 'error', message: MARK_ALL_READ_ERROR });
-      }
-    } catch (error) {
-      console.error('Error marking all notifications read:', error);
-      showBanner({ variant: 'error', message: MARK_ALL_READ_ERROR });
-    } finally {
-      setBusyKey(null);
-    }
-    await refetch();
-    void refreshAttentionCounts();
-  };
+  const handleMarkRead = (notification: AttentionNotification) =>
+    markRead(
+      notification.sourceId,
+      () =>
+        markAttentionNotificationRead({
+          sourceType: notification.sourceType,
+          sourceId: notification.sourceId,
+          stateVersion: notification.stateVersion,
+        }),
+      MARK_READ_ERROR
+    );
+
+  const handleMarkAllRead = () =>
+    markRead(null, markAllAttentionNotificationsRead, MARK_ALL_READ_ERROR);
 
   if (view.isLoading) {
     return (
@@ -425,10 +441,10 @@ export function AufgabenContent() {
               size="sm"
               className="gap-1.5"
               onClick={() => void handleMarkAllRead()}
-              disabled={busyKey !== null}
+              disabled={busy.anyBusy}
             >
-              {busyKey === '__all__' ? (
-                <Loader2 className="size-3.5 animate-spin" />
+              {busy.isBusy(ALL_NOTIFICATIONS_ID) ? (
+                <InlinePending active label="Benachrichtigungen werden markiert" />
               ) : (
                 <CheckCheck className="size-3.5" />
               )}
@@ -508,11 +524,14 @@ export function AufgabenContent() {
                       size="sm"
                       className="gap-1.5 text-muted-foreground"
                       onClick={() => void handleMarkRead(notification)}
-                      disabled={busyKey !== null}
+                      disabled={
+                        busy.isBusy(notification.sourceId) ||
+                        busy.isBusy(ALL_NOTIFICATIONS_ID)
+                      }
                       aria-label={`Benachrichtigung vom ${range} als gelesen markieren`}
                     >
-                      {busyKey === notification.sourceId ? (
-                        <Loader2 className="size-3.5 animate-spin" />
+                      {busy.isBusy(notification.sourceId) ? (
+                        <InlinePending active label="Wird als gelesen markiert" />
                       ) : (
                         <Check className="size-3.5" />
                       )}

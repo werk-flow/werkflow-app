@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Inbox, RefreshCw, Search } from 'lucide-react';
+import { Inbox, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Input } from '@/components/ui/input';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -152,19 +152,12 @@ function requestCallerLabel(entry: RequestListEntry): string {
 
 export function AnfragenContent({ entries }: AnfragenContentProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('aktiv');
 
   useRealtimeRouterRefresh({
     tables: ['client_requests', 'clients'],
   });
-
-  const handleRefresh = useCallback(() => {
-    startTransition(() => {
-      router.refresh();
-    });
-  }, [router]);
 
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -227,17 +220,7 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
                 aria-label="Anfragen durchsuchen"
               />
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={isPending}
-              className="h-8 w-8"
-              title="Liste aktualisieren"
-            >
-              <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
-              <span className="sr-only">Aktualisieren</span>
-            </Button>
+            <RefreshButton label="Liste aktualisieren" />
           </div>
         </div>
         <p className="text-sm text-muted-foreground">

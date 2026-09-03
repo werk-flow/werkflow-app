@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
 import { Button } from "@/components/ui/button";
@@ -29,14 +30,43 @@ function toLocalDate(value: string): Date | undefined {
   return year && month && day ? new Date(year, month - 1, day) : undefined;
 }
 
+/** The values the workspace can show for a coverage before the server confirms it. */
+export type MaintenanceCoveragePendingDraft = {
+  kind: "coverage";
+  id: string;
+  clientName: string;
+  siteName: string;
+  reference: string | null;
+};
+
+export type MaintenanceCoverageCreateSubmission = {
+  draft: MaintenanceCoveragePendingDraft;
+  /** Never rejects; a failure carries the German message for the caller's banner. */
+  result: Promise<{ success: true } | { success: false; message: string }>;
+};
+
+const GENERIC_ERROR = "Die operative Abdeckung konnte nicht gespeichert werden.";
+
+function errorMessage(code: string): string {
+  return code === "maintenance_coverage_site_mismatch"
+    ? "Der Einsatzort gehört nicht zum gewählten Kunden."
+    : GENERIC_ERROR;
+}
+
 export function MaintenanceCoverageDialog({
   open,
   onOpenChange,
   clients,
+  onSubmitted,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clients: MaintenanceClientOption[];
+  /**
+   * Create from the workspace (feedback canon): the dialog closes at once and
+   * the caller renders the pending row until `result` settles.
+   */
+  onSubmitted?: (submission: MaintenanceCoverageCreateSubmission) => void;
 }): ReactElement {
   const router = useRouter();
   const [clientId, setClientId] = useState("");
@@ -56,15 +86,14 @@ export function MaintenanceCoverageDialog({
     idempotencyKey: crypto.randomUUID(),
   });
   const client = clients.find((item) => item.id === clientId);
-  const { run, isPending } = useServerAction(async () => {
-    setError(null);
-    const result = await createMaintenanceCoverage({
+  function buildInput() {
+    return {
       coverageId: mutationIdentity.current.coverageId,
       clientId,
       siteId,
       reference: reference || null,
       description: description || null,
-      status: "active",
+      status: "active" as const,
       validFrom: validFrom || null,
       validUntil: validUntil || null,
       noticeDate: noticeDate || null,
@@ -72,13 +101,13 @@ export function MaintenanceCoverageDialog({
       reviewDueDate: reviewDueDate || null,
       operationalNote: operationalNote || null,
       idempotencyKey: mutationIdentity.current.idempotencyKey,
-    });
+    };
+  }
+  const { run, isPending } = useServerAction(async () => {
+    setError(null);
+    const result = await createMaintenanceCoverage(buildInput());
     if (!result.success) {
-      setError(
-        result.error === "maintenance_coverage_site_mismatch"
-          ? "Der Einsatzort gehört nicht zum gewählten Kunden."
-          : "Die operative Abdeckung konnte nicht gespeichert werden.",
-      );
+      setError(errorMessage(result.error));
       return;
     }
     onOpenChange(false);
@@ -95,6 +124,26 @@ export function MaintenanceCoverageDialog({
       document
         .getElementById(clientId ? "coverage-site" : "coverage-client")
         ?.focus();
+      return;
+    }
+    if (onSubmitted) {
+      onSubmitted({
+        draft: {
+          kind: "coverage",
+          id: mutationIdentity.current.coverageId,
+          clientName: client?.name ?? "",
+          siteName: client?.sites.find((site) => site.id === siteId)?.name ?? "",
+          reference: reference || null,
+        },
+        result: createMaintenanceCoverage(buildInput()).then(
+          (created) =>
+            created.success
+              ? { success: true as const }
+              : { success: false as const, message: errorMessage(created.error) },
+          () => ({ success: false as const, message: GENERIC_ERROR }),
+        ),
+      });
+      onOpenChange(false);
       return;
     }
     void run();
@@ -228,7 +277,8 @@ export function MaintenanceCoverageDialog({
             Abbrechen
           </Button>
           <Button type="button" onClick={submit} disabled={isPending}>
-            {isPending ? "Speichert…" : "Abdeckung speichern"}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            Abdeckung speichern
           </Button>
         </DialogFooter>
       </DialogContent>

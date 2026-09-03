@@ -19,6 +19,7 @@ import {
 import { Field } from '@/components/ui/field'
 import { Form, FormField } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { InlinePending } from '@/components/ui/inline-pending'
 import {
   Select,
   SelectContent,
@@ -117,6 +118,9 @@ export function TimeTrackingSettingsForm({
         message: 'Die Regeln für die Zeiterfassung wurden gespeichert.',
         variant: 'success',
       })
+    } catch (error) {
+      console.error('Unexpected error saving time-tracking settings:', error)
+      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' })
     } finally {
       setIsSaving(false)
     }
@@ -126,7 +130,10 @@ export function TimeTrackingSettingsForm({
     <div className="space-y-6 pb-28">
       <Card>
         <CardHeader>
-          <CardTitle>Pausenregel</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Pausenregel
+            <InlinePending active={isSaving} label="Zeiterfassungsregeln werden gespeichert" />
+          </CardTitle>
           <CardDescription>
             Lege fest, ob Pausen weiter manuell gestempelt werden oder automatisch
             abgezogen werden.

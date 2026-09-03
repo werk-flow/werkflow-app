@@ -25,6 +25,7 @@ import {
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { InlinePending } from '@/components/ui/inline-pending';
 
 export function ProfileSettingsForm() {
   const router = useRouter();
@@ -67,6 +68,12 @@ export function ProfileSettingsForm() {
         message: 'Dein Profil wurde gespeichert.',
         variant: 'success',
       });
+    } catch (error) {
+      console.error('Unexpected error saving profile settings:', error);
+      showBanner({
+        message: 'Dein Profil konnte nicht gespeichert werden.',
+        variant: 'error',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -78,7 +85,10 @@ export function ProfileSettingsForm() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Anzeigename</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Anzeigename
+            <InlinePending active={isSaving} label="Profil wird gespeichert" />
+          </CardTitle>
           <CardDescription>
             Diese Angaben erscheinen in der Sidebar und an weiteren Stellen der App als dein Name.
           </CardDescription>

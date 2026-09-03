@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { useBanner } from '@/components/ui/banner'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { setActiveOrgCookie } from '@/lib/org/actions'
 import type { Database } from '@/lib/supabase/database.types'
@@ -81,6 +82,7 @@ export function OrganizationProvider({
 }: OrganizationProviderProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const { showBanner } = useBanner()
   const [, startTransition] = useTransition()
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships)
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId)
@@ -108,9 +110,15 @@ export function OrganizationProvider({
   useEffect(() => {
     if (initialActiveOrgId && !hasSetCookieRef.current) {
       hasSetCookieRef.current = true
-      setActiveOrgCookie(initialActiveOrgId).catch(() => {})
+      setActiveOrgCookie(initialActiveOrgId).catch((error: unknown) => {
+        console.error('Failed to synchronize the active organization', error)
+        showBanner({
+          variant: 'error',
+          message: 'Die aktive Organisation konnte nicht synchronisiert werden.',
+        })
+      })
     }
-  }, [initialActiveOrgId])
+  }, [initialActiveOrgId, showBanner])
 
   const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null
 
@@ -153,6 +161,10 @@ export function OrganizationProvider({
 
       if (error) {
         console.error('Error fetching memberships:', error)
+        showBanner({
+          variant: 'error',
+          message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
+        })
         return
       }
 
@@ -183,7 +195,7 @@ export function OrganizationProvider({
         setIsLoading(false)
       }
     }
-  }, [activeOrgId])
+  }, [activeOrgId, showBanner])
 
   const setActiveOrg = useCallback(
     async (orgId: string) => {
@@ -214,12 +226,16 @@ export function OrganizationProvider({
         })
       } catch (error) {
         console.error('Failed to switch organization', error)
+        setActiveOrgId(activeOrgId)
         pendingOrgIdRef.current = null
         setIsSwitchingOrg(false)
-        throw error
+        showBanner({
+          variant: 'error',
+          message: 'Die Organisation konnte nicht gewechselt werden.',
+        })
       }
     },
-    [activeOrgId, router, pathname, startTransition],
+    [activeOrgId, router, pathname, showBanner, startTransition],
   )
 
   // Reset switching state when server data arrives for the target org

@@ -18,12 +18,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { useBanner } from "@/components/ui/banner";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { useServerAction } from "@/hooks/use-server-action";
 import { parseBerlinDateTimeInput } from "@/lib/customer-relationships/date-time";
 import { uploadPersonnelDocumentDirect } from "@/lib/documents/upload-client";
@@ -195,6 +197,7 @@ export function PersonnelLifecycleSection({
   });
 
   const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
+  const rowBusy = useBusyIds();
   const currentPlan = data.plans[0] ?? null;
   const incompleteRequirements = useMemo(
     () => currentPlan?.requirements.filter((item) => !["fulfilled", "waived", "cancelled"].includes(item.state)) ?? [],
@@ -214,23 +217,28 @@ export function PersonnelLifecycleSection({
     if (reason.trim().length < 2) nextErrors["access-reason"] = "Bitte gib einen Grund an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
-    await run(async () => {
-      const result = await setPersonnelAccessTransition({
-        employeeRecordId: data.employeeRecordId,
-        expectedVersion: data.access.version,
-        transitionKind: accessKind,
-        effectiveAt: instant,
-        reason,
-        operationId: crypto.randomUUID(),
+    try {
+      await run(async () => {
+        const result = await setPersonnelAccessTransition({
+          employeeRecordId: data.employeeRecordId,
+          expectedVersion: data.access.version,
+          transitionKind: accessKind,
+          effectiveAt: instant,
+          reason,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          setError(errorMessage(result.error));
+          return;
+        }
+        setAccessOpen(false);
+        setReason("");
+        showBanner({ variant: "success", message: "Zugangsstatus wurde gespeichert." });
       });
-      if (!result.success) {
-        setError(errorMessage(result.error));
-        return;
-      }
-      setAccessOpen(false);
-      setReason("");
-      showBanner({ variant: "success", message: "Zugangsstatus wurde gespeichert." });
-    });
+    } catch (submitError) {
+      console.error("Unexpected error saving the access transition:", submitError);
+      setError(ERROR_MESSAGES.mutation_failed);
+    }
   }
 
   async function submitEmployment(): Promise<void> {
@@ -240,25 +248,30 @@ export function PersonnelLifecycleSection({
     if (reason.trim().length < 2) nextErrors["employment-reason"] = "Bitte gib einen Grund an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors) || !employmentDate) return;
-    await run(async () => {
-      const result = await setPersonnelEmploymentTransition({
-        employeeRecordId: data.employeeRecordId,
-        expectedVersion: data.employment.version,
-        transitionKind: employmentKind,
-        effectiveOn: toLocalDateString(employmentDate),
-        reason,
-        acceptUnresolvedWork: acceptUnresolved,
-        operationId: crypto.randomUUID(),
+    try {
+      await run(async () => {
+        const result = await setPersonnelEmploymentTransition({
+          employeeRecordId: data.employeeRecordId,
+          expectedVersion: data.employment.version,
+          transitionKind: employmentKind,
+          effectiveOn: toLocalDateString(employmentDate),
+          reason,
+          acceptUnresolvedWork: acceptUnresolved,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          setError(errorMessage(result.error));
+          return;
+        }
+        setEmploymentOpen(false);
+        setReason("");
+        setAcceptUnresolved(false);
+        showBanner({ variant: "success", message: "Beschäftigungsübergang wurde gespeichert." });
       });
-      if (!result.success) {
-        setError(errorMessage(result.error));
-        return;
-      }
-      setEmploymentOpen(false);
-      setReason("");
-      setAcceptUnresolved(false);
-      showBanner({ variant: "success", message: "Beschäftigungsübergang wurde gespeichert." });
-    });
+    } catch (submitError) {
+      console.error("Unexpected error saving the employment transition:", submitError);
+      setError(ERROR_MESSAGES.mutation_failed);
+    }
   }
 
   async function submitPlan(): Promise<void> {
@@ -267,37 +280,47 @@ export function PersonnelLifecycleSection({
     if (!planName.trim()) nextErrors["plan-name"] = "Bitte gib eine Bezeichnung an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
-    await run(async () => {
-      const result = await createPersonnelOnboardingPlan({
-        employeeRecordId: data.employeeRecordId,
-        templateVersionId: planTemplateVersionId || null,
-        name: planName,
-        targetStartDate: planStartDate ? toLocalDateString(planStartDate) : null,
-        operationId: crypto.randomUUID(),
+    try {
+      await run(async () => {
+        const result = await createPersonnelOnboardingPlan({
+          employeeRecordId: data.employeeRecordId,
+          templateVersionId: planTemplateVersionId || null,
+          name: planName,
+          targetStartDate: planStartDate ? toLocalDateString(planStartDate) : null,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          setError(errorMessage(result.error));
+          return;
+        }
+        setPlanOpen(false);
+        showBanner({ variant: "success", message: "Onboardingplan wurde angelegt." });
       });
-      if (!result.success) {
-        setError(errorMessage(result.error));
-        return;
-      }
-      setPlanOpen(false);
-      showBanner({ variant: "success", message: "Onboardingplan wurde angelegt." });
-    });
+    } catch (submitError) {
+      console.error("Unexpected error creating the onboarding plan:", submitError);
+      setError(ERROR_MESSAGES.mutation_failed);
+    }
   }
 
   async function downloadManifest(): Promise<void> {
-    await run(async () => {
-      const result = await exportPersonnelLifecycleManifest(data.employeeRecordId);
-      if (!result.success) {
-        showBanner({ variant: "error", message: errorMessage(result.error) });
-        return;
-      }
-      const url = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `personalprozess-${data.employeeRecordId}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    });
+    try {
+      await run(async () => {
+        const result = await exportPersonnelLifecycleManifest(data.employeeRecordId);
+        if (!result.success) {
+          showBanner({ variant: "error", message: errorMessage(result.error) });
+          return;
+        }
+        const url = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }));
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `personalprozess-${data.employeeRecordId}.json`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      });
+    } catch (downloadError) {
+      console.error("Unexpected error exporting the personnel lifecycle manifest:", downloadError);
+      showBanner({ variant: "error", message: "Der Arbeitsstand konnte nicht exportiert werden." });
+    }
   }
 
   async function submitRequirement(): Promise<void> {
@@ -307,30 +330,35 @@ export function PersonnelLifecycleSection({
     if (!requirementTitle.trim()) nextErrors["requirement-title"] = "Bitte gib einen Titel an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors)) return;
-    await run(async () => {
-      const result = await savePersonnelOnboardingRequirement({
-        planId: currentPlan.id,
-        requirementId: null,
-        expectedVersion: 0,
-        requirementType,
-        title: requirementTitle,
-        description: null,
-        isRequired: requirementRequired,
-        blocksAccess: requirementBlocksAccess,
-        ownerEmployeeRecordId: null,
-        dueDate: null,
-        state: "missing",
-        blockerReason: null,
-        operationId: crypto.randomUUID(),
+    try {
+      await run(async () => {
+        const result = await savePersonnelOnboardingRequirement({
+          planId: currentPlan.id,
+          requirementId: null,
+          expectedVersion: 0,
+          requirementType,
+          title: requirementTitle,
+          description: null,
+          isRequired: requirementRequired,
+          blocksAccess: requirementBlocksAccess,
+          ownerEmployeeRecordId: null,
+          dueDate: null,
+          state: "missing",
+          blockerReason: null,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          setError(errorMessage(result.error));
+          return;
+        }
+        setRequirementOpen(false);
+        setRequirementTitle("");
+        showBanner({ variant: "success", message: "Anforderung wurde ergänzt." });
       });
-      if (!result.success) {
-        setError(errorMessage(result.error));
-        return;
-      }
-      setRequirementOpen(false);
-      setRequirementTitle("");
-      showBanner({ variant: "success", message: "Anforderung wurde ergänzt." });
-    });
+    } catch (submitError) {
+      console.error("Unexpected error creating the onboarding requirement:", submitError);
+      setError(ERROR_MESSAGES.mutation_failed);
+    }
   }
 
   async function resolveRequirement(
@@ -338,7 +366,7 @@ export function PersonnelLifecycleSection({
     state: Extract<PersonnelRequirementState, "fulfilled" | "waived" | "cancelled">,
   ): Promise<void> {
     setError(null);
-    await run(async () => {
+    await rowBusy.run(requirement.id, async () => {
       const result = await savePersonnelOnboardingRequirement({
         planId: requirement.planId,
         requirementId: requirement.id,
@@ -355,10 +383,13 @@ export function PersonnelLifecycleSection({
         operationId: crypto.randomUUID(),
       });
       if (!result.success) {
-        setError(errorMessage(result.error));
+        showBanner({ variant: "error", message: errorMessage(result.error) });
         return;
       }
       showBanner({ variant: "success", message: "Anforderung wurde aktualisiert." });
+    }).catch((submitError: unknown) => {
+      console.error("Unexpected error updating the onboarding requirement:", submitError);
+      showBanner({ variant: "error", message: ERROR_MESSAGES.mutation_failed });
     });
   }
 
@@ -369,29 +400,34 @@ export function PersonnelLifecycleSection({
     if (documentType.trim().length < 2) nextErrors["document-type"] = "Bitte gib die Dokumentart an.";
     setFieldErrors(nextErrors);
     if (focusFirstInvalid(nextErrors) || !file) return;
-    await run(async () => {
-      const result = await uploadPersonnelDocumentDirect({
-        employeeRecordId: data.employeeRecordId,
-        file,
-        documentType,
-        accessClass,
-        evidenceState: "valid",
-        validUntil: null,
-        operationId: crypto.randomUUID(),
+    try {
+      await run(async () => {
+        const result = await uploadPersonnelDocumentDirect({
+          employeeRecordId: data.employeeRecordId,
+          file,
+          documentType,
+          accessClass,
+          evidenceState: "valid",
+          validUntil: null,
+          operationId: crypto.randomUUID(),
+        });
+        if (!result.success) {
+          setError(errorMessage(result.error));
+          return;
+        }
+        setUploadOpen(false);
+        setFile(null);
+        setDocumentType("");
+        showBanner({ variant: "success", message: "Geschützte Personalunterlage wurde gespeichert." });
       });
-      if (!result.success) {
-        setError(errorMessage(result.error));
-        return;
-      }
-      setUploadOpen(false);
-      setFile(null);
-      setDocumentType("");
-      showBanner({ variant: "success", message: "Geschützte Personalunterlage wurde gespeichert." });
-    });
+    } catch (submitError) {
+      console.error("Unexpected error uploading the personnel document:", submitError);
+      setError(ERROR_MESSAGES.mutation_failed);
+    }
   }
 
   async function toggleRelease(document: PersonnelLifecycleView["documents"][number]): Promise<void> {
-    await run(async () => {
+    await rowBusy.run(document.id, async () => {
       const result = await setPersonnelDocumentRelease({
         employeeRecordId: data.employeeRecordId,
         personnelDocumentId: document.id,
@@ -405,17 +441,23 @@ export function PersonnelLifecycleSection({
           ? { variant: "success", message: document.releasedToEmployee ? "Freigabe wurde zurückgenommen." : "Dokument wurde für die betroffene Person freigegeben." }
           : { variant: "error", message: errorMessage(result.error) },
       );
+    }).catch((submitError: unknown) => {
+      console.error("Unexpected error updating the document release:", submitError);
+      showBanner({ variant: "error", message: ERROR_MESSAGES.mutation_failed });
     });
   }
 
-  async function downloadDocument(documentId: string): Promise<void> {
-    await run(async () => {
-      const result = await getPersonnelDocumentSignedUrl(documentId);
+  async function downloadDocument(document: PersonnelLifecycleView["documents"][number]): Promise<void> {
+    await rowBusy.run(document.id, async () => {
+      const result = await getPersonnelDocumentSignedUrl(document.documentId);
       if (!result.success) {
         showBanner({ variant: "error", message: errorMessage(result.error) });
         return;
       }
       window.location.assign(result.data.signedUrl);
+    }).catch((downloadError: unknown) => {
+      console.error("Unexpected error opening the personnel document:", downloadError);
+      showBanner({ variant: "error", message: "Das Dokument konnte nicht geöffnet werden." });
     });
   }
 
@@ -508,12 +550,13 @@ export function PersonnelLifecycleSection({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-1">
+                  <InlinePending active={rowBusy.isBusy(requirement.id)} label="Anforderung wird aktualisiert" />
                   <Badge variant={requirement.state === "blocked" ? "destructive" : "secondary"}>{REQUIREMENT_STATE_LABELS[requirement.state]}</Badge>
                   {canManage ? (
                     <>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "fulfilled")} disabled={isPending}>Erledigen</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "waived")} disabled={isPending}>Erlassen</Button>
-                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "cancelled")} disabled={isPending}>Abbrechen</Button>
+                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "fulfilled")} disabled={rowBusy.isBusy(requirement.id)}>Erledigen</Button>
+                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "waived")} disabled={rowBusy.isBusy(requirement.id)}>Erlassen</Button>
+                      <Button size="sm" variant="ghost" onClick={() => void resolveRequirement(requirement, "cancelled")} disabled={rowBusy.isBusy(requirement.id)}>Abbrechen</Button>
                     </>
                   ) : null}
                 </div>
@@ -541,9 +584,10 @@ export function PersonnelLifecycleSection({
                   <p className="truncate text-sm font-medium">{document.displayName}</p>
                   <p className="text-xs text-muted-foreground">{document.documentType} · {document.releasedToEmployee ? "für Person freigegeben" : "nicht freigegeben"}</p>
                 </div>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => void downloadDocument(document.documentId)} disabled={isPending}><Download className="size-4" /> Öffnen</Button>
-                  {canManage ? <Button size="sm" variant="ghost" onClick={() => void toggleRelease(document)} disabled={isPending || !data.userId}>{document.releasedToEmployee ? "Freigabe entziehen" : "Freigeben"}</Button> : null}
+                <div className="flex items-center gap-1">
+                  <InlinePending active={rowBusy.isBusy(document.id)} label="Dokument wird aktualisiert" />
+                  <Button size="sm" variant="ghost" onClick={() => void downloadDocument(document)} disabled={rowBusy.isBusy(document.id)}><Download className="size-4" /> Öffnen</Button>
+                  {canManage ? <Button size="sm" variant="ghost" onClick={() => void toggleRelease(document)} disabled={rowBusy.isBusy(document.id) || !data.userId}>{document.releasedToEmployee ? "Freigabe entziehen" : "Freigeben"}</Button> : null}
                 </div>
               </li>
             ))}

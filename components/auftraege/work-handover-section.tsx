@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { CheckCircle2, Download, Eye, Loader2, RotateCcw, Save } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -12,8 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Label } from '@/components/ui/label';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { Textarea } from '@/components/ui/textarea';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { getDocumentSignedUrl } from '@/lib/documents/actions';
 import {
@@ -54,6 +56,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   work_handover_summary_overflow: 'Für diese Übergabe sind zu viele Zeit- oder Materialbuchungen verknüpft.',
   work_handover_action_failed: 'Die Übergabe konnte nicht gespeichert werden.',
 };
+
+/**
+ * One key per button group. The busy state and the feedback line are scoped
+ * to the operation so only the clicked button spins and the message appears
+ * where the click happened, not at the foot of a long card.
+ */
+type HandoverOperation = 'draft' | 'preview' | 'release' | 'withdraw' | 'correction' | 'document';
+type HandoverFeedback = { operation: HandoverOperation; tone: 'success' | 'error'; message: string };
 
 const OVERRIDEABLE_GATES: Array<[string, string]> = [
   ['incompleteRequiredInstructions', 'Pflichtanweisungen offen'],
@@ -132,12 +142,18 @@ async function openDocument(documentId: string): Promise<string | null> {
   return null;
 }
 
+function FeedbackText({ feedback }: { feedback: HandoverFeedback | null }): ReactElement | null {
+  if (!feedback) return null;
+  if (feedback.tone === 'error') return <ErrorText>{feedback.message}</ErrorText>;
+  return <p role="status" className="text-sm text-green-700 dark:text-green-400">{feedback.message}</p>;
+}
+
 export function WorkHandoverSection({
   initialWorkspace,
 }: {
   initialWorkspace: WorkHandoverWorkspace;
 }): ReactElement {
-  const router = useRouter();
+  const { refresh: refreshRoute, isPending: isRefreshing } = useRouterRefresh();
   const [selectedKeys, setSelectedKeys] = useState(initialWorkspace.selectedSourceKeys);
   const [localPackageVersion, setLocalPackageVersion] = useState({
     base: initialWorkspace.packageVersion,
@@ -155,9 +171,8 @@ export function WorkHandoverSection({
     contentHash: string;
     packageVersion: number;
   } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const { run: runHandoverTask, isPending: pending } = usePendingTask();
+  const [feedback, setFeedback] = useState<HandoverFeedback | null>(null);
+  const { run: runHandoverTask, isBusy, anyBusy } = useBusyIds<HandoverOperation>();
   const workspaceAuthorityIdentity = JSON.stringify({
     targetId: initialWorkspace.targetId,
     executionVersion: initialWorkspace.executionVersion,
@@ -202,14 +217,20 @@ export function WorkHandoverSection({
     && initialWorkspace.packageState !== 'released';
   const canPreview = canEdit && packageVersion > 0 && !dirty && selectedKeys.length > 0;
 
-  const refreshAfterMutation = (): void => {
-    router.refresh();
+  const feedbackFor = (...operations: HandoverOperation[]): HandoverFeedback | null =>
+    feedback && operations.includes(feedback.operation) ? feedback : null;
+  const succeed = (operation: HandoverOperation, message: string): void =>
+    setFeedback({ operation, tone: 'success', message });
+  const fail = (operation: HandoverOperation, message: string): void =>
+    setFeedback({ operation, tone: 'error', message });
+  const failWithCode = (operation: HandoverOperation, code: string): void => {
+    fail(operation, ERROR_MESSAGES[code] ?? ERROR_MESSAGES.work_handover_action_failed);
+    if (code.includes('stale')) refreshRoute();
   };
 
   const saveDraft = (): void => {
-    setError(null);
-    setMessage(null);
-    void runHandoverTask(async () => {
+    setFeedback(null);
+    void runHandoverTask('draft', async () => {
       const result = await saveWorkHandoverDraft({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -219,24 +240,22 @@ export function WorkHandoverSection({
         selectedSourceKeys: selectedKeys,
       });
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_handover_action_failed);
-        if (result.error.includes('stale')) refreshAfterMutation();
+        failWithCode('draft', result.error);
         return;
       }
       setLocalPackageVersion({ base: packageVersion, value: result.packageVersion });
       setDirty(false);
       setPreview(null);
-      setMessage('Entwurf gespeichert.');
-      refreshAfterMutation();
+      succeed('draft', 'Entwurf gespeichert.');
+      refreshRoute();
     });
   };
 
   const createPreview = (): void => {
-    setError(null);
-    setMessage(null);
+    setFeedback(null);
     const previewWindow = window.open('about:blank', '_blank');
     if (!previewWindow) {
-      setError('Der Browser hat die Vorschau blockiert. Erlaube Pop-ups und versuche es erneut.');
+      fail('preview', 'Der Browser hat die Vorschau blockiert. Erlaube Pop-ups und versuche es erneut.');
       return;
     }
     previewWindow.opener = null;
@@ -246,7 +265,7 @@ export function WorkHandoverSection({
       releaseId: crypto.randomUUID(), requestId: crypto.randomUUID(),
       documentId: crypto.randomUUID(), documentLinkId: crypto.randomUUID(),
     };
-    void runHandoverTask(async () => {
+    void runHandoverTask('preview', async () => {
       const result = await previewWorkHandover({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -256,21 +275,19 @@ export function WorkHandoverSection({
       });
       if (!result.success) {
         previewWindow.close();
-        setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_handover_action_failed);
-        if (result.error.includes('stale')) refreshAfterMutation();
+        failWithCode('preview', result.error);
         return;
       }
       setPreview({ ...identity, contentHash: result.contentHash, packageVersion });
       renderHtmlPreview(previewWindow, result.html);
-      setMessage('Vorschau erstellt. Prüfe das geöffnete Dokument vor der Freigabe.');
+      succeed('preview', 'Vorschau erstellt. Prüfe das geöffnete Dokument vor der Freigabe.');
     });
   };
 
   const release = (): void => {
     if (!preview || preview.packageVersion !== packageVersion) return;
-    setError(null);
-    setMessage(null);
-    void runHandoverTask(async () => {
+    setFeedback(null);
+    void runHandoverTask('release', async () => {
       const result = await releaseWorkHandover({
         targetType: initialWorkspace.targetType,
         targetId: initialWorkspace.targetId,
@@ -287,20 +304,18 @@ export function WorkHandoverSection({
         overrideReason: overrideable.length > 0 ? overrideReason : undefined,
       });
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_handover_action_failed);
-        if (result.error.includes('stale')) refreshAfterMutation();
+        failWithCode('release', result.error);
         return;
       }
-      setMessage('Übergabepaket freigegeben und an das Büro übergeben.');
+      succeed('release', 'Übergabepaket freigegeben und an das Büro übergeben.');
       setPreview(null);
-      refreshAfterMutation();
+      refreshRoute();
     });
   };
 
   const reopen = (operation: 'withdraw' | 'correction'): void => {
-    setError(null);
-    setMessage(null);
-    void runHandoverTask(async () => {
+    setFeedback(null);
+    void runHandoverTask(operation, async () => {
       const action = operation === 'withdraw'
         ? withdrawWorkHandover
         : returnWorkHandoverForCorrection;
@@ -314,13 +329,23 @@ export function WorkHandoverSection({
         reason: reopenReason,
       });
       if (!result.success) {
-        setError(ERROR_MESSAGES[result.error] ?? ERROR_MESSAGES.work_handover_action_failed);
+        failWithCode(operation, result.error);
         return;
       }
-      setMessage(operation === 'withdraw'
+      succeed(operation, operation === 'withdraw'
         ? 'Übergabe zurückgenommen. Ein neuer Entwurf kann vorbereitet werden.'
         : 'Ausführung zur Korrektur geöffnet.');
-      refreshAfterMutation();
+      refreshRoute();
+    });
+  };
+
+  const downloadReleaseDocument = (documentId: string): void => {
+    setFeedback(null);
+    // Opened synchronously in the click so pop-up blockers accept the window.
+    const openPromise = openDocument(documentId);
+    void runHandoverTask('document', async () => {
+      const downloadError = await openPromise;
+      if (downloadError) fail('document', downloadError);
     });
   };
 
@@ -334,9 +359,12 @@ export function WorkHandoverSection({
               Kundenfähige Inhalte auswählen, prüfen und als unveränderliche Freigabe sichern.
             </p>
           </div>
-          <Badge variant={initialWorkspace.packageState === 'released' ? 'default' : 'secondary'}>
-            {WORK_HANDOVER_STATE_LABELS[initialWorkspace.packageState]}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <InlinePending active={isRefreshing} label="Übergabestand wird aktualisiert" />
+            <Badge variant={initialWorkspace.packageState === 'released' ? 'default' : 'secondary'}>
+              {WORK_HANDOVER_STATE_LABELS[initialWorkspace.packageState]}
+            </Badge>
+          </div>
         </div>
 
         {initialWorkspace.commercialReadiness && (
@@ -392,10 +420,11 @@ export function WorkHandoverSection({
                 Es gibt noch keine freigegebenen kundenfähigen Nachweise, Dokumentversionen oder Auftragsübergaben.
               </p>
             )}
-            <Button type="button" variant="outline" onClick={saveDraft} disabled={pending}>
-              {pending ? <Loader2 className="animate-spin" /> : <Save />}
+            <Button type="button" variant="outline" onClick={saveDraft} disabled={anyBusy}>
+              {isBusy('draft') ? <Loader2 className="animate-spin" /> : <Save />}
               Entwurf speichern
             </Button>
+            <FeedbackText feedback={feedbackFor('draft')} />
           </div>
         ) : initialWorkspace.packageState !== 'released' ? (
           <p className="rounded-md border p-3 text-sm text-muted-foreground">
@@ -450,18 +479,19 @@ export function WorkHandoverSection({
             </Field>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={createPreview}
-                disabled={pending || !canPreview || activeClocks > 0}>
-                {pending ? <Loader2 className="animate-spin" /> : <Eye />}
+                disabled={anyBusy || !canPreview || activeClocks > 0}>
+                {isBusy('preview') ? <Loader2 className="animate-spin" /> : <Eye />}
                 Vorschau öffnen
               </Button>
               <Button type="button" onClick={release}
-                disabled={pending || !preview || preview.packageVersion !== packageVersion || activeClocks > 0
+                disabled={anyBusy || !preview || preview.packageVersion !== packageVersion || activeClocks > 0
                   || (overrideable.length > 0 && overrideReason.trim().length < 3)
                   || reason.trim().length < 3}>
-                {pending ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                {isBusy('release') ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
                 Freigeben und übergeben
               </Button>
             </div>
+            <FeedbackText feedback={feedbackFor('preview', 'release')} />
             {dirty && <p className="text-sm text-muted-foreground">Speichere die Auswahl, bevor du die Vorschau erstellst.</p>}
             {unassessedFacts(initialWorkspace.gateSnapshot).length > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -480,26 +510,26 @@ export function WorkHandoverSection({
                   : 'Freigegeben'}
               </span>
               {initialWorkspace.currentReleaseDocumentId && (
-                <Button type="button" size="sm" variant="outline" onClick={() => {
-                  const openPromise = openDocument(initialWorkspace.currentReleaseDocumentId!);
-                  void runHandoverTask(async () => {
-                    const downloadError = await openPromise;
-                    if (downloadError) setError(downloadError);
-                  });
-                }} disabled={pending}>
-                  <Download /> Dokument herunterladen
+                <Button type="button" size="sm" variant="outline"
+                  onClick={() => downloadReleaseDocument(initialWorkspace.currentReleaseDocumentId!)}
+                  disabled={anyBusy}>
+                  {isBusy('document') ? <Loader2 className="animate-spin" /> : <Download />}
+                  Dokument herunterladen
                 </Button>
               )}
             </div>
+            <FeedbackText feedback={feedbackFor('document')} />
             <Field label="Grund für die Rücknahme" htmlFor="handover-withdraw-reason" required>
               <Textarea value={reopenReason}
                 onChange={(event) => setReopenReason(event.target.value)}
                 placeholder="Was muss in einer neuen Freigabe korrigiert werden?" />
             </Field>
             <Button type="button" variant="outline" onClick={() => reopen('withdraw')}
-              disabled={pending || reopenReason.trim().length < 3}>
-              <RotateCcw /> Übergabe zurücknehmen
+              disabled={anyBusy || reopenReason.trim().length < 3}>
+              {isBusy('withdraw') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+              Übergabe zurücknehmen
             </Button>
+            <FeedbackText feedback={feedbackFor('withdraw')} />
           </div>
         )}
 
@@ -512,9 +542,11 @@ export function WorkHandoverSection({
                 placeholder="Welche Korrektur ist vor Ort erforderlich?" />
             </Field>
             <Button type="button" variant="outline" onClick={() => reopen('correction')}
-              disabled={pending || reopenReason.trim().length < 3}>
-              <RotateCcw /> Zur Korrektur in Ausführung geben
+              disabled={anyBusy || reopenReason.trim().length < 3}>
+              {isBusy('correction') ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+              Zur Korrektur in Ausführung geben
             </Button>
+            <FeedbackText feedback={feedbackFor('correction')} />
           </div>
         )}
 
@@ -533,9 +565,6 @@ export function WorkHandoverSection({
             </ul>
           </FormDisclosure>
         )}
-
-        {message && <p role="status" className="text-sm text-green-700 dark:text-green-400">{message}</p>}
-        {error && <ErrorText>{error}</ErrorText>}
       </div>
     </Card>
   );

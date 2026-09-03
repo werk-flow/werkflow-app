@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,23 @@ function toLocalDate(value: string): Date | undefined {
   return year && month && day ? new Date(year, month - 1, day) : undefined;
 }
 
+/** The values the workspace can show for a plan before the server confirms it. */
+export type MaintenancePlanPendingDraft = {
+  kind: "plan";
+  id: string;
+  clientName: string;
+  siteName: string;
+  templateName: string;
+  intervalMonths: number;
+  status: "draft" | "active";
+};
+
+export type MaintenancePlanCreateSubmission = {
+  draft: MaintenancePlanPendingDraft;
+  /** Never rejects; a failure carries the German message for the caller's banner. */
+  result: Promise<{ success: true } | { success: false; message: string }>;
+};
+
 type FormState = {
   clientId: string;
   siteId: string;
@@ -86,6 +104,8 @@ const EMPTY_FORM: FormState = {
   reason: "Wartungsplan angelegt",
   equipmentIds: [],
 };
+
+const GENERIC_ERROR = "Der Wartungsplan konnte nicht gespeichert werden.";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_input: "Bitte prüfe die Angaben und wähle mindestens eine Anlage.",
@@ -178,6 +198,8 @@ export function MaintenancePlanDialog({
   templates,
   coverages,
   initial,
+  onSubmitted,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -185,6 +207,13 @@ export function MaintenancePlanDialog({
   templates: MaintenanceTemplateOption[];
   coverages: MaintenanceCoverageItem[];
   initial?: MaintenancePlanItem;
+  /**
+   * Create from the workspace (feedback canon): the dialog closes at once and
+   * the caller renders the pending card until `result` settles.
+   */
+  onSubmitted?: (submission: MaintenancePlanCreateSubmission) => void;
+  /** Revision settled by the caller (a live-view refresh) instead of a route refresh. */
+  onSaved?: () => void;
 }): ReactElement {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() =>
@@ -203,9 +232,8 @@ export function MaintenancePlanDialog({
     (coverage) =>
       coverage.clientId === form.clientId && coverage.siteId === form.siteId,
   );
-  const { run, isPending } = useServerAction(async () => {
-    setError(null);
-    const shared = {
+  function buildInput() {
+    return {
       planId: mutationIdentity.current.planId,
       revisionId: mutationIdentity.current.revisionId,
       clientId: form.clientId,
@@ -226,21 +254,25 @@ export function MaintenancePlanDialog({
       equipmentIds: form.equipmentIds,
       idempotencyKey: mutationIdentity.current.idempotencyKey,
     };
+  }
+  const { run, isPending } = useServerAction(async () => {
+    setError(null);
     const result = initial
       ? await reviseMaintenancePlan({
-          ...shared,
+          ...buildInput(),
           expectedVersion: initial.version,
         })
-      : await createMaintenancePlan(shared);
+      : await createMaintenancePlan(buildInput());
     if (!result.success) {
-      setError(
-        ERROR_MESSAGES[result.error] ??
-          "Der Wartungsplan konnte nicht gespeichert werden.",
-      );
+      setError(ERROR_MESSAGES[result.error] ?? GENERIC_ERROR);
       return;
     }
     onOpenChange(false);
-    router.refresh();
+    if (initial && onSaved) {
+      onSaved();
+    } else {
+      router.refresh();
+    }
   });
   const fieldErrors = attempted ? missingFields(form, Boolean(initial)) : {};
 
@@ -251,6 +283,34 @@ export function MaintenancePlanDialog({
     const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
     if (firstInvalid) {
       document.getElementById(firstInvalid[1])?.focus();
+      return;
+    }
+    if (!initial && onSubmitted) {
+      onSubmitted({
+        draft: {
+          kind: "plan",
+          id: mutationIdentity.current.planId,
+          clientName: client?.name ?? "",
+          siteName: site?.name ?? "",
+          templateName:
+            templates.find(
+              (template) => template.versionId === form.templateVersionId,
+            )?.name ?? "",
+          intervalMonths: Number(form.intervalMonths),
+          status: form.status,
+        },
+        result: createMaintenancePlan(buildInput()).then(
+          (created) =>
+            created.success
+              ? { success: true as const }
+              : {
+                  success: false as const,
+                  message: ERROR_MESSAGES[created.error] ?? GENERIC_ERROR,
+                },
+          () => ({ success: false as const, message: GENERIC_ERROR }),
+        ),
+      });
+      onOpenChange(false);
       return;
     }
     void run();
@@ -611,11 +671,8 @@ export function MaintenancePlanDialog({
             Abbrechen
           </Button>
           <Button type="button" onClick={submit} disabled={isPending}>
-            {isPending
-              ? "Speichert…"
-              : initial
-                ? "Neue Revision speichern"
-                : "Wartungsplan anlegen"}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            {initial ? "Neue Revision speichern" : "Wartungsplan anlegen"}
           </Button>
         </DialogFooter>
       </DialogContent>

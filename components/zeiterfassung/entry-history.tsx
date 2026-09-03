@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import {
-  RefreshCw,
   Clock,
   Pencil,
   Plus,
@@ -10,6 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select,
@@ -33,8 +34,12 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getProfilesByIds } from '@/lib/members/actions';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
+
+// Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
+const NEW_ENTRY_ID = 'new';
 
 interface MemberInfo {
   user_id: string;
@@ -152,6 +157,9 @@ export function EntryHistory({
   const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(
     undefined
   );
+  // The corrected row (or the toolbar for an added time) shows the settle
+  // spinner from the dialog's close until the live read carries the change.
+  const settling = useBusyIds();
 
   // Helper to get member display name
   const getMemberDisplayName = (member: MemberInfo): string => {
@@ -290,19 +298,11 @@ export function EntryHistory({
             </SelectContent>
           </Select>
         </Field>
-        <Button
-          variant="outline"
-          onClick={() => void view.refresh()}
-          disabled={view.isRefreshing}
-        >
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${view.isRefreshing ? 'animate-spin' : ''}`}
-          />
-          Laden
-        </Button>
+        <RefreshButton onRefresh={view.refresh} label="Einträge aktualisieren" />
         <Button variant="outline" size="sm" onClick={() => setCorrectionEntry(null)}>
           <Plus className="mr-1.5 size-4" /> Zeit nachtragen
         </Button>
+        <InlinePending active={settling.isBusy(NEW_ENTRY_ID)} />
       </div>
 
       {/* Results */}
@@ -377,7 +377,9 @@ export function EntryHistory({
                     Manuell
                   </span>
                 )}
-                {entry.pendingCorrectionRequestId ? (
+                {settling.isBusy(entry.id) ? (
+                  <InlinePending active />
+                ) : entry.pendingCorrectionRequestId ? (
                   <Button variant="ghost" size="sm" disabled>
                     <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
                   </Button>
@@ -423,7 +425,9 @@ export function EntryHistory({
                         : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {entry.pendingCorrectionRequestId ? (
+                      {settling.isBusy(entry.id) ? (
+                        <InlinePending active className="ml-auto" />
+                      ) : entry.pendingCorrectionRequestId ? (
                         <Button variant="ghost" size="sm" disabled>
                           <Clock className="mr-1.5 size-4" /> Korrektur in Prüfung
                         </Button>
@@ -450,7 +454,9 @@ export function EntryHistory({
           onOpenChange={(nextOpen) => {
             if (!nextOpen) setCorrectionEntry(undefined);
           }}
-          onSubmitted={() => void view.refresh()}
+          onSubmitted={() =>
+            void settling.run(correctionEntry?.id ?? NEW_ENTRY_ID, view.refresh)
+          }
         />
       ) : null}
     </div>

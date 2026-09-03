@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
+import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
 
@@ -42,6 +43,30 @@ const ERROR_MESSAGES: Record<string, string> = {
   create_failed: 'Fehler beim Erstellen des Kunden.',
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.'
 };
+
+/**
+ * The customer list (`KundenContent`) subscribes here: the page header mounts
+ * this dialog outside the list's Suspense boundary, so the optimistic row
+ * travels over a channel instead of a callback.
+ */
+export const clientCreations = createOptimisticChannel<Client>();
+
+function draftClient(tempId: string, input: CreateClientInput): Client {
+  const now = new Date().toISOString();
+  return {
+    id: tempId,
+    organizationId: '',
+    name: input.name,
+    clientType: input.clientType,
+    customerNumber: null,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
+    address: input.address ?? null,
+    notes: input.notes ?? null,
+    createdAt: now,
+    updatedAt: now
+  };
+}
 
 interface CreateClientDialogProps {
   open?: boolean;
@@ -85,36 +110,58 @@ export function CreateClientDialog({
       return;
     }
 
-    setIsLoading(true);
+    const input: CreateClientInput = {
+      name: name.trim(),
+      clientType,
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      address: address.trim() || undefined,
+      notes: notes.trim() || undefined
+    };
 
-    try {
-      const input: CreateClientInput = {
-        name: name.trim(),
-        clientType,
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        address: address.trim() || undefined,
-        notes: notes.trim() || undefined
-      };
-
-      const result = await createClient(input);
-
-      if (result.success) {
-        onClientCreated?.(result.client);
+    if (onClientCreated) {
+      // Select-with-create: the caller needs the confirmed record to select
+      // it, so the button spins until the server answers.
+      setIsLoading(true);
+      try {
+        const result = await createClient(input);
+        if (!result.success) {
+          setError(ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler');
+          return;
+        }
+        onClientCreated(result.client);
         resetForm();
         setOpen(false);
         showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
         router.refresh();
-      } else {
-        setError(
-          ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
-        );
+      } catch {
+        setError('Ein unerwarteter Fehler ist aufgetreten.');
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
+      return;
     }
+
+    // List page: the dialog closes at once and the list shows the draft as a
+    // pending row until the server confirms (feedback canon).
+    const tempId = crypto.randomUUID();
+    clientCreations.publish({ kind: 'insert', tempId, draft: draftClient(tempId, input) });
+    resetForm();
+    setOpen(false);
+
+    const result = await createClient(input).catch(() => null);
+    if (!result || !result.success) {
+      clientCreations.publish({ kind: 'rollback', tempId });
+      const reason = result ? ERROR_MESSAGES[result.error] || result.error : ERROR_MESSAGES.unexpected_error;
+      showBanner({
+        variant: 'error',
+        message: `Kunde „${input.name}" konnte nicht angelegt werden: ${reason}`
+      });
+      return;
+    }
+    clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
+    showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
+    router.refresh();
   };
 
   const resetForm = () => {

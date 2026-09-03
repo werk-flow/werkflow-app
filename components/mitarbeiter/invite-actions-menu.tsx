@@ -31,6 +31,16 @@ interface InviteActionsMenuProps {
   inviteEmail: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   isExpired: boolean; // Whether the invite has expired by date (even if status is 'pending')
+  /**
+   * Row-scoped busy state owned by the table (`useBusyIds`): the spinner
+   * sits on this row and the other rows stay usable.
+   */
+  busy: {
+    isBusy: boolean;
+    run: <Result>(task: () => Promise<Result>) => Promise<Result>;
+  };
+  /** Resolves when refreshed props land, so the row stays marked until then. */
+  waitForChange: () => Promise<void>;
 }
 
 export function InviteActionsMenu({
@@ -38,13 +48,15 @@ export function InviteActionsMenu({
   inviteEmail,
   status,
   isExpired,
+  busy,
+  waitForChange,
 }: InviteActionsMenuProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [isLoading, setIsLoading] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isLoading = busy.isBusy;
 
   // Determine effective status (pending but expired = expired)
   const effectiveStatus =
@@ -57,10 +69,8 @@ export function InviteActionsMenu({
   const canDelete = effectiveStatus !== 'pending';
 
   const handleCancel = async () => {
-    setIsLoading(true);
     setError(null);
-
-    const result = await cancelInvite(inviteId);
+    const result = await busy.run(() => cancelInvite(inviteId));
 
     if (result.success) {
       setShowCancelDialog(false);
@@ -69,18 +79,15 @@ export function InviteActionsMenu({
         message: 'Die Einladung wurde storniert.',
       });
       router.refresh();
+      void busy.run(waitForChange);
     } else {
       setError(result.error || 'Fehler beim Stornieren der Einladung.');
     }
-
-    setIsLoading(false);
   };
 
   const handleDelete = async () => {
-    setIsLoading(true);
     setError(null);
-
-    const result = await deleteInvite(inviteId);
+    const result = await busy.run(() => deleteInvite(inviteId));
 
     if (result.success) {
       setShowDeleteDialog(false);
@@ -89,11 +96,10 @@ export function InviteActionsMenu({
         message: 'Die Einladung wurde gelöscht.',
       });
       router.refresh();
+      void busy.run(waitForChange);
     } else {
       setError(result.error || 'Fehler beim Löschen der Einladung.');
     }
-
-    setIsLoading(false);
   };
 
   // Don't show menu if no actions are available

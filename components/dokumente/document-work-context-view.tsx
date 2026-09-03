@@ -19,6 +19,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -71,6 +72,7 @@ type DocumentWorkContextViewProps = {
   clients: Client[];
   employees: DocumentEmployee[];
   isPending: boolean;
+  isItemPending: (documentId: string) => boolean;
   onOpenDocument: (document: OrganizationDocument) => void;
   onDetailsDocument: (document: OrganizationDocument) => void;
   onRenameDocument: (document: OrganizationDocument) => void;
@@ -447,7 +449,10 @@ function DocumentInlineRow({
             <div className="flex min-w-0 items-center gap-2">
               {renderFileIcon(document)}
               <div className="min-w-0">
-                <p className="truncate text-sm">{document.displayName}</p>
+                <p className="flex items-center gap-2 truncate text-sm">
+                  <span className="truncate">{document.displayName}</span>
+                  <InlinePending active={isPending} />
+                </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {DOCUMENT_CATEGORY_LABELS[document.category]} · {formatFileSize(document.sizeBytes)}
                 </p>
@@ -495,7 +500,10 @@ function MobileDocumentCard({
           <div className="flex min-w-0 items-center gap-2">
             {renderFileIcon(document)}
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{document.displayName}</p>
+              <p className="flex items-center gap-2 truncate text-sm font-medium">
+                <span className="truncate">{document.displayName}</span>
+                <InlinePending active={isPending} />
+              </p>
               <p className="truncate text-xs text-muted-foreground">
                 {DOCUMENT_CATEGORY_LABELS[document.category]} · {formatFileSize(document.sizeBytes)} ·{' '}
                 {formatDate(document.updatedAt)}
@@ -545,6 +553,7 @@ export function DocumentWorkContextView({
   clients,
   employees,
   isPending,
+  isItemPending,
   onOpenDocument,
   onDetailsDocument,
   onRenameDocument,
@@ -670,7 +679,7 @@ export function DocumentWorkContextView({
                         key={`project:${group.project.id}:document:${document.id}`}
                         document={document}
                         indent="project"
-                        isPending={isPending}
+                        isPending={isPending || isItemPending(document.id)}
                         handlers={getHandlers(document)}
                       />
                     ))}
@@ -725,7 +734,7 @@ export function DocumentWorkContextView({
                               key={`job:${jobGroup.job.id}:document:${document.id}`}
                               document={document}
                               indent="job"
-                              isPending={isPending}
+                              isPending={isPending || isItemPending(document.id)}
                               handlers={getHandlers(document)}
                             />
                           ))}
@@ -798,7 +807,7 @@ export function DocumentWorkContextView({
                         key={`standalone-job:${group.job.id}:document:${document.id}`}
                         document={document}
                         indent="project"
-                        isPending={isPending}
+                        isPending={isPending || isItemPending(document.id)}
                         handlers={getHandlers(document)}
                       />
                     ))}
@@ -862,7 +871,7 @@ export function DocumentWorkContextView({
                         key={`${rowId}:document:${document.id}`}
                         document={document}
                         indent="project"
-                        isPending={isPending}
+                        isPending={isPending || isItemPending(document.id)}
                         handlers={getHandlers(document)}
                       />
                     ))}
@@ -927,7 +936,7 @@ export function DocumentWorkContextView({
                     <MobileDocumentCard
                       key={`mobile-project:${group.project.id}:document:${document.id}`}
                       document={document}
-                      isPending={isPending}
+                      isPending={isPending || isItemPending(document.id)}
                       handlers={getHandlers(document)}
                     />
                   ))}
@@ -964,7 +973,7 @@ export function DocumentWorkContextView({
                           <MobileDocumentCard
                             key={`mobile-job:${jobGroup.job.id}:document:${document.id}`}
                             document={document}
-                            isPending={isPending}
+                            isPending={isPending || isItemPending(document.id)}
                             handlers={getHandlers(document)}
                           />
                         ))}
@@ -1028,7 +1037,7 @@ export function DocumentWorkContextView({
                     <MobileDocumentCard
                       key={`mobile-standalone-job:${group.job.id}:document:${document.id}`}
                       document={document}
-                      isPending={isPending}
+                      isPending={isPending || isItemPending(document.id)}
                       handlers={getHandlers(document)}
                     />
                   ))}
@@ -1080,7 +1089,7 @@ export function DocumentWorkContextView({
                     <MobileDocumentCard
                       key={`mobile-${rowId}:document:${document.id}`}
                       document={document}
-                      isPending={isPending}
+                      isPending={isPending || isItemPending(document.id)}
                       handlers={getHandlers(document)}
                     />
                   ))}

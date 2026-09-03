@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Repeat2 } from 'lucide-react';
+import { AlertTriangle, Loader2, Repeat2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -401,6 +401,7 @@ export function PlanningOccurrenceEditDialog({
                       }
                       onClick={() => void handleExtendSeries()}
                     >
+                      {extending && <Loader2 className="size-4 animate-spin" />}
                       {extending
                         ? 'Wird verlängert …'
                         : extendConflicts.length > 0
@@ -617,6 +618,7 @@ export function PlanningOccurrenceEditDialog({
                 (statusIntent !== null ? reason.trim().length < 8 : optionsFailed)
               }
             >
+              {submitting && <Loader2 className="size-4 animate-spin" />}
               {submitting
                 ? 'Wird geprüft …'
                 : statusIntent

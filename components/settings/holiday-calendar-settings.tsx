@@ -16,8 +16,10 @@ import {
 } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { InlinePending } from '@/components/ui/inline-pending'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+import { useBusyIds } from '@/hooks/use-busy-id'
 import {
   addClosureDay,
   removeClosureDay,
@@ -88,7 +90,7 @@ export function HolidayCalendarSettings({
   const [closureLabel, setClosureLabel] = useState<string>('')
   const [isAddingClosure, setIsAddingClosure] = useState(false)
   const [closureDateError, setClosureDateError] = useState<string | null>(null)
-  const [removingClosureId, setRemovingClosureId] = useState<string | null>(null)
+  const removingClosure = useBusyIds()
 
   const todayIso = toLocalDateString(new Date())
   const regionDirty =
@@ -115,6 +117,9 @@ export function HolidayCalendarSettings({
         message: 'Der Feiertagskalender wurde gespeichert.',
         variant: 'success',
       })
+    } catch (error) {
+      console.error('Unexpected error saving the holiday region:', error)
+      showBanner({ message: REGION_ERROR_MESSAGES.update_failed, variant: 'error' })
     } finally {
       setIsSavingRegion(false)
     }
@@ -150,15 +155,17 @@ export function HolidayCalendarSettings({
         message: 'Der Betriebsruhe-Tag wurde eingetragen.',
         variant: 'success',
       })
+    } catch (error) {
+      console.error('Unexpected error adding a closure day:', error)
+      showBanner({ message: CLOSURE_ERROR_MESSAGES.create_failed, variant: 'error' })
     } finally {
       setIsAddingClosure(false)
     }
   }
 
   const handleRemoveClosureDay = async (closureDayId: string) => {
-    if (!canEditClosureDays || removingClosureId) return
-    setRemovingClosureId(closureDayId)
-    try {
+    if (!canEditClosureDays || removingClosure.isBusy(closureDayId)) return
+    await removingClosure.run(closureDayId, async () => {
       const result = await removeClosureDay(closureDayId)
       if (!result.success) {
         showBanner({
@@ -174,16 +181,20 @@ export function HolidayCalendarSettings({
         message: 'Der Betriebsruhe-Tag wurde entfernt.',
         variant: 'success',
       })
-    } finally {
-      setRemovingClosureId(null)
-    }
+    }).catch((error: unknown) => {
+      console.error('Unexpected error removing a closure day:', error)
+      showBanner({ message: CLOSURE_ERROR_MESSAGES.delete_failed, variant: 'error' })
+    })
   }
 
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Feiertagskalender</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Feiertagskalender
+            <InlinePending active={isSavingRegion} label="Feiertagskalender wird gespeichert" />
+          </CardTitle>
           <CardDescription>
             Wähle das Bundesland, dessen gesetzliche Feiertage für die
             Sollarbeitszeit gelten. An Feiertagen ist die Sollzeit 0.
@@ -262,21 +273,24 @@ export function HolidayCalendarSettings({
                       </p>
                     </div>
                     {canEditClosureDays && !isPast && day.id && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-destructive hover:text-destructive"
-                        aria-label={`Betriebsruhe am ${formatDate(day.closureDate)} entfernen`}
-                        disabled={removingClosureId !== null}
-                        onClick={() => handleRemoveClosureDay(day.id!)}
-                      >
-                        {removingClosureId === day.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4" />
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <InlinePending active={removingClosure.isBusy(day.id)} label="Betriebsruhe-Tag wird entfernt" />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 text-destructive hover:text-destructive"
+                          aria-label={`Betriebsruhe am ${formatDate(day.closureDate)} entfernen`}
+                          disabled={removingClosure.isBusy(day.id)}
+                          onClick={() => handleRemoveClosureDay(day.id!)}
+                        >
+                          {removingClosure.isBusy(day.id) ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                        </Button>
+                      </div>
                     )}
                   </li>
                 )

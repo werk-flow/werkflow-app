@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -91,6 +92,7 @@ export function MaintenanceDueActionDialog({
   defaultAction,
   plannedDurationMinutes,
   serviceCases,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -98,6 +100,8 @@ export function MaintenanceDueActionDialog({
   defaultAction: ActionKind;
   plannedDurationMinutes: number;
   serviceCases: MaintenanceWorkspace["serviceCases"];
+  /** Settled by the caller (a live-view refresh) instead of a route refresh. */
+  onSaved?: () => void;
 }): ReactElement {
   const router = useRouter();
   const [action, setAction] = useState<ActionKind>(defaultAction);
@@ -214,7 +218,11 @@ export function MaintenanceDueActionDialog({
       return;
     }
     onOpenChange(false);
-    router.refresh();
+    if (onSaved) {
+      onSaved();
+    } else {
+      router.refresh();
+    }
   });
   const canSchedule =
     due.status === "visit_created" && !due.planningOccurrenceId;
@@ -485,7 +493,8 @@ export function MaintenanceDueActionDialog({
                 (isEvidenceLoading || evidenceLoadFailed))
             }
           >
-            {isPending ? "Speichert…" : "Aktion ausführen"}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            Aktion ausführen
           </Button>
         </DialogFooter>
       </DialogContent>

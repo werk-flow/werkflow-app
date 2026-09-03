@@ -287,6 +287,30 @@ export async function createJob(
   await expect(
     page.getByRole("heading", { name: "Neuen Auftrag oder Projekt erstellen" }),
   ).toBeHidden({ timeout: 15_000 });
+
+  // Phase 5 creation is optimistic: validation closes the dialog before the
+  // server action settles. Do not let a following navigation abort that
+  // request. The pending marker clearing proves the action response landed;
+  // the visible row then proves the confirmed result replaced the draft.
+  await expect(
+    page.locator("[data-pending-row]").filter({ hasText: options.jobNumber }),
+  ).toHaveCount(0, { timeout: 15_000 });
+  const confirmedJobNumber = visibleText(page, options.jobNumber);
+  if (
+    options.projectNumber &&
+    !(await confirmedJobNumber.isVisible().catch(() => false))
+  ) {
+    const projectRow = page
+      .locator("tbody tr:visible")
+      .filter({ hasText: options.projectNumber })
+      .first();
+    await projectRow
+      .getByRole("button", { name: "Projekt aufklappen" })
+      .click();
+  }
+  await expect(confirmedJobNumber).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 export async function createProject(
@@ -362,6 +386,14 @@ export async function createProject(
     .getByRole("button", { name: "Projekt erstellen", exact: true })
     .click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(
+    page
+      .locator("[data-pending-row]")
+      .filter({ hasText: options.projectNumber }),
+  ).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, options.projectNumber)).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 export async function createAndPublishWorkTemplate(
@@ -843,9 +875,10 @@ export async function inviteMember(
   await page.locator("#role").click();
   await page.getByRole("option", { name: roleLabel, exact: true }).click();
   await page.getByRole("button", { name: "Einladung senden" }).click();
-  // The invite action inserts the invite and sends the email before reporting
-  // success; the dialog closes itself two seconds after the flash.
-  await expect(page.getByText("Einladung erfolgreich gesendet!")).toBeVisible({
+  // Phase 5 closes the dialog after validation and lets the list own the
+  // pending row. The email-specific banner confirms the server action; the
+  // marker clearing confirms the refreshed server list replaced the draft.
+  await expect(page.getByText(`Einladung an ${email} wurde gesendet.`)).toBeVisible({
     timeout: 30_000,
   });
   await expect(
@@ -853,6 +886,11 @@ export async function inviteMember(
   ).toBeHidden({
     timeout: 10_000,
   });
+  await page.getByRole("tab", { name: /^Einladungen/ }).click();
+  await expect(
+    page.locator("[data-pending-row]").filter({ hasText: email }),
+  ).toHaveCount(0, { timeout: 15_000 });
+  await expect(visibleText(page, email)).toBeVisible({ timeout: 15_000 });
 }
 
 // Simulates the invited existing user clicking the email's invite link:
@@ -1916,12 +1954,16 @@ export async function openMemberDetailFromList(
   name: string,
 ): Promise<void> {
   await page.goto("/mitarbeiter");
-  const desktopRow = page
-    .locator("tbody tr:visible")
-    .filter({ hasText: name })
-    .first();
-  await expect(desktopRow).toBeVisible({ timeout: 20_000 });
-  await desktopRow.click();
+  const memberLink = page.getByRole("link", { name, exact: true });
+  await expect(memberLink).toBeVisible({ timeout: 20_000 });
+  const memberHref = await memberLink.getAttribute("href");
+  if (!memberHref) {
+    throw new Error(`openMemberDetailFromList: link for ${name} has no href`);
+  }
+  // This helper often follows a settings mutation whose Realtime event can
+  // still refresh the list and supersede an App Router transition. Follow the
+  // semantic link directly while establishing the persisted setup state.
+  await page.goto(memberHref);
   await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
   await expect(visibleText(page, "Personalien")).toBeVisible({
     timeout: 15_000,
@@ -4432,6 +4474,16 @@ export async function createInstalledEquipment(
     }
   }
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(
+    page.locator("[data-pending-row]").filter({ hasText: options.name }),
+  ).toHaveCount(0, { timeout: 20_000 });
+  const equipmentLink = page.getByRole("link", {
+    name: options.name,
+    exact: true,
+  });
+  await expect(equipmentLink).toBeVisible({ timeout: 20_000 });
+  await equipmentLink.click();
   await page.waitForURL(/\/service\/anlagen\/ANL-\d{4}-\d{3}$/i, {
     timeout: 20_000,
   });
@@ -4611,11 +4663,10 @@ export async function expectDuplicateInstalledEquipmentRejected(
     .getByLabel("Seriennummer", { exact: true })
     .fill(options.serialNumber);
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "Diese Kennung wird bereits verwendet.",
-  );
-  await dialog.getByRole("button", { name: "Abbrechen" }).click();
-  await expect(dialog).toHaveCount(0);
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(
+    page.getByText("Diese Kennung wird bereits verwendet.", { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
 }
 
 export async function correctInstalledEquipmentTerminalAction(
@@ -4711,6 +4762,16 @@ export async function createDirectServiceCase(
     await expect(equipmentCheckbox).toBeChecked();
   }
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(
+    page.locator("[data-pending-row]").filter({ hasText: options.summary }),
+  ).toHaveCount(0, { timeout: 20_000 });
+  const serviceCaseLink = page.getByRole("link", {
+    name: options.summary,
+    exact: true,
+  });
+  await expect(serviceCaseLink).toBeVisible({ timeout: 20_000 });
+  await serviceCaseLink.click();
   await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
     timeout: 20_000,
   });

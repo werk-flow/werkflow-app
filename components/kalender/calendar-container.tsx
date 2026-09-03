@@ -115,6 +115,12 @@ interface CalendarContainerProps {
   initialJobs?: CalendarJob[];
 }
 
+// Every calendar read keeps its last-known data on failure and says so through
+// one persistent error banner; a later failure replaces it, so the fan-out of a
+// manual refresh never stacks alerts.
+const CALENDAR_READ_FAILED_MESSAGE =
+  "Der Kalender konnte nicht aktualisiert werden. Angezeigt wird der letzte bekannte Stand.";
+
 function sortEntriesByTimestamp(entries: TimeEntry[]): TimeEntry[] {
   return [...entries].sort((a, b) => {
     const timestampDiff =
@@ -227,7 +233,7 @@ export function CalendarContainer({
   const [changeRequestMap, setChangeRequestMap] =
     useState<EntryChangeRequestMap>(initialChangeRequestMap ?? {});
   const [isLoading, setIsLoading] = useState(!initialEntries);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { showBanner } = useBanner();
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     members.map((m) => m.user_id),
   );
@@ -254,15 +260,14 @@ export function CalendarContainer({
   }
   const refetchVacationEntries = useCallback(async () => {
     const generation = ++vacationGenerationRef.current;
-    try {
-      const result = await getVacationCalendarEntries();
-      if (generation !== vacationGenerationRef.current) return;
-      // Keep last-known entries on transient failure.
-      if (result.success) setVacationEntries(result.entries);
-    } catch (error) {
+    const result = await getVacationCalendarEntries().catch((error: unknown) => {
       console.error("Error fetching vacation calendar entries:", error);
-    }
-  }, []);
+      return { success: false as const };
+    });
+    if (generation !== vacationGenerationRef.current) return;
+    if (result.success) setVacationEntries(result.entries);
+    else showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+  }, [showBanner]);
   useEffect(() => {
     void refetchVacationEntries();
   }, [organizationId, refetchVacationEntries]);
@@ -281,15 +286,14 @@ export function CalendarContainer({
   }
   const refetchSicknessEntries = useCallback(async () => {
     const generation = ++sicknessGenerationRef.current;
-    try {
-      const result = await getSicknessCalendarEntries();
-      if (generation !== sicknessGenerationRef.current) return;
-      // Keep last-known entries on transient failure.
-      if (result.success) setSicknessEntries(result.entries);
-    } catch (error) {
+    const result = await getSicknessCalendarEntries().catch((error: unknown) => {
       console.error("Error fetching sickness calendar entries:", error);
-    }
-  }, []);
+      return { success: false as const };
+    });
+    if (generation !== sicknessGenerationRef.current) return;
+    if (result.success) setSicknessEntries(result.entries);
+    else showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+  }, [showBanner]);
   useEffect(() => {
     void refetchSicknessEntries();
   }, [organizationId, refetchSicknessEntries]);
@@ -303,6 +307,11 @@ export function CalendarContainer({
     string,
     JobParkingContext
   > | null>(null);
+  // Written together with the state: the undo of a park unparks right after
+  // an awaited context fetch, before React has re-rendered with the new map.
+  const parkingContextsRef = useRef<Map<string, JobParkingContext> | null>(
+    null,
+  );
   const [parkingContextJob, setParkingContextJob] =
     useState<CalendarJob | null>(null);
   const [parkedDispatchJob, setParkedDispatchJob] =
@@ -412,11 +421,16 @@ export function CalendarContainer({
   // Refs that always hold the latest state — handlers read from these
   // instead of closing over stale values during rapid successive actions.
   const calendarJobsRef = useRef(calendarJobs);
-  calendarJobsRef.current = calendarJobs;
   const entriesRef = useRef(entries);
-  entriesRef.current = entries;
   const parkedJobsRef = useRef(parkedJobs);
-  parkedJobsRef.current = parkedJobs;
+  useEffect(() => {
+    // These refs are the intentional escape hatch for DnD handlers that must
+    // read the latest optimistic state after an awaited confirmation dialog.
+    // eslint-disable-next-line react-hooks/immutability
+    calendarJobsRef.current = calendarJobs;
+    entriesRef.current = entries;
+    parkedJobsRef.current = parkedJobs;
+  }, [calendarJobs, entries, parkedJobs]);
 
   // Track the date range we've already fetched data for.
   // When switching to a narrower view (e.g. week→day), the needed range
@@ -485,42 +499,39 @@ export function CalendarContainer({
         return;
       }
 
-      try {
-        const crResult = await getChangeRequestsForEntries(entryIds);
-        if (
-          entriesRequestIdRef.current !== requestId ||
-          previousOrgIdRef.current !== requestOrgId
-        ) {
-          return;
-        }
-
-        if (crResult.success && crResult.requests) {
-          const crMap: EntryChangeRequestMap = {};
-          for (const cr of crResult.requests) {
-            crMap[cr.entryId] = cr;
-            if (cr.pairedEntryId) {
-              crMap[cr.pairedEntryId] = cr;
-            }
-          }
-          setChangeRequestMap(crMap);
-        }
-      } catch (crError) {
-        if (
-          entriesRequestIdRef.current !== requestId ||
-          previousOrgIdRef.current !== requestOrgId
-        ) {
-          return;
-        }
-
-        console.error("Error fetching change requests:", crError);
+      const crResult = await getChangeRequestsForEntries(entryIds).catch(
+        (crError: unknown) => {
+          console.error("Error fetching change requests:", crError);
+          return { success: false as const };
+        },
+      );
+      if (
+        entriesRequestIdRef.current !== requestId ||
+        previousOrgIdRef.current !== requestOrgId
+      ) {
+        return;
       }
+
+      if (!crResult.success) {
+        showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+        return;
+      }
+      const crMap: EntryChangeRequestMap = {};
+      for (const cr of crResult.requests) {
+        crMap[cr.entryId] = cr;
+        if (cr.pairedEntryId) {
+          crMap[cr.pairedEntryId] = cr;
+        }
+      }
+      setChangeRequestMap(crMap);
     },
-    [],
+    [showBanner],
   );
 
   // Fetch entries and their pending change requests via server actions.
-  // - silent=true  → no visual indicator (used by Realtime)
-  // - silent=false → spinner in header; skeleton only when no data exists yet
+  // - silent=true  → used by Realtime and by ranges that already have data
+  // - silent=false → skeleton, but only when no data exists yet; the manual
+  //   refresh spins its own RefreshButton over the rows that stay on screen
   // Change requests are fetched non-blocking so the calendar renders entries
   // immediately and CR badges fill in shortly after.
   const fetchEntries = useCallback(
@@ -528,95 +539,82 @@ export function CalendarContainer({
       const requestId = ++entriesRequestIdRef.current;
       const requestOrgId = organizationId;
 
-      if (!silent) {
-        if (!hasDataRef.current) setIsLoading(true);
-        setIsRefreshing(true);
-      }
-      try {
-        const { start, end } = getDateRange();
-
-        const result = await getTimeEntries({
-          organizationId,
-          from: start.toISOString(),
-          to: end.toISOString(),
-        });
-
-        if (result.success && result.entries) {
-          if (
-            entriesRequestIdRef.current !== requestId ||
-            previousOrgIdRef.current !== requestOrgId
-          ) {
-            return;
-          }
-
-          setEntries([
-            ...result.entries,
-            ...(result.provisionalEntries ?? []),
-          ]);
-          hasDataRef.current = true;
-          fetchedRangeRef.current = { start, end };
-
-          void fetchChangeRequestsForCurrentEntries(
-            result.entries,
-            requestId,
-            requestOrgId,
-          );
-        } else if (!result.success) {
-          console.error("Error fetching entries:", result.error);
-        }
-      } catch (error) {
+      if (!silent && !hasDataRef.current) setIsLoading(true);
+      const { start, end } = getDateRange();
+      const result = await getTimeEntries({
+        organizationId,
+        from: start.toISOString(),
+        to: end.toISOString(),
+      }).catch((error: unknown) => {
         console.error("Error fetching entries:", error);
-      } finally {
-        if (
-          entriesRequestIdRef.current !== requestId ||
-          previousOrgIdRef.current !== requestOrgId
-        ) {
-          return;
-        }
-        setIsLoading(false);
-        setIsRefreshing(false);
+        return { success: false as const };
+      });
+      if (
+        entriesRequestIdRef.current !== requestId ||
+        previousOrgIdRef.current !== requestOrgId
+      ) {
+        return;
       }
+      setIsLoading(false);
+
+      if (!result.success || !result.entries) {
+        showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+        return;
+      }
+      setEntries([...result.entries, ...(result.provisionalEntries ?? [])]);
+      hasDataRef.current = true;
+      fetchedRangeRef.current = { start, end };
+
+      void fetchChangeRequestsForCurrentEntries(
+        result.entries,
+        requestId,
+        requestOrgId,
+      );
     },
-    [organizationId, getDateRange, fetchChangeRequestsForCurrentEntries],
+    [
+      organizationId,
+      getDateRange,
+      fetchChangeRequestsForCurrentEntries,
+      showBanner,
+    ],
   );
 
   const fetchJobs = useCallback(async () => {
     const requestId = ++jobsRequestIdRef.current;
     const requestOrgId = organizationId;
 
-    try {
-      const { start, end } = getDateRange();
-      const fromIso = toLocalDateString(start);
-      const toIso = toLocalDateString(end);
-
-      const result = await getPlanningEntries(fromIso, toIso);
-      if (result.success) {
-        if (
-          jobsRequestIdRef.current !== requestId ||
-          previousOrgIdRef.current !== requestOrgId
-        ) {
-          return;
-        }
-        setCalendarJobs(result.entries.map(toCalendarJob));
-      }
-    } catch (error) {
+    const { start, end } = getDateRange();
+    const result = await getPlanningEntries(
+      toLocalDateString(start),
+      toLocalDateString(end),
+    ).catch((error: unknown) => {
       console.error("Error fetching calendar jobs:", error);
+      return { success: false as const };
+    });
+    if (
+      jobsRequestIdRef.current !== requestId ||
+      previousOrgIdRef.current !== requestOrgId
+    ) {
+      return;
     }
-  }, [organizationId, getDateRange]);
+    if (result.success) setCalendarJobs(result.entries.map(toCalendarJob));
+    else showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+  }, [organizationId, getDateRange, showBanner]);
 
   const fetchParkedJobs = useCallback(async () => {
     const requestId = ++parkedJobsRequestIdRef.current;
-    try {
-      const result = await getParkedJobs();
-      if (parkedJobsRequestIdRef.current !== requestId) return;
-      if (result.success) {
-        setParkedJobs(result.jobs);
-        parkedJobsLoadedRef.current = true;
-      }
-    } catch (error) {
+    const result = await getParkedJobs().catch((error: unknown) => {
       console.error("Error fetching parked jobs:", error);
+      return { success: false as const };
+    });
+    if (parkedJobsRequestIdRef.current !== requestId) return;
+    if (!result.success) {
+      showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+      return;
     }
-  }, []);
+    setParkedJobs(result.jobs);
+    parkedJobsLoadedRef.current = true;
+  }, [showBanner]);
 
   const hasUsedInitialData = useRef(!!initialEntries);
 
@@ -640,6 +638,7 @@ export function CalendarContainer({
     setParkplatzOpen(false);
     // P1-12 state is organization-scoped as well.
     setDispatchPanelOpen(false);
+    parkingContextsRef.current = null;
     setParkingContexts(null);
     setParkingContextJob(null);
     setParkedDispatchJob(null);
@@ -647,7 +646,6 @@ export function CalendarContainer({
     setSelectedSession(null);
     setPendingHighlightMemberId(null);
     setHighlightMemberId(null);
-    setIsRefreshing(false);
     setIsLoading(true);
   }, [organizationId, members]);
 
@@ -736,22 +734,25 @@ export function CalendarContainer({
   const fetchParkingContexts = useCallback(async () => {
     if (!isAdminOrManager) return;
     const requestId = ++parkingContextsRequestIdRef.current;
-    try {
-      const result = await getJobParkingContexts();
-      // Generation guard: an older response (or one from a previous
-      // organization) must never overwrite newer state.
-      if (parkingContextsRequestIdRef.current !== requestId) return;
-      if (result.success) {
-        setParkingContexts(
-          new Map(result.contexts.map((context) => [context.jobId, context])),
-        );
-      }
-    } catch (error) {
-      // Keep last-known contexts on a transient failure; the panel keeps its
-      // labeled missing-context state otherwise.
+    const result = await getJobParkingContexts().catch((error: unknown) => {
       console.error("Failed to refresh parking contexts:", error);
+      return { success: false as const };
+    });
+    // Generation guard: an older response (or one from a previous
+    // organization) must never overwrite newer state.
+    if (parkingContextsRequestIdRef.current !== requestId) return;
+    // Keep last-known contexts on failure; the panel keeps its labeled
+    // missing-context state otherwise.
+    if (!result.success) {
+      showBanner({ variant: "error", message: CALENDAR_READ_FAILED_MESSAGE });
+      return;
     }
-  }, [isAdminOrManager]);
+    const next = new Map(
+      result.contexts.map((context) => [context.jobId, context]),
+    );
+    parkingContextsRef.current = next;
+    setParkingContexts(next);
+  }, [isAdminOrManager, showBanner]);
   useEffect(() => {
     void fetchParkingContexts();
   }, [fetchParkingContexts, organizationId]);
@@ -846,17 +847,20 @@ export function CalendarContainer({
     initialData: null,
   });
 
-  // Force a full refetch with loading skeleton (manual refresh button, after edits, etc.)
-  const handleManualRefresh = useCallback(() => {
+  // Force a full refetch (manual refresh button, after edits, etc.). Existing
+  // entries stay on screen while the header's RefreshButton spins on the
+  // awaited promise; the skeleton is only for a range that has no data yet
+  // (feedback canon). Absence entries refresh too — a manual refresh must
+  // never leave stale availability standing when a Realtime event was missed.
+  const handleManualRefresh = useCallback(async () => {
     fetchedRangeRef.current = null;
-    setIsLoading(true);
-    fetchEntries();
-    fetchJobs();
-    // Absence entries refresh too — a manual refresh must never leave stale
-    // availability standing when a Realtime event was missed.
-    void refetchVacationEntries();
-    void refetchSicknessEntries();
-    if (isAdminOrManager) fetchParkedJobs();
+    await Promise.all([
+      fetchEntries(),
+      fetchJobs(),
+      refetchVacationEntries(),
+      refetchSicknessEntries(),
+      isAdminOrManager ? fetchParkedJobs() : undefined,
+    ]);
   }, [
     fetchEntries,
     fetchJobs,
@@ -868,6 +872,9 @@ export function CalendarContainer({
 
   const handleOperationStart = useCallback(() => {
     inflightRef.current++;
+    // The Realtime read predicate consumes this ref; mutations extend its
+    // pause so stale server reads cannot overwrite the optimistic state.
+    // eslint-disable-next-line react-hooks/immutability
     realtimePausedUntilRef.current = Date.now() + 8000;
     // Kill any pending refresh — a new mutation just started so any fetch
     // would return stale data missing this mutation's changes.
@@ -921,7 +928,6 @@ export function CalendarContainer({
     refetchSicknessEntries,
   ]);
 
-  const { showBanner } = useBanner();
   // Adapter over the global banner (feedback canon): parkplatz/drag successes
   // carry the undo action, errors persist until dismissed. A failed undo still
   // settles the in-flight counter via handleSilentRefresh so later silent
@@ -954,6 +960,19 @@ export function CalendarContainer({
       });
     },
     [showBanner, handleSilentRefresh],
+  );
+  // Undo handlers run only after the forward call settled (the banner appears
+  // after persistence), so a returned failure is their one remaining silent
+  // path; thrown failures are caught by the adapter above.
+  const reportUndoResult = useCallback(
+    (result: { success: boolean; error?: string }) => {
+      if (result.success || result.error === "qualification_declined") return;
+      showBanner({
+        variant: "error",
+        message: "Die Aktion konnte nicht rückgängig gemacht werden.",
+      });
+    },
+    [showBanner],
   );
 
   const handleManualEntrySuccess = useCallback(
@@ -1182,6 +1201,7 @@ export function CalendarContainer({
       const jobIndex = parkedList.findIndex((j) => j.id === jobId);
       const job = jobIndex >= 0 ? parkedList[jobIndex] : null;
       if (!job) return;
+      const parkingContexts = parkingContextsRef.current;
       if (!parkingContexts) {
         showParkplatzBanner({
           variant: "error",
@@ -1218,7 +1238,21 @@ export function CalendarContainer({
         newJob.assignedUserIds = [...job.assignedUserIds, assignToUserId];
       }
 
+      const removeFromCalendar = () =>
+        setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
+      const putBackInParkplatz = () =>
+        setParkedJobs((prev) => {
+          const next = prev.filter((j) => j.id !== jobId);
+          next.splice(Math.min(jobIndex, next.length), 0, job);
+          return next;
+        });
+
+      // Optimistic: the card leaves the Parkplatz and lands on the calendar
+      // before any server call; each failure below puts it back.
       handleOperationStart();
+      setParkedJobs((prev) => prev.filter((j) => j.id !== jobId));
+      setCalendarJobs((prev) => [...prev, newJob]);
+
       const unparkResult = await unparkWorkTarget({
         targetType: "job",
         targetId: jobId,
@@ -1229,6 +1263,8 @@ export function CalendarContainer({
         error: "work_action_failed",
       }));
       if (!unparkResult.success) {
+        removeFromCalendar();
+        putBackInParkplatz();
         showParkplatzBanner({
           variant: "error",
           message: "Der Parkplatz konnte nicht verlassen werden.",
@@ -1272,13 +1308,15 @@ export function CalendarContainer({
         }
         return true;
       };
+      // Re-park and, once that holds, move the card back to where it was.
+      const revertToParkplatz = async () => {
+        const restored = await restoreParking();
+        removeFromCalendar();
+        if (restored) putBackInParkplatz();
+      };
 
-      setParkedJobs((prev) => prev.filter((j) => j.id !== jobId));
-      setCalendarJobs((prev) => [...prev, newJob]);
-
-      const undone = { current: false };
-
-      const updatePromise = updateJob(jobId, {
+      // updateJob with a planned_date on a geparkt job auto-sets status to nicht_bearbeitet
+      const result = await updateJob(jobId, {
         plannedDate: targetDate,
         plannedTime: targetTime ?? "",
         ...(nextDurationMinutes !== job.estimatedDurationMinutes
@@ -1286,68 +1324,119 @@ export function CalendarContainer({
           : {}),
         selectedUserIds: newJob.assignedUserIds,
       });
+      if (!result.success) {
+        await revertToParkplatz();
+        if (result.error !== "qualification_declined") {
+          showParkplatzBanner({
+            variant: "error",
+            message: "Auftrag konnte nicht eingeplant werden.",
+          });
+        }
+        handleSilentRefresh();
+        return;
+      }
 
       showParkplatzBanner({
         variant: "success",
         message: "Auftrag wurde eingeplant.",
         onUndo: async () => {
-          undone.current = true;
           handleOperationStart();
-          await updatePromise;
-          const restored = await restoreParking();
-          setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-          if (restored) {
-            setParkedJobs((prev) => {
-              const next = [...prev];
-              next.splice(Math.min(jobIndex, next.length), 0, job);
-              return next;
-            });
-          }
+          await revertToParkplatz();
           if (assignToUserId && !job.assignedUserIds.includes(assignToUserId)) {
-            await updateJob(jobId, { selectedUserIds: job.assignedUserIds });
+            reportUndoResult(
+              await updateJob(jobId, { selectedUserIds: job.assignedUserIds }),
+            );
           }
           handleSilentRefresh();
         },
       });
-
-      // updateJob with a planned_date on a geparkt job auto-sets status to nicht_bearbeitet
-      const result = await updatePromise;
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-
-      if (!result.success) {
-        const restored = await restoreParking();
-        setCalendarJobs((prev) => prev.filter((j) => j.id !== jobId));
-        if (restored) {
-          setParkedJobs((prev) => {
-            const next = [...prev];
-            next.splice(Math.min(jobIndex, next.length), 0, job);
-            return next;
-          });
-        }
-        if (result.error === "qualification_declined") {
-          handleSilentRefresh();
-          return;
-        }
-        showParkplatzBanner({
-          variant: "error",
-          message: "Auftrag konnte nicht eingeplant werden.",
-        });
-        handleSilentRefresh();
-        return;
-      }
-
-      if (!undone.current) handleSilentRefresh();
+      handleSilentRefresh();
     },
     [
       fetchParkedJobs,
       fetchParkingContexts,
       handleOperationStart,
       handleSilentRefresh,
-      parkingContexts,
+      reportUndoResult,
       updateJob,
+      showParkplatzBanner,
+    ],
+  );
+
+  // The dialog calls this after local validation and before persistence, so
+  // the card reaches the Parkplatz in the same frame as the submit. Its
+  // failure callback restores the previous calendar placement.
+  const handleJobParkStart = useCallback(
+    (job: CalendarJob) => {
+      const jobId = job.jobId ?? job.id;
+      handleOperationStart();
+      setCalendarJobs((prev) =>
+        prev.filter((entry) => (entry.jobId ?? entry.id) !== jobId),
+      );
+      setParkedJobs((prev) =>
+        prev.some((entry) => entry.id === jobId)
+          ? prev
+          : [
+              {
+                ...job,
+                id: jobId,
+                occurrenceId: undefined,
+                jobId,
+                status: "geparkt",
+                plannedDate: null,
+                plannedTime: null,
+              },
+              ...prev,
+            ],
+      );
+    },
+    [handleOperationStart],
+  );
+
+  const handleJobParkFailed = useCallback(
+    (job: CalendarJob) => {
+      const jobId = job.jobId ?? job.id;
+      setParkedJobs((prev) => prev.filter((entry) => entry.id !== jobId));
+      setCalendarJobs((prev) =>
+        prev.some((entry) => (entry.jobId ?? entry.id) === jobId)
+          ? prev
+          : [...prev, job],
+      );
+      handleSilentRefresh();
+    },
+    [handleSilentRefresh],
+  );
+
+  // Persistence has settled. Keep the optimistic placement while the
+  // authoritative reads converge, then expose undo.
+  const handleJobParked = useCallback(
+    (job: CalendarJob) => {
+      const jobId = job.jobId ?? job.id;
+      void fetchParkingContexts();
+      const { plannedDate, plannedTime, estimatedDurationMinutes } = job;
+      showParkplatzBanner({
+        variant: "success",
+        message: "Auftrag wurde geparkt.",
+        onUndo: plannedDate
+          ? async () => {
+              // The fresh blocker version must be known before unparking.
+              await fetchParkingContexts();
+              await handleUnparkJob(
+                jobId,
+                plannedDate,
+                plannedTime ?? undefined,
+                undefined,
+                estimatedDurationMinutes ?? undefined,
+              );
+            }
+          : undefined,
+      });
+      handleSilentRefresh();
+    },
+    [
+      fetchParkingContexts,
+      handleSilentRefresh,
+      handleUnparkJob,
       showParkplatzBanner,
     ],
   );
@@ -1375,6 +1464,20 @@ export function CalendarContainer({
         ? [...job.assignedUserIds, memberId]
         : job.assignedUserIds;
 
+      const revert = () =>
+        setCalendarJobs((prev) =>
+          prev.map((j) =>
+            j.id === jobId
+              ? {
+                  ...j,
+                  plannedTime: origTime,
+                  estimatedDurationMinutes: origDuration,
+                  assignedUserIds: origAssigned,
+                }
+              : j,
+          ),
+        );
+
       handleOperationStart();
       setCalendarJobs((prev) =>
         prev.map((j) =>
@@ -1389,73 +1492,48 @@ export function CalendarContainer({
         ),
       );
 
-      const undone = { current: false };
-
-      showParkplatzBanner({
-        variant: "success",
-        message: "Auftrag wurde eingeplant.",
-        onUndo: async () => {
-          undone.current = true;
-          handleOperationStart();
-          setCalendarJobs((prev) =>
-            prev.map((j) =>
-              j.id === jobId
-                ? {
-                    ...j,
-                    plannedTime: origTime,
-                    estimatedDurationMinutes: origDuration,
-                    assignedUserIds: origAssigned,
-                  }
-                : j,
-            ),
-          );
-          await updateJob(jobId, {
-            plannedTime: origTime ?? "",
-            estimatedDurationMinutes: origDuration ?? null,
-            selectedUserIds: origAssigned,
-          });
-          handleSilentRefresh();
-        },
-      });
-
       const result = await updateJob(jobId, {
         plannedTime: time,
         estimatedDurationMinutes: nextDurationMinutes,
         selectedUserIds: newAssigned,
       });
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-
       if (!result.success) {
-        setCalendarJobs((prev) =>
-          prev.map((j) =>
-            j.id === jobId
-              ? {
-                  ...j,
-                  plannedTime: origTime,
-                  estimatedDurationMinutes: origDuration,
-                  assignedUserIds: origAssigned,
-                }
-              : j,
-          ),
-        );
-        if (result.error === "qualification_declined") {
-          handleSilentRefresh();
-          return;
+        revert();
+        if (result.error !== "qualification_declined") {
+          showParkplatzBanner({
+            variant: "error",
+            message: "Auftrag konnte nicht eingeplant werden.",
+          });
         }
-        showParkplatzBanner({
-          variant: "error",
-          message: "Auftrag konnte nicht eingeplant werden.",
-        });
         handleSilentRefresh();
         return;
       }
 
-      if (!undone.current) handleSilentRefresh();
+      showParkplatzBanner({
+        variant: "success",
+        message: "Auftrag wurde eingeplant.",
+        onUndo: async () => {
+          handleOperationStart();
+          revert();
+          reportUndoResult(
+            await updateJob(jobId, {
+              plannedTime: origTime ?? "",
+              estimatedDurationMinutes: origDuration ?? null,
+              selectedUserIds: origAssigned,
+            }),
+          );
+          handleSilentRefresh();
+        },
+      });
+      handleSilentRefresh();
     },
-    [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner],
+    [
+      handleOperationStart,
+      handleSilentRefresh,
+      reportUndoResult,
+      updateJob,
+      showParkplatzBanner,
+    ],
   );
 
   const handleJobWeekHeaderMove = useCallback(
@@ -1474,6 +1552,15 @@ export function CalendarContainer({
         ? job.assignedUserIds.filter((uid) => uid !== oldMemberId)
         : job.assignedUserIds;
 
+      const revert = () =>
+        setCalendarJobs((prev) =>
+          prev.map((entry) =>
+            entry.id === jobId
+              ? { ...entry, plannedDate: origDate, assignedUserIds: origAssigned }
+              : entry,
+          ),
+        );
+
       handleOperationStart();
       setCalendarJobs((prev) =>
         prev.map((entry) =>
@@ -1483,65 +1570,46 @@ export function CalendarContainer({
         ),
       );
 
-      const undone = { current: false };
+      const result = await updateJob(jobId, {
+        ...(dateChanged ? { plannedDate: newDate } : {}),
+        selectedUserIds: newAssigned,
+      });
+      if (!result.success) {
+        revert();
+        if (result.error !== "qualification_declined") {
+          showParkplatzBanner({
+            variant: "error",
+            message: "Auftrag konnte nicht verschoben werden.",
+          });
+        }
+        handleSilentRefresh();
+        return;
+      }
 
       showParkplatzBanner({
         variant: "success",
         message: "Auftrag wurde verschoben.",
         onUndo: async () => {
-          undone.current = true;
           handleOperationStart();
-          setCalendarJobs((prev) =>
-            prev.map((entry) =>
-              entry.id === jobId
-                ? {
-                    ...entry,
-                    plannedDate: origDate,
-                    assignedUserIds: origAssigned,
-                  }
-                : entry,
-            ),
+          revert();
+          reportUndoResult(
+            await updateJob(jobId, {
+              ...(dateChanged ? { plannedDate: origDate ?? "" } : {}),
+              selectedUserIds: origAssigned,
+            }),
           );
-          await updateJob(jobId, {
-            ...(dateChanged ? { plannedDate: origDate ?? "" } : {}),
-            selectedUserIds: origAssigned,
-          });
           handleSilentRefresh();
         },
       });
-
-      const result = await updateJob(jobId, {
-        ...(dateChanged ? { plannedDate: newDate } : {}),
-        selectedUserIds: newAssigned,
-      });
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-      if (!result.success) {
-        setCalendarJobs((prev) =>
-          prev.map((entry) =>
-            entry.id === jobId
-              ? {
-                  ...entry,
-                  plannedDate: origDate,
-                  assignedUserIds: origAssigned,
-                }
-              : entry,
-          ),
-        );
-        if (result.error === "qualification_declined") {
-          handleSilentRefresh();
-          return;
-        }
-        showParkplatzBanner({
-          variant: "error",
-          message: "Auftrag konnte nicht verschoben werden.",
-        });
-      }
       handleSilentRefresh();
     },
-    [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner],
+    [
+      handleOperationStart,
+      handleSilentRefresh,
+      reportUndoResult,
+      updateJob,
+      showParkplatzBanner,
+    ],
   );
 
   const handleJobDateChange = useCallback(
@@ -1551,6 +1619,14 @@ export function CalendarContainer({
 
       const origDate = job.plannedDate;
       const origTime = job.plannedTime;
+      const revert = () =>
+        setCalendarJobs((prev) =>
+          prev.map((j) =>
+            j.id === jobId
+              ? { ...j, plannedDate: origDate, plannedTime: origTime }
+              : j,
+          ),
+        );
 
       handleOperationStart();
       setCalendarJobs((prev) =>
@@ -1565,59 +1641,46 @@ export function CalendarContainer({
         ),
       );
 
-      const undone = { current: false };
+      const result = await updateJob(jobId, {
+        plannedDate: newDate,
+        ...(newTime !== undefined ? { plannedTime: newTime } : {}),
+      });
+      if (!result.success) {
+        revert();
+        if (result.error !== "qualification_declined") {
+          showParkplatzBanner({
+            variant: "error",
+            message: "Auftrag konnte nicht verschoben werden.",
+          });
+        }
+        handleSilentRefresh();
+        return;
+      }
 
       showParkplatzBanner({
         variant: "success",
         message: "Auftrag wurde verschoben.",
         onUndo: async () => {
-          undone.current = true;
           handleOperationStart();
-          setCalendarJobs((prev) =>
-            prev.map((j) =>
-              j.id === jobId
-                ? { ...j, plannedDate: origDate, plannedTime: origTime }
-                : j,
-            ),
+          revert();
+          reportUndoResult(
+            await updateJob(jobId, {
+              plannedDate: origDate ?? "",
+              plannedTime: origTime ?? "",
+            }),
           );
-          await updateJob(jobId, {
-            plannedDate: origDate ?? "",
-            plannedTime: origTime ?? "",
-          });
           handleSilentRefresh();
         },
       });
-
-      const result = await updateJob(jobId, {
-        plannedDate: newDate,
-        ...(newTime !== undefined ? { plannedTime: newTime } : {}),
-      });
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-
-      if (!result.success) {
-        setCalendarJobs((prev) =>
-          prev.map((j) =>
-            j.id === jobId
-              ? { ...j, plannedDate: origDate, plannedTime: origTime }
-              : j,
-          ),
-        );
-        if (result.error === "qualification_declined") {
-          handleSilentRefresh();
-          return;
-        }
-        showParkplatzBanner({
-          variant: "error",
-          message: "Auftrag konnte nicht verschoben werden.",
-        });
-      }
-
       handleSilentRefresh();
     },
-    [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner],
+    [
+      handleOperationStart,
+      handleSilentRefresh,
+      reportUndoResult,
+      updateJob,
+      showParkplatzBanner,
+    ],
   );
 
   const handleJobWeekMove = useCallback(
@@ -1646,6 +1709,20 @@ export function CalendarContainer({
             )
         : job.assignedUserIds;
 
+      const revert = () =>
+        setCalendarJobs((prev) =>
+          prev.map((j) =>
+            j.id === jobId
+              ? {
+                  ...j,
+                  plannedDate: origDate,
+                  plannedTime: origTime,
+                  assignedUserIds: origAssigned,
+                }
+              : j,
+          ),
+        );
+
       handleOperationStart();
       setCalendarJobs((prev) =>
         prev.map((j) =>
@@ -1655,69 +1732,48 @@ export function CalendarContainer({
         ),
       );
 
-      const undone = { current: false };
+      const result = await updateJob(jobId, {
+        ...(dateChanged ? { plannedDate: newDate } : {}),
+        selectedUserIds: newAssigned,
+      });
+      if (!result.success) {
+        revert();
+        if (result.error !== "qualification_declined") {
+          showParkplatzBanner({
+            variant: "error",
+            message: "Auftrag konnte nicht verschoben werden.",
+          });
+        }
+        handleSilentRefresh();
+        return;
+      }
 
       showParkplatzBanner({
         variant: "success",
         message: "Auftrag wurde verschoben.",
         onUndo: async () => {
-          undone.current = true;
           handleOperationStart();
-          setCalendarJobs((prev) =>
-            prev.map((j) =>
-              j.id === jobId
-                ? {
-                    ...j,
-                    plannedDate: origDate,
-                    plannedTime: origTime,
-                    assignedUserIds: origAssigned,
-                  }
-                : j,
-            ),
+          revert();
+          reportUndoResult(
+            await updateJob(jobId, {
+              ...(dateChanged
+                ? { plannedDate: origDate ?? "", plannedTime: origTime ?? "" }
+                : {}),
+              selectedUserIds: origAssigned,
+            }),
           );
-          await updateJob(jobId, {
-            ...(dateChanged
-              ? { plannedDate: origDate ?? "", plannedTime: origTime ?? "" }
-              : {}),
-            selectedUserIds: origAssigned,
-          });
           handleSilentRefresh();
         },
       });
-
-      const result = await updateJob(jobId, {
-        ...(dateChanged ? { plannedDate: newDate } : {}),
-        selectedUserIds: newAssigned,
-      });
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-      if (!result.success) {
-        setCalendarJobs((prev) =>
-          prev.map((entry) =>
-            entry.id === jobId
-              ? {
-                  ...entry,
-                  plannedDate: origDate,
-                  plannedTime: origTime,
-                  assignedUserIds: origAssigned,
-                }
-              : entry,
-          ),
-        );
-        if (result.error === "qualification_declined") {
-          handleSilentRefresh();
-          return;
-        }
-        showParkplatzBanner({
-          variant: "error",
-          message: "Auftrag konnte nicht verschoben werden.",
-        });
-      }
       handleSilentRefresh();
     },
-    [handleOperationStart, handleSilentRefresh, updateJob, showParkplatzBanner],
+    [
+      handleOperationStart,
+      handleSilentRefresh,
+      reportUndoResult,
+      updateJob,
+      showParkplatzBanner,
+    ],
   );
 
   const handleSessionWeekMove = useCallback(
@@ -1789,6 +1845,13 @@ export function CalendarContainer({
                 ).toISOString(),
       }));
 
+      const revert = () =>
+        setEntries((prev) =>
+          prev.map(
+            (e) => sourceEntries.find((entry) => entry.id === e.id) ?? e,
+          ),
+        );
+
       handleOperationStart();
       setEntries((prev) =>
         prev.map((e) => {
@@ -1806,44 +1869,6 @@ export function CalendarContainer({
         }),
       );
 
-      const undone = { current: false };
-
-      showParkplatzBanner({
-        variant: "success",
-        message: "Eintrag wurde verschoben.",
-        onUndo: async () => {
-          undone.current = true;
-          handleOperationStart();
-          setEntries((prev) =>
-            prev.map((e) => {
-              const originalEntry = sourceEntries.find(
-                (entry) => entry.id === e.id,
-              );
-              if (originalEntry) return originalEntry;
-              return e;
-            }),
-          );
-          if (sourceEntries.length > 2) {
-            await reassignEntryBatch(
-              sourceEntries.map((entry) => ({
-                entryId: entry.id,
-                newUserId: entry.userId,
-                newTimestamp: entry.timestamp,
-              })),
-            );
-          } else {
-            await reassignEntries(
-              clockInId,
-              clockOutId,
-              origCi.userId,
-              origCi.timestamp,
-              origCo.timestamp,
-            );
-          }
-          handleSilentRefresh();
-        },
-      });
-
       const result =
         sourceEntries.length > 2
           ? await reassignEntryBatch(batchUpdates)
@@ -1854,21 +1879,8 @@ export function CalendarContainer({
               newCiTs,
               newCoTs,
             );
-      if (undone.current) {
-        handleSilentRefresh();
-        return;
-      }
-
       if (!result.success) {
-        setEntries((prev) =>
-          prev.map((e) => {
-            const originalEntry = sourceEntries.find(
-              (entry) => entry.id === e.id,
-            );
-            if (originalEntry) return originalEntry;
-            return e;
-          }),
-        );
+        revert();
         showParkplatzBanner({
           variant: "error",
           message:
@@ -1876,11 +1888,44 @@ export function CalendarContainer({
               ? "Überlappende Arbeitszeit am Ziel."
               : "Eintrag konnte nicht verschoben werden.",
         });
+        handleSilentRefresh();
+        return;
       }
 
+      showParkplatzBanner({
+        variant: "success",
+        message: "Eintrag wurde verschoben.",
+        onUndo: async () => {
+          handleOperationStart();
+          revert();
+          reportUndoResult(
+            sourceEntries.length > 2
+              ? await reassignEntryBatch(
+                  sourceEntries.map((entry) => ({
+                    entryId: entry.id,
+                    newUserId: entry.userId,
+                    newTimestamp: entry.timestamp,
+                  })),
+                )
+              : await reassignEntries(
+                  clockInId,
+                  clockOutId,
+                  origCi.userId,
+                  origCi.timestamp,
+                  origCo.timestamp,
+                ),
+          );
+          handleSilentRefresh();
+        },
+      });
       handleSilentRefresh();
     },
-    [handleOperationStart, handleSilentRefresh, showParkplatzBanner],
+    [
+      handleOperationStart,
+      handleSilentRefresh,
+      reportUndoResult,
+      showParkplatzBanner,
+    ],
   );
 
   // Use the custom renderers for day/week so break-aware work blocks behave
@@ -1917,7 +1962,6 @@ export function CalendarContainer({
         <CalendarHeader
           currentDate={currentDate}
           view={view}
-          isLoading={showLoadingSkeleton || isRefreshing}
           onPrevious={handlePrevious}
           onNext={handleNext}
           onToday={handleToday}
@@ -2085,17 +2129,28 @@ export function CalendarContainer({
             ) ?? null
           }
           onClose={() => setParkingContextJob(null)}
-          onSaved={() => {
-            const wasAlreadyParked = parkingContextJob.status === "geparkt";
-            setParkingContextJob(null);
-            void fetchParkingContexts();
-            if (!wasAlreadyParked) {
-              showParkplatzBanner({
-                variant: "success",
-                message: "Auftrag wurde geparkt.",
-              });
+          onSaveStart={() => {
+            if (parkingContextJob.status !== "geparkt") {
+              handleJobParkStart(parkingContextJob);
             }
-            handleSilentRefresh();
+          }}
+          onSaveFailed={() => {
+            if (parkingContextJob.status !== "geparkt") {
+              handleJobParkFailed(parkingContextJob);
+            }
+          }}
+          onSaved={() => {
+            const job = parkingContextJob;
+            setParkingContextJob(null);
+            if (job.status !== "geparkt") {
+              handleJobParked(job);
+              return;
+            }
+            void fetchParkingContexts();
+            showParkplatzBanner({
+              variant: "success",
+              message: "Parkplatz-Kontext wurde gespeichert.",
+            });
           }}
         />
       )}

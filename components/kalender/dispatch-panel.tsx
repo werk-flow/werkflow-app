@@ -15,7 +15,9 @@ import {
   X,
 } from 'lucide-react';
 
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -29,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -42,7 +45,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { TimeInput } from '@/components/ui/time-input';
 import {
   batchReschedule,
-  cancelDispatch,
+  cancelDispatch as cancelDispatchAction,
   getDispatchOverview,
   previewBatchReschedule,
   resolveDispatchChallenge,
@@ -352,19 +355,28 @@ export function DispatchPanel({
   onChanged?: () => void;
   primaryHeaderHeight?: number;
 }) {
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [issueTarget, setIssueTarget] = useState<
-    { occurrenceId: string } | { jobId: string } | null
-  >(null);
+  const { showBanner } = useBanner();
+  // Row-scoped settle indicator: after a dialog action succeeds, the row it
+  // belongs to shows InlinePending until the authoritative re-read lands.
+  // Row keys are the occurrence id, the unscheduled job id, or the
+  // acknowledgement id of a challenge row.
+  const rowBusy = useBusyIds();
+  const [issueTarget, setIssueTarget] = useState<{
+    occurrenceId: string;
+  } | null>(null);
   const [commitmentEntry, setCommitmentEntry] =
     useState<DispatchOverviewOccurrence | null>(null);
-  const [withdrawCommitmentId, setWithdrawCommitmentId] = useState<
-    string | null
-  >(null);
+  const [withdrawCommitment, setWithdrawCommitment] = useState<{
+    commitmentId: string;
+    rowKey: string;
+  } | null>(null);
   const [resolveChallengeId, setResolveChallengeId] = useState<string | null>(
     null
   );
-  const [cancelDispatchId, setCancelDispatchId] = useState<string | null>(null);
+  const [cancelDispatch, setCancelDispatch] = useState<{
+    dispatchId: string;
+    rowKey: string;
+  } | null>(null);
 
   // Batch rescheduling. batchNow is snapshotted when batch mode starts so the
   // eligibility memo stays pure during render; the RPC re-validates anyway.
@@ -382,6 +394,7 @@ export function DispatchPanel({
     conflictCount: number;
   } | null>(null);
   const [isBatchWorking, setIsBatchWorking] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const { requestApproval, warningDialog } = usePlanningWarningConfirmation();
 
   const today = useMemo(() => berlinTodayIso(), []);
@@ -408,9 +421,10 @@ export function DispatchPanel({
   const { refresh } = view;
   const overview = view.data ?? null;
   // A failed initial load must not strand the panel in loading state; later
-  // failures keep the last-known overview (the primitive's keep-last-known).
+  // failures keep the last-known overview (the primitive's keep-last-known)
+  // and are named so a stale panel after an action is never silent.
   const loadError =
-    view.data === undefined && !view.isLoading
+    !view.isLoading && (view.data === undefined || view.isStale)
       ? (view.error ?? dispatchErrorMessage('load_failed'))
       : null;
 
@@ -441,6 +455,17 @@ export function DispatchPanel({
     await refresh();
     onChanged?.();
   }, [refresh, onChanged]);
+  // Success path of a row action: the banner fires after persistence (the
+  // dialog only reports success once the server confirmed), then the row
+  // shows its settle indicator until the re-read lands. `refresh` never
+  // rejects — a failed read surfaces through the stale-state ErrorText.
+  const settleRow = useCallback(
+    (rowKey: string, message: string) => {
+      showBanner({ variant: 'success', message });
+      void rowBusy.run(rowKey, afterMutation);
+    },
+    [afterMutation, rowBusy, showBanner]
+  );
 
   const eligibleForBatch = useMemo(
     () =>
@@ -457,7 +482,7 @@ export function DispatchPanel({
 
   const runBatchPreview = useCallback(async () => {
     const dayShift = Number(dayShiftText);
-    setActionError(null);
+    setBatchError(null);
     setIsBatchWorking(true);
     const result = await previewBatchReschedule({
       occurrenceIds: [...selectedIds],
@@ -466,7 +491,7 @@ export function DispatchPanel({
     });
     setIsBatchWorking(false);
     if (!result.success) {
-      setActionError(dispatchErrorMessage(result.error));
+      setBatchError(dispatchErrorMessage(result.error));
       return;
     }
     setBatchPreview({
@@ -481,7 +506,7 @@ export function DispatchPanel({
   const runBatchCommit = useCallback(async () => {
     const dayShift = Number(dayShiftText);
     setIsBatchWorking(true);
-    setActionError(null);
+    setBatchError(null);
     const baseInput = {
       occurrenceIds: [...selectedIds],
       dayShift,
@@ -515,13 +540,21 @@ export function DispatchPanel({
     }
     setIsBatchWorking(false);
     if (!result.success) {
-      setActionError(dispatchErrorMessage(result.error));
+      setBatchError(dispatchErrorMessage(result.error));
       return;
     }
+    const movedCount = selectedIds.size;
     setBatchPreview(null);
     setBatchMode(false);
     setSelectedIds(new Set());
     setBatchReason('');
+    showBanner({
+      variant: 'success',
+      message:
+        movedCount === 1
+          ? 'Der Besuch wurde verschoben.'
+          : `${movedCount} Besuche wurden verschoben.`,
+    });
     await afterMutation();
   }, [
     dayShiftText,
@@ -530,17 +563,20 @@ export function DispatchPanel({
     batchReason,
     requestApproval,
     afterMutation,
+    showBanner,
   ]);
 
+  // A challenge is always recorded on an acknowledgement; the narrowed id is
+  // the row key for the settle indicator and the resolve dialog.
   const openChallenges = useMemo(() => {
     if (!overview) return [];
-    return [
-      ...overview.occurrences.flatMap((entry) =>
-        (entry.dispatch?.recipients ?? [])
-          .filter((recipient) => recipient.state === 'rueckfrage')
-          .map((recipient) => ({ entry, recipient }))
-      ),
-    ];
+    return overview.occurrences.flatMap((entry) =>
+      (entry.dispatch?.recipients ?? []).flatMap((recipient) =>
+        recipient.state === 'rueckfrage' && recipient.acknowledgementId
+          ? [{ entry, recipient, acknowledgementId: recipient.acknowledgementId }]
+          : []
+      )
+    );
   }, [overview]);
 
   return (
@@ -587,7 +623,6 @@ export function DispatchPanel({
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
         <ErrorText>{loadError}</ErrorText>
-        <ErrorText>{actionError}</ErrorText>
         {!overview && !loadError && (
           <div className="space-y-2" role="status" aria-busy="true">
             <span className="sr-only">Einsätze werden geladen …</span>
@@ -609,13 +644,19 @@ export function DispatchPanel({
               Offene Rückfragen
             </h3>
             <div className="space-y-2">
-              {openChallenges.map(({ entry, recipient }) => (
+              {openChallenges.map(({ entry, recipient, acknowledgementId }) => (
                 <div
                   key={`${entry.occurrenceId}:${recipient.employeeRecordId}`}
                   className="rounded-md border border-yellow-500/40 bg-yellow-500/5 px-3 py-2"
                 >
-                  <p className="text-sm font-medium">
-                    {recipient.displayName} · {entry.title}
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    <span className="min-w-0 flex-1">
+                      {recipient.displayName} · {entry.title}
+                    </span>
+                    <InlinePending
+                      active={rowBusy.isBusy(acknowledgementId)}
+                      label="Wird aktualisiert"
+                    />
                   </p>
                   {recipient.challengeReason && (
                     <p className="mt-0.5 text-xs text-muted-foreground">
@@ -626,9 +667,8 @@ export function DispatchPanel({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setResolveChallengeId(recipient.acknowledgementId)
-                      }
+                      disabled={rowBusy.isBusy(acknowledgementId)}
+                      onClick={() => setResolveChallengeId(acknowledgementId)}
                     >
                       Plan beibehalten …
                     </Button>
@@ -681,13 +721,19 @@ export function DispatchPanel({
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {entry.title}
-                      {entry.jobNumber && (
-                        <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                          {entry.jobNumber}
-                        </span>
-                      )}
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      <span className="min-w-0 flex-1 truncate">
+                        {entry.title}
+                        {entry.jobNumber && (
+                          <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                            {entry.jobNumber}
+                          </span>
+                        )}
+                      </span>
+                      <InlinePending
+                        active={rowBusy.isBusy(entry.occurrenceId)}
+                        label="Wird aktualisiert"
+                      />
                     </p>
                     <p className="text-xs text-muted-foreground tabular-nums">
                       {formatOccurrenceSchedule(entry)}
@@ -740,6 +786,7 @@ export function DispatchPanel({
                           entry.assignedEmployeeRecordIds.length > 0 && (
                             <Button
                               size="sm"
+                              disabled={rowBusy.isBusy(entry.occurrenceId)}
                               onClick={() =>
                                 setIssueTarget({
                                   occurrenceId: entry.occurrenceId,
@@ -761,10 +808,12 @@ export function DispatchPanel({
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={rowBusy.isBusy(entry.occurrenceId)}
                             onClick={() =>
-                              setCancelDispatchId(
-                                entry.dispatch!.dispatchId
-                              )
+                              setCancelDispatch({
+                                dispatchId: entry.dispatch!.dispatchId,
+                                rowKey: entry.occurrenceId,
+                              })
                             }
                           >
                             Einsatz zurückziehen …
@@ -775,6 +824,7 @@ export function DispatchPanel({
                             {entry.commitmentMismatch && (
                               <Button
                                 size="sm"
+                                disabled={rowBusy.isBusy(entry.occurrenceId)}
                                 onClick={() => setCommitmentEntry(entry)}
                               >
                                 Neue Zusage erfassen
@@ -783,10 +833,12 @@ export function DispatchPanel({
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={rowBusy.isBusy(entry.occurrenceId)}
                               onClick={() =>
-                                setWithdrawCommitmentId(
-                                  entry.commitment!.commitmentId
-                                )
+                                setWithdrawCommitment({
+                                  commitmentId: entry.commitment!.commitmentId,
+                                  rowKey: entry.occurrenceId,
+                                })
                               }
                             >
                               Zusage zurückziehen …
@@ -796,6 +848,7 @@ export function DispatchPanel({
                           <Button
                             variant="outline"
                             size="sm"
+                            disabled={rowBusy.isBusy(entry.occurrenceId)}
                             onClick={() => setCommitmentEntry(entry)}
                           >
                             Zusage erfassen
@@ -825,13 +878,19 @@ export function DispatchPanel({
                   className="rounded-md border px-3 py-2"
                   data-dispatch-job={entry.jobId}
                 >
-                  <p className="truncate text-sm font-medium">
-                    {entry.title}
-                    {entry.jobNumber && (
-                      <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                        {entry.jobNumber}
-                      </span>
-                    )}
+                  <p className="flex items-center gap-1.5 text-sm font-medium">
+                    <span className="min-w-0 flex-1 truncate">
+                      {entry.title}
+                      {entry.jobNumber && (
+                        <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
+                          {entry.jobNumber}
+                        </span>
+                      )}
+                    </span>
+                    <InlinePending
+                      active={rowBusy.isBusy(entry.jobId)}
+                      label="Wird aktualisiert"
+                    />
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {entry.clientName ?? 'Ohne Kunde'} · ohne festen Termin
@@ -841,8 +900,12 @@ export function DispatchPanel({
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={rowBusy.isBusy(entry.jobId)}
                       onClick={() =>
-                        setCancelDispatchId(entry.dispatch.dispatchId)
+                        setCancelDispatch({
+                          dispatchId: entry.dispatch.dispatchId,
+                          rowKey: entry.jobId,
+                        })
                       }
                     >
                       Einsatz zurückziehen …
@@ -912,6 +975,8 @@ export function DispatchPanel({
               maxLength={1000}
             />
           </Field>
+          {/* While the preview dialog is open the error belongs inside it. */}
+          <ErrorText>{batchPreview ? null : batchError}</ErrorText>
           <Button
             className="w-full"
             disabled={
@@ -1001,6 +1066,7 @@ export function DispatchPanel({
                   </li>
                 )}
             </ul>
+            <ErrorText>{batchError}</ErrorText>
             <DialogFooter>
               <Button variant="outline" onClick={() => setBatchPreview(null)}>
                 Abbrechen
@@ -1023,7 +1089,7 @@ export function DispatchPanel({
           onClose={() => setIssueTarget(null)}
           onIssued={() => {
             setIssueTarget(null);
-            void afterMutation();
+            settleRow(issueTarget.occurrenceId, 'Einsatz wurde gesendet.');
           }}
         />
       )}
@@ -1034,26 +1100,32 @@ export function DispatchPanel({
           onClose={() => setCommitmentEntry(null)}
           onSaved={() => {
             setCommitmentEntry(null);
-            void afterMutation();
+            settleRow(
+              commitmentEntry.occurrenceId,
+              'Kundenzusage wurde erfasst.'
+            );
           }}
         />
       )}
 
-      {withdrawCommitmentId && (
+      {withdrawCommitment && (
         <ReasonDialog
           title="Kundenzusage zurückziehen"
           description="Die Zusage wird als zurückgezogen dokumentiert. Der Kunde wird dadurch nicht benachrichtigt."
           confirmLabel="Zusage zurückziehen"
           minLength={3}
-          onClose={() => setWithdrawCommitmentId(null)}
+          onClose={() => setWithdrawCommitment(null)}
           onConfirm={async (reason) => {
             const result = await withdrawCustomerCommitment(
-              withdrawCommitmentId,
+              withdrawCommitment.commitmentId,
               reason
             );
-            if (!result.success) return dispatchErrorMessage(result.error);
-            setWithdrawCommitmentId(null);
-            void afterMutation();
+            if (!result.success) return commitmentErrorMessage(result.error);
+            setWithdrawCommitment(null);
+            settleRow(
+              withdrawCommitment.rowKey,
+              'Kundenzusage wurde zurückgezogen.'
+            );
             return null;
           }}
         />
@@ -1073,24 +1145,30 @@ export function DispatchPanel({
             );
             if (!result.success) return dispatchErrorMessage(result.error);
             setResolveChallengeId(null);
-            void afterMutation();
+            settleRow(
+              resolveChallengeId,
+              'Rückfrage wurde beantwortet, der Plan bleibt bestehen.'
+            );
             return null;
           }}
         />
       )}
 
-      {cancelDispatchId && (
+      {cancelDispatch && (
         <ReasonDialog
           title="Einsatz zurückziehen"
           description="Der Einsatz wird zurückgezogen und verschwindet bei den zugewiesenen Personen. Die Historie bleibt erhalten."
           confirmLabel="Einsatz zurückziehen"
           minLength={3}
-          onClose={() => setCancelDispatchId(null)}
+          onClose={() => setCancelDispatch(null)}
           onConfirm={async (reason) => {
-            const result = await cancelDispatch(cancelDispatchId, reason);
+            const result = await cancelDispatchAction(
+              cancelDispatch.dispatchId,
+              reason
+            );
             if (!result.success) return dispatchErrorMessage(result.error);
-            setCancelDispatchId(null);
-            void afterMutation();
+            setCancelDispatch(null);
+            settleRow(cancelDispatch.rowKey, 'Einsatz wurde zurückgezogen.');
             return null;
           }}
         />

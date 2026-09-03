@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import {
   Check,
   X,
-  Loader2,
   Clock,
   RefreshCw,
   Plus,
@@ -16,6 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
+import { InlinePending } from '@/components/ui/inline-pending';
+import { RefreshButton } from '@/components/ui/refresh-button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   getPendingSessions,
@@ -29,6 +30,7 @@ import type {
   WorkSession
 } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/members/actions';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { toLocalDateString } from '@/lib/utils';
 
@@ -158,10 +160,9 @@ export function PendingApprovals({
 }: PendingApprovalsProps) {
   // Errors from approve/reject actions; read errors come from view.error.
   const [actionError, setActionError] = useState<string | null>(null);
-  const [processingAction, setProcessingAction] = useState<{
-    id: string;
-    action: 'approve' | 'reject';
-  } | null>(null);
+  // Row-scoped pending: the reviewed card spins until the refetch lands;
+  // the other cards stay actionable.
+  const busy = useBusyIds();
 
   const view = useLiveView<{
     sessions: PendingSession[];
@@ -219,94 +220,47 @@ export function PendingApprovals({
   const isInitialLoading = view.isLoading;
   const error = actionError ?? view.error;
 
-  const handleRefresh = () => {
-    void view.refresh();
-  };
-
-  const handleApproveSession = async (session: PendingSession) => {
-    setActionError(null);
-    setProcessingAction({ id: session.id, action: 'approve' });
-    try {
-      const pairedEntryId =
-        session.clockIn && session.clockOut ? session.clockOut.id : undefined;
-
-      const result = await reviewSession(session.id, 'approved', pairedEntryId);
-      // Refresh while the buttons are still disabled so the reviewed item is
-      // gone (or the view corrected) before the next action is possible.
-      await view.refresh();
-      if (!result.success) {
-        console.error('Failed to approve session:', result.error);
-        setActionError(getApprovalErrorMessage(result.error));
-      }
-    } catch (err) {
-      console.error('Error approving session:', err);
-      setActionError('Ein Fehler ist aufgetreten.');
-    } finally {
-      setProcessingAction(null);
-    }
-  };
-
-  const handleRejectSession = async (session: PendingSession) => {
-    setActionError(null);
-    setProcessingAction({ id: session.id, action: 'reject' });
-    try {
-      const pairedEntryId =
-        session.clockIn && session.clockOut ? session.clockOut.id : undefined;
-
-      const result = await reviewSession(session.id, 'rejected', pairedEntryId);
-      await view.refresh();
-      if (!result.success) {
-        console.error('Failed to reject session:', result.error);
-        setActionError(getApprovalErrorMessage(result.error));
-      }
-    } catch (err) {
-      console.error('Error rejecting session:', err);
-      setActionError('Ein Fehler ist aufgetreten.');
-    } finally {
-      setProcessingAction(null);
-    }
-  };
-
-  const handleApproveChangeRequest = async (
-    request: ChangeRequestWithDetails
+  const reviewPendingSession = (
+    session: PendingSession,
+    decision: 'approved' | 'rejected'
   ) => {
     setActionError(null);
-    setProcessingAction({ id: request.id, action: 'approve' });
-    try {
-      const result = await reviewChangeRequest(request.id, 'approve');
-      if (result.success) {
+    return busy.run(session.id, async () => {
+      try {
+        const pairedEntryId =
+          session.clockIn && session.clockOut ? session.clockOut.id : undefined;
+        const result = await reviewSession(session.id, decision, pairedEntryId);
+        // Refresh while the card is still busy so the reviewed item is gone
+        // (or the view corrected) before the next action is possible.
         await view.refresh();
-      } else {
-        console.error('Failed to approve change request:', result.error);
-        setActionError(getApprovalErrorMessage(result.error));
+        if (!result.success) {
+          setActionError(getApprovalErrorMessage(result.error));
+        }
+      } catch (err) {
+        console.error('Error reviewing session:', err);
+        setActionError('Ein Fehler ist aufgetreten.');
       }
-    } catch (err) {
-      console.error('Error approving change request:', err);
-      setActionError('Ein Fehler ist aufgetreten.');
-    } finally {
-      setProcessingAction(null);
-    }
+    });
   };
 
-  const handleRejectChangeRequest = async (
-    request: ChangeRequestWithDetails
+  const reviewPendingChangeRequest = (
+    request: ChangeRequestWithDetails,
+    decision: 'approve' | 'reject'
   ) => {
     setActionError(null);
-    setProcessingAction({ id: request.id, action: 'reject' });
-    try {
-      const result = await reviewChangeRequest(request.id, 'reject');
-      if (result.success) {
-        await view.refresh();
-      } else {
-        console.error('Failed to reject change request:', result.error);
-        setActionError(getApprovalErrorMessage(result.error));
+    return busy.run(request.id, async () => {
+      try {
+        const result = await reviewChangeRequest(request.id, decision);
+        if (result.success) {
+          await view.refresh();
+        } else {
+          setActionError(getApprovalErrorMessage(result.error));
+        }
+      } catch (err) {
+        console.error('Error reviewing change request:', err);
+        setActionError('Ein Fehler ist aufgetreten.');
       }
-    } catch (err) {
-      console.error('Error rejecting change request:', err);
-      setActionError('Ein Fehler ist aufgetreten.');
-    } finally {
-      setProcessingAction(null);
-    }
+    });
   };
 
   // Combine and sort all items by creation date
@@ -417,18 +371,12 @@ export function PendingApprovals({
               <SessionRequestCard
                 key={`session-${item.data.id}`}
                 session={item.data}
-                isProcessing={processingAction?.id === item.data.id}
-                processingAction={
-                  processingAction?.id === item.data.id
-                    ? processingAction.action
-                    : null
-                }
-                onApprove={() => handleApproveSession(item.data)}
-                onReject={() => handleRejectSession(item.data)}
+                isProcessing={busy.isBusy(item.data.id)}
+                onApprove={() => void reviewPendingSession(item.data, 'approved')}
+                onReject={() => void reviewPendingSession(item.data, 'rejected')}
                 onRefresh={() => void view.refresh()}
                 currentUserRole={currentUserRole}
                 currentUserId={currentUserId}
-                disabled={processingAction !== null}
               />
             );
           }
@@ -438,15 +386,9 @@ export function PendingApprovals({
               key={`change-${item.data.id}`}
               request={item.data}
               type={item.type}
-              isProcessing={processingAction?.id === item.data.id}
-              processingAction={
-                processingAction?.id === item.data.id
-                  ? processingAction.action
-                  : null
-              }
-              onApprove={() => handleApproveChangeRequest(item.data)}
-              onReject={() => handleRejectChangeRequest(item.data)}
-              disabled={processingAction !== null}
+              isProcessing={busy.isBusy(item.data.id)}
+              onApprove={() => void reviewPendingChangeRequest(item.data, 'approve')}
+              onReject={() => void reviewPendingChangeRequest(item.data, 'reject')}
             />
           );
         })}
@@ -473,19 +415,7 @@ export function PendingApprovals({
             'Keine ausstehenden Anträge'
           )}
         </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={
-            view.isRefreshing || isInitialLoading || processingAction !== null
-          }
-        >
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${view.isRefreshing ? 'animate-spin' : ''}`}
-          />
-          Aktualisieren
-        </Button>
+        <RefreshButton onRefresh={view.refresh} label="Anträge aktualisieren" />
       </div>
 
       {/* Inline error message for operation failures (when items exist) */}
@@ -535,28 +465,22 @@ function pendingSessionToWorkSession(session: PendingSession): WorkSession {
 function SessionRequestCard({
   session,
   isProcessing,
-  processingAction,
   onApprove,
   onReject,
   onRefresh,
   currentUserRole,
   currentUserId,
-  disabled
 }: {
   session: PendingSession;
   isProcessing: boolean;
-  processingAction: 'approve' | 'reject' | null;
   onApprove: () => void;
   onReject: () => void;
   onRefresh: () => void;
   currentUserRole: OrgRole;
   currentUserId: string;
-  disabled: boolean;
 }) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const isApproving = isProcessing && processingAction === 'approve';
-  const isRejecting = isProcessing && processingAction === 'reject';
   const isPair = session.clockIn && session.clockOut;
 
   const displayName =
@@ -584,6 +508,7 @@ function SessionRequestCard({
               <RequestTypeIcon />
               <span className="font-medium">{displayName}</span>
               <RequestTypeBadge type="session" />
+              <InlinePending active={isProcessing} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {formatDate(session.date)}
@@ -621,7 +546,7 @@ function SessionRequestCard({
               variant="outline"
               size="icon"
               onClick={() => setIsEditDialogOpen(true)}
-              disabled={disabled}
+              disabled={isProcessing}
               title="Bearbeiten"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >
@@ -631,29 +556,21 @@ function SessionRequestCard({
               variant="outline"
               size="icon"
               onClick={onApprove}
-              disabled={disabled}
+              disabled={isProcessing}
               title="Genehmigen - Eintrag bleibt erhalten"
               className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
             >
-              {isApproving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
+              <Check className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
               onClick={onReject}
-              disabled={disabled}
+              disabled={isProcessing}
               title="Ablehnen - Eintrag wird entfernt"
               className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
             >
-              {isRejecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <X className="h-4 w-4" />
-              )}
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </CardContent>
@@ -679,22 +596,15 @@ function ChangeRequestCard({
   request,
   type,
   isProcessing,
-  processingAction,
   onApprove,
   onReject,
-  disabled
 }: {
   request: ChangeRequestWithDetails;
   type: 'edit' | 'delete';
   isProcessing: boolean;
-  processingAction: 'approve' | 'reject' | null;
   onApprove: () => void;
   onReject: () => void;
-  disabled: boolean;
 }) {
-  const isApproving = isProcessing && processingAction === 'approve';
-  const isRejecting = isProcessing && processingAction === 'reject';
-
   const displayName =
     request.requesterFirstName || request.requesterLastName
       ? `${request.requesterFirstName || ''} ${
@@ -732,6 +642,7 @@ function ChangeRequestCard({
             <RequestTypeIcon />
             <span className="font-medium">{displayName}</span>
             <RequestTypeBadge type={type} />
+            <InlinePending active={isProcessing} />
           </div>
 
           {type === 'edit' ? (
@@ -791,7 +702,7 @@ function ChangeRequestCard({
             variant="outline"
             size="icon"
             onClick={onApprove}
-            disabled={disabled}
+            disabled={isProcessing}
             title={
               type === 'edit'
                 ? 'Genehmigen - Änderung wird bestätigt'
@@ -801,17 +712,13 @@ function ChangeRequestCard({
             }
             className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
           >
-            {isApproving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4" />
-            )}
+            <Check className="h-4 w-4" />
           </Button>
           <Button
             variant="outline"
             size="icon"
             onClick={onReject}
-            disabled={disabled}
+            disabled={isProcessing}
             title={
               type === 'edit'
                 ? 'Ablehnen - Änderung wird rückgängig gemacht'
@@ -821,11 +728,7 @@ function ChangeRequestCard({
             }
             className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
           >
-            {isRejecting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <X className="h-4 w-4" />
-            )}
+            <X className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>

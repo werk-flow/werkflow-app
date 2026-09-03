@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,12 +32,15 @@ export function MaintenancePlanActionDialog({
   plan,
   toStatus,
   archived,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   plan: MaintenancePlanItem;
   toStatus?: Exclude<MaintenancePlanStatus, "draft">;
   archived?: boolean;
+  /** Settled by the caller (a live-view refresh) instead of a route refresh. */
+  onSaved?: () => void;
 }): ReactElement {
   const router = useRouter();
   const [reason, setReason] = useState("");
@@ -83,7 +87,11 @@ export function MaintenancePlanActionDialog({
       return;
     }
     onOpenChange(false);
-    router.refresh();
+    if (onSaved) {
+      onSaved();
+    } else {
+      router.refresh();
+    }
   });
   const title =
     toStatus === "active"
@@ -134,7 +142,8 @@ export function MaintenancePlanActionDialog({
             onClick={() => void run()}
             disabled={isPending}
           >
-            {isPending ? "Speichert…" : title}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            {title}
           </Button>
         </DialogFooter>
       </DialogContent>

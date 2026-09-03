@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -19,9 +20,14 @@ import {
   type AssignmentEvaluation,
 } from '@/lib/qualifications/types';
 
+const CONFIRM_FAILED_MESSAGE =
+  'Die begründete Zuweisung konnte nicht gespeichert werden. Bitte versuche es erneut.';
+
 type QualificationWarningDialogProps = {
   evaluation: AssignmentEvaluation | null;
   isSubmitting?: boolean;
+  /** Failure of the last confirm attempt, shown inside the still-open dialog. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (approval: AssignmentApproval) => void | Promise<void>;
 };
@@ -29,6 +35,7 @@ type QualificationWarningDialogProps = {
 export function QualificationWarningDialog({
   evaluation,
   isSubmitting = false,
+  error = null,
   onCancel,
   onConfirm,
 }: QualificationWarningDialogProps) {
@@ -39,6 +46,7 @@ export function QualificationWarningDialog({
       key={evaluation.fingerprint}
       evaluation={evaluation}
       isSubmitting={isSubmitting}
+      error={error}
       onCancel={onCancel}
       onConfirm={onConfirm}
     />
@@ -48,6 +56,7 @@ export function QualificationWarningDialog({
 function QualificationWarningDialogContent({
   evaluation,
   isSubmitting,
+  error,
   onCancel,
   onConfirm,
 }: Omit<QualificationWarningDialogProps, 'evaluation'> & {
@@ -55,6 +64,9 @@ function QualificationWarningDialogContent({
 }) {
   const [reason, setReason] = useState('');
   const [showReasonError, setShowReasonError] = useState(false);
+  // Covers a confirm handler that rejects; handlers that report through the
+  // `error` prop resolve normally, so only one of the two is ever set.
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const handleConfirm = async () => {
     const normalizedReason = reason.trim();
@@ -62,10 +74,15 @@ function QualificationWarningDialogContent({
       setShowReasonError(true);
       return;
     }
-    await onConfirm({
-      fingerprint: evaluation.fingerprint,
-      reason: normalizedReason,
-    });
+    setConfirmError(null);
+    try {
+      await onConfirm({
+        fingerprint: evaluation.fingerprint,
+        reason: normalizedReason,
+      });
+    } catch {
+      setConfirmError(CONFIRM_FAILED_MESSAGE);
+    }
   };
 
   const uncovered = evaluation.requirementCoverage.filter(
@@ -143,6 +160,8 @@ function QualificationWarningDialogContent({
               disabled={isSubmitting}
             />
           </Field>
+
+          <ErrorText>{error ?? confirmError}</ErrorText>
         </div>
 
         <DialogFooter>

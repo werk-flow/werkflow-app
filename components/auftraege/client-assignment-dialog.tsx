@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { ClientSelectWithCreate } from './client-select-with-create';
 import type { Client } from '@/lib/jobs/types';
 
@@ -20,6 +21,8 @@ interface ClientAssignmentDialogProps {
   currentClientId?: string | null;
   title?: string;
   isSaving?: boolean;
+  /** Failure of the last save; the dialog stays open while it is set. */
+  saveError?: string | null;
   onSave: (clientId: string) => Promise<void> | void;
 }
 
@@ -30,6 +33,7 @@ export function ClientAssignmentDialog({
   currentClientId,
   title = 'Kunde zuweisen',
   isSaving = false,
+  saveError,
   onSave,
 }: ClientAssignmentDialogProps) {
   const [selectedClientId, setSelectedClientId] = useState(currentClientId ?? '');
@@ -58,6 +62,8 @@ export function ClientAssignmentDialog({
             onValueChange={setSelectedClientId}
             disabled={isSaving}
           />
+
+          <ErrorText>{saveError}</ErrorText>
 
           <div className="flex justify-end gap-2">
             <Button

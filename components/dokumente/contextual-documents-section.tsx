@@ -13,9 +13,11 @@ import {
   Download,
   FileText,
   LinkIcon,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Trash2,
+  Undo2,
   Unlink,
   Upload,
 } from "lucide-react";
@@ -46,10 +48,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import {
   deleteDocument,
   renameDocument as renameDocumentAction,
+  restoreDocument,
   unlinkDocument,
 } from "@/lib/documents/actions";
 import {
@@ -59,8 +64,9 @@ import {
   type ProjectJobDocumentGroup,
 } from "@/lib/documents/types";
 import { useBanner } from "@/components/ui/banner";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
-import { usePendingTask } from "@/hooks/use-server-action";
+import { useSettleOnChange } from "@/hooks/use-settle-on-change";
 import { cn } from "@/lib/utils";
 import { AttachDocumentDialog } from "./attach-document-dialog";
 import { DocumentLinkDialog } from "./document-link-dialog";
@@ -160,7 +166,8 @@ function getUnlinkLabel(context: {
 
 type DocumentRowProps = {
   document: OrganizationDocument;
-  isPending: boolean;
+  /** This row's own action is in flight; the other rows stay usable. */
+  isBusy: boolean;
   canManage: boolean;
   context: {
     jobId?: string;
@@ -182,7 +189,7 @@ type DocumentRowProps = {
 
 function DocumentRow({
   document,
-  isPending,
+  isBusy,
   canManage,
   context,
   indented = false,
@@ -210,6 +217,7 @@ function DocumentRow({
           <span className="truncate text-sm font-medium">
             {document.displayName}
           </span>
+          <InlinePending active={isBusy} />
         </span>
         <span className="ml-6 mt-0.5 block text-xs text-muted-foreground">
           {DOCUMENT_CATEGORY_LABELS[document.category]} ·{" "}
@@ -226,7 +234,7 @@ function DocumentRow({
           <Button
             variant="ghost"
             size="icon-sm"
-            disabled={isPending}
+            disabled={isBusy}
             className="shrink-0"
           >
             <MoreHorizontal className="size-4" />
@@ -310,7 +318,11 @@ export function ContextualDocumentsSection({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadItemIdRef = useRef(0);
-  const { run: runDocumentTask, isPending } = usePendingTask();
+  // Row-scoped pending: the acting row shows a spinner and stays busy until
+  // the refreshed props land, so the rename/unlink/trash result is on screen
+  // before the indicator goes away (feedback canon, 2026-09-03).
+  const { isBusy, run: runBusy } = useBusyIds();
+  const waitForDocuments = useSettleOnChange(documents);
   const { showBanner } = useBanner();
   const [attachDialogOpen, setAttachDialogOpen] = useState(false);
   const [linkDialogDocument, setLinkDialogDocument] =
@@ -329,8 +341,10 @@ export function ContextualDocumentsSection({
   const [renameDocument, setRenameDocument] =
     useState<OrganizationDocument | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [deleteDocumentTarget, setDeleteDocumentTarget] =
     useState<OrganizationDocument | null>(null);
+  const isRenamePending = renameDocument ? isBusy(renameDocument.id) : false;
 
   useEffect(() => {
     if (recentlyUploadedDocuments.length === 0) return;
@@ -380,6 +394,22 @@ export function ContextualDocumentsSection({
     showBanner({ variant, message });
   }
 
+  async function settleAfterRefresh() {
+    router.refresh();
+    await waitForDocuments();
+  }
+
+  // A thrown action (network, session) must not vanish behind `void`.
+  function runRowTask(
+    documentId: string,
+    task: () => Promise<void>,
+    failureMessage: string,
+  ) {
+    void runBusy(documentId, task).catch(() =>
+      showFeedback("error", failureMessage),
+    );
+  }
+
   function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
 
@@ -403,46 +433,96 @@ export function ContextualDocumentsSection({
       return;
     }
 
-    void runDocumentTask(async () => {
+    const documentId = renameDocument.id;
+    const renameFailure = "Die Datei konnte nicht umbenannt werden.";
+    setRenameError(null);
+    void runBusy(documentId, async () => {
       const result = await renameDocumentAction({
-        documentId: renameDocument.id,
+        documentId,
         displayName: nextName,
       });
       if (!result.success) {
-        showFeedback("error", "Die Datei konnte nicht umbenannt werden.");
+        setRenameError(renameFailure);
         return;
       }
       setRecentlyUploadedDocuments((current) =>
         current.map((recentDocument) =>
-          recentDocument.id === renameDocument.id
+          recentDocument.id === documentId
             ? { ...recentDocument, displayName: nextName }
             : recentDocument,
         ),
       );
       setRenameDocument(null);
-      router.refresh();
-    });
+      await settleAfterRefresh();
+    }).catch(() => setRenameError(renameFailure));
   }
 
   function handleUnlink(document: OrganizationDocument) {
     const link = getContextLink(document, context);
     if (!link) return;
 
-    void runDocumentTask(async () => {
-      const result = await unlinkDocument({ linkId: link.id });
-      if (!result.success) {
-        showFeedback("error", "Die Verknüpfung konnte nicht entfernt werden.");
-        return;
-      }
-      setRecentlyUploadedDocuments((current) =>
-        current.filter((recentDocument) => recentDocument.id !== document.id),
-      );
-      showFeedback(
-        "success",
-        "Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.",
-      );
-      router.refresh();
-    });
+    const unlinkFailure = "Die Verknüpfung konnte nicht entfernt werden.";
+    runRowTask(
+      document.id,
+      async () => {
+        const result = await unlinkDocument({ linkId: link.id });
+        if (!result.success) {
+          showFeedback("error", unlinkFailure);
+          return;
+        }
+        setRecentlyUploadedDocuments((current) =>
+          current.filter(
+            (recentDocument) => recentDocument.id !== document.id,
+          ),
+        );
+        showFeedback(
+          "success",
+          "Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.",
+        );
+        await settleAfterRefresh();
+      },
+      unlinkFailure,
+    );
+  }
+
+  function handleTrash(target: OrganizationDocument) {
+    const trashFailure = "Die Datei konnte nicht gelöscht werden.";
+    const restoreFailure = "Die Datei konnte nicht wiederhergestellt werden.";
+    runRowTask(
+      target.id,
+      async () => {
+        const result = await deleteDocument(target.id);
+        if (!result.success) {
+          showFeedback("error", trashFailure);
+          return;
+        }
+        setRecentlyUploadedDocuments((current) =>
+          current.filter((recentDocument) => recentDocument.id !== target.id),
+        );
+        showBanner({
+          variant: "success",
+          message: "Datei wurde in den Papierkorb verschoben.",
+          actionLabel: "Rückgängig",
+          actionIcon: <Undo2 className="size-3.5" />,
+          onAction: () =>
+            runRowTask(
+              target.id,
+              async () => {
+                const restored = await restoreDocument(target.id);
+                if (!restored.success) {
+                  showFeedback("error", restoreFailure);
+                  return;
+                }
+                showFeedback("success", "Datei wurde wiederhergestellt.");
+                await settleAfterRefresh();
+              },
+              restoreFailure,
+            ),
+        });
+        await settleAfterRefresh();
+      },
+      trashFailure,
+    );
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -462,12 +542,12 @@ export function ContextualDocumentsSection({
   }
 
   const rowProps = {
-    isPending,
     canManage,
     context,
     onOpen: setViewerDocument,
     onManageLinks: setLinkDialogDocument,
     onRename: (document: OrganizationDocument) => {
+      setRenameError(null);
       setRenameDocument(document);
       setRenameValue(document.displayName);
     },
@@ -479,7 +559,12 @@ export function ContextualDocumentsSection({
     return (
       <div className="min-w-0 overflow-hidden rounded-md border">
         {documentList.map((document) => (
-          <DocumentRow key={document.id} document={document} {...rowProps} />
+          <DocumentRow
+            key={document.id}
+            document={document}
+            isBusy={isBusy(document.id)}
+            {...rowProps}
+          />
         ))}
       </div>
     );
@@ -532,6 +617,7 @@ export function ContextualDocumentsSection({
                     <DocumentRow
                       key={document.id}
                       document={document}
+                      isBusy={isBusy(document.id)}
                       indented
                       {...rowProps}
                       context={{ jobId: group.jobId }}
@@ -585,7 +671,6 @@ export function ContextualDocumentsSection({
                   size="sm"
                   variant="outline"
                   onClick={() => setAttachDialogOpen(true)}
-                  disabled={isPending}
                 >
                   <LinkIcon className="size-4" />
                   Verknüpfen
@@ -597,7 +682,6 @@ export function ContextualDocumentsSection({
               variant={emphasizeUpload ? "default" : "outline"}
               className={emphasizeUpload ? undefined : "min-h-11"}
               onClick={() => fileInputRef.current?.click()}
-              disabled={isPending}
             >
               <Upload className="size-4" />
               Hochladen
@@ -683,7 +767,11 @@ export function ContextualDocumentsSection({
 
       <Dialog
         open={!!renameDocument}
-        onOpenChange={(open) => !open && setRenameDocument(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setRenameDocument(null);
+          setRenameError(null);
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -703,8 +791,10 @@ export function ContextualDocumentsSection({
               }
             }}
             placeholder="Dateiname"
+            aria-invalid={renameError ? true : undefined}
             autoFocus
           />
+          <ErrorText>{renameError}</ErrorText>
           <DialogFooter>
             <Button
               type="button"
@@ -716,8 +806,9 @@ export function ContextualDocumentsSection({
             <Button
               type="button"
               onClick={handleRenameConfirm}
-              disabled={isPending}
+              disabled={isRenamePending}
             >
+              {isRenamePending && <Loader2 className="size-4 animate-spin" />}
               Umbenennen
             </Button>
           </DialogFooter>
@@ -746,27 +837,7 @@ export function ContextualDocumentsSection({
               onClick={() => {
                 const target = deleteDocumentTarget;
                 setDeleteDocumentTarget(null);
-                if (!target) return;
-                void runDocumentTask(async () => {
-                  const result = await deleteDocument(target.id);
-                  if (!result.success) {
-                    showFeedback(
-                      "error",
-                      "Die Datei konnte nicht gelöscht werden.",
-                    );
-                    return;
-                  }
-                  setRecentlyUploadedDocuments((current) =>
-                    current.filter(
-                      (recentDocument) => recentDocument.id !== target.id,
-                    ),
-                  );
-                  showFeedback(
-                    "success",
-                    "Datei wurde in den Papierkorb verschoben.",
-                  );
-                  router.refresh();
-                });
+                if (target) handleTrash(target);
               }}
             >
               In Papierkorb verschieben

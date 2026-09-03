@@ -38,9 +38,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ListRow } from '@/components/ui/list-row';
+import { PendingRow } from '@/components/ui/pending-row';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import {
@@ -68,8 +70,10 @@ import { LocationSelectWithCreate } from '@/components/inventar/location-select-
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { usePendingTask } from '@/hooks/use-server-action';
+import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
+import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import {
   adjustInventoryStock,
   createInventoryLocation,
@@ -139,6 +143,23 @@ type StockDialogState = {
   quantity: string;
   reason: string;
 } | null;
+
+// What the list shows for a record the user just created, until the refreshed
+// server list carries it (feedback canon: create from a dialog).
+type PendingItemDraft = {
+  confirmedId: string | null;
+  name: string;
+  internalSku: string;
+  itemType: InventoryItemType;
+  unit: string;
+  quantity: number;
+  locationName: string | null;
+};
+
+type PendingLocationDraft = {
+  name: string;
+  locationType: InventoryLocationType;
+};
 
 type ImportColumnKey = keyof InventoryImportRow;
 
@@ -334,6 +355,24 @@ function itemTypeClasses(type: InventoryItemType): string {
   }
 }
 
+// Places a pending draft where the server row will land: both lists are
+// ordered by name (inventory_items and, with equal sort_order, inventory_locations).
+function withPendingDraft<Row extends { name: string }, Draft extends { name: string }>(
+  rows: Row[],
+  draft: Draft | null
+): Array<Row | Draft> {
+  if (!draft) return rows;
+  const index = rows.findIndex((row) => draft.name.localeCompare(row.name, 'de') <= 0);
+  const position = index === -1 ? rows.length : index;
+  return [...rows.slice(0, position), draft, ...rows.slice(position)];
+}
+
+function isServerRow<Row extends { id: string }, Draft extends object>(
+  row: Row | Draft
+): row is Row {
+  return 'id' in row;
+}
+
 function matchesInventorySearch(item: InventoryOverviewItem, search: string): boolean {
   if (!search) return true;
   const query = search.toLowerCase();
@@ -503,7 +542,22 @@ export function InventoryContent({ overview }: InventoryContentProps) {
   const [stockDialog, setStockDialog] = useState<StockDialogState>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const { run: runInventoryTask, isPending } = usePendingTask();
+  const [pendingItemDraft, setPendingItemDraft] = useState<PendingItemDraft | null>(null);
+  const [pendingLocationDraft, setPendingLocationDraft] =
+    useState<PendingLocationDraft | null>(null);
+  // Dialog edits: the button spins while the action runs; the changed row
+  // shows an inline indicator until the refreshed props land.
+  const itemSave = useServerAction(upsertInventoryItem);
+  const stockSave = useServerAction(adjustInventoryStock);
+  const busyItems = useBusyIds();
+  const waitForItems = useSettleOnChange(overview.items);
+  const waitForLocations = useSettleOnChange(overview.locations);
+
+  const visiblePendingItemDraft =
+    pendingItemDraft?.confirmedId &&
+    overview.items.some((item) => item.id === pendingItemDraft.confirmedId)
+      ? null
+      : pendingItemDraft;
 
   useRealtimeRouterRefresh({
     tables: [
@@ -586,100 +640,139 @@ export function InventoryContent({ overview }: InventoryContentProps) {
       return;
     }
 
-    void runInventoryTask(async () => {
-      const result = await upsertInventoryItem({
-        id: itemForm.id ?? undefined,
-        name: itemForm.name,
-        itemType: itemForm.itemType,
-        description: itemForm.description,
-        categoryId:
-          itemForm.categoryId === NONE_VALUE ? null : itemForm.categoryId,
-        unit: itemForm.unit,
-        internalSku: itemForm.internalSku,
-        manufacturer: itemForm.manufacturer,
-        supplierId:
-          itemForm.supplierId === NONE_VALUE ||
-          itemForm.supplierId === NEW_SUPPLIER_VALUE
-            ? null
-            : itemForm.supplierId,
-        supplierName:
-          itemForm.supplierId === NEW_SUPPLIER_VALUE
-            ? itemForm.supplierName
-            : null,
-        supplierArticleNumber: itemForm.supplierArticleNumber,
-        purchasePriceCents: centsFromInput(itemForm.purchasePrice),
-        salePriceCents: centsFromInput(itemForm.salePrice),
-        isBillable: itemForm.isBillable,
-        globalMinimumStock: decimalFromInput(itemForm.globalMinimumStock),
-        globalTargetStock: itemForm.globalTargetStock
-          ? decimalFromInput(itemForm.globalTargetStock)
+    const input = {
+      id: itemForm.id ?? undefined,
+      name: itemForm.name,
+      itemType: itemForm.itemType,
+      description: itemForm.description,
+      categoryId:
+        itemForm.categoryId === NONE_VALUE ? null : itemForm.categoryId,
+      unit: itemForm.unit,
+      internalSku: itemForm.internalSku,
+      manufacturer: itemForm.manufacturer,
+      supplierId:
+        itemForm.supplierId === NONE_VALUE ||
+        itemForm.supplierId === NEW_SUPPLIER_VALUE
+          ? null
+          : itemForm.supplierId,
+      supplierName:
+        itemForm.supplierId === NEW_SUPPLIER_VALUE
+          ? itemForm.supplierName
           : null,
-        trackQuantity: true,
-        trackIndividualAssets:
-          itemForm.itemType === 'tool' || itemForm.itemType === 'asset',
-        barcode: itemForm.barcode,
-        notes: itemForm.notes,
-        initialLocationId: itemForm.id ? null : itemForm.initialLocationId || null,
-        initialQuantity: itemForm.id ? null : initialQuantity,
-      });
+      supplierArticleNumber: itemForm.supplierArticleNumber,
+      purchasePriceCents: centsFromInput(itemForm.purchasePrice),
+      salePriceCents: centsFromInput(itemForm.salePrice),
+      isBillable: itemForm.isBillable,
+      globalMinimumStock: decimalFromInput(itemForm.globalMinimumStock),
+      globalTargetStock: itemForm.globalTargetStock
+        ? decimalFromInput(itemForm.globalTargetStock)
+        : null,
+      trackQuantity: true,
+      trackIndividualAssets:
+        itemForm.itemType === 'tool' || itemForm.itemType === 'asset',
+      barcode: itemForm.barcode,
+      notes: itemForm.notes,
+      initialLocationId: itemForm.id ? null : itemForm.initialLocationId || null,
+      initialQuantity: itemForm.id ? null : initialQuantity,
+    };
 
-      if (!result.success) {
-        setFormError(getInventoryActionErrorMessage(result.error));
+    if (!itemForm.id) {
+      // Create: the dialog closes at once and the table carries the draft as
+      // a pending row until the refreshed list contains the new item.
+      setItemDialogOpen(false);
+      setPendingItemDraft({
+        confirmedId: null,
+        name: itemForm.name.trim(),
+        internalSku: itemForm.internalSku.trim(),
+        itemType: itemForm.itemType,
+        unit: itemForm.unit,
+        quantity: initialQuantity,
+        locationName:
+          overview.locations.find((location) => location.id === itemForm.initialLocationId)
+            ?.name ?? null,
+      });
+      void (async () => {
+        const result = await upsertInventoryItem(input).catch(() => null);
+        if (!result?.success) {
+          setPendingItemDraft(null);
+          showBanner({
+            variant: 'error',
+            message: getInventoryActionErrorMessage(result?.error ?? 'save_failed'),
+          });
+          return;
+        }
+        showBanner({ variant: 'success', message: 'Der Artikel wurde angelegt.' });
+        setPendingItemDraft((current) =>
+          current ? { ...current, confirmedId: result.item.id } : current
+        );
+        router.refresh();
+      })();
+      return;
+    }
+
+    const itemId = itemForm.id;
+    void (async () => {
+      const result = await itemSave.run(input).catch(() => null);
+      if (!result?.success) {
+        setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
         return;
       }
-
       setItemDialogOpen(false);
-      showBanner({
-        variant: 'success',
-        message: itemForm.id
-          ? 'Der Artikel wurde gespeichert.'
-          : 'Der Artikel wurde angelegt.',
-      });
+      showBanner({ variant: 'success', message: 'Der Artikel wurde gespeichert.' });
       router.refresh();
-    });
+      void busyItems.run(itemId, waitForItems);
+    })();
   }
 
   function handleLocationSave() {
     setFormError(null);
-    void runInventoryTask(async () => {
-      const result = await createInventoryLocation(locationForm);
-      if (!result.success) {
-        setFormError(getInventoryActionErrorMessage(result.error));
+    const form = locationForm;
+    // Create: the dialog closes at once; the Lager tab shows a pending card
+    // until the refreshed location list contains the new one.
+    setLocationDialogOpen(false);
+    setLocationForm(EMPTY_LOCATION_FORM);
+    setPendingLocationDraft({ name: form.name.trim(), locationType: form.locationType });
+    void (async () => {
+      const result = await createInventoryLocation(form).catch(() => null);
+      if (!result?.success) {
+        setPendingLocationDraft(null);
+        showBanner({
+          variant: 'error',
+          message: getInventoryActionErrorMessage(result?.error ?? 'create_failed'),
+        });
         return;
       }
-
-      setLocationDialogOpen(false);
-      setLocationForm(EMPTY_LOCATION_FORM);
       showBanner({ variant: 'success', message: 'Das Lager wurde angelegt.' });
       router.refresh();
-    });
+      await waitForLocations();
+      setPendingLocationDraft(null);
+    })();
   }
 
   function handleStockSave() {
     if (!stockDialog) return;
 
     setFormError(null);
-    void runInventoryTask(async () => {
-      const result = await adjustInventoryStock({
-        itemId: stockDialog.item.id,
-        locationId: stockDialog.locationId,
-        direction: stockDialog.direction,
-        quantity: decimalFromInput(stockDialog.quantity),
-        reason: stockDialog.reason,
-      });
-
-      if (!result.success) {
-        setFormError(getInventoryActionErrorMessage(result.error));
+    const itemId = stockDialog.item.id;
+    void (async () => {
+      const result = await stockSave
+        .run({
+          itemId,
+          locationId: stockDialog.locationId,
+          direction: stockDialog.direction,
+          quantity: decimalFromInput(stockDialog.quantity),
+          reason: stockDialog.reason,
+        })
+        .catch(() => null);
+      if (!result?.success) {
+        setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
         return;
       }
-
       setStockDialog(null);
-      showBanner({
-        variant: 'success',
-        message: 'Der Bestand wurde angepasst.',
-      });
+      showBanner({ variant: 'success', message: 'Der Bestand wurde angepasst.' });
       router.refresh();
-    });
+      void busyItems.run(itemId, waitForItems);
+    })();
   }
 
   function openStockDialog(item: InventoryOverviewItem) {
@@ -821,18 +914,25 @@ export function InventoryContent({ overview }: InventoryContentProps) {
           <TabsContent value="all" className="mt-4">
             <InventoryTable
               items={filteredItems}
+              pendingDraft={visiblePendingItemDraft}
+              isBusy={busyItems.isBusy}
               onEdit={openEditItemDialog}
               onAdjust={openStockDialog}
             />
           </TabsContent>
 
           <TabsContent value="locations" className="mt-4">
-            <LocationsView locations={overview.locations} items={overview.items} />
+            <LocationsView
+              locations={overview.locations}
+              items={overview.items}
+              pendingDraft={pendingLocationDraft}
+            />
           </TabsContent>
 
           <TabsContent value="planned" className="mt-4">
             <InventoryTable
               items={plannedItems}
+              isBusy={busyItems.isBusy}
               onEdit={openEditItemDialog}
               onAdjust={openStockDialog}
             />
@@ -852,7 +952,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         categories={overview.categories}
         suppliers={overview.suppliers}
         locations={overview.locations}
-        isSaving={isPending}
+        isSaving={itemSave.isPending}
         error={formError}
         onSave={handleItemSave}
       />
@@ -862,8 +962,6 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         onOpenChange={setLocationDialogOpen}
         form={locationForm}
         setForm={setLocationForm}
-        isSaving={isPending}
-        error={formError}
         onSave={handleLocationSave}
       />
 
@@ -871,7 +969,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         state={stockDialog}
         setState={setStockDialog}
         locations={overview.locations}
-        isSaving={isPending}
+        isSaving={stockSave.isPending}
         error={formError}
         onSave={handleStockSave}
       />
@@ -908,28 +1006,39 @@ function SummaryTile({
   );
 }
 
+const PENDING_ITEM_LABEL = 'Artikel wird angelegt';
+
 function InventoryTable({
   items,
+  pendingDraft = null,
+  isBusy,
   onEdit,
   onAdjust,
 }: {
   items: InventoryOverviewItem[];
+  pendingDraft?: PendingItemDraft | null;
+  /** The row whose dialog edit is still settling shows an inline indicator. */
+  isBusy: (itemId: string) => boolean;
   onEdit: (item: InventoryOverviewItem) => void;
   onAdjust: (item: InventoryOverviewItem) => void;
 }) {
+  const rows = withPendingDraft(items, pendingDraft);
+  const isEmpty = rows.length === 0;
+
   return (
     <>
       <div className="space-y-2 md:hidden">
-        {items.length === 0 ? (
+        {isEmpty ? (
           <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
             Keine Artikel gefunden.
           </div>
         ) : (
-          items.map((item) => (
+          rows.map((item) => isServerRow(item) ? (
             <ListRow key={item.id} className="items-start">
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
+                  <InlinePending active={isBusy(item.id)} />
                   <Badge
                     variant="outline"
                     className={cn('shrink-0', stockStatusClasses(item.stockStatus))}
@@ -967,6 +1076,28 @@ function InventoryTable({
               </div>
               <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
             </ListRow>
+          ) : (
+            <ListRow
+              key="pending-item"
+              role="status"
+              aria-label={PENDING_ITEM_LABEL}
+              className="items-start opacity-70"
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <InlinePending active label={PENDING_ITEM_LABEL} />
+                  <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
+                </div>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                  <span>{INVENTORY_ITEM_TYPE_LABELS[item.itemType]}</span>
+                  {item.internalSku && <span>SKU {item.internalSku}</span>}
+                </div>
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  Bestand {formatInventoryQuantity(item.quantity, item.unit)}
+                  {item.locationName && ` · ${item.locationName}`}
+                </p>
+              </div>
+            </ListRow>
           ))
         )}
       </div>
@@ -983,7 +1114,7 @@ function InventoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.length === 0 ? (
+            {isEmpty ? (
               <TableRow>
                 <TableCell
                   colSpan={INVENTORY_ITEM_COLUMNS.length}
@@ -993,11 +1124,14 @@ function InventoryTable({
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((item) => (
+              rows.map((item) => isServerRow(item) ? (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="min-w-48">
-                    <p className="font-medium">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{item.name}</p>
+                      <InlinePending active={isBusy(item.id)} />
+                    </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       {item.internalSku && <span>SKU {item.internalSku}</span>}
                       {item.primaryBarcode && <span>Barcode {item.primaryBarcode}</span>}
@@ -1049,6 +1183,54 @@ function InventoryTable({
                   <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
                 </TableCell>
               </TableRow>
+              ) : (
+              <PendingRow
+                key="pending-item"
+                columns={INVENTORY_ITEM_COLUMNS}
+                label={PENDING_ITEM_LABEL}
+                cells={{
+                  name: (
+                    <div className="min-w-48">
+                      <p className="font-medium">{item.name}</p>
+                      {item.internalSku && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          SKU {item.internalSku}
+                        </p>
+                      )}
+                    </div>
+                  ),
+                  type: (
+                    <Badge variant="secondary" className={itemTypeClasses(item.itemType)}>
+                      {INVENTORY_ITEM_TYPE_LABELS[item.itemType]}
+                    </Badge>
+                  ),
+                  location: item.locationName ? (
+                    <span className="text-xs">
+                      <span className="font-medium">{item.locationName}</span>{' '}
+                      <span className="text-muted-foreground">
+                        {formatInventoryQuantity(item.quantity, item.unit)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  ),
+                  onHand: (
+                    <span className="ml-auto tabular-nums">
+                      {formatInventoryQuantity(item.quantity, item.unit)}
+                    </span>
+                  ),
+                  planned: (
+                    <span className="ml-auto tabular-nums text-muted-foreground">
+                      {formatInventoryQuantity(0, item.unit)}
+                    </span>
+                  ),
+                  available: (
+                    <span className="ml-auto tabular-nums font-medium">
+                      {formatInventoryQuantity(item.quantity, item.unit)}
+                    </span>
+                  ),
+                }}
+              />
               ))
             )}
           </TableBody>
@@ -1206,13 +1388,34 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
 function LocationsView({
   locations,
   items,
+  pendingDraft,
 }: {
   locations: InventoryLocation[];
   items: InventoryOverviewItem[];
+  pendingDraft: PendingLocationDraft | null;
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      {locations.map((location) => {
+      {withPendingDraft(locations, pendingDraft).map((location) => {
+        if (!isServerRow(location)) {
+          return (
+            <div
+              key="pending-location"
+              role="status"
+              aria-label="Lager wird angelegt"
+              className="rounded-lg border bg-card p-4 opacity-70"
+            >
+              <div className="flex items-center gap-2">
+                <InlinePending active label="Lager wird angelegt" />
+                <Warehouse className="size-4 text-muted-foreground" />
+                <h2 className="font-semibold">{location.name}</h2>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
+              </p>
+            </div>
+          );
+        }
         const locationItems = items.filter((item) =>
           item.stockByLocation.some((stock) => stock.locationId === location.id)
         );
@@ -1659,21 +1862,19 @@ function SupplierQuickCreateDialog({
   );
 }
 
+// Create-only dialog: it closes on submit and the Lager tab shows the pending
+// card, so it carries no pending or error state of its own.
 function LocationDialog({
   open,
   onOpenChange,
   form,
   setForm,
-  isSaving,
-  error,
   onSave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   form: LocationFormState;
   setForm: (form: LocationFormState) => void;
-  isSaving: boolean;
-  error: string | null;
   onSave: () => void;
 }) {
   const [attempted, setAttempted] = useState(false);
@@ -1732,20 +1933,11 @@ function LocationDialog({
               }
             />
           </Field>
-          <ErrorText>{error}</ErrorText>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSaving}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Abbrechen
             </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Speichern
-            </Button>
+            <Button type="submit">Speichern</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -2008,17 +2200,25 @@ function ImportDialog({
         rows: normalizedRows,
       };
 
-      const result = await importInventoryRows(payload);
-      if (!result.success) {
+      // One server call imports every row; the result carries the counts.
+      const result = await importInventoryRows(payload).catch(() => null);
+      if (!result?.success) {
         setError('Der Import konnte nicht abgeschlossen werden.');
         return;
       }
 
       handleOpenChange(false);
-      showBanner({
-        variant: 'success',
-        message: 'Der Import wurde abgeschlossen.',
-      });
+      const importedLabel = `${result.importedCount} Artikel importiert`;
+      showBanner(
+        result.failedCount > 0
+          ? {
+              variant: 'error',
+              message: `${importedLabel}, ${result.failedCount} ${
+                result.failedCount === 1 ? 'Zeile konnte' : 'Zeilen konnten'
+              } nicht übernommen werden. Prüfe die CSV-Datei.`,
+            }
+          : { variant: 'success', message: `${importedLabel}.` }
+      );
       onImported();
     });
   }

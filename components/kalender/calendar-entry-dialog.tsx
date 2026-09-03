@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { CreateJobFormContent } from '@/components/auftraege/create-job-form-content';
 import { ManualEntryFormContent } from '@/components/manual-entry-form-content';
@@ -67,10 +68,9 @@ async function loadCalendarEntryDialogData(
       dialogDataCache.set(organizationId, data);
       return data;
     })
-    .catch((error) => {
-      console.error('Error loading calendar dialog options:', error);
-      return null;
-    })
+    // A failed load resolves to null; the dialog renders that as an
+    // ErrorText, so nothing is logged here.
+    .catch(() => null)
     .finally(() => {
       dialogDataPromiseCache.delete(organizationId);
     });
@@ -122,6 +122,14 @@ export function CalendarEntryDialog({
   const isLoadingData = activeOrgId
     ? loadingDialogOrgId === activeOrgId
     : false;
+  // The reference data resolved to null for the active organization: the
+  // forms would silently offer empty lists, so the failure is named instead.
+  const hasDataLoadFailed =
+    isAdminOrManager &&
+    !isLoadingData &&
+    activeOrgId !== null &&
+    loadedDialogData?.organizationId === activeOrgId &&
+    loadedDialogData.data === null;
 
   useEffect(() => {
     activeOrgIdRef.current = activeOrgId;
@@ -343,6 +351,12 @@ export function CalendarEntryDialog({
               Referenzdaten werden geladen. Die vorausgefüllten Felder kannst du
               schon direkt anpassen.
             </div>
+          )}
+          {hasDataLoadFailed && !dialogData && (
+            <ErrorText>
+              Kunden, Aufträge und Mitarbeiter konnten nicht geladen werden.
+              Bitte schließe den Dialog und öffne ihn erneut.
+            </ErrorText>
           )}
 
           <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { ClientSelectWithCreate } from "@/components/auftraege/client-select-with-create";
 import { Button } from "@/components/ui/button";
@@ -38,8 +39,21 @@ import {
   type ServiceCaseClientOption,
   type ServiceCaseDetail,
   type ServiceCaseJobOption,
+  type ServiceCaseListItem,
   type ServiceCaseStatus,
 } from "@/lib/service-cases/types";
+
+/** The values a list can show for a record before the server confirms it. */
+export type ServiceCasePendingDraft = Pick<
+  ServiceCaseListItem,
+  "id" | "summary" | "urgency" | "status" | "clientName" | "siteName"
+>;
+
+export type ServiceCaseCreateSubmission = {
+  draft: ServiceCasePendingDraft;
+  /** Never rejects; a failure carries the German message for the caller's banner. */
+  result: Promise<{ success: true } | { success: false; message: string }>;
+};
 
 type FormState = {
   clientId: string;
@@ -76,6 +90,8 @@ const EMPTY_FORM: FormState = {
   equipmentIds: [],
   reason: "",
 };
+
+const GENERIC_ERROR = "Der Servicefall konnte nicht gespeichert werden.";
 
 const ERRORS: Record<string, string> = {
   invalid_input: "Bitte prüfe die Angaben.",
@@ -162,12 +178,22 @@ export function ServiceCaseFormDialog({
   clients,
   initial,
   jobs = [],
+  onSubmitted,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clients: ServiceCaseClientOption[];
   initial?: ServiceCaseDetail;
   jobs?: ServiceCaseJobOption[];
+  /**
+   * Create from a list (feedback canon): the dialog closes at once and the
+   * caller renders the pending row until `result` settles. Without it a
+   * create navigates to the new record.
+   */
+  onSubmitted?: (submission: ServiceCaseCreateSubmission) => void;
+  /** Edit settled by the caller (a live-view refresh) instead of a route refresh. */
+  onSaved?: () => void;
 }): ReactElement {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() =>
@@ -175,6 +201,23 @@ export function ServiceCaseFormDialog({
   );
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  function createInput(serviceCaseId: string) {
+    return {
+      serviceCaseId,
+      idempotencyKey: crypto.randomUUID(),
+      clientId: form.clientId,
+      siteId: form.siteId,
+      contactId: form.contactId || null,
+      originalStatement: form.originalStatement,
+      originalDetails: form.originalDetails,
+      summary: form.summary,
+      urgency: form.urgency,
+      chargeContext: form.chargeContext,
+      accessInstructions: form.accessInstructions,
+      triageNote: form.triageNote,
+      equipmentIds: form.equipmentIds,
+    };
+  }
   const { run, isPending } = useServerAction(async () => {
     const result = initial
       ? await updateServiceCase({
@@ -192,28 +235,16 @@ export function ServiceCaseFormDialog({
           reason: form.reason,
           idempotencyKey: crypto.randomUUID(),
         })
-      : await createServiceCase({
-          serviceCaseId: crypto.randomUUID(),
-          idempotencyKey: crypto.randomUUID(),
-          clientId: form.clientId,
-          siteId: form.siteId,
-          contactId: form.contactId || null,
-          originalStatement: form.originalStatement,
-          originalDetails: form.originalDetails,
-          summary: form.summary,
-          urgency: form.urgency,
-          chargeContext: form.chargeContext,
-          accessInstructions: form.accessInstructions,
-          triageNote: form.triageNote,
-          equipmentIds: form.equipmentIds,
-        });
+      : await createServiceCase(createInput(crypto.randomUUID()));
     if (!result.success) {
-      setError(ERRORS[result.error] ?? "Der Servicefall konnte nicht gespeichert werden.");
+      setError(ERRORS[result.error] ?? GENERIC_ERROR);
       return;
     }
     onOpenChange(false);
     if (!initial) {
       router.push(`/service/faelle/${result.serviceCase.case_number}`);
+    } else if (onSaved) {
+      onSaved();
     } else {
       router.refresh();
     }
@@ -236,6 +267,28 @@ export function ServiceCaseFormDialog({
     const firstInvalid = REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
     if (firstInvalid) {
       document.getElementById(firstInvalid[1])?.focus();
+      return;
+    }
+    if (!initial && onSubmitted) {
+      const serviceCaseId = crypto.randomUUID();
+      onSubmitted({
+        draft: {
+          id: serviceCaseId,
+          summary: form.summary.trim(),
+          urgency: form.urgency,
+          status: "new",
+          clientName: client?.name ?? "",
+          siteName: site?.name ?? "",
+        },
+        result: createServiceCase(createInput(serviceCaseId)).then(
+          (created) =>
+            created.success
+              ? { success: true as const }
+              : { success: false as const, message: ERRORS[created.error] ?? GENERIC_ERROR },
+          () => ({ success: false as const, message: GENERIC_ERROR }),
+        ),
+      });
+      onOpenChange(false);
       return;
     }
     void run();
@@ -370,7 +423,7 @@ export function ServiceCaseFormDialog({
         <ErrorText>{error}</ErrorText>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Abbrechen</Button>
-          <Button type="button" onClick={submit} disabled={isPending}>{isPending ? "Speichert…" : "Speichern"}</Button>
+          <Button type="button" onClick={submit} disabled={isPending}>{isPending && <Loader2 className="size-4 animate-spin" />}Speichern</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

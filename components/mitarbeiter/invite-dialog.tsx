@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -14,7 +14,6 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import {
@@ -24,7 +23,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import { useBanner } from '@/components/ui/banner';
+import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
+import type { Invite } from './invitations-table';
 
 // Role labels for the dropdown (using gender-inclusive German format)
 const ROLE_OPTIONS: { value: InviteRole; label: string }[] = [
@@ -50,21 +52,32 @@ const ERROR_MESSAGES: Record<string, string> = {
 // Email validation regex (same as signup form)
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * The invitations list (`MitarbeiterTabs`) subscribes here: the page header
+ * mounts this dialog outside the list's Suspense boundary, so the optimistic
+ * row travels over a channel instead of a callback.
+ */
+export const inviteCreations = createOptimisticChannel<Invite>();
+
 export function InviteDialog() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<InviteRole>('employee');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [success, setSuccess] = useState(false);
   const router = useRouter();
+  const { showBanner } = useBanner();
+
+  const resetForm = () => {
+    setEmail('');
+    setSelectedRole('employee');
+    setEmailError(null);
+    setHasAttemptedSubmit(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setHasAttemptedSubmit(true);
-    setError(null);
     setEmailError(null);
 
     // Validate email format
@@ -74,48 +87,54 @@ export function InviteDialog() {
       return;
     }
 
-    setIsLoading(true);
-    setSuccess(false);
+    // The dialog closes at once; the invitations list shows the draft as a
+    // pending row until the server confirms (feedback canon). The expiry is
+    // server-assigned, so the row keeps a placeholder for it until then.
+    const invitedEmail = email.trim().toLowerCase();
+    const role = selectedRole;
+    const tempId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const draft: Invite = {
+      id: tempId,
+      email: invitedEmail,
+      status: 'pending',
+      invited_role: role,
+      created_at: now,
+      expires_at: now,
+      accepted_at: null
+    };
+    inviteCreations.publish({ kind: 'insert', tempId, draft });
+    resetForm();
+    setOpen(false);
 
-    try {
-      const result = await sendOrgInvite(email, selectedRole);
-
-      if (result.success) {
-        setSuccess(true);
-        setEmail('');
-        setSelectedRole('employee'); // Reset role to default
-        setHasAttemptedSubmit(false);
-        // Close dialog after a short delay
-        setTimeout(() => {
-          setOpen(false);
-          setSuccess(false);
-          router.refresh();
-        }, 2000);
-      } else {
-        setError(
-          ERROR_MESSAGES[result.error || 'unexpected_error'] ||
-            result.error ||
-            'Unbekannter Fehler'
-        );
-      }
-    } catch {
-      setError('Ein unerwarteter Fehler ist aufgetreten.');
-    } finally {
-      setIsLoading(false);
+    const result = await sendOrgInvite(invitedEmail, role).catch(() => null);
+    if (!result || !result.success) {
+      inviteCreations.publish({ kind: 'rollback', tempId });
+      const reason =
+        ERROR_MESSAGES[result?.error || 'unexpected_error'] ||
+        result?.error ||
+        ERROR_MESSAGES.unexpected_error;
+      showBanner({
+        variant: 'error',
+        message: `Einladung an ${invitedEmail} konnte nicht gesendet werden: ${reason}`
+      });
+      return;
     }
+    inviteCreations.publish({
+      kind: 'commit',
+      tempId,
+      confirmed: { ...draft, id: result.inviteId ?? tempId }
+    });
+    showBanner({
+      variant: 'success',
+      message: `Einladung an ${invitedEmail} wurde gesendet.`
+    });
+    router.refresh();
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    if (!newOpen) {
-      // Reset state when closing
-      setEmail('');
-      setSelectedRole('employee');
-      setError(null);
-      setEmailError(null);
-      setSuccess(false);
-      setHasAttemptedSubmit(false);
-    }
+    if (!newOpen) resetForm();
   };
 
   // Determine if we should show the email error (only after submit attempt)
@@ -160,7 +179,6 @@ export function InviteDialog() {
                   // Clear email error when user types
                   if (emailError) setEmailError(null);
                 }}
-                disabled={isLoading || success}
               />
             </Field>
             <Field
@@ -171,7 +189,6 @@ export function InviteDialog() {
               <Select
                 value={selectedRole}
                 onValueChange={(value) => setSelectedRole(value as InviteRole)}
-                disabled={isLoading || success}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Rolle auswählen" />
@@ -185,18 +202,9 @@ export function InviteDialog() {
                 </SelectContent>
               </Select>
             </Field>
-            <ErrorText>{error}</ErrorText>
-            {success && (
-              <p className="text-sm text-green-600">
-                Einladung erfolgreich gesendet!
-              </p>
-            )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isLoading || success}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
-              {isLoading ? 'Wird gesendet...' : 'Einladung senden'}
-            </Button>
+            <Button type="submit">Einladung senden</Button>
           </DialogFooter>
         </form>
       </DialogContent>

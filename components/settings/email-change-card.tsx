@@ -336,6 +336,13 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
     now
   );
 
+  function reportUnexpectedError(error: unknown): void {
+    console.error('Unexpected error in the email-change flow:', error);
+    setFormError(
+      'Die E-Mail-Änderung konnte nicht vollständig verarbeitet werden. Bitte versuche es erneut.'
+    );
+  }
+
   async function handleStartFlow() {
     setFormError(null);
     setCompletionState(null);
@@ -345,6 +352,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
     try {
       const result = await requestCurrentEmailChangeOtp();
       applyResultError(result, setWizardState, setFormError);
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsStarting(false);
     }
@@ -367,6 +376,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
       if (result.success) {
         setCurrentOtpCode('');
       }
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsCurrentOtpSubmitting(false);
     }
@@ -379,6 +390,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
     try {
       const result = await requestCurrentEmailChangeOtp();
       applyResultError(result, setWizardState, setFormError);
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsCurrentOtpResending(false);
     }
@@ -407,6 +420,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
       if (result.success) {
         emailForm.reset({ email: nextEmail });
       }
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsSavingNewEmail(false);
     }
@@ -423,6 +438,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
     try {
       const result = await touchPendingNewEmailVerification(pendingNewEmail);
       applyResultError(result, setWizardState, setFormError);
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsNewEmailOtpResending(false);
     }
@@ -483,6 +500,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
         message: 'Deine E-Mail-Adresse wurde erfolgreich aktualisiert.',
         variant: 'success',
       });
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsNewEmailOtpSubmitting(false);
     }
@@ -507,6 +526,8 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
           variant: 'success',
         });
       }
+    } catch (error) {
+      reportUnexpectedError(error);
     } finally {
       setIsResetting(false);
     }

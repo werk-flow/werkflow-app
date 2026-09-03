@@ -19,6 +19,7 @@ import {
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { updateOrganizationSettings } from '@/lib/org/settings-actions';
 import {
   ORGANIZATION_CODE_LENGTH,
@@ -134,6 +135,9 @@ export function OrganizationSettingsForm({
         message: 'Die Organisation wurde gespeichert.',
         variant: 'success',
       });
+    } catch (error) {
+      console.error('Unexpected error saving organization settings:', error);
+      showBanner({ message: ERROR_MESSAGES.update_failed, variant: 'error' });
     } finally {
       setIsSaving(false);
     }
@@ -166,7 +170,10 @@ export function OrganizationSettingsForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Allgemeine Angaben</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Allgemeine Angaben
+            <InlinePending active={isSaving} label="Organisation wird gespeichert" />
+          </CardTitle>
           <CardDescription>
             Admins können den Organisationsnamen und den Code für den Beitritt pflegen.
           </CardDescription>

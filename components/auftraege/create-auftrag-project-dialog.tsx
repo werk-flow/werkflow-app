@@ -14,8 +14,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CreateJobFormContent } from './create-job-form-content';
-import { CreateProjectFormContent } from './create-project-form-content';
+import { CreateJobFormContent, type CreateJobSubmission } from './create-job-form-content';
+import {
+  CreateProjectFormContent,
+  type CreateProjectSubmission,
+} from './create-project-form-content';
 import type { OrgMemberOption } from './employee-multi-select';
 import type { Client, Job, Project, ProjectWithDetails } from '@/lib/jobs/types';
 
@@ -37,6 +40,14 @@ interface CreateAuftragProjectDialogProps {
     project: Project;
     linkedJobIds: string[];
   }) => void | Promise<void>;
+  /**
+   * Deferred submit (feedback canon, create from a dialog): when set, the
+   * dialog closes as soon as the form validates and the list owns the server
+   * call, the pending row, and the result. `onJobCreated` /
+   * `onProjectCreated` are not called on that path.
+   */
+  onJobSubmit?: (submission: CreateJobSubmission) => void;
+  onProjectSubmit?: (submission: CreateProjectSubmission) => void;
 }
 
 export function CreateAuftragProjectDialog({
@@ -51,6 +62,8 @@ export function CreateAuftragProjectDialog({
   onOpenChange: controlledOnOpenChange,
   onJobCreated,
   onProjectCreated,
+  onJobSubmit,
+  onProjectSubmit,
 }: CreateAuftragProjectDialogProps) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -111,6 +124,14 @@ export function CreateAuftragProjectDialog({
               defaultEmployeeIds={defaultEmployeeIds}
               readOnlyClient={readOnlyClient}
               isActive={activeTab === 'job'}
+              onSubmitDeferred={
+                onJobSubmit
+                  ? (submission) => {
+                      setOpen(false);
+                      onJobSubmit(submission);
+                    }
+                  : undefined
+              }
               onSuccess={async (payload) => {
                 setOpen(false);
                 if (onJobCreated) {
@@ -129,6 +150,14 @@ export function CreateAuftragProjectDialog({
               defaultClientId={defaultClientId}
               readOnlyClient={readOnlyClient}
               isActive={activeTab === 'project'}
+              onSubmitDeferred={
+                onProjectSubmit
+                  ? (submission) => {
+                      setOpen(false);
+                      onProjectSubmit(submission);
+                    }
+                  : undefined
+              }
               onSuccess={async (payload) => {
                 setOpen(false);
                 if (onProjectCreated) {

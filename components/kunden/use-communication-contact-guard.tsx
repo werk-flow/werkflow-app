@@ -1,6 +1,7 @@
 'use client';
 
 import { useBanner } from '@/components/ui/banner';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useRef, useState } from 'react';
 import { CircleAlert, Loader2 } from 'lucide-react';
@@ -62,13 +63,16 @@ export function useCommunicationContactGuard({
   const [reasonError, setReasonError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const { run: runGuardTask, isPending } = usePendingTask();
+  // The server check runs on the link click itself; the caller shows the
+  // spinner beside that contact so the click visibly did something.
+  const { run: runCheck, isBusy: isCheckingContact } = useBusyIds();
 
   function requestContact(input: Omit<PendingContact, 'warnings'>) {
     if (!isAllowedContactHref(input.channel, input.href)) {
       showBanner({ variant: 'error', message: 'Der Kontaktlink ist ungültig.' });
       return;
     }
-    void runGuardTask(async () => {
+    void runCheck(input.contactId, async () => {
       // Re-evaluate on the server at contact time so a stale tab cannot skip a
       // preference or do-not-contact warning that was just added elsewhere.
       const result = await evaluateCustomerCommunicationGuidance(clientId, {
@@ -172,5 +176,5 @@ export function useCommunicationContactGuard({
     </Dialog>
   );
 
-  return { requestContact, dialog };
+  return { requestContact, isCheckingContact, dialog };
 }

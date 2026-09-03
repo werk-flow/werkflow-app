@@ -6,6 +6,7 @@ import {
   Check,
   FolderKanban,
   LinkIcon,
+  Loader2,
   Search,
   UserRound,
   Users,
@@ -21,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorText } from "@/components/ui/error-text";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -210,6 +212,10 @@ export function DocumentLinkDialog({
   );
   const [targetType, setTargetType] = useState<LinkTargetType>("job");
   const [searchQuery, setSearchQuery] = useState("");
+  // Both failures render inside the dialog (feedback canon: the error sits at
+  // the point of action and the dialog never closes on failure).
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [fetchedCatalog, setFetchedCatalog] = useState<{
     jobs: Job[];
     projects: ProjectWithDetails[];
@@ -288,12 +294,19 @@ export function DocumentLinkDialog({
     if (!needsCatalogFetch) return;
 
     let cancelled = false;
+    const catalogErrorMessage =
+      "Aufträge, Projekte, Kunden, Mitarbeiter und Anlagen konnten nicht geladen werden.";
 
     void (async () => {
-      const result = await runCatalogFetch();
-      if (cancelled) return;
+      try {
+        const result = await runCatalogFetch();
+        if (cancelled) return;
 
-      if (result.success) {
+        if (!result.success) {
+          setCatalogError(catalogErrorMessage);
+          return;
+        }
+        setCatalogError(null);
         setFetchedCatalog({
           jobs: result.jobs,
           projects: result.projects,
@@ -301,18 +314,15 @@ export function DocumentLinkDialog({
           employees: result.employees,
           equipment: result.equipment,
         });
-      } else {
-        onComplete(
-          "error",
-          "Aufträge, Projekte, Kunden, Mitarbeiter und Anlagen konnten nicht geladen werden.",
-        );
+      } catch {
+        if (!cancelled) setCatalogError(catalogErrorMessage);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [needsCatalogFetch, onComplete, runCatalogFetch]);
+  }, [needsCatalogFetch, runCatalogFetch]);
 
   const isLoadingCatalog = needsCatalogFetch && isCatalogPending;
 
@@ -469,27 +479,33 @@ export function DocumentLinkDialog({
 
   function handleSave() {
     if (!document || changeCount === 0) return;
+    setSaveError(null);
 
     void (async () => {
-      const result = await runSaveLinks({
-        documentId: document.id,
-        addJobIds,
-        addProjectIds,
-        addClientIds,
-        addEmployeeIds,
-        addEquipmentIds,
-        removeLinkIds,
-      });
+      let result: Awaited<ReturnType<typeof updateDocumentLinks>>;
+      try {
+        result = await runSaveLinks({
+          documentId: document.id,
+          addJobIds,
+          addProjectIds,
+          addClientIds,
+          addEmployeeIds,
+          addEquipmentIds,
+          removeLinkIds,
+        });
+      } catch {
+        setSaveError("Die Verknüpfungen konnten nicht aktualisiert werden.");
+        return;
+      }
 
       const feedback = getUpdateMessage(result);
-      onComplete(feedback.variant, feedback.message);
-
-      if (
-        result.success ||
-        (result.addedCount ?? 0) + (result.removedCount ?? 0) > 0
-      ) {
-        onOpenChange(false);
+      if (!result.success) {
+        setSaveError(feedback.message);
+        return;
       }
+
+      onComplete(feedback.variant, feedback.message);
+      onOpenChange(false);
     })();
   }
 
@@ -595,7 +611,11 @@ export function DocumentLinkDialog({
           </div>
 
           <div className="max-h-80 overflow-auto rounded-md border">
-            {isLoadingCatalog ? (
+            {catalogError ? (
+              <ErrorText className="px-4 py-10 text-center">
+                {catalogError}
+              </ErrorText>
+            ) : isLoadingCatalog ? (
               <div className="divide-y" role="status" aria-busy="true">
                 <span className="sr-only">Einträge werden geladen.</span>
                 {Array.from({ length: 5 }, (_, index) => (
@@ -708,6 +728,8 @@ export function DocumentLinkDialog({
               </div>
             )}
           </div>
+
+          <ErrorText>{saveError}</ErrorText>
         </div>
 
         <DialogFooter>
@@ -727,7 +749,11 @@ export function DocumentLinkDialog({
             onClick={handleSave}
             disabled={isSaving || isLoadingCatalog || changeCount === 0}
           >
-            <LinkIcon className="size-4" />
+            {isSaving ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <LinkIcon className="size-4" />
+            )}
             Speichern
           </Button>
         </DialogFooter>

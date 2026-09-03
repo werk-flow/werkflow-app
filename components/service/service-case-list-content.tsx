@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { MapPin, Plus, Search, Siren } from "lucide-react";
 
+import { useBanner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
+import { PendingRow } from "@/components/ui/pending-row";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SkeletonColumn } from "@/components/ui/skeleton-table";
@@ -22,7 +25,20 @@ import {
   type ServiceCaseListItem,
   type ServiceCaseStatus,
 } from "@/lib/service-cases/types";
-import { ServiceCaseFormDialog } from "./service-case-form-dialog";
+import {
+  ServiceCaseFormDialog,
+  type ServiceCaseCreateSubmission,
+  type ServiceCasePendingDraft,
+} from "./service-case-form-dialog";
+
+// The page mounts the create button in its own Suspense tree beside the
+// heading, so a submission reaches the list through this module channel
+// instead of props. The list is the one listener: it renders the pending
+// row, settles through its live read, and shows the failure banner.
+const submissionListeners = new Set<(submission: ServiceCaseCreateSubmission) => void>();
+function announceSubmission(submission: ServiceCaseCreateSubmission): void {
+  for (const listener of submissionListeners) listener(submission);
+}
 
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
@@ -60,6 +76,29 @@ export function ServiceCaseListContent({
     },
   });
   const cases = live.data ?? initialCases;
+  const { showBanner } = useBanner();
+  const [pendingCreates, setPendingCreates] = useState<ServiceCasePendingDraft[]>([]);
+  const liveRefresh = live.refresh;
+  const liveInvalidate = live.invalidate;
+  useEffect(() => {
+    const listener = ({ draft, result }: ServiceCaseCreateSubmission) => {
+      liveInvalidate();
+      setPendingCreates((current) => [...current, draft]);
+      void result
+        .then(async (outcome) => {
+          if (outcome.success) await liveRefresh();
+          else showBanner({ variant: "error", message: outcome.message });
+        })
+        .finally(() => setPendingCreates((current) => current.filter((item) => item.id !== draft.id)));
+    };
+    submissionListeners.add(listener);
+    return () => {
+      submissionListeners.delete(listener);
+    };
+  }, [liveInvalidate, liveRefresh, showBanner]);
+  // The list is newest first, so a new record leads; a Realtime read that
+  // arrives before the settle read drops the placeholder by id.
+  const visiblePending = pendingCreates.filter((draft) => !cases.some((item) => item.id === draft.id));
   const needle = search.trim().toLocaleLowerCase("de-DE");
   const filtered = useMemo(
     () =>
@@ -96,7 +135,7 @@ export function ServiceCaseListContent({
           />
         </div>
       </div>
-      {filtered.length === 0 ? (
+      {filtered.length === 0 && visiblePending.length === 0 ? (
         <div className="rounded-lg border border-dashed px-6 py-12 text-center">
           <Siren className="mx-auto size-8 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-semibold">Keine passenden Servicefälle</h2>
@@ -105,6 +144,12 @@ export function ServiceCaseListContent({
       ) : (
         <>
           <div className="space-y-2 md:hidden">
+            {visiblePending.map((draft) => (
+              <ListRow key={draft.id} role="status" aria-label="Wird gespeichert" data-pending-row="" className="opacity-70">
+                <span className="min-w-0 flex-1"><span className="flex items-center gap-2 font-medium"><InlinePending active /><span className="truncate">{draft.summary}</span></span><span className="block truncate text-xs text-muted-foreground">{draft.clientName} · {draft.siteName}</span></span>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">{SERVICE_CASE_STATUS_LABELS[draft.status]}</span>
+              </ListRow>
+            ))}
             {filtered.map((item) => (
               <ListRow key={item.id} asChild interactive>
                 <Link href={serviceCaseHref(item.caseNumber)}>
@@ -118,6 +163,18 @@ export function ServiceCaseListContent({
             <Table>
               <TableHeader><TableRow>{SERVICE_CASE_COLUMNS.map((column) => <TableHead key={column.id} className={column.className}>{column.header}</TableHead>)}</TableRow></TableHeader>
               <TableBody>
+                {visiblePending.map((draft) => (
+                  <PendingRow
+                    key={draft.id}
+                    columns={SERVICE_CASE_COLUMNS}
+                    cells={{
+                      case: <span><span className="block font-medium">{draft.summary}</span><Skeleton className="mt-1 h-3 w-24" /></span>,
+                      site: <span><span className="block">{draft.clientName}</span><span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" />{draft.siteName}</span></span>,
+                      urgency: SERVICE_CASE_URGENCY_LABELS[draft.urgency],
+                      status: <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">{SERVICE_CASE_STATUS_LABELS[draft.status]}</span>,
+                    }}
+                  />
+                ))}
                 {filtered.map((item) => {
                   const href = serviceCaseHref(item.caseNumber);
                   return (
@@ -135,11 +192,11 @@ export function ServiceCaseListContent({
         </>
       )}
       <Button type="button" className="fixed bottom-6 right-6 shadow-lg md:hidden" onClick={() => setCreateOpen(true)}><Plus className="size-4" />Servicefall erfassen</Button>
-      {createOpen && <ServiceCaseFormDialog open onOpenChange={setCreateOpen} clients={clients} />}
+      {createOpen && <ServiceCaseFormDialog open onOpenChange={setCreateOpen} clients={clients} onSubmitted={announceSubmission} />}
     </>
   );
 }
 export function ServiceCaseCreateButton({ clients }: { clients: ServiceCaseClientOption[] }): ReactElement {
   const [open, setOpen] = useState(false);
-  return <><Button type="button" onClick={() => setOpen(true)}><Plus className="size-4" />Servicefall erfassen</Button>{open && <ServiceCaseFormDialog open onOpenChange={setOpen} clients={clients} />}</>;
+  return <><Button type="button" onClick={() => setOpen(true)}><Plus className="size-4" />Servicefall erfassen</Button>{open && <ServiceCaseFormDialog open onOpenChange={setOpen} clients={clients} onSubmitted={announceSubmission} />}</>;
 }

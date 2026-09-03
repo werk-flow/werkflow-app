@@ -226,11 +226,14 @@ export function DocumentUploadDialog({
 
           uploadedDocuments.push(result.document);
           updateRow(row.id, { status: "done" });
-        } catch {
+        } catch (error) {
           failures++;
           updateRow(row.id, {
             status: "error",
-            error: "Upload fehlgeschlagen.",
+            error:
+              error instanceof Error && error.message === "folder_failed"
+                ? "Der Zielordner konnte nicht angelegt werden."
+                : "Upload fehlgeschlagen.",
           });
         }
       }

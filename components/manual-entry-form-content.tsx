@@ -96,6 +96,8 @@ export function ManualEntryFormContent({
     entryMode === 'clock_in' || entryMode === 'both';
 
   const [error, setError] = useState<string | null>(null);
+  // A failed option load leaves a select empty; the reason must be visible.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ member?: string; date?: string }>({});
   const { showBanner } = useBanner();
 
@@ -121,9 +123,12 @@ export function ManualEntryFormContent({
               role: member.role,
             }))
           );
+        } else {
+          setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
         }
       } catch (err) {
         console.error('Error fetching members:', err);
+        setLoadError('Die Mitarbeiterliste konnte nicht geladen werden.');
       } finally {
         setIsLoadingMembers(false);
       }
@@ -145,9 +150,14 @@ export function ManualEntryFormContent({
         const result = isAdminOrManager
           ? await getAllOrgJobs(activeOrgId!)
           : await getAssignedJobs(activeOrgId!);
-        if (result.success) setJobOptions(result.jobs);
+        if (result.success) {
+          setJobOptions(result.jobs);
+        } else {
+          setLoadError('Die Auftragsliste konnte nicht geladen werden.');
+        }
       } catch (err) {
         console.error('Error fetching jobs:', err);
+        setLoadError('Die Auftragsliste konnte nicht geladen werden.');
       } finally {
         setIsLoadingJobs(false);
       }
@@ -344,6 +354,7 @@ export function ManualEntryFormContent({
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
+        <ErrorText>{loadError}</ErrorText>
         {!lockEntryMode && (
           <Field label="Art des Eintrags">
             <Select

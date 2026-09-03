@@ -26,11 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import {
-  updateMemberRole,
-  removeMember,
-  type OrgRole
-} from '@/lib/members/actions';
+import { removeMember, type OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 
@@ -59,12 +55,18 @@ interface MemberActionsMenuProps {
   currentUserId: string;
   currentUserRole: OrgRole;
   removalBlockedMessage?: string;
-  onRoleChange?: (
+  /** The list has a change for this row in flight (role change settling). */
+  isBusy?: boolean;
+  /**
+   * The list owns the role change: optimistic role, the server call, the
+   * rollback and the banner, so the row shows pending until props land.
+   */
+  onRoleChange: (
     memberId: string,
     newRole: OrgRole,
     firstName: string,
     lastName: string
-  ) => void;
+  ) => Promise<void>;
 }
 
 export function MemberActionsMenu({
@@ -76,10 +78,10 @@ export function MemberActionsMenu({
   currentUserId,
   currentUserRole,
   removalBlockedMessage,
+  isBusy = false,
   onRoleChange
 }: MemberActionsMenuProps) {
   const router = useRouter();
-  const [isUpdating, setIsUpdating] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [showRemoveDialog, setShowRemoveDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,27 +107,6 @@ export function MemberActionsMenu({
         ? ADMIN_ASSIGNABLE_ROLES
         : BUERO_ASSIGNABLE_ROLES;
     return assignableRoles.filter((role) => role !== memberRole);
-  };
-
-  const handleRoleChange = async (newRole: OrgRole) => {
-    if (isUpdating) return;
-    setIsUpdating(true);
-    setError(null);
-
-    const result = await updateMemberRole(memberId, newRole);
-
-    if (result.success) {
-      // Call the callback for optimistic UI update and banner display
-      if (onRoleChange) {
-        onRoleChange(memberId, newRole, memberFirstName, memberLastName);
-      }
-      // Refresh to get sorted data from server
-      router.refresh();
-    } else {
-      setError(getMemberActionErrorMessage(result.error));
-    }
-
-    setIsUpdating(false);
   };
 
   const handleRemove = async () => {
@@ -160,7 +141,7 @@ export function MemberActionsMenu({
   const availableRoles = getAvailableRoles();
 
   // Show loading state for either role change or member removal
-  const isLoading = isUpdating || isRemoving;
+  const isLoading = isBusy || isRemoving;
 
   return (
     <>
@@ -198,7 +179,9 @@ export function MemberActionsMenu({
                 {availableRoles.map((role) => (
                   <DropdownMenuItem
                     key={role}
-                    onClick={() => handleRoleChange(role)}
+                    onClick={() =>
+                      void onRoleChange(memberId, role, memberFirstName, memberLastName)
+                    }
                   >
                     {ROLE_LABELS[role]}
                   </DropdownMenuItem>
@@ -246,7 +229,12 @@ export function MemberActionsMenu({
               Abbrechen
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleRemove}
+              // Keep the dialog open until the server confirms; a failure
+              // must stay visible at the point of action.
+              onClick={(event) => {
+                event.preventDefault();
+                void handleRemove();
+              }}
               disabled={isRemoving || Boolean(removalBlockedMessage)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

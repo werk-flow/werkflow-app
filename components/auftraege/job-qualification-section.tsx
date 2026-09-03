@@ -4,14 +4,16 @@ import { useState } from 'react';
 import { Award, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Label } from '@/components/ui/label';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   getJobQualificationDetail,
@@ -22,6 +24,10 @@ import {
   type JobQualificationDetail,
 } from '@/lib/qualifications/types';
 
+const SAVE_FAILED_MESSAGE = 'Die Anforderungen konnten nicht gespeichert werden.';
+/** Busy slot for the section-level add; removals use the requirement id. */
+const ADD_BUSY_ID = 'add';
+
 export function JobQualificationSection({
   jobId,
   canEdit,
@@ -29,10 +35,10 @@ export function JobQualificationSection({
   jobId: string;
   canEdit: boolean;
 }) {
-  const { showBanner } = useBanner();
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
   const [requireConfirmation, setRequireConfirmation] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { run: runSave, isBusy, anyBusy } = useBusyIds();
 
   const view = useLiveView<JobQualificationDetail>({
     tables: [
@@ -77,29 +83,30 @@ export function JobQualificationSection({
     (capability) => capability.id === selectedCapabilityId
   );
 
+  // Every save replaces the whole requirement list, so saves stay mutually
+  // exclusive (`anyBusy` disables the controls); `busyId` only chooses where
+  // the spinner shows. Never rejects: every failure lands in `saveError`.
   const saveRequirements = async (
+    busyId: string,
     requirements: Array<{
       capabilityId: string;
       requireConfirmation: boolean;
     }>
-  ) => {
-    setIsSaving(true);
+  ): Promise<boolean> => {
+    setSaveError(null);
     try {
-      const result = await setJobCapabilityRequirements({
-        jobId,
-        requirements,
-      });
+      const result = await runSave(busyId, () =>
+        setJobCapabilityRequirements({ jobId, requirements })
+      );
       if (!result.success) {
-        showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });
+        setSaveError(SAVE_FAILED_MESSAGE);
         return false;
       }
       await refresh();
       return true;
     } catch {
-      showBanner({ variant: 'error', message: 'Die Anforderungen konnten nicht gespeichert werden.' });
+      setSaveError(SAVE_FAILED_MESSAGE);
       return false;
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -109,6 +116,10 @@ export function JobQualificationSection({
         <div className="flex items-center gap-2">
           <Award className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Qualifikationsabdeckung</h2>
+          <InlinePending
+            active={isBusy(ADD_BUSY_ID)}
+            label="Anforderung wird gespeichert"
+          />
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Zeigt die von der Organisation hinterlegten Planungshinweise. Keine
@@ -163,9 +174,9 @@ export function JobQualificationSection({
           )}
           <Button
             variant="outline"
-            disabled={!selectedCapabilityId || isSaving}
+            disabled={!selectedCapabilityId || anyBusy}
             onClick={async () => {
-              const saved = await saveRequirements([
+              const saved = await saveRequirements(ADD_BUSY_ID, [
                 ...detail.requirements.map((requirement) => ({
                   capabilityId: requirement.capabilityId,
                   requireConfirmation: requirement.requireConfirmation,
@@ -185,6 +196,8 @@ export function JobQualificationSection({
           </Button>
         </div>
       )}
+
+      <ErrorText>{saveError}</ErrorText>
 
       {detail.evaluation.requirementCoverage.length === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -210,6 +223,10 @@ export function JobQualificationSection({
                 </p>
               </div>
               <div className="flex items-center gap-1">
+                <InlinePending
+                  active={isBusy(coverage.requirement.id)}
+                  label="Anforderung wird entfernt"
+                />
                 <Badge
                   variant={
                     coverage.status === 'covered' ? 'secondary' : 'outline'
@@ -222,13 +239,14 @@ export function JobQualificationSection({
                     variant="ghost"
                     size="icon"
                     className="size-7"
-                    disabled={isSaving}
+                    disabled={anyBusy}
                     aria-label={
                       coverage.requirement.capabilityName +
                       ' als Anforderung entfernen'
                     }
                     onClick={() =>
                       void saveRequirements(
+                        coverage.requirement.id,
                         detail.requirements
                           .filter(
                             (requirement) =>

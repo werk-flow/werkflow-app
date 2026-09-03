@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   Info,
+  Loader2,
   Maximize2,
   Minimize2,
 } from 'lucide-react';
@@ -18,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   getDocumentSignedUrl,
@@ -75,6 +77,7 @@ export function DocumentViewerDialog({
     error: string | null;
   } | null>(null);
   const { run: runDownload, isPending } = useServerAction(getDocumentSignedUrl);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -83,43 +86,51 @@ export function DocumentViewerDialog({
     }
 
     let cancelled = false;
+    const previewError = {
+      documentId: document.id,
+      signedUrl: null,
+      error: 'Die Vorschau konnte nicht geladen werden.',
+    };
 
-    getDocumentViewSignedUrl(document.id).then((result) => {
-      if (cancelled) return;
-      if (!result.success) {
+    getDocumentViewSignedUrl(document.id)
+      .then((result) => {
+        if (cancelled) return;
+        if (!result.success) {
+          setPreview(previewError);
+          return;
+        }
         setPreview({
           documentId: document.id,
-          signedUrl: null,
-          error: 'Die Vorschau konnte nicht geladen werden.',
+          signedUrl: result.signedUrl,
+          error: null,
         });
-        return;
-      }
-      setPreview({
-        documentId: document.id,
-        signedUrl: result.signedUrl,
-        error: null,
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(previewError);
       });
-    });
 
     return () => {
       cancelled = true;
     };
   }, [document, open]);
 
+  // The download error sits beside its button; the preview pane keeps showing
+  // the file (feedback canon: failure at the point of action).
   function handleDownload() {
     if (!document) return;
+    setDownloadError(null);
 
     void (async () => {
-      const result = await runDownload(document.id);
-      if (!result.success) {
-        setPreview({
-          documentId: document.id,
-          signedUrl: null,
-          error: 'Der Download konnte nicht vorbereitet werden.',
-        });
-        return;
+      try {
+        const result = await runDownload(document.id);
+        if (!result.success) {
+          setDownloadError('Der Download konnte nicht vorbereitet werden.');
+          return;
+        }
+        window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
+      } catch {
+        setDownloadError('Der Download konnte nicht vorbereitet werden.');
       }
-      window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
     })();
   }
 
@@ -132,7 +143,13 @@ export function DocumentViewerDialog({
   const error = activePreview?.error ?? null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setDownloadError(null);
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent
         className={cn(
           'flex !h-[96vh] !max-h-[96vh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-neutral-950 p-0 text-white shadow-2xl sm:!max-w-none',
@@ -187,11 +204,18 @@ export function DocumentViewerDialog({
                 onClick={handleDownload}
                 disabled={isPending}
               >
-                <Download className="size-4" />
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Download className="size-4" />
+                )}
                 Herunterladen
               </Button>
             </div>
           </div>
+          <ErrorText className="text-red-300 md:text-right">
+            {downloadError}
+          </ErrorText>
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 bg-neutral-950 xl:grid-cols-[minmax(0,1fr)_300px]">

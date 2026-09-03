@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ErrorText } from '@/components/ui/error-text';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { ProjectWithDetails } from '@/lib/jobs/types';
 
@@ -21,6 +22,8 @@ interface ProjectAssignmentDialogProps {
   currentClientId?: string | null;
   title?: string;
   isSaving?: boolean;
+  /** Failure of the last save; the dialog stays open while it is set. */
+  saveError?: string | null;
   onSave: (projectId: string) => Promise<void> | void;
 }
 
@@ -32,6 +35,7 @@ export function ProjectAssignmentDialog({
   currentClientId,
   title = 'Projekt zuweisen',
   isSaving = false,
+  saveError,
   onSave,
 }: ProjectAssignmentDialogProps) {
   const [selectedProjectId, setSelectedProjectId] = useState(
@@ -106,6 +110,8 @@ export function ProjectAssignmentDialog({
               Dem ausgewählten Kunden sind keine aktiven Projekte zugeordnet.
             </p>
           )}
+
+          <ErrorText>{saveError}</ErrorText>
 
           <div className="flex justify-end gap-2">
             <Button

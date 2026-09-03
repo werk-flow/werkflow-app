@@ -11,6 +11,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useBanner } from '@/components/ui/banner';
 import { useOrganization } from '@/components/organization/organization-context';
 import { getRoleLabel } from '@/lib/roles';
 
@@ -20,6 +21,7 @@ interface OrgInfoCardProps {
 
 export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
   const { activeOrg } = useOrganization();
+  const { showBanner } = useBanner();
   const [copied, setCopied] = useState(false);
 
   // Use the server-provided member count
@@ -35,6 +37,10 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy code:', error);
+      showBanner({
+        variant: 'error',
+        message: 'Der Organisationscode konnte nicht kopiert werden.',
+      });
     }
   };
 

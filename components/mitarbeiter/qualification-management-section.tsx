@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import { Award, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
@@ -61,7 +61,6 @@ export function QualificationManagementSection({
 >) {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [, startTransition] = useTransition();
   const [kind, setKind] = useState<CapabilityKind>('skill');
   const [definitionName, setDefinitionName] = useState('');
   const [warningDays, setWarningDays] = useState('30');
@@ -125,7 +124,7 @@ export function QualificationManagementSection({
     [activeCapabilities]
   );
 
-  const refresh = () => startTransition(() => router.refresh());
+  const refresh = () => router.refresh();
 
   const resetGrantForm = () => {
     setEmployeeRecordId('');

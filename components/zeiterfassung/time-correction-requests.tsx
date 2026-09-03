@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Check, HelpCircle, Loader2, RotateCcw, X } from 'lucide-react';
+import { Check, HelpCircle, RotateCcw, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   getTimeCorrectionRequests,
@@ -69,7 +71,9 @@ export function TimeCorrectionRequests({
 }: TimeCorrectionRequestsProps) {
   const { showBanner } = useBanner();
   const [comments, setComments] = useState<Record<string, string>>({});
-  const [busyKey, setBusyKey] = useState<string | null>(null);
+  // Row-scoped pending: the acted-on card shows the spinner and stays busy
+  // until the live read confirms; the other cards keep their buttons.
+  const busy = useBusyIds();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const view = useLiveView<TimeCorrectionRequest[]>({
     tables: ['time_correction_requests'],
@@ -94,11 +98,10 @@ export function TimeCorrectionRequests({
     await view.refresh();
   };
 
-  const review = async (
+  const review = (
     request: TimeCorrectionRequest,
     decision: 'approve' | 'reject' | 'clarify'
-  ) => {
-    setBusyKey(`${request.id}:${decision}`);
+  ) => busy.run(request.id, async () => {
     const result = await reviewTimeCorrection({
       requestId: request.id,
       expectedRevision: request.currentRevision,
@@ -113,15 +116,13 @@ export function TimeCorrectionRequests({
           ? 'Bitte gib für Rückfrage oder Ablehnung einen Kommentar an.'
           : 'Die Entscheidung konnte nicht gespeichert werden.',
       });
-    } else {
-      showBanner({ variant: 'success', message: 'Die Entscheidung wurde gespeichert.' });
-      await refresh();
+      return;
     }
-    setBusyKey(null);
-  };
+    showBanner({ variant: 'success', message: 'Die Entscheidung wurde gespeichert.' });
+    await refresh();
+  });
 
-  const withdraw = async (request: TimeCorrectionRequest) => {
-    setBusyKey(`${request.id}:withdraw`);
+  const withdraw = (request: TimeCorrectionRequest) => busy.run(request.id, async () => {
     const result = await withdrawTimeCorrection({
       requestId: request.id,
       operationId: crypto.randomUUID(),
@@ -130,8 +131,7 @@ export function TimeCorrectionRequests({
       ? { variant: 'success', message: 'Der Antrag wurde zurückgezogen.' }
       : { variant: 'error', message: 'Der Antrag konnte nicht zurückgezogen werden.' });
     if (result.success) await refresh();
-    setBusyKey(null);
-  };
+  });
 
   const resubmit = async (request: TimeCorrectionRequest) => {
     const reason = comments[request.id]?.trim();
@@ -139,20 +139,23 @@ export function TimeCorrectionRequests({
       showBanner({ variant: 'error', message: 'Bitte beantworte die Rückfrage.' });
       return;
     }
-    setBusyKey(`${request.id}:resubmit`);
-    const result = await resubmitTimeCorrection({
-      requestId: request.id,
-      expectedRevision: request.currentRevision,
-      reason,
-      operationId: crypto.randomUUID(),
+    await busy.run(request.id, async () => {
+      const result = await resubmitTimeCorrection({
+        requestId: request.id,
+        expectedRevision: request.currentRevision,
+        reason,
+        operationId: crypto.randomUUID(),
+      });
+      showBanner(result.success
+        ? { variant: 'success', message: 'Die Antwort wurde erneut eingereicht.' }
+        : { variant: 'error', message: 'Die Antwort konnte nicht eingereicht werden.' });
+      if (result.success) await refresh();
     });
-    showBanner(result.success
-      ? { variant: 'success', message: 'Die Antwort wurde erneut eingereicht.' }
-      : { variant: 'error', message: 'Die Antwort konnte nicht eingereicht werden.' });
-    if (result.success) await refresh();
-    setBusyKey(null);
   };
 
+  // One all-or-nothing server call for the whole selection (not per-item
+  // progress): every selected card shows its spinner and the progress banner
+  // resolves into the result.
   const reviewBatch = async (decision: 'approve' | 'reject') => {
     if (selectedRequests.length === 0) return;
     const batchComment = comments.batch?.trim() || null;
@@ -160,20 +163,26 @@ export function TimeCorrectionRequests({
       showBanner({ variant: 'error', message: 'Bitte gib einen Ablehnungsgrund an.' });
       return;
     }
-    setBusyKey(`batch:${decision}`);
-    const result = await reviewTimeCorrectionsBatch({
-      requests: selectedRequests.map((request) => ({
-        requestId: request.id,
-        expectedRevision: request.currentRevision,
-      })),
-      decision,
-      comment: batchComment,
+    const count = selectedRequests.length;
+    showBanner({
+      variant: 'progress',
+      message: `${count} ${count === 1 ? 'Antrag wird' : 'Anträge werden'} bearbeitet …`,
     });
-    showBanner(result.success
-      ? { variant: 'success', message: `${selectedRequests.length} Anträge wurden gemeinsam bearbeitet.` }
-      : { variant: 'error', message: 'Kein Antrag wurde geändert. Bitte lade die Liste neu.' });
-    if (result.success) await refresh();
-    setBusyKey(null);
+    const batchTask = (async () => {
+      const result = await reviewTimeCorrectionsBatch({
+        requests: selectedRequests.map((request) => ({
+          requestId: request.id,
+          expectedRevision: request.currentRevision,
+        })),
+        decision,
+        comment: batchComment,
+      });
+      showBanner(result.success
+        ? { variant: 'success', message: `${count} Anträge wurden gemeinsam bearbeitet.` }
+        : { variant: 'error', message: 'Kein Antrag wurde geändert. Bitte lade die Liste neu.' });
+      if (result.success) await refresh();
+    })();
+    await Promise.all(selectedRequests.map((request) => busy.run(request.id, () => batchTask)));
   };
 
   if (view.isLoading) {
@@ -230,10 +239,10 @@ export function TimeCorrectionRequests({
               placeholder="Nur bei Ablehnung erforderlich"
             />
           </Field>
-          <Button size="sm" onClick={() => void reviewBatch('approve')} disabled={Boolean(busyKey)}>
+          <Button size="sm" onClick={() => void reviewBatch('approve')} disabled={busy.anyBusy}>
             Auswahl freigeben
           </Button>
-          <Button size="sm" variant="destructive" onClick={() => void reviewBatch('reject')} disabled={Boolean(busyKey)}>
+          <Button size="sm" variant="destructive" onClick={() => void reviewBatch('reject')} disabled={busy.anyBusy}>
             Auswahl ablehnen
           </Button>
         </div>
@@ -241,7 +250,7 @@ export function TimeCorrectionRequests({
 
       <div className="space-y-3">
         {requests.map((request) => {
-          const requestBusy = busyKey?.startsWith(request.id) ?? false;
+          const requestBusy = busy.isBusy(request.id);
           return (
             <Card key={request.id} data-testid={`time-correction-${request.id}`} className="gap-4 py-4">
               <CardHeader className="px-4">
@@ -263,6 +272,7 @@ export function TimeCorrectionRequests({
                       <Badge variant="outline" className={statusClass(request.status)}>
                         {TIME_CORRECTION_STATUS_LABELS[request.status]}
                       </Badge>
+                      <InlinePending active={requestBusy} />
                     </CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {request.subjectName} · {formatDateTime(request.createdAt)} · Version {request.currentRevision}
@@ -328,7 +338,7 @@ export function TimeCorrectionRequests({
                         <X className="mr-1.5 size-4" /> Ablehnen
                       </Button>
                       <Button size="sm" onClick={() => void review(request, 'approve')} disabled={requestBusy}>
-                        {requestBusy ? <Loader2 className="mr-1.5 size-4 animate-spin" /> : <Check className="mr-1.5 size-4" />}
+                        <Check className="mr-1.5 size-4" />
                         Freigeben
                       </Button>
                     </>

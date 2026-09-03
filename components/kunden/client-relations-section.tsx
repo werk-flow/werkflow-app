@@ -34,9 +34,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ErrorText } from "@/components/ui/error-text";
+import { InlinePending } from "@/components/ui/inline-pending";
 import { SectionError } from "@/components/ui/section-error";
 import { useBanner } from "@/components/ui/banner";
+import { useBusyIds } from "@/hooks/use-busy-id";
 import { usePendingTask } from "@/hooks/use-server-action";
+import { useSettleOnChange } from "@/hooks/use-settle-on-change";
 
 import {
   createClientContact,
@@ -83,6 +86,10 @@ function normalizePhoneHref(phone: string): string {
 type ContactDraft = SaveClientContactInput;
 type SiteDraft = SaveClientSiteInput;
 
+// Busy ids for list-level changes (a create) that have no row yet.
+const CONTACT_LIST_ID = "contacts";
+const SITE_LIST_ID = "sites";
+
 const EMPTY_CONTACT: ContactDraft = {
   name: "",
   role: "",
@@ -117,6 +124,8 @@ interface ClientRelationsSectionProps {
     channel: "phone" | "email";
     href: string;
   }) => void;
+  /** The contact guard is checking this contact's preferences on the server. */
+  isCheckingContact?: (contactId: string) => boolean;
 }
 
 export function ClientRelationsSection({
@@ -128,9 +137,15 @@ export function ClientRelationsSection({
   equipment,
   equipmentLoadFailed,
   onRequestContact,
+  isCheckingContact,
 }: ClientRelationsSectionProps) {
   const router = useRouter();
+  // Dialog saves gate their submit button; row actions and the settle window
+  // after a save mark only the affected row (feedback canon).
   const { run: runRelationTask, isPending } = usePendingTask();
+  const { run: runRowTask, isBusy } = useBusyIds();
+  const waitForContacts = useSettleOnChange(contacts);
+  const waitForSites = useSettleOnChange(sites);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const { showBanner } = useBanner();
 
@@ -177,6 +192,7 @@ export function ClientRelationsSection({
         message: "Ansprechpartner gespeichert.",
       });
       router.refresh();
+      void runRowTask(contactId ?? CONTACT_LIST_ID, waitForContacts);
     });
   }
 
@@ -202,12 +218,13 @@ export function ClientRelationsSection({
       setSiteDialog(null);
       showBanner({ variant: "success", message: "Einsatzort gespeichert." });
       router.refresh();
+      void runRowTask(siteId ?? SITE_LIST_ID, waitForSites);
     });
   }
 
   function toggleContactActive(contact: ClientContact) {
     setSectionError(null);
-    void runRelationTask(async () => {
+    void runRowTask(contact.id, async () => {
       const result = await updateClientContact(contact.id, {
         isActive: !contact.isActive,
       });
@@ -216,12 +233,13 @@ export function ClientRelationsSection({
         return;
       }
       router.refresh();
+      await waitForContacts();
     });
   }
 
   function toggleSiteActive(site: ClientSite) {
     setSectionError(null);
-    void runRelationTask(async () => {
+    void runRowTask(site.id, async () => {
       const result = await updateClientSite(site.id, {
         isActive: !site.isActive,
       });
@@ -230,6 +248,7 @@ export function ClientRelationsSection({
         return;
       }
       router.refresh();
+      await waitForSites();
     });
   }
 
@@ -262,6 +281,7 @@ export function ClientRelationsSection({
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <Users className="size-4" />
             Ansprechpartner
+            <InlinePending active={isBusy(CONTACT_LIST_ID)} />
           </h3>
           {isAdminOrManager && (
             <Button
@@ -300,6 +320,11 @@ export function ClientRelationsSection({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="font-medium">{contact.name}</p>
+                      <InlinePending active={isBusy(contact.id)} />
+                      <InlinePending
+                        active={isCheckingContact?.(contact.id) ?? false}
+                        label="Kontaktvorgaben werden geprüft"
+                      />
                       {contact.isPrimary && (
                         <Badge variant="secondary" className="gap-1 text-xs">
                           <Star className="size-3" />
@@ -389,7 +414,7 @@ export function ClientRelationsSection({
                         size="icon"
                         className="size-8 text-muted-foreground"
                         title="Ansprechpartner archivieren"
-                        disabled={isPending}
+                        disabled={isBusy(contact.id)}
                         onClick={() => toggleContactActive(contact)}
                       >
                         <Archive className="size-3.5" />
@@ -416,9 +441,12 @@ export function ClientRelationsSection({
                   key={contact.id}
                   className="flex items-center justify-between gap-3 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
                 >
-                  <span className="truncate">
-                    {contact.name}
-                    {contact.role ? ` · ${contact.role}` : ""}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">
+                      {contact.name}
+                      {contact.role ? ` · ${contact.role}` : ""}
+                    </span>
+                    <InlinePending active={isBusy(contact.id)} />
                   </span>
                   {isAdminOrManager && (
                     <Button
@@ -426,7 +454,7 @@ export function ClientRelationsSection({
                       size="icon"
                       className="size-7 text-muted-foreground"
                       title="Ansprechpartner wiederherstellen"
-                      disabled={isPending}
+                      disabled={isBusy(contact.id)}
                       onClick={() => toggleContactActive(contact)}
                     >
                       <ArchiveRestore className="size-3.5" />
@@ -451,6 +479,7 @@ export function ClientRelationsSection({
           <h3 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             <MapPin className="size-4" />
             Einsatzorte
+            <InlinePending active={isBusy(SITE_LIST_ID)} />
           </h3>
           {isAdminOrManager && (
             <Button
@@ -509,6 +538,7 @@ export function ClientRelationsSection({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <p className="font-medium">{site.name}</p>
+                        <InlinePending active={isBusy(site.id)} />
                         {site.isPrimary && (
                           <Badge variant="secondary" className="gap-1 text-xs">
                             <Star className="size-3" />
@@ -605,7 +635,7 @@ export function ClientRelationsSection({
                           size="icon"
                           className="size-8 text-muted-foreground"
                           title="Einsatzort archivieren"
-                          disabled={isPending}
+                          disabled={isBusy(site.id)}
                           onClick={() => toggleSiteActive(site)}
                         >
                           <Archive className="size-3.5" />
@@ -633,11 +663,14 @@ export function ClientRelationsSection({
                   key={site.id}
                   className="flex items-center justify-between gap-3 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
                 >
-                  <span className="truncate">
-                    {site.name}
-                    {formatSiteAddress(site)
-                      ? ` · ${formatSiteAddress(site)}`
-                      : ""}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">
+                      {site.name}
+                      {formatSiteAddress(site)
+                        ? ` · ${formatSiteAddress(site)}`
+                        : ""}
+                    </span>
+                    <InlinePending active={isBusy(site.id)} />
                   </span>
                   {isAdminOrManager && (
                     <Button
@@ -645,7 +678,7 @@ export function ClientRelationsSection({
                       size="icon"
                       className="size-7 text-muted-foreground"
                       title="Einsatzort wiederherstellen"
-                      disabled={isPending}
+                      disabled={isBusy(site.id)}
                       onClick={() => toggleSiteActive(site)}
                     >
                       <ArchiveRestore className="size-3.5" />

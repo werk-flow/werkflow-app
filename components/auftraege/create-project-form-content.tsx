@@ -25,7 +25,7 @@ import { type Client, type Job, type Project } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 
-const ERROR_MESSAGES: Record<string, string> = {
+export const CREATE_PROJECT_ERROR_MESSAGES: Record<string, string> = {
   not_authenticated: 'Du bist nicht angemeldet.',
   no_active_org: 'Keine Organisation ausgewählt.',
   not_authorized: 'Du bist nicht berechtigt, Projekte zu verwalten.',
@@ -41,6 +41,45 @@ const ERROR_MESSAGES: Record<string, string> = {
   unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };
 
+/** A validated create request the landing list runs itself (deferred submit). */
+export type CreateProjectSubmission = {
+  input: CreateProjectInput;
+  linkedJobIds: string[];
+};
+
+/** Links the selected jobs to the new project; returns how many links failed. */
+export async function linkJobsToProject(
+  projectId: string,
+  jobIds: string[]
+): Promise<number> {
+  if (jobIds.length === 0) return 0;
+  const linkResults = await Promise.allSettled(
+    jobIds.map((jobId) => updateJob(jobId, { projectId }))
+  );
+  return linkResults.filter(
+    (entry) =>
+      entry.status === 'rejected' ||
+      (entry.status === 'fulfilled' && !entry.value.success)
+  ).length;
+}
+
+// Partially failed job links must stay visible (no-silent-failure rule);
+// the project itself exists at this point.
+export function projectCreatedBanner(
+  failedLinkCount: number
+): { variant: 'success' | 'error'; message: string } {
+  if (failedLinkCount === 0) {
+    return { variant: 'success', message: 'Projekt erfolgreich erstellt!' };
+  }
+  return {
+    variant: 'error',
+    message:
+      failedLinkCount === 1
+        ? 'Projekt erstellt, aber eine Auftragszuordnung konnte nicht gespeichert werden. Bitte prüfe die Auftragsliste.'
+        : `Projekt erstellt, aber ${failedLinkCount} Auftragszuordnungen konnten nicht gespeichert werden. Bitte prüfe die Auftragsliste.`,
+  };
+}
+
 export interface CreateProjectFormContentProps {
   clients: Client[];
   jobs: Job[];
@@ -50,6 +89,12 @@ export interface CreateProjectFormContentProps {
     project: Project;
     linkedJobIds: string[];
   }) => void | Promise<void>;
+  /**
+   * Deferred submit (feedback canon, create from a dialog): the form hands the
+   * validated input over instead of awaiting the server, so the caller closes
+   * the dialog at once, shows a pending row, and owns the result.
+   */
+  onSubmitDeferred?: (submission: CreateProjectSubmission) => void;
   isActive?: boolean;
 }
 
@@ -59,6 +104,7 @@ export function CreateProjectFormContent({
   defaultClientId,
   readOnlyClient,
   onSuccess,
+  onSubmitDeferred,
   isActive = true,
 }: CreateProjectFormContentProps) {
   const [name, setName] = useState('');
@@ -163,25 +209,30 @@ export function CreateProjectFormContent({
       return;
     }
 
+    const input: CreateProjectInput = {
+      name: name.trim(),
+      description: description.trim() || undefined,
+      clientId: clientId || undefined,
+      siteId: siteId || undefined,
+      contactId: contactId || undefined,
+      projectNumber: projectNumber.trim() || undefined,
+      plannedStartDate: plannedStartDate
+        ? toLocalDateString(plannedStartDate)
+        : undefined,
+      plannedEndDate: plannedEndDate
+        ? toLocalDateString(plannedEndDate)
+        : undefined,
+      templateVersionId: templateVersionId || undefined,
+    };
+
+    if (onSubmitDeferred) {
+      onSubmitDeferred({ input, linkedJobIds: selectedJobIds });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const input: CreateProjectInput = {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        clientId: clientId || undefined,
-        siteId: siteId || undefined,
-        contactId: contactId || undefined,
-        projectNumber: projectNumber.trim() || undefined,
-        plannedStartDate: plannedStartDate
-          ? toLocalDateString(plannedStartDate)
-          : undefined,
-        plannedEndDate: plannedEndDate
-          ? toLocalDateString(plannedEndDate)
-          : undefined,
-        templateVersionId: templateVersionId || undefined,
-      };
-
       const result = await createProject(input);
 
       if (!result.success) {
@@ -189,45 +240,22 @@ export function CreateProjectFormContent({
           result.error === 'project_number_required' ||
           result.error === 'project_number_taken'
         ) {
-          setProjectNumberError(ERROR_MESSAGES[result.error]);
+          setProjectNumberError(CREATE_PROJECT_ERROR_MESSAGES[result.error]);
         } else if (result.error === 'name_or_description_required') {
-          setContentError(ERROR_MESSAGES[result.error]);
+          setContentError(CREATE_PROJECT_ERROR_MESSAGES[result.error]);
         } else {
           setError(
-            ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
+            CREATE_PROJECT_ERROR_MESSAGES[result.error] || result.error || 'Unbekannter Fehler'
           );
         }
         return;
       }
 
-      let failedLinkCount = 0;
-      if (selectedJobIds.length > 0) {
-        const linkResults = await Promise.allSettled(
-          selectedJobIds.map((jobId) =>
-            updateJob(jobId, { projectId: result.project.id })
-          )
-        );
-        const failed = linkResults.filter(
-          (entry) =>
-            entry.status === 'rejected' ||
-            (entry.status === 'fulfilled' && !entry.value.success)
-        );
-        failedLinkCount = failed.length;
-      }
-
-      // Partially failed job links must stay visible (no-silent-failure rule);
-      // the project itself is created at this point.
-      showBanner(
-        failedLinkCount > 0
-          ? {
-              variant: 'error',
-              message:
-                failedLinkCount === 1
-                  ? 'Projekt erstellt, aber eine Auftragszuordnung konnte nicht gespeichert werden. Bitte prüfe die Auftragsliste.'
-                  : `Projekt erstellt, aber ${failedLinkCount} Auftragszuordnungen konnten nicht gespeichert werden. Bitte prüfe die Auftragsliste.`,
-            }
-          : { variant: 'success', message: 'Projekt erfolgreich erstellt!' }
+      const failedLinkCount = await linkJobsToProject(
+        result.project.id,
+        selectedJobIds
       );
+      showBanner(projectCreatedBanner(failedLinkCount));
       resetForm();
       await onSuccess?.({
         project: result.project,

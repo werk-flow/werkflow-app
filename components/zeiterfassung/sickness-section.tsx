@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { InlinePending } from '@/components/ui/inline-pending';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -41,8 +42,12 @@ import {
   type SicknessAbsenceType,
   type SicknessReport,
 } from '@/lib/sickness/types';
+import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { cn, toLocalDateString } from '@/lib/utils';
+
+// Settle key for a report that has no row yet; report ids are UUIDs.
+const NEW_REPORT_ID = 'new';
 
 function formatDate(value: string): string {
   return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
@@ -72,7 +77,11 @@ export function SicknessSection() {
   // Keep last-known data on transient failure; only an initial load that
   // never produced data shows the error state.
   const loadFailed = !isLoading && overview === null;
-  const refetch = view.refresh;
+  // A dialog closes as soon as the server saved; the affected row (or the
+  // section header for a new report) shows the settle spinner until the
+  // authoritative read lands.
+  const settling = useBusyIds();
+  const settle = (id: string) => void settling.run(id, view.refresh);
 
   const activeReports = (overview?.reports ?? []).filter(
     (report) => report.status === 'reported'
@@ -83,8 +92,9 @@ export function SicknessSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-medium text-muted-foreground px-1">
+      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
         Krankmeldung
+        <InlinePending active={settling.isBusy(NEW_REPORT_ID)} />
       </h3>
 
       <Card>
@@ -156,6 +166,7 @@ export function SicknessSection() {
                             ? 'Aktiv'
                             : 'Storniert'}
                         </span>
+                        <InlinePending active={settling.isBusy(report.id)} />
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {SICKNESS_TYPE_LABELS[report.absenceType]}
@@ -172,6 +183,7 @@ export function SicknessSection() {
                           size="sm"
                           className="gap-1.5"
                           onClick={() => setEndReport(report)}
+                          disabled={settling.isBusy(report.id)}
                           aria-label={`Enddatum für die Krankmeldung vom ${formatSicknessRange(report)} setzen`}
                         >
                           <CalendarCheck className="size-3.5" />
@@ -184,6 +196,7 @@ export function SicknessSection() {
                           size="sm"
                           className="text-muted-foreground"
                           onClick={() => setCancelReport(report)}
+                          disabled={settling.isBusy(report.id)}
                           aria-label={`Krankmeldung vom ${formatSicknessRange(report)} stornieren`}
                         >
                           Stornieren
@@ -202,7 +215,7 @@ export function SicknessSection() {
         <SicknessReportDialog
           onClose={(saved) => {
             setShowReportDialog(false);
-            if (saved) void refetch();
+            if (saved) settle(NEW_REPORT_ID);
           }}
         />
       )}
@@ -212,7 +225,7 @@ export function SicknessSection() {
           report={endReport}
           onClose={(saved) => {
             setEndReport(null);
-            if (saved) void refetch();
+            if (saved) settle(endReport.id);
           }}
         />
       )}
@@ -222,7 +235,7 @@ export function SicknessSection() {
           report={cancelReport}
           onClose={(saved) => {
             setCancelReport(null);
-            if (saved) void refetch();
+            if (saved) settle(cancelReport.id);
           }}
         />
       )}
