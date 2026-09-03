@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-08-30
+Status: living — last reviewed 2026-09-03
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage.
 
@@ -22,53 +22,25 @@ The module should reduce paper lists, duplicate entry, emergency wholesaler trip
 
 ## Current Product Baseline
 
-The implemented V1 is a useful native WerkFlow foundation, not the complete operational core described later.
+As of 2026-09-02, Inventory V1 gives Admin and Büro an organization-scoped catalog, self-defined Lager locations, manual stock movements, CSV import, and material planning on jobs and projects. Assigned field workers take and return material on their jobs. V1 is a native foundation, not the complete operational core described below.
 
-### Central Inventory
+- **Central inventory.** Admin and Büro use `/inventar` with the `Alle Artikel`, `Lager`, `Geplant`, and `Bewegungen` views plus search and filters for type, stock status, and location; the views refresh live. Field workers do not see the route. The overview shows stock by item and by location, open planned quantity, and `Verfügbar` as total stock minus open planned demand. `Verfügbar` is not a committed reservation.
+- **Stock movements.** Managers record manual additions and removals at a location. Stock cannot be booked below zero. Every movement keeps quantity before and after, movement type, location, time, reason, and the linked job or project where applicable. Transfer movement types exist in the domain, but there is no user-facing transfer flow.
+- **Locations and categories.** Managers create their own locations labeled Lager, room, shelf, vehicle, or other; WerkFlow invents no default warehouse. Default editable SHK categories are seeded per organization, and category names carry no product logic.
+- **Catalog.** Item types are material, consumable, tool, and asset. An item has name, description, category, unit, internal SKU, one or more barcodes, manufacturer, supplier and supplier article number, purchase and sale price, tax rate, billable default, global minimum and target stock, notes, and active and tracking flags. The web app has no camera scanning or scanner-first workflow.
+- **CSV import.** Managers map columns for catalog, location, supplier, price, barcode, threshold, billability, and initial-quantity fields; missing categories, suppliers, and locations are created during import. Matching checks the internal SKU first, then a barcode. Imported initial quantities become stock movements.
+- **Job and project material.** `Material & Inventar` on job and project detail lets managers plan catalog items without changing stock, and lets managers and authorized users take items from a location or return them; take and return create movements immediately, and unplanned takes are supported. Direct project material, material inherited from child jobs, and the project total stay visible separately. Lines distinguish planned, taken, returned, unplanned, preferred location, billable, and status.
+- **Field material actions.** An assigned employee sees material for the assigned job, takes planned material, takes an unplanned existing item, and returns material inside the field work pack; unplanned search is bounded and hides supplier, price, valuation, and billability ([P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)). Employees cannot create items, open `/inventar`, or use project-level material.
+- **Read-only consumers.** Work templates prepare planned material lines with provenance and never move or reserve stock ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md)). Dispatch readiness and the work lifecycle compare open demand with on-hand stock, label planned material „nicht reserviert“, and label tools „nicht bewertet“ until `P1-32` ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md), [P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)). Handover releases, service cases, and maintenance plans show or freeze existing material facts without reinterpreting them as reservation, consumption, billability, or cost ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md), [P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)). None of these actions creates, reserves, consumes, returns, or repairs stock.
+- **Tools and assets.** Tools and assets are catalog items, and individual asset-instance records exist, but there is no instance register, checkout, custody, maintenance, inspection, loss, or retirement workflow yet.
 
-- `admin` and `buero` users have an organization-scoped `/inventar` route. `employee` users do not see or access the central inventory manager surface.
-- The route provides `Alle Artikel`, `Lager`, `Geplant`, and `Bewegungen` views plus search and filters for type, stock status, and location.
-- The overview shows total stock by item and by location, open planned quantity, and a current `Verfügbar` value calculated from total stock minus open planned demand. It does not represent a committed reservation.
-- Managers can create and edit catalog items and record manual stock additions or removals at a location. Stock cannot be booked below zero.
-- Managers create the actual Lager locations themselves; WerkFlow does not invent a default physical warehouse. Supported location labels include Lager, room, shelf, vehicle, and other.
-- Default editable SHK categories are seeded per organization. Category names are not product logic.
-- The recent movement view records quantity before and after, movement type, location, timestamp, reason, and a linked job or project where applicable.
+### Important current limitations
 
-### Catalog And Import
+- There is no reservation, picking, approval, procurement, invoice, or full post-calculation workflow. Billable defaults and billable quantities exist, but no offer or invoice module consumes them.
+- There is no paired transfer flow, purchase requisition, supplier order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
+- The CSV flow has no row-by-row preview, duplicate-resolution workspace, reconciliation total, downloadable error report, or created/updated/skipped summary. Excel import is not implemented.
 
-- V1 catalog types are material, consumable, tool, and asset.
-- Current item metadata includes name, description, category, unit, internal SKU, barcode, manufacturer, supplier and supplier article number, purchase and sale price, tax rate infrastructure, billable default, global minimum and target stock, notes, and active/tracking flags.
-- A catalog item may have multiple stored barcode identifiers. The current web product does not provide camera scanning or a scanner-first workflow.
-- Managers can import CSV data through column mapping. The current import can map catalog, location, supplier, price, barcode, threshold, billability, and initial-quantity fields; it can create missing categories, suppliers, and locations.
-- Import matching currently checks an internal SKU first and then a barcode. Imported initial quantities become stock movements.
-- The current CSV flow does not yet offer the full planned onboarding experience: there is no robust row-by-row preview, duplicate-resolution workspace, reconciliation total, downloadable error report, or clear post-import created/updated/skipped summary in the UI. Excel import is not implemented.
-
-### Job And Project Material
-
-- Job and project detail pages contain `Material & Inventar`.
-- Managers can plan existing catalog items for a job or project. Planning does not change physical stock.
-- Managers and authorized users can explicitly take existing items from a location or return them. These actions create physical movements immediately.
-- An assigned employee can see material for an assigned job, take planned material, take an unplanned existing item, and return material. The employee cannot create a catalog item, see the central inventory route, or use project-level inventory workflows.
-- Since P1-16, those employee actions appear inside the focused field work pack. Unplanned search is server-bounded to 50 matches across name, SKU, manufacturer and barcode; planned lines outside that cap resolve by exact item identity. Supplier, price, valuation and billability stay hidden, and pack Realtime refreshes only reread authoritative material/movement facts.
-- Direct project material and material inherited from jobs inside the project are kept visible separately, with an aggregate project total.
-- Planned, taken, returned, unplanned, preferred-location, billable, and status information exists on material lines. There is not yet a reservation, picking, approval, procurement, invoice, or full post-calculation workflow.
-- Since P1-12, the calendar's dispatch-readiness view consumes these facts read-only and honestly: open demand (geplant − entnommen) is compared against current on-hand stock and always labeled „nicht reserviert"; a shortfall warns, a failed lookup shows as unknown, and tool availability is always „nicht bewertet" until `P1-32`. No calendar action reserves, moves, or repairs stock.
-- Since P1-13, organization work templates can prepare material demand with quantity, preferred location, billability and notes. Application creates ordinary `job_material_lines` on the Auftrag or Projekt with template provenance; every quantity begins planned with taken/returned at zero. It never creates a stock movement or reservation. Managers edit the resulting line through the existing `Material & Inventar` surface; P1-26 still owns reservation.
-- P1-14 reads planned demand and shortfall through the shared readiness projection, labels planned material „nicht reserviert“ and records only that assessment in transition snapshots. Execution, blocker, dependency, parking, completion and handover mutations never create, reserve, consume, return or repair stock.
-- P1-17 can freeze a bounded customer-safe material summary and its source fingerprint in an office-handover release. The summary does not reinterpret planned/taken/returned quantities as reservation, consumption, installation, billability or valuation; releasing, withdrawing or reopening a package creates no inventory movement or procurement fact.
-- P1-19 shows the linked job's existing planned, taken and returned material facts in the reactive-service context. It creates no service-owned material ledger and does not reinterpret those quantities as consumption, warranty return, billability or cost.
-- P1-20 may consume planned-material hints already frozen into a published P1-13 work-template version and later applied to a normal visit job. The plan and due-work records create no reservation, stock movement, consumption, supplier demand, tool-maintenance record or billability fact.
-- A billable default and billable-quantity infrastructure exist, but no structured offer or invoice module consumes them yet.
-
-### Tools, Assets, And Missing Operational Depth
-
-- Tools and assets can be catalog items, and individual asset-instance infrastructure exists.
-- The current manager UI does not yet provide a complete instance register, checkout/return, custody, maintenance, inspection, loss, or retirement workflow.
-- There is no dedicated paired transfer flow, purchase requisition, supplier order, goods receipt, supplier return, reorder worklist, formal stock count, valuation report, or wholesale-standard integration.
-- `transfer_in` and `transfer_out` movement concepts exist in the inventory domain, but a user-facing transfer workflow is not implemented.
-- Realtime refresh and organization-scoped authorization are already part of the V1 behavior. Exact schema details must still be verified through live Supabase and generated types before schema-aware changes.
-
-The V1 implementation handoff remains documented in [Inventory V1 implementation plan](../plans/inventory-v1-implementation-plan.md). Current code and live database state override older plan wording where they differ.
+The V1 planning record is the [Inventory V1 implementation plan](../plans/inventory-v1-implementation-plan.md). Current code and live database state override older plan wording where they differ.
 
 ## Phase 1 — Complete Operational Core
 

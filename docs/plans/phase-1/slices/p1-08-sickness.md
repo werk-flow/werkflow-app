@@ -1,6 +1,6 @@
 # P1-08 — Sickness
 
-Status: complete (accepted 2026-08-08)
+Status: closed (2026-08-08) — accepted P1-08 acceptance record; canonical home for the slice's evidence
 
 This record is the canonical home for the slice's acceptance facts, moved verbatim from the former roadmap index row on 2026-08-24. The current slice index lives in [../roadmap.md](../roadmap.md); process rules in [../protocol.md](../protocol.md).
 

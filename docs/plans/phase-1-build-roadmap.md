@@ -13,4 +13,4 @@ This file was split on 2026-08-24 into `docs/plans/phase-1/` so that hot status,
 
 Why the split happened, and what was rejected instead, is recorded in [decision 0004](../decisions/0004-documentation-structure.md).
 
-Nothing was deleted in the split; every section was relocated — the split commit's diff is the complete evidence. The migration map that guided it lives at `temporary-transcripts/ai-graph-and-folder-structure/2026-08-24-roadmap-split-migration-map.md` (the untracked ideas folder) while it exists.
+Nothing was deleted in the split; every section was relocated — the split commit's diff is the complete evidence.

@@ -1,6 +1,6 @@
 # 0006 — Testing Architecture: Local Certification, Cloud Canary
 
-- **Status:** Accepted
+- **Status:** accepted (2026-08-28)
 - **Date:** 2026-08-28
 - **Owner:** Product owner (Tamay), designed in the platform-hardening sessions ([plan](../plans/platform-hardening.md))
 - **Affects:** The browser-test harness, slice acceptance, wave-end certification

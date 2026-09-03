@@ -140,7 +140,7 @@ async function getDecidedRequestCount(orgId: string, userId: string): Promise<nu
   ).length;
 }
 
-test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @GG-02', () => {
+test.describe('GG-02 Zeitplan, Urlaub, Freigabe und Aufmerksamkeit @P1-07 @GG-02', () => {
   test('Ausgangslage: Verantwortlichkeiten stehen fest; Anfrage-Aufgaben zeigen Zuständigkeit, Deep-Link und nachvollziehbare Auflösung; geerbte Benachrichtigungen werden dedupliziert gelesen', async ({
     adminPage,
     bueroPage,

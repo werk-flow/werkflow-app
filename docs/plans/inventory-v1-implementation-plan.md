@@ -1,7 +1,8 @@
 # Inventory V1 Implementation Plan
 
-Status: Closed — Inventory V1 shipped; this file is kept as the historical planning record. The implemented behavior is documented in `docs/features/inventory.md` (Current Product Baseline).
-Date: 2026-07-06 (closed 2026-08-24)
+Status: closed (2026-08-24) — historical Inventory V1 planning record; implemented behavior lives in the inventory spec
+
+This plan is historical. Do not execute it. It was written on 2026-07-06, before Inventory V1 shipped, and closed on 2026-08-24. Its "apply schema through Supabase MCP/direct SQL" step is superseded by the committed-migration rule in [decision 0003](../decisions/0003-dev-prod-environment-split.md), and the shipped product settled its open questions. The implemented behavior is documented in [inventory.md](../features/inventory.md) (Current Product Baseline).
 
 ## Purpose
 
@@ -612,7 +613,7 @@ Add Realtime subscriptions for:
 
 Keep events organization-scoped and debounce as the existing provider does.
 
-## Implementation Phases
+## Implementation phases (historical)
 
 ### Phase 1: Schema And Types
 
@@ -665,10 +666,10 @@ Keep events organization-scoped and debounce as the existing provider does.
 - Run `bun run build`.
 - Verify manager and employee routes manually.
 - Verify stock movement history for planned/taken/returned/correction flows.
-- Update `docs/features/inventory.md` with final implemented model.
-- Update `docs/technical/data-model.md` if conceptual model changes.
+- Update [inventory.md](../features/inventory.md) with final implemented model.
+- Update [data-model.md](../technical/data-model.md) if conceptual model changes.
 
-## Open Questions Before Or During Build
+## Open questions at the time (settled by the shipped product)
 
 These should not block the first schema draft, but should be confirmed before polishing V1:
 
@@ -680,7 +681,7 @@ These should not block the first schema draft, but should be confirmed before po
 
 ## Source Notes
 
-- Local source of truth before planning: `AGENTS.md`, `docs/features/inventory.md`, `docs/features/jobs-and-projects.md`, `docs/features/document-management.md`, `docs/technical/data-model.md`, live Supabase table inspection.
+- Local source of truth before planning: `AGENTS.md`, [inventory.md](../features/inventory.md), [jobs-and-projects.md](../features/jobs-and-projects.md), [document-management.md](../features/document-management.md), [data-model.md](../technical/data-model.md), live Supabase table inspection.
 - GC-GRUPPE assortment reference: https://www.gc-gruppe.de/ueber-uns/sortiment
 - GC-GRUPPE installation reference: https://www.gc-gruppe.de/ueber-uns/sortiment/installation
 - GC-GRUPPE tool reference: https://www.gc-gruppe.de/ueber-uns/sortiment/werkzeug

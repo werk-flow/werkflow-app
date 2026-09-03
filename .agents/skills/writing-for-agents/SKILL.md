@@ -3,7 +3,7 @@ name: writing-for-agents
 description: Writing documents for agents. Use when creating or editing skills, writing prompts or meta prompts for other agents, or modifying AGENTS.md, CLAUDE.md, or docs agents consume.
 ---
 
-Adapted for WerkFlow from mattpocock/skills (MIT). Pair with the `unslop` skill: this skill decides what an agent-facing document says and how it is structured; unslop owns the prose-tell catalog. In this repo the main subjects are `.claude/skills/` (mirrored in `.agents/skills/`), `AGENTS.md`, the slice implementation prompts and meta prompts, and the routing docs under `docs/`.
+Adapted for WerkFlow from mattpocock/skills (MIT). Pair with the `unslop` skill: this skill decides what an agent-facing document says and how it is structured; unslop owns the prose-tell catalog. In this repo the main subjects are `.claude/skills/` (mirrored in `.agents/skills/`), `AGENTS.md`, the slice implementation prompts and meta prompts, and the routing docs under `docs/`. The standard new-task prompt lives in `docs/plans/phase-1/protocol.md` under "Standard New-Task Prompt".
 
 Reference for writing any document an agent consumes: a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable, since the agent takes the same _process_ every run rather than producing the same output.
 

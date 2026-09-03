@@ -1,6 +1,6 @@
 # Realtime And Caching
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-02
 
 WerkFlow should feel fast, modern, and operationally fresh. The app combines server-rendered data, cache tags, and Supabase Realtime to avoid slow legacy-software behavior while reducing stale data.
 
@@ -10,7 +10,8 @@ WerkFlow should feel fast, modern, and operationally fresh. The app combines ser
 - Cache Components enabled in `next.config.ts`.
 - React request memoization through `react.cache()`.
 - Cross-request caching through `unstable_cache()`.
-- Cache tags and invalidation through `CACHE_TAGS` in `lib/data/cached.ts`.
+- Function-level caching through the Next.js 16 `'use cache'` directive with `cacheTag()`; `lib/work-templates/server.ts` is the current user.
+- Cache tag names from the `CACHE_TAGS` registry in `lib/data/cached.ts`, the single list.
 - Supabase Realtime through `components/realtime/realtime-provider.tsx`; the published table list lives in `lib/realtime/tables.ts`.
 - The live-view family: `hooks/use-live-view.ts` (client refetch views) and `hooks/use-realtime-router-refresh.ts` (route refresh).
 - Pending state for server actions through `hooks/use-server-action.ts`.
@@ -23,26 +24,9 @@ Use `react.cache()` for repeated work within the same request/render pass. This 
 
 ### Cross-Request Caching
 
-Use `unstable_cache()` for data that can be reused across requests and invalidated by tags.
+Use `unstable_cache()` for data that can be reused across requests and invalidated by tags, or the `'use cache'` directive with `cacheTag()` where a whole function result is the cache unit.
 
-Current cache tag areas include:
-
-- Memberships.
-- Subscription status.
-- Profiles.
-- Member counts.
-- Organization settings.
-- User preferences within an organization.
-- Clients.
-- Requests (Anfragen).
-- Personnel records, employment conditions, and work schedules (`personnel-<orgId>`, P1-03/P1-04).
-- Vacation requests (`vacation-<orgId>`, P1-06).
-- Scoped responsibility configurations, assignments, and substitutes (`responsibilities-<orgId>`, P1-05).
-- Organization holiday/closure context (`organization-calendar-<orgId>` plus the settings tag, P1-04).
-- Jobs.
-- Projects.
-
-Server actions that mutate these areas should call `updateTag()` for affected tags.
+The `CACHE_TAGS` registry in `lib/data/cached.ts` is the single list of tag names; this document does not repeat it. Server Actions that mutate a cached area call `updateTag()` for the affected tags. `updateTag()` is Server-Action-only and throws inside a route handler, so route handlers such as `app/api/redeem-invite/route.ts` call `revalidateTag(tag, 'max')` instead.
 
 ## Realtime Model
 
@@ -57,7 +41,7 @@ Recorded from current Supabase primary sources before the Stage B consolidation 
 
 Supabase Realtime subscriptions are centralized in `components/realtime/realtime-provider.tsx`. The published table list has ONE home: `lib/realtime/tables.ts` exports `REALTIME_TABLES`, the `RealtimeTable` type derives from it, and the provider generates one org-filtered binding per entry (`profiles` is the recorded unfiltered exception — profile data is referenced across organization views). Adding a table to Realtime means: publication + replica-identity migration, one line in `REALTIME_TABLES`, done — a table cannot join without its organization filter. `bun run realtime:check` also runs in the local preflight. It checks publication membership in both directions, requires each `USING INDEX` identity to cover exactly `(id, organization_id)`, verifies the three recorded DEFAULT exceptions, rejects FULL identity, and requires INSERT, UPDATE, and DELETE publication operations.
 
-**P1-23 acceptance checkpoint (2026-09-01):** local, DEV and PROD publish the same 87 tables. Eighty-four use replica identity `USING INDEX` on exactly `(id, organization_id)`. `profiles`, `organization_settings`, and `organization_qualification_settings` use the recorded DEFAULT identity. No published table uses FULL identity, and all three checked backends have INSERT, UPDATE, and DELETE enabled on `supabase_realtime`.
+The exact published set is `REALTIME_TABLES` in `lib/realtime/tables.ts`, and `bun run realtime:check` verifies publication membership, replica identity, and publication operations against the current backend.
 
 Events are debounced per table inside the provider (`REALTIME_DEBOUNCE_MS` in `lib/realtime/events.ts`) to avoid refresh storms when multiple related rows change quickly. The provider also owns the focus/visibility catch-up: returning to the tab dispatches one coalesced synthetic event per table to every subscriber, so consumers get gap recovery without their own listeners.
 
@@ -77,7 +61,7 @@ P1-13 publishes the mutable template/version/content/application/origin tables w
 
 P1-14 publishes `work_blockers` and `work_dependencies` with replica identity `USING INDEX` on exactly `(id, organization_id)`. Their append-only event tables and `work_execution_events`/instruction-completion events stay unpublished. Job/project detail cards subscribe through the central provider and preserve open dialogs by surfacing a catch-up control instead of replacing input. Blocker changes also refresh the one attention-count and `/aufgaben` pipeline. Mutations reuse the existing organization-scoped jobs/projects tags and revalidate `/auftraege`, `/kalender`, `/aufgaben`, and `/mitarbeiter`; no lifecycle-specific cache duplicates the work sources.
 
-P1-15 publishes only current `work_artifacts` and active `job_instruction_evidence_fulfillments`, both with replica identity `USING INDEX` on exactly `(id, organization_id)`. Immutable revisions, type details, document/source relations and action ledgers stay unpublished. Job/project detail uses the central dialog-safe catch-up behavior; artifact review, correction and due-defect changes also refresh the unified attention pipeline. Mutations reuse jobs/projects, documents and responsibilities tags and routes rather than adding an artifact cache.
+P1-15 publishes only current `work_artifacts` and active `job_instruction_item_evidence_fulfillments`, both with replica identity `USING INDEX` on exactly `(id, organization_id)`. Immutable revisions, type details, document/source relations and action ledgers stay unpublished. Job/project detail uses the central dialog-safe catch-up behavior; artifact review, correction and due-defect changes also refresh the unified attention pipeline. Mutations reuse jobs/projects, documents and responsibilities tags and routes rather than adding an artifact cache.
 
 P1-16 composes the assigned worker's field pack from these existing live sources without adding a cache, copied pack, or publication member. Server rendering loads the independent customer/site, dispatch, lifecycle, instruction, artifact, document, time, material, blocker, and bounded project projections in parallel. Route refresh covers assignment, planning, dispatch-root, instruction, document, artifact-root, time, blocker, and dependency changes. The employee material section performs a narrower debounced refetch for `job_material_lines`, `inventory_movements`, and `inventory_stock_levels`, keeps the last confirmed state during a transient failure, and ignores an older response after a newer generation starts. Open dialogs use the shared suspension and queued catch-up behavior so Realtime cannot discard typed input. Immutable `planning_dispatch_revisions`, `work_artifact_revisions`, and `work_artifact_actions` remain unpublished because their owning root-row mutations already signal the required refresh.
 
@@ -85,7 +69,7 @@ P1-21 publishes the mutable `time_sessions` and `time_segments` roots with exact
 
 P1-22 publishes only the mutable `time_correction_requests` root with exact `(id, organization_id)` replica-index identity. Immutable revisions, exact sources, lifecycle events, accepted applications and the private applied-source claim ledger remain unpublished. Personal history, manager review, shared attention, provisional totals and calendar blocks refetch the authoritative bounded correction view through the live-view family; an open correction dialog uses shared suspension and one catch-up read. Accepted applications flow into the same time compatibility projection consumed by job/project readers, so no surface owns a second correction cache or subscription.
 
-P1-23 publishes only six mutable roots: `time_accounts`, `time_account_adjustment_requests`, `time_periods`, `time_period_findings`, `payroll_mapping_profiles`, and `payroll_exports`, each with exact `(id, organization_id)` replica-index identity. Immutable policy versions/rules, ledger events, calculation snapshots, findings decisions, closes, mappings and export events remain unpublished. Account, period, settings and statement surfaces refetch the bounded server projection from root changes; no export bytes or immutable child rows pass through Realtime.
+P1-23 publishes only six mutable roots: `time_account_policies`, `time_accounts`, `time_account_adjustment_requests`, `time_periods`, `payroll_mapping_profiles`, and `payroll_exports`, each with exact `(id, organization_id)` replica-index identity. Immutable policy versions/rules, ledger events, calculation snapshots, findings and their decisions, closes, mappings and export events remain unpublished. Account, period, settings and statement surfaces refetch the bounded server projection from root changes; no export bytes or immutable child rows pass through Realtime.
 
 P1-24 publishes seven mutable roots: `personnel_access_lifecycles`, `personnel_employment_lifecycles`, `personnel_documents`, `personnel_document_releases`, `personnel_onboarding_templates`, `personnel_onboarding_plans`, and `personnel_onboarding_requirements`. Each uses exact `(id, organization_id)` replica-index identity. Access/employment transitions, template versions/items, acknowledgements, requirement references and operation receipts remain unpublished immutable history. Personnel detail, settings and the employee own-actions view refetch the authoritative projection through the existing live-view family; the access state is rechecked at the server and RLS boundaries rather than authorized by a Realtime payload.
 
@@ -110,7 +94,7 @@ Direct `useRealtimeEvent()` consumption is lint-banned for surfaces; the recorde
 
 Standardized 2026-08-27 from the race classes P1-16 exposed; since Stage B of the platform hardening (2026-08-28) the contract is not a set of rules surfaces re-implement — it is the behavior of the live-view primitive, and every live surface runs on it.
 
-1. **The provider owns subscriptions.** Components consume the live-view family; they do not open their own channels. Table events are debounced `REALTIME_DEBOUNCE_MS` in the provider, and the family shares that boundary with no per-surface override — a shorter debounce raced server cache invalidation in P1-16 and produced stale reads. _Enforced (Tier 2): `eslint.config.mjs` bans `.channel(` and `onAuthStateChange` outside the provider, and bans importing `useRealtimeEvent`/`useRealtimeSubscribe` outside the family. Tier 1 by construction: the hooks expose no debounce option._
+1. **The provider owns subscriptions.** Components consume the live-view family; they do not open their own channels. Table events are debounced `REALTIME_DEBOUNCE_MS` in the provider, and the family shares that boundary with no per-surface override — a shorter debounce raced server cache invalidation in P1-16 and produced stale reads. _Enforced (Tier 2): `eslint.config.mjs` bans `.channel(` and `onAuthStateChange` outside the provider, and bans importing `useRealtimeEvent`/`useRealtimeSubscribe` outside the family. The recorded `onAuthStateChange` exception is the password-recovery form at `app/**/reset-password-form.tsx`, which must react to the `PASSWORD_RECOVERY` event. Tier 1 by construction: the hooks expose no debounce option._
 2. **Focus and visibility catch-up are provider concerns.** Returning to a tab or window dispatches one coalesced synthetic catch-up to every subscriber; components must not register competing focus/visibility listeners. _Enforced (Tier 2): `eslint.config.mjs` bans `addEventListener('visibilitychange'|'focus')` in product code — the Stage B sweep ended the former legacy allowlist at zero. `setInterval` is banned the same way; the named exception is the wall-clock day-rollover tick (`hooks/use-business-day-refresh.ts`), and pure render clocks carry reasoned inline disables._
 3. **Server props are mount-time data for live components.** `useLiveView`'s `initialData` is exactly this: it seeds the first paint and suppresses the mount read; after mount, the reader is authoritative. Key live components by entity id so navigation remounts them cleanly, or pass `resetKey` where remounting is not an option (app-shell providers).
 4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with the authoritative client refetch (`view.refresh()`); the reverse order let a stale server payload overwrite the fresh read (the P1-16 dispatch-challenge race).

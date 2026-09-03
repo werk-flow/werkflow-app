@@ -1,6 +1,6 @@
 # P1-22 — Consistent time corrections and approvals
 
-Status: accepted complete — 2026-09-01
+Status: closed (2026-09-01) — accepted P1-22 acceptance record; canonical home for the slice's evidence
 
 ## Bounded outcome
 
@@ -92,7 +92,7 @@ Known limits remain deliberately downstream: no time account, overtime/supplemen
 
 ## Post-implementation campaign audit
 
-The audit reconciled every P1-22 runner manifest, retained diagnostic, gate/incident entry, review pass, pre-world refusal and no-manifest command. The detailed failure evidence and cleanup record is in `docs/technical/test-incident-log.md`.
+The audit reconciled every P1-22 runner manifest, retained diagnostic, gate/incident entry, review pass, pre-world refusal and no-manifest command. The detailed failure evidence and cleanup record is in [test-incident-log.md](../../../technical/test-incident-log.md).
 
 - **Tier 1 — schema ownership:** the first focused product failure (`2026-09-01T054534936Z-6a7594`) showed that organization teardown could leave a correction child blocked by foreign-key order. The final FK graph uses deferred cascades, and the P1-22 SQL runner deletes the organization and asserts no request/application survives. The unsafe graph is no longer deployable without failing replay.
 - **Tier 1 — SQL runner identity:** `scripts/run-sql-assertions.ts` now derives its label from the requested assertion filename instead of hard-coding P1-21. New non-pgTAP assertion owners cannot be silently reported under the wrong slice.
@@ -102,3 +102,41 @@ The audit reconciled every P1-22 runner manifest, retained diagnostic, gate/inci
 - **No durable prevention finding:** the WSL keepalive exit and sandbox proxy omission were host-local cleanup interruptions. The local-stack preflight and explicit retained-world inventory already surfaced them before acceptance, and no repository-level Tier 1/2 change would be more reliable than those existing checks. No Tier 3 rule or backlog entry was added.
 
 All retained worlds were classified, diagnosed where required and cleaned. The final focused, full Golden and canary proofs ran on fresh worlds and passed without retry.
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)
+
+## Implementation plan (merged 2026-09-03 from the former separate plan file)
+
+### Scope
+
+Implement the owner-confirmed P1-22 slice (the contract sections above) across the additive correction model, four-eyes authorization, server actions, shared attention projection, time and calendar UI, Realtime invalidation, exhaustive evidence, DEV-first/PROD-second rollout and closure.
+
+P1-22 does not own time accounts, overtime or supplement classifications, legal-policy warnings, actual period close or reopen, payroll export, a generic approval engine, new external delivery channels, a second task inbox, or automatic planning, dispatch, stock, document, commercial or message effects.
+
+### Execution order
+
+- [x] Verify local `main`, `partner-preview`, documentation and retained-world state.
+- [x] Inspect the legacy and canonical time schema, data aggregates, functions, permissions and Realtime posture in DEV and PROD.
+- [x] Inspect current action, responsibility, attention, calculation and UI owners.
+- [x] Resolve the complete product frontier and receive owner authorization.
+- [x] Finalize the correction aggregate, immutable lifecycle and application transaction design.
+- [x] Add and locally prove additive schema, organization integrity, RLS, grants, idempotency, concurrency and Realtime invariants.
+- [x] Apply committed SQL to DEV and regenerate Supabase types from DEV.
+- [x] Implement typed domain validation, projections, server actions and compatibility readers.
+- [x] Extend the shared attention taxonomy and owning time surfaces without a parallel inbox or refresh system.
+- [x] Add employee correction entry, before/after preview, provisional totals, history, manager decision and batch UI.
+- [x] Add unit, SQL, staged Golden and exhaustive Wave 2 audit evidence.
+- [x] Run affected Wave 1 audit tags selected from the concrete changed surfaces.
+- [x] Converge self-review and authorized CodeRabbit review-fix-review passes.
+- [x] Verify DEV security, performance, Realtime, generated types, zero fabricated rows and preserved legacy meaning.
+- [x] Apply the identical committed SQL to PROD after read-only preflight and verify preserved aggregates.
+- [x] Freeze, run focused acceptance, full local Golden and the unchanged DEV canary.
+- [x] Reconcile feature, technical, catalog, audit, roadmap, gate, incident and slice documentation.
+- [x] Complete the campaign audit, commit with the required trailer and publish only to `partner-preview`.
+
+### Recovery
+
+All schema changes are additive and default-preserving. Application rollback leaves unused correction tables and functions in place, with legacy readers still able to render existing history. Once accepted corrections exist, database recovery is forward-only: use a corrective migration or a new attributable correction, never rewrite migrations or erase request, decision, applied-result, canonical operation or canonical event history.

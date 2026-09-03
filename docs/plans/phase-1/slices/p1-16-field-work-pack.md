@@ -1,6 +1,6 @@
-# P1-16 Field Work Pack
+# P1-16 — Field work pack
 
-Status: closed — accepted complete on 2026-08-25
+Status: closed (2026-08-25) — accepted P1-16 acceptance record; canonical home for the slice's evidence
 
 ## Outcome
 
@@ -92,4 +92,9 @@ P1-16 has no named Golden gate and does not claim `GG-04`. P1-17 remains the own
 
 ## Post-acceptance harness hardening
 
-The 2026-08-25 retrospective found that the product slice was broad, but its 14-hour cycle was not an acceptable baseline. Several real product defects justified focused reruns; repeated full replay, overwritten failure state, a stale outsider session and verbose progress polling did not. The repository now archives every failed run, retains its disposable DEV world, supports focused diagnostic reuse, validates all role sessions, splits this spec into setup, execution and boundary stages, enforces classification and rerun budgets, checks DEV Supabase and R2 before browser launch, stops serial batteries after the first failure and keeps full runner output outside the conversation. The P1-12 terminal scenario now constructs its own persisted precondition, proving that a late failure can be replayed without the preceding five tests. Focused P1-12 passed 6/6; two later full runs encountered evidenced live-provider network failures, and the policy correctly blocks another same-class retry. The reusable incident record is [`../../../technical/test-incident-log.md`](../../../technical/test-incident-log.md). This hardening changes no accepted P1-16 product behavior or evidence and does not pretend the long live-provider battery is deterministic.
+The 2026-08-25 retrospective found that the product slice was broad, but its 14-hour cycle was not an acceptable baseline. Several real product defects justified focused reruns; repeated full replay, overwritten failure state, a stale outsider session and verbose progress polling did not. The repository now archives every failed run, retains its disposable DEV world, supports focused diagnostic reuse, validates all role sessions, splits this spec into setup, execution and boundary stages, enforces classification and rerun budgets, checks DEV Supabase and R2 before browser launch, stops serial batteries after the first failure and keeps full runner output outside the conversation. The P1-12 terminal scenario now constructs its own persisted precondition, proving that a late failure can be replayed without the preceding five tests. Focused P1-12 passed 6/6; two later full runs encountered evidenced live-provider network failures, and the policy correctly blocks another same-class retry. The reusable incident record is [test-incident-log.md](../../../technical/test-incident-log.md). This hardening changes no accepted P1-16 product behavior or evidence and does not pretend the long live-provider battery is deterministic.
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)

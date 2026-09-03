@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-03
 
 Commercial and finance capabilities connect WerkFlow's operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation.
 
@@ -24,19 +24,21 @@ The product should reduce duplicate entry and missed revenue while keeping legal
 
 ## Current Product Baseline
 
-WerkFlow does not currently have structured commercial or finance modules.
+As of 2026-09-02, WerkFlow has no structured commercial or finance module. Admin and Büro work with the operational records that a later commercial loop will consume: customers, jobs, projects, time, documents, and material.
 
-- Customer, job, project, assignment, scheduling, time, and document capabilities provide operational context.
-- Job, project, customer, and employee pages can hold linked documents and images. The central document library can store business documents, but an uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
-- Inventory V1 stores basic purchase price, sale price, tax-rate infrastructure, billable defaults, material planning, and actual take/return quantities. No current workflow converts these fields into offers, invoices, procurement accounting, revenue, or profit.
-- Time entries can be associated with operational work, but there is no approved billable-time handoff, labor calculation, commercial rate card, or job post-calculation.
-- P1-23 provides a versioned payroll-ready time ZIP with employee/code mappings, allocations, correction history and control totals. It contains minutes rather than money and creates no wage calculation, accounting posting, billable labor, invoice, payment or provider transmission.
-- P1-15 provides versioned operational Aufmaß and Regie-/Änderungsnachweise with internal decisions and customer-response evidence. They carry no prices, commercial scope acceptance, billing release or invoice effect.
-- P1-17 records an operational handover result as `ready_for_commercial_review` or `ready_with_exceptions` on an immutable release. This means only that the office-reviewed evidence package is ready for a later commercial process; it creates no calculation, price/tax decision, billable quantity, offer, contract, invoice, payment, posting or message.
-- There is no structured product/service price catalog, calculation engine, offer, order confirmation, commercial contract/change order, billable measurement, invoice, credit, incoming-bill, payment, open-item, dunning, bank-matching, accounting-export, or native ledger workflow.
-- WerkFlow does not currently claim XRechnung, ZUGFeRD, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll, or tax-filing capability.
+- **Operational context.** Customer, job, project, assignment, scheduling, time, and document capabilities provide the operational context for later commercial work.
+- **Documents.** Job, project, customer, and employee pages hold linked documents and images, and the central library stores business documents. An uploaded PDF is not a structured offer, contract, invoice, incoming bill, payment, or accounting record.
+- **Inventory fields.** Inventory V1 stores purchase price, sale price, tax rate, billable defaults, material planning, and actual take and return quantities. No workflow converts these fields into offers, invoices, procurement accounting, revenue, or profit.
+- **Time.** Time entries attach to operational work, but there is no approved billable-time handoff, labor calculation, commercial rate card, or job post-calculation. The versioned payroll-ready time export carries minutes with employee and code mappings, allocations, correction history, and control totals; it creates no wage calculation, accounting posting, billable labor, invoice, payment, or provider transmission ([P1-23](../plans/phase-1/slices/p1-23-time-accounts-period-close-and-payroll-export.md)).
+- **Measurements and change work.** Versioned operational Aufmaß and Regie-/Änderungsnachweise carry internal decisions and customer-response evidence but no prices, commercial scope acceptance, billing release, or invoice effect ([P1-15](../plans/phase-1/slices/p1-15-structured-site-evidence.md)).
+- **Handover readiness.** An immutable handover release records `ready_for_commercial_review` or `ready_with_exceptions`. This means only that the office-reviewed evidence package is ready for a later commercial process; it creates no calculation, price or tax decision, billable quantity, offer, contract, invoice, payment, posting, or message ([P1-17](../plans/phase-1/slices/p1-17-office-handover.md)).
 
-This baseline matters: future-facing sections below must not be described as implemented behavior until the product and its acceptance evidence exist.
+### Important current limitations
+
+- There is no structured product or service price catalog, calculation engine, offer, order confirmation, commercial contract or change order, billable measurement, invoice, credit, incoming bill, payment, open item, dunning, bank matching, accounting export, or native ledger workflow.
+- WerkFlow does not claim XRechnung, ZUGFeRD, Peppol, DATEV, GAEB, REB/VOB, §13b, GoBD archive, double-entry accounting, payroll, or tax-filing capability.
+
+This baseline matters: the sections below must not be described as implemented behavior until the product and its acceptance evidence exist.
 
 ## Phase 1 — Complete Operational Core
 

@@ -1,6 +1,6 @@
 # Competitive Landscape: German Trades Software
 
-Status: living — dated research snapshot (2026-07-23); refresh volatile figures before using them in a current decision
+Status: living — last reviewed 2026-09-02; research snapshot 2026-07-23, refresh volatile figures before a current decision
 
 This document is a research reference for WerkFlow's competitive environment in German trade-business software (`Handwerkersoftware`). It focuses on software used by HVAC / SHK, plumbing, roofing, tiling, electrical, and adjacent construction trades.
 
@@ -111,12 +111,12 @@ Structured offer, contract, invoice, payment, purchasing, and full accounting mo
 
 Use the current feature references rather than this competitive document for exact WerkFlow behavior:
 
-- `docs/features/jobs-and-projects.md`
-- `docs/features/time-tracking.md`
-- `docs/features/employee-management.md`
-- `docs/features/document-management.md`
-- `docs/features/inventory.md`
-- `docs/features/ai-automations.md`
+- [jobs-and-projects.md](../features/jobs-and-projects.md)
+- [time-tracking.md](../features/time-tracking.md)
+- [employee-management.md](../features/employee-management.md)
+- [document-management.md](../features/document-management.md)
+- [inventory.md](../features/inventory.md)
+- [ai-automations.md](../features/ai-automations.md)
 
 ## Market Shape
 

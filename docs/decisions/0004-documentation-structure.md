@@ -1,9 +1,10 @@
 # 0004 — Documentation Structure: Graph Discipline, Not A Knowledge Graph
 
-- **Status:** accepted, implemented 2026-08-24
+- **Status:** accepted (2026-08-24) — implemented 2026-08-24
 - **Date:** 2026-08-24
 - **Owner:** Product owner (Tamay), approved phase by phase during the 2026-08-24 restructure session
 - **Affects:** every file under `docs/`, the `.claude/` and `.agents/` skill mirrors, `AGENTS.md` routing, `bun run docs:check`, and the per-slice acceptance protocol
+- **Amended 2026-09-03:** one document per slice. The separate per-slice implementation-plan files that eight Wave 1 and 2 slices had grown beside their records were folded into the records and deleted, because the overlap between a slice's plan and its record was never zero. The record now starts as the plan when a slice enters `in_progress` and closes as the acceptance record; `docs:check` rejects any per-slice file outside `plans/phase-1/slices/`. The same pass moved volatile counters out of living docs, normalized every status line to one shape per genre, and taught `docs:check` to verify status shape, link syntax, index prefixes, roadmap invariants, and catalog order.
 
 ## Context
 

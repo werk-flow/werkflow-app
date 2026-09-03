@@ -1,6 +1,9 @@
 # 0005 — The Enforcement Ladder
 
-Status: closed (2026-08-27) — accepted; the open conversion backlog lives in [enforcement-ladder-backlog.md](../technical/enforcement-ladder-backlog.md)
+- **Status:** accepted (2026-08-27) — the open conversion backlog lives in [enforcement-ladder-backlog.md](../technical/enforcement-ladder-backlog.md)
+- **Date:** 2026-08-27
+- **Owner:** Product owner (Tamay)
+- **Affects:** lint config, harness helpers, incident log, docs
 
 ## Decision
 

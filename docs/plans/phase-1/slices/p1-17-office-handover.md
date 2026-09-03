@@ -1,6 +1,6 @@
-# P1-17 Office Handover
+# P1-17 — Office handover
 
-Status: closed — accepted complete on 2026-08-28
+Status: closed (2026-08-28) — accepted P1-17 acceptance record; canonical home for the slice's evidence
 
 ## Outcome
 
@@ -89,3 +89,8 @@ Final static evidence: `git diff --check`, TypeScript, lint and `docs:check` cle
 The final confirmation pair used one frozen source fingerprint `ad281b52…`: focused `@AUDIT-W2-P1-17` passed 4/4 in 8.6 minutes (world `mtc6tlit`), followed sequentially by full Golden 110/110 in 56.6 minutes (world `mtc767kd`). Both teardowns destroyed their disposable worlds. `GG-04` is accepted. P1-17 creates no delivery, public link, customer portal, billing record, price/tax decision, time segment, stock movement/reservation/consumption, service equipment history, offline queue or external provider.
 
 Follow-up work remains with the roadmap owners already named in the contract: installed equipment/service history (`P1-18` onward), time segmentation (`P1-21`), reservation/consumption/procurement (`P1-26` onward), commercial documents and billing (`P1-35` onward), delivery/messaging (`P1-46`) and mobile/offline behavior (`P1-49`).
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)

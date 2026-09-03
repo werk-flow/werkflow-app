@@ -1,6 +1,6 @@
 # Product Offer
 
-Status: living placeholder
+Status: living — last reviewed 2026-09-02; placeholder, do not invent details it lacks
 
 This document is still a placeholder for the complete WerkFlow offer.
 

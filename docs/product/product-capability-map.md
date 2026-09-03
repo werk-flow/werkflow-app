@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-09-02
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
@@ -34,16 +34,16 @@ The target is **progressive depth**: simple defaults for common work, powerful c
 
 ## Documentation Model
 
-The product is documented at three levels:
+The product is documented at four levels:
 
 | Level | Purpose | Source |
 | --- | --- | --- |
 | Product context | Why WerkFlow exists, who it serves, and broad principles | `AGENTS.md` |
 | Product capability map | How all feature areas form one product, their phases, dependencies, and decision gates | This document |
-| Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | `docs/features/*.md` |
+| Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | [`docs/features/*.md`](../features/) |
 | Phase 1 build roadmap | Ordered vertical slices, direct prerequisites, current progress, exit evidence, and golden-scenario gates | [`phase-1/roadmap.md`](../plans/phase-1/roadmap.md) |
 
-Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in `docs/plans/`, technical docs, or decision records after the product behavior is decided.
+Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in [`docs/plans/`](../plans/), technical docs, or decision records after the product behavior is decided.
 
 ## Phase Model
 
@@ -234,27 +234,13 @@ The complete operational core should meet all of the following product-level cri
 
 This is a dependency sequence, not a release commitment.
 
-### Foundation Already Underway
+### Done As Of 2026-09-02
 
-- organizations, roles, employees, customers;
-- jobs/projects and assignment;
-- calendar and time;
-- documents;
-- inventory V1.
+Waves 0 to 2 of the Phase 1 roadmap are accepted: 26 of 56 slices, `P1-00` and `P1-00a` through `P1-24`. That closes the operational graph this section once listed as next: customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning and dispatch; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Search, mobile and offline behavior are not done; they sit in Wave 5. The exact position, the per-slice records and the pending Wave 2 wave-end certification live in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint).
 
-These areas should continue to mature while preserving their current behavior and cross-links.
+### Remaining
 
-### Complete The Operational Graph
-
-The next product-definition dependencies are:
-
-- customer sites, contacts, requests, and installed-equipment context;
-- complete employee, leave, schedule, and qualification context;
-- recurring calendar/resource planning;
-- service and maintenance;
-- consistent tasks, approvals, notifications, search, audit, and mobile/offline behavior.
-
-These additions give commercial, procurement, and AI work trustworthy operational inputs.
+Waves 3 to 6 have not started. In dependency order they cover material, procurement, inventory control and assets; the commercial and finance loop; evidence, communication, portability, mobile and interoperability; and Phase 1 closure with Phase 2 readiness. The next two subsections describe the first of those in product terms; the roadmap owns the slice list.
 
 ### Close The Commercial And Material Loop
 
@@ -349,6 +335,8 @@ Every feature spec should keep these sections current:
 7. **Boundaries And Decision Gates**
 8. **Open Product Decisions**
 9. **Related Docs**
+
+One spec carries extra sections by design. `document-management.md` keeps the nine standard sections since 2026-09-03; its implementation reference lives in [document-storage-and-access.md](../technical/document-storage-and-access.md). `ai-automations.md` has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations" and it adds In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements.
 
 When behavior is implemented:
 

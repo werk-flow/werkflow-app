@@ -1,6 +1,6 @@
 # Conceptual Data Model
 
-Status: living — last reviewed 2026-08-28
+Status: living — last reviewed 2026-09-02
 
 This document describes WerkFlow's domain model at a conceptual level. It is not a schema dump.
 
@@ -22,9 +22,12 @@ WerkFlow is organization-scoped. Most operational data belongs to an `organizati
 The organization is the workspace/company boundary for:
 
 - Members and roles.
+- Personnel records, their access and employment lifecycles, and protected personnel documents.
 - Jobs and projects.
 - Customers.
-- Time tracking.
+- Planning and dispatch.
+- Service: installed equipment, service cases, and maintenance.
+- Time tracking, time accounts, and periods.
 - Settings and preferences.
 - Documents.
 - Inventory.
@@ -89,6 +92,16 @@ Employment identity is organization-scoped and deliberately separate from the gl
 
 - Sickness report (`P1-08`): org-scoped sibling of the vacation request, keyed to the employee record, but semantically a REPORTED FACT — status is only `reported` → `cancelled` (reason required when cancelling someone else's report); everything else (end date set, dates/portion/type corrected) is an update on the same row audited in append-only `sickness_report_events` with before/after. `end_date` is nullable (open-ended, „bis auf Weiteres"); retroactive entry is first-class; a gist exclusion constraint (`daterange` with `infinity` upper bound for open reports) forbids overlapping own ACTIVE sickness only — overlap with vacation is deliberately possible and has no automatic balance effect. The neutral type vocabulary (`krankheit`/`kind_krank`/`sonstige`) and the evidence state (`evidence_required` + `not_required`/`pending`/`received`, kept consistent by a CHECK) are the only sensitive-adjacent fields; there is NO note/diagnosis column by design. Active sickness feeds the same daily-target absence input as vacation (second union variant, open ends clamped by the loader). Reads are self-or-manager via the `app_private` helpers; writes are service-role (self-report, manager entry/corrections) with organization-validation triggers; Realtime-published with minimal `USING INDEX` replica identity.
 
+### Controlled People Lifecycle (P1-24)
+
+- `employee_records.id` stays the stable organization-specific person identity. Auth users, profiles, memberships and invitations remain distinct rows; P1-24 keys every new table to the personnel record.
+- `personnel_access_lifecycles` is the versioned organization-access root with states `not_configured`, `scheduled`, `active`, `suspended` and `ended`; `personnel_access_transitions` is its immutable history. A record without a lifecycle row keeps the pre-P1-24 membership behavior. Effective authorization uses the database clock, suspension is organization-scoped and never disables the global Auth user, and the organization owner or last effective Admin cannot be suspended or ended without a safe successor.
+- `personnel_employment_lifecycles` is the separate versioned employment root with `planned`, `active`, `notice`, `inactive` and `exited`; `personnel_employment_transitions` is immutable. Existing records keep their date-derived presentation until a controlled lifecycle starts. Before a transition completes, the domain inventories responsibilities, pending approvals, attention items and active assignments; the last effective responsibility holder blocks completion, other open work remains a visible reasoned exception. P1-33 owns final closure, physical return and destructive removal.
+- `personnel_documents` is protected metadata over the ordinary `documents`, `document_versions`, `document_audit_events` and private direct-to-R2 path. Its owner is `employee_records.id`, not `document_links.employee_id`, and one document belongs to at most one protected row. Access classes are `personnel_standard`, `admin_restricted` and `health_evidence`; access never follows a responsibility, an ordinary document permission, a job assignment or a planning role. `personnel_document_releases` and `personnel_acknowledgements` bind an exact document version. An acknowledgement records that the person saw one version at one time and makes no signature or legal-sufficiency claim.
+- `personnel_onboarding_templates` own immutable published `personnel_onboarding_template_versions` and items; no template is seeded. `personnel_onboarding_plans` are editable instances whose `personnel_onboarding_requirements` carry typed requirements of kind `document`, `qualification`, `employment_condition`, `work_schedule`, `team`, `access`, `acknowledgement` or `manual` and state `missing`, `pending`, `fulfilled`, `blocked`, `waived` or `cancelled`. `personnel_requirement_references` points at exact rows in the owning domains and copies nothing. Only an explicit access-blocker requirement prevents activation, and missing configuration never renders as complete or compliant.
+- `personnel_lifecycle_operations` is the immutable idempotency receipt ledger. Writes are atomic service-role RPCs with organization-validation triggers and composite foreign keys; the protected-document classifier is a private caller-independent helper, and the public wrapper checks bind to `auth.uid()`. Export is a bounded per-person manifest plus the existing authorized downloads; P1-45 owns retention and legal hold.
+- Seven mutable roots are Realtime-published: both lifecycle roots, `personnel_documents`, `personnel_document_releases`, templates, plans and requirements. Transitions, template versions and items, acknowledgements, requirement references and operation receipts stay unpublished immutable history.
+
 ## Work Domain
 
 The core work domain is job/project management.
@@ -131,7 +144,7 @@ Concepts:
 - `work_artifacts` is the stable organization-scoped identity for exactly one job or project and one bounded kind. `current_revision_id`, status and version serialize current state without overwriting business history.
 - `work_artifact_revisions` stores immutable numbered snapshots. Normalized measurement, defect and change-work detail tables enforce their typed fields; exact revision document/source relations preserve evidence provenance.
 - `work_artifact_actions` is the append-only review, customer outcome, signature, export and void ledger. Decisions and signatures reference the exact revision; internal approval snapshots the existing scoped-responsibility resolution and enforces Four-Eyes.
-- `job_instruction_evidence_fulfillments` is the current attributable link from one expected-evidence row to one document or artifact revision. Removal is versioned and reasoned; the expectation itself stays in the instruction domain.
+- `job_instruction_item_evidence_fulfillments` is the current attributable link from one expected-evidence row to one document or artifact revision. Removal is versioned and reasoned; the expectation itself stays in the instruction domain.
 - P1-14 declared approval dependencies can reference one current `internal_approved` artifact action. Lifecycle gate snapshots derive required evidence, customer decisions, signatures, defects and formal approval facts without storing a second lifecycle state.
 - Mutable `work_artifacts` and active evidence fulfilments use organization-scoped RLS, minimal `USING INDEX` replica identity and Realtime publication. Revisions, detail rows, relations and actions are immutable unpublished ledgers. Business writes use action-time authorized, organization-scoped, version-checked and request-idempotent RPCs.
 
@@ -152,6 +165,25 @@ Concepts:
 - `document_links` gained an equipment target with composite tenant integrity. Existing private-R2 documents are reused, and equipment-history guards prevent ordinary unlink or permanent deletion from erasing an immutable event reference.
 - `installed_equipment_events` is the append-only lifecycle and correction ledger. Version-checked, request-idempotent guarded RPCs own registration, link and lifecycle/replacement mutations; terminal history is retained rather than overwritten.
 - Managers own the complete service read/write model. Employees receive only a compact projection for equipment linked to an exactly assigned job. Only `installed_equipment` is Realtime-published; successful child/history mutations touch the root to signal an authoritative refetch.
+
+### Reactive Service Domain (P1-19)
+
+- `service_cases` is the mutable organization-scoped root for one customer and one site. A request-based case references exactly one `client_requests` row, and qualification stays once-only and atomic; a direct case keeps its own immutable customer statement. A case may name one contact and one operational job. Case numbers are server-derived and organization-unique.
+- The case owns only the service thread: triage state, urgency, access guidance and suspected warranty, contract, goodwill, rework or charge context. States are `new`, `clarification_needed`, `visit_required`, `follow_up_required`, `resolved`, `closed_without_visit` and `duplicate`. The charge context is operational triage and never a legal or final commercial decision.
+- `service_case_equipment_links` binds a case to exact P1-18 equipment rows from the same customer and site; composite foreign keys and a validation trigger keep every link on the case's customer and site, and a write guard refuses any write that does not come through the domain RPCs. `service_case_relations` records duplicate, related and continuation links between two cases and preserves both identities. Nothing is merged or deleted.
+- `service_case_evidence_links` references exact `work_artifact_revisions`. Documents attach through a `service_case` target on `document_links`, and a guard prevents an ordinary unlink from erasing an immutable history reference.
+- Due next actions stay P1-10 follow-ups. Visits reuse planning occurrences, P1-12 dispatch, P1-14 lifecycle, P1-15 artifacts and P1-16 field packs; the case copies none of those facts.
+- `service_case_events`, relations and evidence links are immutable by trigger. Only `service_cases` is Realtime-published, and a successful child mutation touches the root. Admin and Büro own the model; employees receive only case number, issue, urgency, access guidance and linked equipment for an exactly assigned job.
+
+### Maintenance Domain (P1-20)
+
+- `maintenance_plans` is the mutable root for one customer site with states `draft`, `active`, `suspended` and `terminated`; archiving changes visibility only after termination. `maintenance_plan_revisions` are numbered snapshots, each covering one or more exact P1-18 equipment rows at that site through `maintenance_plan_revision_equipment` and referencing exactly one published P1-13 template version. Revisions are immutable snapshots by contract, and write guards on plans, revisions and their equipment rows refuse any write outside the domain RPCs.
+- `maintenance_coverages` is a separate service record for operational coverage: entered dates, an internal review date, status, notes and one exact document link. Commercial or legal contract truth stays outside the domain. Overlapping active coverage needs an explicit reason rather than a uniqueness ban.
+- `maintenance_due_work` exists before any job. States are `open`, `visit_created`, `completed`, `skipped`, `cancelled` and `superseded`; the completion outcome is separately `complete`, `partial` or `unresolved`. Activation generates an 18-month horizon. Reads never generate rows; creation, revision, resumption, completion and explicit extension advance the horizon idempotently.
+- Each revision chooses `planned_due_date` or `actual_completion_date` as its next-due basis. Missing or contradictory next-due facts stay a visible exception and are never repaired silently.
+- A maintenance visit is a normal job that a manager creates deliberately with the revision's exact template version. Its calendar occurrence exists only once scheduled, and moving one appointment never alters the maintenance sequence. Several compatible due-work rows may share one job and occurrence while keeping separate identities and histories.
+- `maintenance_due_evidence_links` and `maintenance_service_case_links` reference exact P1-15 artifact revisions and P1-19 cases. P1-14 keeps execution gates, P1-15 keeps artifact revisions, P1-18 keeps equipment history, P1-19 keeps reactive follow-up cases and P1-10 keeps assigned follow-ups.
+- The coverage, plan and due-work event ledgers and both link tables are immutable by trigger. Only `maintenance_coverages`, `maintenance_plans` and `maintenance_due_work` are Realtime-published. Employees get compact context for an exact assigned visit job; coverage dates, renewal risk and internal notes stay manager-only.
 
 Ownership rule: sites, contacts, manual follow-ups, and communication guidance belong to the customer domain; work only references them. Changing the customer of a job or project clears references to the previous customer's sites/contacts (server actions enforce consistency; database triggers validate org/client integrity). Customer master and P1-10 relationship reads are manager-only under RLS; field workers receive only purpose-limited context through assigned work.
 
@@ -203,6 +235,17 @@ Permitted activity segments can be linked to jobs or remain explicitly unallocat
 
 P1-22 correction RPCs are service-role-only and revalidate membership, organization, current source versions, expected request revision and effective `time_approval` scope. Pending proposals never mutate the source. Confirmed readers overlay the newest accepted application and suppress its replaced source while preserving every original row and immutable canonical event. Only `time_correction_requests` is published as an invalidation root; immutable correction children remain unpublished.
 
+### Time Accounts, Period Close And Payroll Export (P1-23)
+
+- A period in `time_periods` is one organization-wide calendar month in Europe/Berlin. Its boundaries are stored explicitly so a later, separately approved cut-off model can arrive without rewriting historical periods. Only an ended month may close.
+- `time_account_policies` is the mutable root: one versioned default per organization plus named exceptions. `time_account_policy_versions` and their credit, supplement and warning rules are immutable; `time_account_policy_assignments` binds employees to a policy on an explicit Berlin date without overlap. Credit rules use the six existing activity categories at 0, 50 or 100 percent and never change raw recorded minutes. Approved full-day vacation and sickness reduce the target and are classified per policy as paid, unpaid or informational.
+- `time_accounts` starts from an explicit opening balance, effective date and reason; deployment never assumes zero and never reconstructs a balance from history. `time_account_events` is the immutable ledger of openings, period postings and approved adjustment, expiry or payout events, stored in minutes and never as money. `time_account_adjustment_requests` is the mutable proposal root; a different effective `time_approval` holder approves, and rejected or superseded requests stay visible.
+- A calculation in `time_period_calculations` with its daily results, employee results and result sources is an immutable fingerprinted snapshot. It retains exact source seconds, rounds once per employee, Berlin day and bucket, and stores the rounding delta. Night, Sunday and holiday classifications carry exact sources and may overlap, so those buckets are explicitly non-additive.
+- `time_period_findings` and `time_period_finding_decisions` are immutable rows with severities informational, approval-required and close-blocked. Objective readiness defects block close, operational exceptions need an authorized acknowledgement with a reason, and payroll mapping defects block export but not close. One period covers every personnel record whose employment overlaps its boundaries, including people without a login; the population cannot be filtered.
+- Close writes an immutable `time_period_close_versions` row instead of toggling a flag. Ordinary edits inside a closed period are refused, and a late P1-22 correction keeps the `period_closed` refusal until an administrator reopens with a reason; recalculation and re-close create a successor version. A closed employee result is `previous balance + credited time - target time + approved account events = closing balance`.
+- `payroll_mapping_profiles` is the mutable root over immutable `payroll_mapping_versions`, employee mappings and code mappings. `payroll_exports` versions one deterministic complete-workforce ZIP per closed period version, stored as an immutable document in private R2; a re-export supersedes the earlier export explicitly and `payroll_export_events` is immutable.
+- Administrators create policies, confirm openings and reopen periods; effective `time_approval` holders resolve findings, approve overtime and account events and close; Admin and Büro prepare periods and generate exports; employees see only their own account, findings and statements. Writes are wrapper-only service-role RPCs with idempotency keys, expected versions and organization and period locks. Six mutable roots are Realtime-published: `time_account_policies`, `time_accounts`, `time_account_adjustment_requests`, `time_periods`, `payroll_mapping_profiles` and `payroll_exports`. Every ledger, snapshot, finding and mapping row stays unpublished.
+
 ## Settings And Preferences
 
 Settings are split across scopes:
@@ -225,16 +268,18 @@ Inventory V1 is implemented. At a conceptual level it separates:
 - basic tool/asset instances;
 - import batches and inventory audit events.
 
-Future procurement, reservation, transfer, lifecycle, valuation, commercial, and automation capabilities are defined in `docs/features/inventory.md`. Inspect live Supabase and generated types before schema-aware work.
+`inventory_movements` and `inventory_audit_events` are append-only by application convention only. The RLS policies in migration `20260706110018` grant inventory managers `FOR ALL`, and no immutability trigger exists on either table, unlike the ledgers of every slice since P1-14. The gap is flagged for the hardening pass.
+
+Future procurement, reservation, transfer, lifecycle, valuation, commercial, and automation capabilities are defined in [inventory.md](../features/inventory.md). Inspect live Supabase and generated types before schema-aware work.
 
 ## Document Domain
 
-Document management is implemented (Stages 1–4). See `docs/features/document-management.md` for the full feature model, permissions, and open decisions.
+Document management is implemented (Stages 1–4). See [document-management.md](../features/document-management.md) for the feature model and open decisions, and [document-storage-and-access.md](document-storage-and-access.md) for storage paths, the signed-URL flow, permissions and RLS, and the operations reference.
 
 At a high level:
 
 - **Metadata in Postgres:** folders, documents, links to jobs/projects/customers/employees, categories, trash state, versions, audit events.
-- **Bytes in Cloudflare R2 (EU jurisdiction):** private `werkflow-documents-dev`/`-prod` buckets with org-scoped paths and direct signed uploads/downloads (`lib/storage/r2.ts`; see `docs/decisions/0001-infrastructure-stack.md`). `documents.storage_bucket` keeps the logical value `organization-documents`.
+- **Bytes in Cloudflare R2 (EU jurisdiction):** private `werkflow-documents-dev`/`-prod` buckets with org-scoped paths and direct signed uploads/downloads (`lib/storage/r2.ts`; see [decision 0001](../decisions/0001-infrastructure-stack.md)). `documents.storage_bucket` keeps the logical value `organization-documents`.
 - **No automatic folder creation** when jobs, projects, customers, or employee records are created; manual folders, metadata links, and library filters provide operational organization instead.
 - **Role split:** managers use `/dokumente`; employees use assigned job contextual sections only.
 
@@ -248,4 +293,4 @@ Exact columns and RLS policies belong in Supabase and generated types, not in th
 - Preserve auditability where operational records can affect time, stock, billing, or customer documentation.
 - Prefer conceptual docs here; exact schema belongs to Supabase and generated types.
 
-The future product-domain boundaries and cross-feature handoffs are mapped in `docs/product/product-capability-map.md`. Update this document when those planned concepts become part of the implemented conceptual model.
+The future product-domain boundaries and cross-feature handoffs are mapped in [product-capability-map.md](../product/product-capability-map.md). Update this document when those planned concepts become part of the implemented conceptual model.

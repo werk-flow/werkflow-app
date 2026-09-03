@@ -1,6 +1,6 @@
 # 0002 — Dispatch Revision And Acknowledgement Identity
 
-- **Status:** Accepted
+- **Status:** accepted (2026-08-13)
 - **Date:** 2026-08-13
 - **Owner:** Product owner (Tamay), confirmed via the P1-12 pre-implementation report (items 2, 3, 5, 6)
 - **Affects:** Calendar/dispatch (`P1-12`), field work pack (`P1-16`), service dispatch (`P1-19`), mobile shell (`P1-49`), communications (`P1-46`)

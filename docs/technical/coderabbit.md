@@ -1,6 +1,6 @@
 # CodeRabbit reviews
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-02
 
 This document explains how future agents should use CodeRabbit for WerkFlow code reviews. It is intentionally practical and repo-specific. For current product context, still start with `AGENTS.md`; for CodeRabbit behavior, start with `.coderabbit.yaml`.
 
@@ -62,9 +62,9 @@ For this repo, the most important context files are:
 
 - `AGENTS.md` for product direction, coding standards, Bun-first workflow, German UI language, and role/organization principles.
 - `.coderabbit.yaml` for CodeRabbit-specific scope and review behavior.
-- `docs/features/inventory.md` when reviewing inventory catalog, stock, import, or job/project material changes.
-- `docs/features/document-management.md` when reviewing document-management changes.
-- `docs/technical/realtime-and-caching.md` when reviewing cache, realtime, or freshness behavior.
+- [inventory.md](../features/inventory.md) when reviewing inventory catalog, stock, import, or job/project material changes.
+- [document-management.md](../features/document-management.md) when reviewing document-management changes.
+- [realtime-and-caching.md](realtime-and-caching.md) when reviewing cache, realtime, or freshness behavior.
 - Generated Supabase types and live Supabase inspection when schema details matter.
 
 Run CodeRabbit from the repository root so it can resolve the Git repo, `.coderabbit.yaml`, and guideline files correctly.
@@ -89,7 +89,7 @@ The workstation also provides `coderabbit` and `cr` host shims for interactive c
 
 When capturing agent output to a file, write it inside the repository in a gitignored location. WSL temporary paths do not persist reliably across separate invocations. If output is lost, replay the stored findings through the wrapper instead of rerunning the review.
 
-Claude Code note: there is no CodeRabbit plugin for Claude Code. Its repo-local skill is `.claude/skills/coderabbit-review/SKILL.md`; both Codex and Claude must follow the same wrapper-only workflow.
+Claude Code note: its repo-local skill is `.claude/skills/coderabbit-review/SKILL.md`; both Codex and Claude must follow the same wrapper-only workflow.
 
 The CLI sends local diff/context to CodeRabbit. Before reviewing unpushed local work, make sure the user has approved sending those diffs to CodeRabbit.
 
@@ -126,7 +126,7 @@ bun run review -- --show-prompts
 
 Use committed/uncommitted/base scopes to keep reviews focused. For a huge branch, prefer reviewing sensible commits or a focused PR-sized diff. Do not split work just for ceremony; split when it improves review signal and makes fixes safer.
 
-The local Codex CodeRabbit skill expects agent mode and parses JSON-line output. Once a CodeRabbit review starts, stay quiet while it runs. Report only completion, authentication/setup blockers, timeout, or failure. The official docs note that large reviews can take many minutes; if a review is too slow or quota-limited, narrow the scope or retry later.
+The Codex-side CodeRabbit skill (shipped with Codex, not in this repo) expects agent mode and parses JSON-line output. Once a CodeRabbit review starts, stay quiet while it runs. Report only completion, authentication/setup blockers, timeout, or failure. The official docs note that large reviews can take many minutes; if a review is too slow or quota-limited, narrow the scope or retry later.
 
 ## Interpreting Agent Output
 
@@ -150,11 +150,11 @@ bun run lint
 bun run build
 ```
 
-Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure if you should run it again, it is generally speaking better to let it run once more than not to. However CLI reviews are rate-limited by plan (as of early August 2026 the repo was on the free plan with 3 CLI reviews per hour; verify the current plan before assuming a higher limit), so beware of that when running multiple subsequent reviews during a specific task.
+Rerun CodeRabbit once if the original findings were serious, the fix touched shared behavior, or the user asks for a review-fix-review loop. If you are unsure whether to run it again, run it once more. CLI reviews are rate-limited by plan (see the next section), so budget the passes when a task needs several reviews.
 
-## Plans, Free Use, And Limits
+## Plans And Limits
 
-As of the last review date above, CodeRabbit docs say open-source projects get Pro+ features for unlimited public repositories without a paid subscription, but OSS reviews use a separate rate-limit tier. Free and OSS usage still has rolling review limits, so agents should expect quota or rate-limit messages sometimes.
+CLI reviews are rate-limited by plan. The current plan is not recorded in this repo; check it in the CodeRabbit dashboard before assuming a limit. Expect quota or rate-limit messages.
 
 If CodeRabbit reports a quota limit:
 
@@ -169,14 +169,31 @@ After each Phase 1 vertical slice, run a CodeRabbit review before the slice is m
 
 An explicit CodeRabbit workflow supplied by the user for the current task takes precedence over the regular workflow in this document, including its review scope, branch, commit, and publication instructions. Use the regular workflow only for details the custom workflow does not specify, and do not carry custom mechanics from an earlier task into a later one.
 
-Key rules the prompt encodes:
+The prompt encodes six rules, in this order.
 
-1. **Do not rewrite `.coderabbit.yaml` per review.** The yaml holds durable, repo-wide review behavior only. Touch it only when the slice changed a durable boundary it describes (a new `lib/` domain, a changed role model, a new storage/tenant invariant) — then add or adjust the matching `path_instructions` entry and keep the wording timeless.
-2. **Per-review context goes on the command line** with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature spec(s) the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
-3. **Scope to the slice's diff**: `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
-4. Findings are verified against the code before fixing; invalid findings are skipped with a stated reason; after fixes, lint/typecheck and the slice's golden-gate spec are rerun.
-5. **Every intended review pass happens before the confirmation gate run** — CodeRabbit fixes, self-review, and any quality/skill checklists (React patterns, design review) included. Once the post-review full suite is green, only documentation may change; a later application-code change invalidates that evidence and forces another build + full run (this cost the P1-05 cycle an extra build and two full-suite runs).
-6. **Post-freeze review fixes are batched, not ping-ponged.** The pre-freeze review phase has no pass cap — run review-fix-review until the findings converge; the passes pay for themselves. But once the confirmation phase has begun and browser evidence forces an application fix, do not launch a review pass per individual fix: first prove the fix at the failed stage (focused or diagnostic lane), accumulate any further fixes from the same investigation, then run ONE delta-scoped CodeRabbit pass over all of them before freezing the next build. The only exception is a fix that touches authorization or data integrity — that warrants an immediate, non-batched pass. Everything still gets reviewed before the commit; this rule only removes the review↔rebuild↔rerun oscillation that dominated the P1-16 cycle (six interleaved passes, each restarting the browser ladder).
+### Do not rewrite `.coderabbit.yaml` per review
+
+The yaml holds durable, repo-wide review behavior only. Touch it only when the slice changed a durable boundary it describes (a new `lib/` domain, a changed role model, a new storage/tenant invariant) — then add or adjust the matching `path_instructions` entry and keep the wording timeless.
+
+### Per-review context goes on the command line
+
+Pass it with `-c`: always `AGENTS.md` and `.coderabbit.yaml`, plus the primary feature spec(s) the slice touched, plus the matching technical doc when caching/Realtime/storage behavior changed. Smallest set that explains the diff.
+
+### Scope to the slice's diff
+
+Use `--type committed --base-commit <commit before the slice>` for committed work, or `--type uncommitted --include-untracked` for local work.
+
+### Verify findings before fixing
+
+Verify each finding against the code before fixing it. Skip invalid findings with a stated reason. After fixes, rerun lint/typecheck and the slice's golden-gate spec.
+
+### Every intended review pass happens before the confirmation gate run
+
+CodeRabbit fixes, self-review, and any quality/skill checklists (React patterns, design review) included. Once the post-review full suite is green, only documentation may change; a later application-code change invalidates that evidence and forces another build + full run (this cost the P1-05 cycle an extra build and two full-suite runs).
+
+### Post-freeze review fixes are batched
+
+Not ping-ponged. The pre-freeze review phase has no pass cap — run review-fix-review until the findings converge; the passes pay for themselves. But once the confirmation phase has begun and browser evidence forces an application fix, do not launch a review pass per individual fix: first prove the fix at the failed stage (focused or diagnostic lane), accumulate any further fixes from the same investigation, then run ONE delta-scoped CodeRabbit pass over all of them before freezing the next build. The only exception is a fix that touches authorization or data integrity — that warrants an immediate, non-batched pass. Everything still gets reviewed before the commit; this rule only removes the review↔rebuild↔rerun oscillation that dominated the P1-16 cycle (six interleaved passes, each restarting the browser ladder).
 
 ## WerkFlow-Specific Review Priorities
 

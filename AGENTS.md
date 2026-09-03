@@ -4,7 +4,7 @@
 
 This file gives coding agents product context before they change WerkFlow. It should help agents understand what the app is for, who it serves, what problems matter most, and which product principles should guide feature work.
 
-Keep this file focused on broad product direction. Technical setup belongs in technical docs and implementation-specific Cursor rules. Deeper business context, such as offer design and acquisition strategy, can live in separate files later and be linked from here.
+Keep this file focused on broad product direction and the always-on repository rules. Technical setup lives under `docs/technical/`, routed through `docs/README.md`. Deeper business context, such as offer design and acquisition strategy, lives in `docs/product/`.
 
 ## App Summary
 
@@ -63,22 +63,22 @@ If the answer to all three questions is no, think carefully before adding the fe
 
 ## Key Use Cases And Product Scope
 
-Some of these areas already exist in the app, some are only partially implemented, and some are planned product scope rather than current implementation.
+Implementation status is owned by each feature spec's **Current Product Baseline** section and by the slice index in `docs/plans/phase-1/roadmap.md`. Read those before making a status claim; this list only orients. As of 2026-09-02, Waves 0 to 2 of Phase 1 (`P1-00` through `P1-24`) are accepted and Wave 3 has not started.
 
-- Working-time and employee management: current functionality covers organization membership/roles, employee assignment, clock in/out, breaks, job-linked time, manual entries, weekly overview, and change requests. The complete product should add personnel master data, schedules, skills/certifications, contracts/personnel documents, onboarding/offboarding, vacation, sick leave, time accounts, approvals, period close, and payroll-ready handoffs.
-- Customers and CRM: a basic organization-scoped customer area exists. The complete product should add contacts, multiple work sites, operational requests, relationship/communication history, duplicate control, installed-equipment links, and practical follow-up without becoming a bloated generic sales CRM.
-- Calendar and resource planning: day/week/month scheduling, job assignment, time context, and parked work exist. The complete product should connect recurring work, employee availability and skills, teams, tools, vehicles, material readiness, routes, and customer commitments while keeping planned and actual time distinct.
-- Project and job management: authorized users can create projects and jobs, assign employees, track state and progress, attach photos and documents, and keep all project-related information connected. Offer/contract/invoice entities are not separate modules yet; documents can be categorized and linked operationally.
-- Service and maintenance: a dedicated module does not exist yet. It should eventually connect customer sites and installed equipment with reactive service, recurring maintenance, contracts' operational delivery, dispatch, field reports, warranty/return context, and equipment history.
-- Commercial and finance workflows: structured offers, contracts, invoices, incoming bills, payments, dunning, and accounting-ready handoffs are not implemented yet. The complete operational core should connect these records to approved work, material, measurements, customer context, and post-calculation. Native double-entry accounting, payroll, or tax filing remain separate strategic decision gates rather than automatic scope.
+- Working-time and employee management: personnel records with date-effective employment conditions, work schedules and holiday calendars, scoped responsibilities with delegation, vacation, sickness, teams and qualifications, explicit time segments, one correction and approval flow, time accounts with period close and payroll-ready export, and a controlled onboarding, access, and employment lifecycle with protected personnel documents. Full offboarding closure with asset return is `P1-33`.
+- Customers and CRM: customer identity with contacts and work sites, operational requests (`Anfragen`) converted exactly once into work, a relationship timeline with owned follow-ups and communication preferences, and installed-equipment context per site. Duplicate control and outbound messaging are later slices. It must not become a generic sales CRM.
+- Calendar and resource planning: day/week/month scheduling, recurring and multi-visit planning occurrences, capacity and qualification checks, dispatch with acknowledgement, parked work, and customer commitments kept distinct from internal plans. Tools, vehicles, and routes are Wave 3 and later.
+- Project and job management: projects and jobs with assignment, versioned work templates, an explicit execution lifecycle with blockers and dependencies, structured site evidence (reports, measurements, defects, signatures), a focused field work pack, and office-reviewed handover packages. Offers, contracts, and invoices are not separate modules yet.
+- Service and maintenance: installed equipment per customer site, reactive service cases with triage and dispatch, and maintenance plans with operational coverage that generate due work. On-call planning, customer messaging, and telemetry are later scope or decision gates.
+- Commercial and finance workflows: not implemented yet (Wave 4). Structured offers, contracts, invoices, incoming bills, payments, dunning, and accounting-ready handoffs must connect to approved work, material, measurements, customer context, and post-calculation. Native double-entry accounting, payroll, or tax filing remain separate strategic decision gates rather than automatic scope.
 - Inventory management: a substantial V1 is implemented. The app should continue toward a connected material lifecycle covering catalog, locations, stock movements, job planning and consumption, tools/assets, suppliers, procurement, billability, and reordering without conflating these states. See `docs/features/inventory.md`.
 - Mobile inventory workflows: the future mobile app should build on inventory V1 with barcode scanning so employees can quickly identify an item and complete permitted take, return, transfer, count, or receipt actions.
 - Inventory onboarding service: part of the surrounding product/service offer may include an initial inventory audit so a customer starts with a usable baseline inventory in WerkFlow from day one.
 - Supplier and ordering workflows: the app should extend inventory V1 with demand, approvals, supplier orders, receipts, returns, invoice matching, and reviewed reorder proposals, ideally through relevant German wholesaler standards and APIs where possible.
-- Document management: a substantial first implementation exists. Managers (`admin`, `buero`) use a central `/dokumente` library with manual folders, a Drive-like file table, search/filtering by category and linked targets, trash, versioning for business documents, audit history, and server-side storage maintenance helpers. File bytes live in private Cloudflare R2 buckets (EU jurisdiction) with direct signed uploads/downloads; Postgres keeps all metadata (see `docs/decisions/0001-infrastructure-stack.md`). Field workers (`employee`) do not see the library sidebar page; they upload, view, and download documents from assigned job detail pages. Documents are metadata-linked to jobs, projects, customers, or employees rather than auto-creating physical folders when operational records are created. See `docs/features/document-management.md` for the full current model and open decisions.
+- Document management: a substantial first implementation exists. Managers (`admin`, `buero`) use a central `/dokumente` library with manual folders, a Drive-like file table, search/filtering by category and linked targets, trash, versioning for business documents, audit history, and server-side storage maintenance helpers. File bytes live in private Cloudflare R2 buckets (EU jurisdiction) with direct signed uploads/downloads; Postgres keeps all metadata (see `docs/decisions/0001-infrastructure-stack.md`). Field workers (`employee`) do not see the library sidebar page; they upload, view, and download documents from assigned job detail pages. Documents are metadata-linked to jobs, projects, customers, employees, requests, installed equipment, service cases, or maintenance coverage rather than auto-creating physical folders when operational records are created. Protected personnel documents (`P1-24`) are a separate access class outside the ordinary library. See `docs/features/document-management.md` for the full current model and open decisions.
 - AI automations: this is the second broad product phase after the complete operational core is trustworthy. Future capabilities may include assistance, recommendations, product-owned templates, configurable workflows, and bounded agents acting inside WerkFlow or through authorized external email, SMS, calendar, accounting, or supplier connections. Human control, source visibility, permissions, audit, cost limits, and safe failure behavior are required. See `docs/features/ai-automations.md`.
 
-Treat generated Supabase types and live Supabase inspection as more reliable than older architecture documentation when schema details matter. Production (`jbgaqpdjauzoocplgdsn`) is the source of truth for production state; the dev project (`mbkkzuqjbdvzelqvuzcn`) mirrors it via the committed `supabase/migrations/` history and is where development, tests, and schema changes go first (see `docs/technical/environments.md`).
+Treat generated Supabase types and live Supabase inspection as more reliable than older architecture documentation when schema details matter. WerkFlow runs a production and a dev Supabase project plus a local test stack; the project IDs, the dev-first migration rule, and which tool reaches which backend live in `docs/technical/environments.md`.
 
 ## Product Principles For Agents
 
@@ -90,7 +90,7 @@ Treat generated Supabase types and live Supabase inspection as more reliable tha
 - Prefer German user-facing language that is natural, neutral, and practical. Keep code, identifiers, comments, and developer artifacts in English.
 - Favor simple defaults over heavy configuration. The product should work well out of the box.
 - Avoid bloat. New features should reduce paperwork, improve organization, or save time.
-- Prioritize fast loading and fresh operational data. The app uses Next.js, Partial Prerendering where appropriate, and Supabase Realtime heavily to balance speed with non-stale data.
+- Prioritize fast loading and fresh operational data. The app uses Next.js Cache Components, Suspense streaming, cache tags, and Supabase Realtime to balance speed with non-stale data (`docs/technical/realtime-and-caching.md`).
 - Design for excellent UI/UX, not just feature coverage. The app should feel slick, modern, and trustworthy.
 - When business context is uncertain, leave a clear TODO or ask the product owner instead of inventing strategy.
 
@@ -98,13 +98,7 @@ Treat generated Supabase types and live Supabase inspection as more reliable tha
 
 WerkFlow should not become a bloated generic business suite where features are added just because similar software has them. It should stay focused on the operational reality of German SHK businesses.
 
-Before adding anything substantial, use the three product-purpose questions:
-
-- Does this reduce paperwork inside the business?
-- Does this make their work more organized?
-- Does this save time for employees or the business owner?
-
-If none of those are true, the feature probably does not belong in the product yet.
+Before adding anything substantial, apply the three product-purpose questions above. If none of them holds, the feature probably does not belong in the product yet.
 
 Do not encode acquisition strategy, offer structure, or sales positioning directly into feature logic unless those concepts are explicitly represented in product docs and requirements.
 
@@ -119,10 +113,20 @@ Use German product language for anything visible to end users. Keep code, databa
 - `Mitarbeiter`: an employee or organization member.
 - `Handwerker/in`: the field-worker employee role label used in the UI.
 - `Organisation`: the workspace/company boundary.
-- `Kalender`: scheduling view for jobs and time entries.
+- `Anfrage`: an operational customer request captured at intake (`/anfragen`), converted exactly once into work.
+- `Ansprechpartner` / `Einsatzort`: a customer's contact person / a customer's durable work site.
+- `Kalender`: scheduling view for planning occurrences, dispatch, absences, and time context.
+- `Einsatz`: a dispatched work instruction; `Mein Einsatz` is the field worker's view.
+- `Arbeitsvorlage`: a versioned work template (`/arbeitsvorlagen`).
+- `Arbeitsnachweis`: a structured site-evidence artifact (report, measurement, defect, signature).
+- `Übergabe`: the office-reviewed handover package (`/auftraege/uebergaben`).
+- `Aufgaben`: the one role-aware task, approval, and notification surface (`/aufgaben`).
+- `Qualifikationen`: teams, skills, and certifications (`/qualifikationen`).
+- `Anlage`, `Servicefall`, `Wartungsplan`: installed equipment, reactive service case, maintenance plan (`/service/...`).
 - `Dokumente`: manager-facing document library at `/dokumente`.
 - `Dokumente & Bilder`: contextual document section on job, project, customer, and employee detail pages.
-- `Zeiterfassung`: time tracking, breaks, entries, corrections, and approvals.
+- `Zeiterfassung`: time tracking, activity segments, corrections, and approvals.
+- `Zeitkonto` / `Perioden`: time accounts and balances / period close and payroll export.
 - `Urlaub`: vacation/leave management.
 - `Krankheit` / `Krankmeldung`: sick leave and absence management.
 - `Arbeitszeitmanagement`: management of working hours, breaks, vacation, sick leave, and related approvals.
@@ -130,7 +134,7 @@ Use German product language for anything visible to end users. Keep code, databa
 - `geparkt`: parked work that is intentionally unscheduled or paused.
 - `buero`: office/manager role with more permissions than an employee and fewer than an admin.
 
-Keep route names, database enum values, and identifiers aligned with the existing codebase.
+Keep route names, database enum values, and identifiers aligned with the existing codebase. The route name is the German term; the owning feature spec defines it.
 
 ## Future Product Context
 
@@ -178,28 +182,18 @@ These rules apply to every task in this repository. They originated as Cursor ru
 - Use `bun install` for installs.
 - Use `bun run <script>` for package scripts.
 - Prefer `bunx <tool>` over `npx <tool>`.
-- Preserve Bun as the package manager of record and keep `bun.lock` / `bun.lockb` when present.
-- Do not introduce or regenerate `package-lock.json`, `yarn.lock`, or `pnpm-lock.yaml`.
+- Preserve Bun as the package manager of record and keep `bun.lock`.
+- A committed `package-lock.json` is expected because Vercel builds on the Node runtime. Do not regenerate it, and do not introduce `yarn.lock` or `pnpm-lock.yaml`.
 - Documentation and shell examples should default to Bun commands.
 - Run CodeRabbit only through `bun run review` (or `bun run review:doctor` for a prerequisite check). Never infer that CodeRabbit is missing from a failed native PowerShell or WSL PATH lookup, and never install or reinstall it; the repository wrapper owns the configured WSL binary path and reports genuine host problems.
 - Allowed exceptions: the user explicitly requests another tool, a tool/platform clearly requires another command, or deployment/runtime discussion needs to mention Node.js.
-- Also important: this app uses bun for local development but is hosted on Vercel and uses the node runtime on Vercel so the existance of a package-lock.json file is completely fine.
 - Windows workstation note: the repository path contains spaces and Next.js route folders contain parentheses (`app/(app)/...`). In PowerShell, always quote such paths or use `-LiteralPath`; unquoted `(app)` is parsed as a subexpression and fails. Prefer Bash/`bunx` invocations for anything path-heavy.
 
-### Product Context Reminder
+### Infrastructure, Branches, And Deployment
 
-- Before making product-facing changes, use this `AGENTS.md` file as the current broad product context.
-- WerkFlow is a German-language operations app for German SHK businesses first.
-- Product-facing changes should reduce paperwork, make work more organized, or save time for employees or the business owner.
-- Keep workflows practical for non-technical German SHK users.
-- Keep field-worker (`Handwerker/in`) flows extremely simple, clear, mobile-friendly, and hard to misuse.
-- Keep owner, office, and manager flows efficient for planning, assignment, documents, inventory, time, and operational oversight.
-- Preserve organization boundaries and intentional role-specific behavior.
-- Prefer speed, simple defaults, excellent UI/UX, and operational usefulness over broad generic SaaS features.
-- Distinguish current implementation from planned scope, especially for inventory and AI automation work.
-- Do not invent offer, pricing, acquisition, or deeper avatar details; ask or leave TODOs until product docs exist.
-- When schema details matter, treat live Supabase inspection and generated types as more reliable than older architecture documentation.
 - The infrastructure stack is a settled decision (`docs/decisions/0001-infrastructure-stack.md`): Supabase Postgres/Auth/Realtime, Vercel (Frankfurt), Cloudflare R2 EU for file bytes via direct signed uploads, Railway workers only when a real long-running workload exists, Phase 2 AI via provider APIs. Do not propose provider migrations or route file bytes through Server Actions without a superseding decision record.
+- Work on local `main`. Publish with `git push origin main:partner-preview`; every push there builds a Vercel preview deployment that the business partner reviews. `origin/main` is the production deploy branch and advances only when the owner explicitly asks for a production release. Commit and push only when the user asks.
+- Schema changes are committed migration files applied dev-first, prod-second; browser certification runs against the local Supabase stack, and only the canary suite and wave-end runs touch cloud dev (`docs/technical/environments.md`, `docs/technical/testing.md`).
 
 ### Styling And Brand Color Rules
 

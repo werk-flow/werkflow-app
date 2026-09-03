@@ -1,6 +1,6 @@
-# P1-19 Reactive Service And Warranty Demand
+# P1-19 — Reactive service and warranty demand
 
-Status: closed — accepted `complete` 2026-08-30
+Status: closed (2026-08-30) — accepted P1-19 acceptance record; canonical home for the slice's evidence
 
 ## Outcome
 
@@ -45,3 +45,8 @@ The service case owns only the service-specific thread: triage state, urgency, a
 The campaign review covered every runner manifest, retained-world record, command session, review finding and correction. Product defects were the canonical contact-column mismatch and the missing service-case document target; both now fail in focused browser coverage (Tier 2). Repeatable harness findings were moved into shared semantic helpers, persisted stage boundaries, date ownership, stale recovery and exact database assertions (Tiers 1 and 2). Two final full-suite attempts stopped on local infrastructure after authoritative rows had persisted: one local REST fetch failed and one Realtime delivery missed its 15-second browser window. Both were classified `environment`, cleaned, and followed by focused P1-11/P1-10 recovery; the Realtime container restart and the recorded rerun-budget override preceded the successful 122/122 certification. The final inventory reports `Open retained worlds: 0`.
 
 The post-acceptance enforcement pass made the document-owner omission unwritable with a shared discriminated union, bounded dispatch-visible fixture dates against the product's window constant, and added pinned DEV type generation and parity commands. Compile-time assertions, convention tests and `types:check` keep those Tier 1 and Tier 2 protections active.
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)

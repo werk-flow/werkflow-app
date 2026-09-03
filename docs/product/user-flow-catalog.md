@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — updated at every slice acceptance
+Status: living — last reviewed 2026-09-02
 
 ## Purpose And Rules (for agents)
 
@@ -9,7 +9,7 @@ This file is the tactical, exhaustive answer to one question per slice: **what c
 It exists for two planned uses:
 
 1. **Handover:** after Phase 1 (possibly in steps), this list explains every new capability to the customer in plain German without roadmap terminology.
-2. **Audit coverage:** this list is the test inventory for the exhaustive audit batteries that exercise far more flows than the golden gates cover. Wave 1 audited it in wave-end sessions; **since Wave 2 every slice ships audit coverage for its own flow IDs as part of acceptance** (see `docs/plans/wave-2-audit.md` and testing rule 12), and the wave end only certifies.
+2. **Audit coverage:** this list is the test inventory for the exhaustive audit batteries that exercise far more flows than the golden gates cover. Wave 1 audited it in wave-end sessions; **since Wave 2 every slice ships audit coverage for its own flow IDs as part of acceptance** (see [wave-2-audit.md](../plans/wave-2-audit.md) and testing rule 12), and the wave end only certifies.
 
 Rules for maintaining this file:
 
@@ -22,7 +22,7 @@ Rules for maintaining this file:
 - If a later slice changes an earlier flow, correct the earlier flow in place and note the changing slice in parentheses. The catalog describes the app as it is now, per the slice that introduced each capability.
 - A material wording change reopens the affected flow ID's audit mapping until the assertion bodies have been rechecked against the complete revised bullet.
 - This catalog intentionally repeats things that also live in feature docs. Feature docs describe the product model for agents; this file describes concrete user actions for humans. Do not "deduplicate" it away.
-- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See testing rule 12, `docs/plans/wave-1-audit.md`, and `docs/plans/wave-2-audit.md`.
+- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See testing rule 12, [wave-1-audit.md](../plans/wave-1-audit.md), and [wave-2-audit.md](../plans/wave-2-audit.md).
 
 ---
 
@@ -102,12 +102,14 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 ### `P1-00a` — Dateispeicher (2026-08-04)
 
-- `P1-00A-F01` — Alle: große Dateien (auch deutlich über 4–5 MB, z. B. Foto-Serien oder Pläne) lassen sich jetzt zuverlässig hochladen. Der Upload zeigt einen echten Fortschrittsbalken statt vorher bei großen Dateien kommentarlos zu scheitern.
-- `P1-00A-F02` — Alle: Downloads öffnen sich über kurzlebige signierte Links direkt aus dem geschützten Speicher.
+- `P1-00a-F01` — Alle: große Dateien (auch deutlich über 4–5 MB, z. B. Foto-Serien oder Pläne) lassen sich jetzt zuverlässig hochladen. Der Upload zeigt einen echten Fortschrittsbalken statt vorher bei großen Dateien kommentarlos zu scheitern.
+- `P1-00a-F02` — Alle: Downloads öffnen sich über kurzlebige signierte Links direkt aus dem geschützten Speicher.
 
 ---
 
 ## Wave 1 — Kunden, Personal, Planung und gemeinsame Koordination
+
+Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain (see [wave-1-audit.md](../plans/wave-1-audit.md)); from Wave 2 onward every slice enumerates its flows at acceptance.
 
 ### `P1-01` — Ansprechpartner und Einsatzorte (2026-08-04)
 
@@ -178,7 +180,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-08-F06` — Wer an einem Kranktag einstempelt, wird **nicht** blockiert: das Einstempeln gelingt mit sichtbarem Hinweis („Für heute liegt eine Krankmeldung vor …") — wer früher gesund ist, arbeitet real; die Korrektur ist das Enddatum.
 - `P1-08-F07` — Beide Seiten werden benachrichtigt: Manager erfahren von Meldungen, die sie nicht selbst erfasst haben; die Person erfährt von Büro-Erfassungen und -Stornierungen der eigenen Meldung.
 
-### `P1-09` — Teams, Qualifikationen, Eignung (2026-08-08/09)
+### `P1-09` — Teams, Qualifikationen, Eignung (2026-08-09)
 
 - `P1-09-F01` — Büro/Admin: legen **Teams** an und pflegen ihre Mitglieder datumswirksam; Teams sind reine Planungs-Abkürzungen und geben niemandem Rechte. In Zuweisungs-Pickern (Auftragsdialoge und Kalender) wählt ein Klick auf ein Team alle zum jeweiligen Datum aktiven Mitglieder auf einmal aus; in Auftragsdialogen werden Mitglieder ohne Login dabei ausgewiesen übersprungen, während die Kalenderplanung sie seit `P1-11` als planbares Personal mit einplant.
 - `P1-09-F02` — Büro/Admin: pflegen einen Organisations-Katalog aus **Fähigkeiten und Zertifikaten** und ordnen Personen Einträge mit Gültigkeitsdaten und Nachweis-Status zu. Mitarbeiter sehen die eigenen Einträge nur lesend.
@@ -507,7 +509,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-16-F93` — P1-16 sendet keine Nachricht oder Kundenaktualisierung und baut weder Geräte-/Servicehistorie, kaufmännische Freigabe noch kundenöffentliche Übergabe vor.
 - `P1-16-F94` — Jede sichtbare Aktion bleibt beim zuständigen Fachgebiet; Rendern und Ausführen erzeugen keine fachfremde Mutation und der Arbeitspack bleibt eine Projektion statt einer neuen Domäne.
 
-### `P1-17` — Bürogeprüfte Übergabe und Kundenpaket (2026-08-27)
+### `P1-17` — Bürogeprüfte Übergabe und Kundenpaket (2026-08-28)
 
 - `P1-17-F01` — Büro/Admin öffnen für einen Einzelauftrag den eigenen Übergabestand unter `/auftraege/[Auftragsnummer]/uebergabe`.
 - `P1-17-F02` — Büro/Admin öffnen für einen Projekt-Unterauftrag denselben fachlichen Übergabestand unter der verschachtelten Auftragsroute.
@@ -885,7 +887,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 **Acceptance invariant:** `105/105 mapped; 105/105 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).
 
-### `P1-21` — Explizite Zeitsegmente (2026-08-31)
+### `P1-21` — Explizite Zeitsegmente (2026-09-01)
 
 - `P1-21-F01` — Ein Mitarbeiter startet seine eigene Zeiterfassung über eine eindeutige, touchfreundliche Hauptaktion; WerkFlow zeigt die laufende Aktivität und verstrichene Zeit.
 - `P1-21-F02` — Admin und Büro verwenden für die eigene Zeit dieselbe Erfassung; P1-21 erlaubt ihnen keine spontane Live-Steuerung fremder Sitzungen.
@@ -1009,6 +1011,61 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 **Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).
 
+### `P1-23` — Zeitkonten, Periodenabschluss und Lohnexport (2026-09-01)
+
+- `P1-23-F01` — Die Organisation verwendet zunächst vollständige Kalendermonate in `Europe/Berlin`; jede Periode bewahrt ihre ausdrücklichen Grenzen für eine spätere, separat entschiedene Stichtagslogik.
+- `P1-23-F02` — Eine datierte, bestätigte Standardregel gilt organisationsweit, solange keine datierte Mitarbeiterzuordnung sie ersetzt.
+- `P1-23-F03` — Admin kann benannte Ausnahmeregeln anlegen und einem Mitarbeiter ohne überlappende Gültigkeitsbereiche zuordnen.
+- `P1-23-F04` — Bestätigte Regelversionen bleiben historisch unveränderlich; eine neue Konfiguration erzeugt eine neue Version.
+- `P1-23-F05` — Die sechs vorhandenen Tätigkeiten behalten ihre Rohzeit und erhalten getrennte Gutschriften von 0, 50 oder 100 Prozent.
+- `P1-23-F06` — Fahrtgutschrift unterscheidet Hin-/Rückweg sowie Fahrer/Beifahrer, Bereitschaft unterscheidet Betrieb/zu Hause.
+- `P1-23-F07` — Urlaub und Krankheit werden je Regel ausdrücklich als bezahlt, unbezahlt oder informativ eingestuft, ohne den Abwesenheitsdatensatz umzuschreiben.
+- `P1-23-F08` — Nacht-, Sonntags- und Organisationsfeiertagsminuten werden quellenbezogen klassifiziert, ohne Zuschlagsbetrag, Lohn oder Rechtsaussage zu berechnen.
+- `P1-23-F09` — Überlappende Zuschlagsklassifikationen bleiben nicht additiv und werden nicht zu einer erfundenen Gesamtsumme zusammengezogen.
+- `P1-23-F10` — Nachtklassifikation bleibt deaktiviert, bis ein ausdrückliches lokales Zeitfenster bestätigt wurde.
+- `P1-23-F11` — Ein Zeitkonto entsteht nur durch eine ausdrückliche Admin-Eröffnung mit Anfangssaldo, Wirksamkeitsdatum und Grund; null Minuten sind eine bewusste Bestätigung.
+- `P1-23-F12` — Die Einführung rekonstruiert keine Anfangssalden aus lückenhaften historischen Buchungen und erzeugt beim Rollout keine Konten.
+- `P1-23-F13` — Ein Konto zeigt Anfangssaldo, unveränderliche Ereignisse, Periodenbewegungen und aktuellen Saldo nachvollziehbar getrennt.
+- `P1-23-F14` — Admin und Büro können Korrektur-, Verfall- oder Auszahlungsvorgänge in Minuten beantragen; kein Vorgang berechnet Geld.
+- `P1-23-F15` — Eine andere wirksame `time_approval`-Person muss eine Kontobewegung freigeben; Selbstfreigabe bleibt ausgeschlossen.
+- `P1-23-F16` — Eine abgelehnte Kontobewegung verändert weder Saldo noch Kontoversion und bleibt mit Entscheidungsgrund erhalten.
+- `P1-23-F17` — Wiederholte identische Kontooperationen liefern dieselbe Wirkung; veraltete erwartete Versionen überschreiben keinen neueren Stand.
+- `P1-23-F18` — Es gibt keinen automatischen Höchstsaldo, Verfall, Ausgleich, Auszahlung oder Verzicht.
+- `P1-23-F19` — Eine Periodenberechnung umfasst alle im Monat beschäftigten Personalakten, auch Personen ohne App-Zugang.
+- `P1-23-F20` — Fehlendes Zeitkonto, fehlende bestätigte Regel, fehlender verlässlicher Sollplan oder unklassifizierte Abwesenheit bleibt je Mitarbeiter als Abschlussblocker sichtbar.
+- `P1-23-F21` — WerkFlow verwendet den datierten Sollplan, Feiertagsbereich, Betriebsruhetage, genehmigten Urlaub und Krankheitszeitraum aus ihren jeweiligen Quelldomänen.
+- `P1-23-F22` — Legacy-Buchungen, kanonische Sitzungen/Segmente und die neueste freigegebene Korrekturprojektion fließen in dieselbe bestätigte Berechnung ein, ohne eine zweite Zeiterfassung zu erzeugen.
+- `P1-23-F23` — Ersetzte kanonische oder Legacy-Quellen werden nach einer freigegebenen Korrektur nicht doppelt angerechnet.
+- `P1-23-F24` — Nur Zeitanteile innerhalb der Periodengrenzen werden berücksichtigt; über Nacht laufende Arbeit wird nach Berliner Kalendertagen getrennt.
+- `P1-23-F25` — Exakte Quellsekunden werden je Mitarbeiter, Tag und Tätigkeitskontext gesammelt und erst dann auf ganze Minuten gerundet; 30 Sekunden runden auf.
+- `P1-23-F26` — Quelle, Gutschrift und Rundungsdifferenz bleiben getrennt gespeichert und in den Kontrollsummen prüfbar.
+- `P1-23-F27` — Soll, Rohzeit, gutgeschriebene Zeit, Urlaub, Krankheit, Kontobewegung, Periodendifferenz und Schlusssaldo bleiben unterscheidbar.
+- `P1-23-F28` — Auftrags- und Projektzuordnungen bleiben je Zeitquelle erhalten; nicht zugeordnete Zeit wird ausdrücklich als Prüfhinweis gezeigt.
+- `P1-23-F29` — Fehlende Buchung, offene Sitzung, Überlappung, offene Korrektur und objektiv fehlende Stammdaten behaupten keine Abschlussreife.
+- `P1-23-F30` — Regelbasierte Pausen-, Tagesdauer-, Ruhezeit-, Nacht-, Sonntags- und Feiertagshinweise beginnen als verständliche, konfigurierbare Hinweise und nicht als Rechtsbescheinigung.
+- `P1-23-F31` — Hinweise unterscheiden Information, Freigabe erforderlich und Abschluss gesperrt.
+- `P1-23-F32` — Eine freigabepflichtige Feststellung verlangt eine Entscheidung mit Grund und aktueller `time_approval`-Berechtigung.
+- `P1-23-F33` — Positive Periodendifferenz bleibt Überstundenkandidat und muss vor Abschluss durch eine andere zuständige Person freigegeben werden.
+- `P1-23-F34` — Negative Zeit bleibt sichtbar und wird nicht still verworfen; nur eine ausdrücklich konfigurierte Feststellung kann zusätzlich sperren.
+- `P1-23-F35` — Eine Neuberechnung erzeugt einen neuen unveränderlichen Versuch und bewahrt frühere Berechnungen und Entscheidungen.
+- `P1-23-F36` — Ändern sich Zeit, Korrektur, Personal, Plan, Abwesenheit, Regel, Konto oder Organisationskalender nach der Vorbereitung, verweigert der Abschluss die veraltete Berechnung.
+- `P1-23-F37` — Nur ein vollständig vergangener Kalendermonat kann abgeschlossen werden.
+- `P1-23-F38` — Der Abschluss sperrt Organisation und Periode transaktional, prüft die vollständige Belegschaft erneut und erzeugt genau eine unveränderliche Abschlussversion.
+- `P1-23-F39` — Der Abschluss bucht je einbezogenem Konto genau eine nachvollziehbare Periodenbewegung und stimmt Konten- und Periodenkontrollsummen ab.
+- `P1-23-F40` — Nach Abschluss verweigern betroffene gewöhnliche Zeit- und Korrekturanwendungen die Wirkung mit `period_closed`.
+- `P1-23-F41` — Nur Admin kann eine Periode mit Grund wieder öffnen; der alte Abschluss und seine Exportdateien bleiben unverändert erhalten.
+- `P1-23-F42` — Wiederöffnung erzeugt nachvollziehbare Gegenbuchungen; Korrektur, Neuberechnung und erneuter Abschluss erzeugen Nachfolgeversionen statt Umschreiben.
+- `P1-23-F43` — Der Mitarbeiter sieht ausschließlich das eigene Zeitkonto, eigene relevante Hinweise und eigene abgeschlossene Monatsnachweise.
+- `P1-23-F44` — Admin und Büro können Perioden vorbereiten und Exporte verwalten; nur wirksame Zeitfreigabeverantwortliche entscheiden Feststellungen und schließen eine bereite Periode.
+- `P1-23-F45` — Fremde Organisationsmitglieder sehen weder Konto, Periode, Ergebnis, Feststellung, Abschluss noch Export.
+- `P1-23-F46` — Eine bestätigte Lohnzuordnung bildet jeden Mitarbeiter und jeden erforderlichen festen Ausgabe-Code ausdrücklich und versioniert ab; Lücken sperren den Export, nicht den Abschluss.
+- `P1-23-F47` — Ein Export umfasst immer die vollständige, im Abschluss eingefrorene Organisationsbelegschaft; Mitarbeiterfilter und Differenzexporte bleiben späterer Umfang.
+- `P1-23-F48` — Das erste Artefakt ist ein deterministisches ZIP mit vier semikolongetrennten UTF-8-BOM-CSV-Dateien und einem Manifest; identische Eingaben erzeugen identische Bytes und Hashes.
+- `P1-23-F49` — Das ZIP trennt Lohnwerte, Auftrags-/Projektzuordnungen, Korrekturverlauf und Kontrollsummen, neutralisiert Tabellenformeln und speichert die genaue Abschluss-, Mapping- und Generatorversion privat in R2/Dokumenten.
+- `P1-23-F50` — P1-23 erzeugt weder Lohnberechnung, Steuer, Rechtsbestätigung, PDF-Nachweis, Providerübertragung, Buchungssatz, Rechnung noch automatische Folgeaktion; Realtime aktualisiert nur die freigegebenen veränderlichen Wurzeln.
+
+**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).
+
 ### `P1-24` — Kontrollierter Personenlebenszyklus (2026-09-02)
 
 - `P1-24-F01` — Eine Organisation ohne P1-24-Konfiguration sieht „Bisheriger Zugang – nicht gesteuert“ und „Kein Onboardingplan“, niemals einen erfundenen vollständigen oder regelkonformen Zustand.
@@ -1079,58 +1136,3 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 - `P1-24-F66` — P1-24 deaktiviert kein globales Auth-Konto, nutzt keinen neuen externen Dienst und erzeugt kein zweites Dokument-, Qualifikations-, Verantwortungs-, Aufgaben-, Auftrags-, Zeit-, Lohn-, Anlagenrückgabe- oder Aufbewahrungssystem.
 
 **Acceptance invariant:** `66/66 mapped; 66/66 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-02).
-
-### `P1-23` — Zeitkonten, Periodenabschluss und Lohnexport (2026-09-01)
-
-- `P1-23-F01` — Die Organisation verwendet zunächst vollständige Kalendermonate in `Europe/Berlin`; jede Periode bewahrt ihre ausdrücklichen Grenzen für eine spätere, separat entschiedene Stichtagslogik.
-- `P1-23-F02` — Eine datierte, bestätigte Standardregel gilt organisationsweit, solange keine datierte Mitarbeiterzuordnung sie ersetzt.
-- `P1-23-F03` — Admin kann benannte Ausnahmeregeln anlegen und einem Mitarbeiter ohne überlappende Gültigkeitsbereiche zuordnen.
-- `P1-23-F04` — Bestätigte Regelversionen bleiben historisch unveränderlich; eine neue Konfiguration erzeugt eine neue Version.
-- `P1-23-F05` — Die sechs vorhandenen Tätigkeiten behalten ihre Rohzeit und erhalten getrennte Gutschriften von 0, 50 oder 100 Prozent.
-- `P1-23-F06` — Fahrtgutschrift unterscheidet Hin-/Rückweg sowie Fahrer/Beifahrer, Bereitschaft unterscheidet Betrieb/zu Hause.
-- `P1-23-F07` — Urlaub und Krankheit werden je Regel ausdrücklich als bezahlt, unbezahlt oder informativ eingestuft, ohne den Abwesenheitsdatensatz umzuschreiben.
-- `P1-23-F08` — Nacht-, Sonntags- und Organisationsfeiertagsminuten werden quellenbezogen klassifiziert, ohne Zuschlagsbetrag, Lohn oder Rechtsaussage zu berechnen.
-- `P1-23-F09` — Überlappende Zuschlagsklassifikationen bleiben nicht additiv und werden nicht zu einer erfundenen Gesamtsumme zusammengezogen.
-- `P1-23-F10` — Nachtklassifikation bleibt deaktiviert, bis ein ausdrückliches lokales Zeitfenster bestätigt wurde.
-- `P1-23-F11` — Ein Zeitkonto entsteht nur durch eine ausdrückliche Admin-Eröffnung mit Anfangssaldo, Wirksamkeitsdatum und Grund; null Minuten sind eine bewusste Bestätigung.
-- `P1-23-F12` — Die Einführung rekonstruiert keine Anfangssalden aus lückenhaften historischen Buchungen und erzeugt beim Rollout keine Konten.
-- `P1-23-F13` — Ein Konto zeigt Anfangssaldo, unveränderliche Ereignisse, Periodenbewegungen und aktuellen Saldo nachvollziehbar getrennt.
-- `P1-23-F14` — Admin und Büro können Korrektur-, Verfall- oder Auszahlungsvorgänge in Minuten beantragen; kein Vorgang berechnet Geld.
-- `P1-23-F15` — Eine andere wirksame `time_approval`-Person muss eine Kontobewegung freigeben; Selbstfreigabe bleibt ausgeschlossen.
-- `P1-23-F16` — Eine abgelehnte Kontobewegung verändert weder Saldo noch Kontoversion und bleibt mit Entscheidungsgrund erhalten.
-- `P1-23-F17` — Wiederholte identische Kontooperationen liefern dieselbe Wirkung; veraltete erwartete Versionen überschreiben keinen neueren Stand.
-- `P1-23-F18` — Es gibt keinen automatischen Höchstsaldo, Verfall, Ausgleich, Auszahlung oder Verzicht.
-- `P1-23-F19` — Eine Periodenberechnung umfasst alle im Monat beschäftigten Personalakten, auch Personen ohne App-Zugang.
-- `P1-23-F20` — Fehlendes Zeitkonto, fehlende bestätigte Regel, fehlender verlässlicher Sollplan oder unklassifizierte Abwesenheit bleibt je Mitarbeiter als Abschlussblocker sichtbar.
-- `P1-23-F21` — WerkFlow verwendet den datierten Sollplan, Feiertagsbereich, Betriebsruhetage, genehmigten Urlaub und Krankheitszeitraum aus ihren jeweiligen Quelldomänen.
-- `P1-23-F22` — Legacy-Buchungen, kanonische Sitzungen/Segmente und die neueste freigegebene Korrekturprojektion fließen in dieselbe bestätigte Berechnung ein, ohne eine zweite Zeiterfassung zu erzeugen.
-- `P1-23-F23` — Ersetzte kanonische oder Legacy-Quellen werden nach einer freigegebenen Korrektur nicht doppelt angerechnet.
-- `P1-23-F24` — Nur Zeitanteile innerhalb der Periodengrenzen werden berücksichtigt; über Nacht laufende Arbeit wird nach Berliner Kalendertagen getrennt.
-- `P1-23-F25` — Exakte Quellsekunden werden je Mitarbeiter, Tag und Tätigkeitskontext gesammelt und erst dann auf ganze Minuten gerundet; 30 Sekunden runden auf.
-- `P1-23-F26` — Quelle, Gutschrift und Rundungsdifferenz bleiben getrennt gespeichert und in den Kontrollsummen prüfbar.
-- `P1-23-F27` — Soll, Rohzeit, gutgeschriebene Zeit, Urlaub, Krankheit, Kontobewegung, Periodendifferenz und Schlusssaldo bleiben unterscheidbar.
-- `P1-23-F28` — Auftrags- und Projektzuordnungen bleiben je Zeitquelle erhalten; nicht zugeordnete Zeit wird ausdrücklich als Prüfhinweis gezeigt.
-- `P1-23-F29` — Fehlende Buchung, offene Sitzung, Überlappung, offene Korrektur und objektiv fehlende Stammdaten behaupten keine Abschlussreife.
-- `P1-23-F30` — Regelbasierte Pausen-, Tagesdauer-, Ruhezeit-, Nacht-, Sonntags- und Feiertagshinweise beginnen als verständliche, konfigurierbare Hinweise und nicht als Rechtsbescheinigung.
-- `P1-23-F31` — Hinweise unterscheiden Information, Freigabe erforderlich und Abschluss gesperrt.
-- `P1-23-F32` — Eine freigabepflichtige Feststellung verlangt eine Entscheidung mit Grund und aktueller `time_approval`-Berechtigung.
-- `P1-23-F33` — Positive Periodendifferenz bleibt Überstundenkandidat und muss vor Abschluss durch eine andere zuständige Person freigegeben werden.
-- `P1-23-F34` — Negative Zeit bleibt sichtbar und wird nicht still verworfen; nur eine ausdrücklich konfigurierte Feststellung kann zusätzlich sperren.
-- `P1-23-F35` — Eine Neuberechnung erzeugt einen neuen unveränderlichen Versuch und bewahrt frühere Berechnungen und Entscheidungen.
-- `P1-23-F36` — Ändern sich Zeit, Korrektur, Personal, Plan, Abwesenheit, Regel, Konto oder Organisationskalender nach der Vorbereitung, verweigert der Abschluss die veraltete Berechnung.
-- `P1-23-F37` — Nur ein vollständig vergangener Kalendermonat kann abgeschlossen werden.
-- `P1-23-F38` — Der Abschluss sperrt Organisation und Periode transaktional, prüft die vollständige Belegschaft erneut und erzeugt genau eine unveränderliche Abschlussversion.
-- `P1-23-F39` — Der Abschluss bucht je einbezogenem Konto genau eine nachvollziehbare Periodenbewegung und stimmt Konten- und Periodenkontrollsummen ab.
-- `P1-23-F40` — Nach Abschluss verweigern betroffene gewöhnliche Zeit- und Korrekturanwendungen die Wirkung mit `period_closed`.
-- `P1-23-F41` — Nur Admin kann eine Periode mit Grund wieder öffnen; der alte Abschluss und seine Exportdateien bleiben unverändert erhalten.
-- `P1-23-F42` — Wiederöffnung erzeugt nachvollziehbare Gegenbuchungen; Korrektur, Neuberechnung und erneuter Abschluss erzeugen Nachfolgeversionen statt Umschreiben.
-- `P1-23-F43` — Der Mitarbeiter sieht ausschließlich das eigene Zeitkonto, eigene relevante Hinweise und eigene abgeschlossene Monatsnachweise.
-- `P1-23-F44` — Admin und Büro können Perioden vorbereiten und Exporte verwalten; nur wirksame Zeitfreigabeverantwortliche entscheiden Feststellungen und schließen eine bereite Periode.
-- `P1-23-F45` — Fremde Organisationsmitglieder sehen weder Konto, Periode, Ergebnis, Feststellung, Abschluss noch Export.
-- `P1-23-F46` — Eine bestätigte Lohnzuordnung bildet jeden Mitarbeiter und jeden erforderlichen festen Ausgabe-Code ausdrücklich und versioniert ab; Lücken sperren den Export, nicht den Abschluss.
-- `P1-23-F47` — Ein Export umfasst immer die vollständige, im Abschluss eingefrorene Organisationsbelegschaft; Mitarbeiterfilter und Differenzexporte bleiben späterer Umfang.
-- `P1-23-F48` — Das erste Artefakt ist ein deterministisches ZIP mit vier semikolongetrennten UTF-8-BOM-CSV-Dateien und einem Manifest; identische Eingaben erzeugen identische Bytes und Hashes.
-- `P1-23-F49` — Das ZIP trennt Lohnwerte, Auftrags-/Projektzuordnungen, Korrekturverlauf und Kontrollsummen, neutralisiert Tabellenformeln und speichert die genaue Abschluss-, Mapping- und Generatorversion privat in R2/Dokumenten.
-- `P1-23-F50` — P1-23 erzeugt weder Lohnberechnung, Steuer, Rechtsbestätigung, PDF-Nachweis, Providerübertragung, Buchungssatz, Rechnung noch automatische Folgeaktion; Realtime aktualisiert nur die freigegebenen veränderlichen Wurzeln.
-
-**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).

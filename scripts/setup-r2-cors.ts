@@ -4,6 +4,13 @@
 // Origins: localhost dev servers plus NEXT_PUBLIC_SITE_URL when set.
 // Re-run against the production bucket (R2_BUCKET_NAME=werkflow-documents-prod)
 // with the production NEXT_PUBLIC_SITE_URL before go-live.
+//
+// Token scope: since 2026-08-19 the R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY in
+// the env files are bucket-scoped and object-only, and PutBucketCors is
+// rejected with them. Supply an account-level R2 token for the run by
+// overriding the two variables in the shell. This script is not part of
+// routine operation; CORS is normally managed in the Cloudflare dashboard.
+// See docs/technical/environments.md.
 
 import {
   GetBucketCorsCommand,

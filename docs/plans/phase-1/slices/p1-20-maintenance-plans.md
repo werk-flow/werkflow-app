@@ -1,6 +1,6 @@
-# P1-20 Maintenance Plans And Operational Coverage
+# P1-20 — Maintenance plans and operational coverage
 
-Status: accepted complete — 2026-08-31
+Status: closed (2026-08-31) — accepted P1-20 acceptance record; canonical home for the slice's evidence
 
 ## Outcome
 
@@ -50,4 +50,9 @@ The review inspected the runner manifests, retained-world diagnostics, focused r
 - Tier 2: unit tests pin month shifting, visible-grid ranges, run-policy selection and validation boundaries. Shared browser helpers now scope contextual uploads, primary-month calendar cells, sign-out retries and semantic regions. Persisted audit stages inspect existing exact links before replay, and the focused/Golden/audit suites assert the resulting database facts. The production-advisor finding is closed by a committed FK-index migration and remote advisor verification.
 - Tier 3: after a full local Supabase cold start, event-sensitive browser tests wait until the Realtime container log confirms its tenant replication stream is ready. The public health endpoint became green about 70 seconds before CDC was usable in the closing A5 proof; repository preflight cannot observe that container-internal transition without host-specific Docker access. The final A5 retry passed 4/4 (`2026-08-31T072318050Z-ed6f36`) once readiness was confirmed.
 
-The detailed run-to-prevention mapping is recorded in `docs/technical/test-incident-log.md`.
+The detailed run-to-prevention mapping is recorded in [test-incident-log.md](../../../technical/test-incident-log.md).
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)

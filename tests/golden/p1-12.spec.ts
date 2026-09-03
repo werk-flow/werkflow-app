@@ -64,7 +64,7 @@ function batchJobNumber(runId: string): string {
   return `AUF-${runId}-P112-BATCH`;
 }
 
-test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, and commitments @GG-03', () => {
+test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, and commitments @P1-12 @GG-03', () => {
   test('parked backlog work gains context and an honest unscheduled dispatch', async ({
     adminPage,
     employeePage,

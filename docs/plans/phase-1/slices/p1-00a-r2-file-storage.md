@@ -1,6 +1,6 @@
 # P1-00a — R2 file storage
 
-Status: complete (accepted 2026-08-04)
+Status: closed (2026-08-04) — accepted P1-00a acceptance record; canonical home for the slice's evidence
 
 This record is the canonical home for the slice's acceptance facts, moved verbatim from the former roadmap index row on 2026-08-24. The current slice index lives in [../roadmap.md](../roadmap.md); process rules in [../protocol.md](../protocol.md).
 

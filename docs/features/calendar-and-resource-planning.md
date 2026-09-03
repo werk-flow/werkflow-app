@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-09-01
+Status: living — last reviewed 2026-09-03
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations, and materials needed to deliver it.
 
@@ -21,41 +21,29 @@ The calendar should reduce telephone coordination, paper schedules, duplicate en
 
 ## Current Product Baseline
 
-The current `/kalender` implementation already includes:
+As of 2026-09-02, `/kalender` is the shared planning surface for Admin and Büro: they schedule one-off and recurring job visits and internal entries, see capacity and qualification warnings, dispatch work, keep parked work in the `Parkplatz`, and record customer commitments separately from the internal plan. Employees see only the occurrences assigned to them and confirm or challenge their dispatch. Actual working time appears in the same calendar but stays structurally separate from planned work.
 
-- day, week, and month views;
-- job events and derived working-time blocks in the same planning context;
-- manager views across organization members and employee-focused visibility;
-- filters for employees, working hours, and jobs;
-- creation of jobs and manual time entries from the calendar;
-- moving and resizing scheduled work;
-- employee assignment and reassignment;
-- a `Parkplatz` for intentionally unscheduled or parked jobs;
-- drag-and-drop scheduling between the `Parkplatz` and calendar;
-- pending time-change visualization and entry detail flows;
-- Realtime refresh behavior and undo feedback for selected planning actions;
-- since `P1-04`: the organization's public holidays (selected regional calendar) and closure days („Betriebsruhe") shown as labeled, non-interactive all-day context in the month view — display-only planning context; capacity, conflicts, and per-employee availability remain `P1-11` scope;
-- since `P1-06`: vacation absence as a differentiated, non-interactive all-day entry type in the month view („Urlaub – <Name>", calm purple planning state). Approved and requested absence stay visually distinct — pending requests render provisionally („angefragt", dashed) and never count as approved availability. Managers see all members' vacation; employees see their own. Capacity/conflict behavior remains `P1-11` scope;
-- since `P1-08`: sickness/privacy-sensitive absence as deliberately NEUTRAL all-day entries: „Abwesend – <Name>" (open-ended reports „bis auf Weiteres", half days „halber Tag"), same calm purple planning state as approved vacation, never dashed (a report is a fact, not a request). The calendar shows WHO is unavailable WHEN and never why — the absence type exists only on the self/manager management surfaces (privacy matrix, employee management). Managers see all members' entries; employees see exactly their own; colleagues see nothing.
-- since `P1-09`: team shortcuts in employee assignment controls expand the team's date-effective members into individual assignments without granting authority; every calendar move, resize, schedule, unpark, and cross-row reassignment that changes people or the assessed date runs the same job qualification evaluation as the job detail. Missing, future, expired, or unconfirmed coverage and the optional apprentice signal are explained in a confirmation dialog; an authorized planner may continue only with a recorded reason. Cancelling the warning restores the optimistic calendar state quietly. Capacity and multi-resource conflict planning remain `P1-11`.
-- since `P1-11`: managers can create timed or all-day job visits and bounded internal entries (`Interne Arbeit`, `Besprechung`, `Schulung`, `Sonstiges`) as one-off, multi-day/cross-midnight, or daily/weekly/monthly series. A series materializes an initial 18-month horizon and can be extended in six-month, idempotent batches. Occurrences keep a stable lineage/original-local identity; invalid monthly dates are skipped rather than shifted. Editing one occurrence creates an exception, while `diese und zukünftige` and whole-series edits preserve past or already-started history. Skipped and cancelled occurrences remain auditable rows rather than disappearing;
-- `P1-11` capacity checks calculate employee minutes per Berlin calendar date from date-effective schedules, the visibly labeled schedule fallback, public holidays, closure days, approved vacation/sickness, provisional pending vacation, and overlapping planned occurrences. Qualification and date-effective team membership are evaluated for the occurrence date. Warnings explain every affected person/date and remain overridable by managers only with a reason tied to the exact assessment fingerprint; changed facts force a fresh decision;
-- planning assignments use stable employee-record identities, including employees without a login. They control occurrence visibility, while `job_assignments` continue to own durable job access/responsibility. A job visit references the job's own title/details/customer/location instead of copying them into calendar-owned internal fields;
-- planned occurrences and actual time entries remain visibly and structurally separate. Moving, splitting, skipping, or cancelling planned work never rewrites actual time. Employees see only occurrences assigned to their employee record; managers see organization planning.
-- since `P1-12`, dispatch is a first-class fact distinct from scheduling: a narrow versioned dispatch instruction (`planning_dispatches` + append-only `planning_dispatch_revisions`) targets exactly one scheduled `job_visit` occurrence XOR one genuinely unscheduled job. Recipients are employee records; acknowledgement/challenge rows bind to (revision, recipient) with the acting user recorded separately. Material changes (schedule, location, note, target transition, batch moves) supersede the current revision in the same transaction via deferred database triggers, so a moved or reassigned visit can never appear acknowledged from stale state; recipient-set-only changes carry unchanged recipients forward traceably. Records without an active login show the labeled „nicht möglich" state and are never auto-acknowledged. Parking a job cancels its active dispatches visibly; scheduling a dispatched unscheduled job is a traceable `target_scheduled` transition on the same dispatch identity;
-- since `P1-12`, the manager „Einsätze" panel in `/kalender` coordinates dispatch: per-visit recipient states, open challenges with keep-with-reason resolution, an issue dialog showing the compositional readiness picture (capacity/qualification from the P1-11 assessment, site/access from CRM, explicit-fact travel gaps, material demand always labeled „nicht reserviert", tools always „nicht bewertet" until `P1-32`), and explicit batch rescheduling: checkbox selection → server-computed preview (conflicts, invalidated acknowledgements, affected customer commitments) → one all-or-nothing version-checked idempotent move that turns selected series occurrences into `one`-scope exceptions. Employees confirm or challenge their own dispatch on the job detail („Mein Einsatz") and via `/aufgaben`; acknowledgement never implies attendance, recorded time, or a customer promise;
-- since `P1-14`, Parkplatz context is the `parking` kind of the canonical `work_blockers` model. Parking/unparking is one atomic, versioned manager action with reason, responsible person, review date and immutable history; context-free legacy rows remain labeled rather than backfilled. Adding, moving or removing planning occurrences changes the planned facet only and never overwrites canonical execution;
-- since `P1-12`, an internal plan and an explicitly recorded customer commitment are separate facts: `planning_customer_commitments` stores a manually recorded agreement (day, optional arrival window, source channel, actor) per occurrence. Schedule moves never rewrite a commitment — a mismatch is surfaced as a required explicit action (re-commit supersedes traceably, or withdraw with reason). Recording proves only that an office user documented an agreement; no message is sent by any planning action (`P1-46` owns delivery).
-- since `P1-13`, manager work-creation dialogs and request conversion offer an optional matching published work template. Template application never creates or changes `planning_series`, `planning_occurrences`, assignments, dispatches, customer commitments or actual time. Template material is demand labeled „nicht reserviert“; since P1-14 structural task prerequisites participate in start/completion checks through the existing instruction primitive.
-- since `P1-14`, job detail reuses the exact P1-12 readiness composer and exposes planned, readiness and execution as separate facts. The first successful job-linked clock-in or break-end atomically starts/resumes execution; schedule and dispatch mutations never do. Calendar projections carry the execution version needed for safe parking without storing another schedule.
-- since `P1-16`, the assigned-worker work pack projects the current planned window, dispatch acknowledgement/challenge and the same readiness dimensions around one next action. Opening or executing the pack never moves an occurrence, rewrites actual time, acknowledges dispatch automatically or changes a customer commitment; calendar and dispatch remain the authoritative planning sources.
-- since `P1-19`, reactive service reuses the normal job visit and dispatch path after a manager links the case to one existing job. The service case does not own a second appointment, assignment or dispatch state, and service-case updates never move the plan.
-- since `P1-20`, a service-owned due item can deliberately create one normal visit job and then one normal P1-11 occurrence. The maintenance plan owns cadence, due identity and next-due calculation; calendar owns the appointment, assignment, capacity/qualification assessment and one/future/series scheduling semantics. Moving or cancelling one appointment never rewrites the maintenance revision or unrelated due items.
-- since `P1-21`, actual attendance has a stable session and explicit work, travel, break, standby/on-call, call-out and internal-activity segments. Since `P1-22`, calendar working-time blocks use the same legacy-plus-canonical-plus-approved-correction projection as every other time reader, suppress replaced sources, keep job allocation visible and show open proposals only as explicitly provisional context. A correction found in calendar enters the shared time-correction domain. Planning occurrences, moves and dispatches never create, approve or rewrite actual facts, and a time correction never reschedules planned work.
+- Views and direct manipulation. Day, week, and month views with filters for employees, working hours, and jobs. Managers create jobs from the calendar, move and resize them, reassign between employees, and drag between the `Parkplatz` and the schedule; manual time entries can be created from the calendar ([Grundstock](../product/user-flow-catalog.md#grundstock-vor-phase-1-stand-vor-p1-00-4-august-2026)).
+- Absence and holiday context. The month view shows public holidays and **Betriebsruhe** as labeled, non-interactive entries, approved vacation as „Urlaub – Name" with pending requests dashed and marked „angefragt", and sickness as the neutral „Abwesend – Name". The calendar shows who is unavailable when and never why; managers see everyone, employees only themselves ([P1-04](../plans/phase-1/slices/p1-04-work-schedules-and-holidays.md), [P1-06](../plans/phase-1/slices/p1-06-vacation.md), [P1-08](../plans/phase-1/slices/p1-08-sickness.md)).
+- Team shortcuts and qualification checks. A team in an assignment control expands to its members active on that date without granting authority. Every move, resize, schedule, unpark, or reassignment re-runs the job qualification check; gaps are explained in a confirmation dialog and can be overridden only with a recorded reason ([P1-09](../plans/phase-1/slices/p1-09-teams-and-qualifications.md)).
+- Planning occurrences. Managers create timed or all-day job visits and internal entries of the kinds `Interne Arbeit`, `Besprechung`, `Schulung`, and `Sonstiges` as one-off, multi-day, cross-midnight, or daily, weekly, or monthly series with an 18-month horizon that extends in six-month steps. Editing one occurrence creates an exception, `diese und zukünftige` splits the series, and skipped or cancelled occurrences stay visible history ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)).
+- Capacity. Each planning action computes per-person minutes per Berlin date from schedules and their labeled fallback, holidays, closure days, approved and pending absence, and overlapping occurrences. Warnings name every affected person and date and are overridable only with a reason tied to the exact assessment; changed facts force a fresh decision ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)).
+- Assignments and identity. Occurrence assignments use stable employee records, including people without a login, and control occurrence visibility; durable job access and responsibility stay with the job assignment. A job visit references the job's title, customer, and location instead of copying them ([P1-11](../plans/phase-1/slices/p1-11-planning-occurrences.md)).
+- Dispatch. A dispatch is a versioned work instruction for exactly one scheduled visit or one unscheduled job. Any material change to schedule, location, note, or recipients supersedes the current revision in the same transaction, so a moved visit can never appear acknowledged from stale state; parking cancels active dispatches, and people without a login show „nicht möglich" instead of a fabricated confirmation ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)).
+- The **Einsätze** panel. Managers see per-visit recipient states, resolve challenges with a keep-with-reason decision, and issue dispatch with a readiness picture that combines capacity and qualification, site and access, explicit travel gaps, material always „nicht reserviert", and tools always „nicht bewertet" until `P1-32`. Batch rescheduling previews conflicts, invalidated acknowledgements, and affected commitments, then applies as one all-or-nothing move. Employees confirm or challenge on the job detail under **Mein Einsatz** and on `/aufgaben`; acknowledgement never implies attendance, recorded time, or a customer promise ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)).
+- Customer commitments. An office user can record an agreed day and arrival window per occurrence. Schedule moves never rewrite a commitment; a mismatch requires an explicit re-commit or withdrawal with reason, and no planning action sends a message, which is `P1-46` ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)).
+- Parked work. The `Parkplatz` is the `parking` kind of the shared blocker model: parking and unparking are one atomic manager action with reason, responsible person, review date, and immutable history. Planning changes touch the planned facet only and never overwrite execution state ([P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md)).
+- Templates and readiness on jobs. Work-creation dialogs offer a published work template; applying one never creates or changes series, occurrences, assignments, dispatches, commitments, or time. Job detail and the field work pack reuse the same readiness picture, and the first job-linked clock-in starts execution while schedule and dispatch changes never do ([P1-13](../plans/phase-1/slices/p1-13-work-templates.md), [P1-14](../plans/phase-1/slices/p1-14-work-lifecycle.md), [P1-16](../plans/phase-1/slices/p1-16-field-work-pack.md)).
+- Service visits. A reactive service case is linked to one existing job and then uses the normal visit and dispatch path. A maintenance due item deliberately creates one visit job and one normal occurrence; the plan owns cadence and next-due, the calendar owns the appointment, and moving it never rewrites the maintenance definition ([P1-19](../plans/phase-1/slices/p1-19-reactive-service.md), [P1-20](../plans/phase-1/slices/p1-20-maintenance-plans.md)).
+- Actual time. Working-time blocks use the same projection of legacy entries, canonical segments, and approved corrections as every other time reader, with open proposals shown as provisional. Planning moves and dispatches never create or rewrite actual time, and a correction never reschedules planned work ([P1-21](../plans/phase-1/slices/p1-21-time-segments.md), [P1-22](../plans/phase-1/slices/p1-22-time-corrections-and-approvals.md)).
 
-This is an operational scheduling foundation with recurring people-capacity planning and first-class dispatch, acknowledgement, parked-work context, and customer-commitment distinction. It is not yet the complete route/provider, tool/vehicle/material-reservation, external-calendar, or maintenance-contract product described below.
+### Important current limitations
 
-Before changing current behavior, verify role rules, current action validation, and live data structures in code and Supabase.
+- Route and travel-time providers, tool and vehicle reservation, material reservation, external calendar sync, and outbound customer messages are not implemented; readiness signals say so instead of guessing.
+- On-call coverage, training absence, and other absence types are not planned yet.
+- There is no dedicated overdue-work view.
+
+Before changing current behavior, verify role rules, action validation, and live data structures in code and Supabase.
 
 ## Phase 1 — Complete Operational Core
 
@@ -88,35 +76,36 @@ Expected depth includes:
 
 ### Dispatch And Backlog Planning
 
-Office staff should be able to:
+Office staff can:
 
-- see scheduled, unscheduled, overdue, and blocked work in one planning flow;
-- drag work onto a date, time, employee, or team;
-- schedule one job for multiple employees without duplicate job records;
-- split work across visits or days when one appointment is not enough;
-- batch reschedule work after absence, weather, supplier delay, or customer change;
-- park work intentionally without losing why it was parked;
-- preserve an audit trail for material scheduling changes;
-- notify affected employees without requiring separate manual messages;
-- see whether a field worker has acknowledged a newly assigned or materially changed appointment.
+- see scheduled, parked and blocked work in one planning flow, since `P1-12` and `P1-14`; a dedicated overdue-work view stays open;
+- drag work onto a date, time or employee since the pre-roadmap baseline, and onto a team through the `P1-09` team shortcut;
+- schedule one job for multiple employees without duplicate job records, since the baseline and `P1-11` occurrence assignments;
+- split work across visits or days when one appointment is not enough, since `P1-11`;
+- batch reschedule work after absence, weather, supplier delay, or customer change, since `P1-12`;
+- park work intentionally without losing why it was parked, since `P1-14`;
+- rely on an audit trail for material scheduling changes, since `P1-11` occurrence events and `P1-12` dispatch revisions;
+- reach affected employees without separate manual messages: a dispatch appears as an acknowledgement task on `/aufgaben` since `P1-12`; external delivery stays `P1-46`;
+- see whether a field worker has acknowledged a newly assigned or materially changed appointment, since `P1-12`.
 
-The `Parkplatz` should remain a deliberate operational state, not become a hiding place for incomplete data. Parked work should retain customer, priority, reason, responsible office user, and next-review context where applicable.
+The `Parkplatz` is a deliberate operational state, not a hiding place for incomplete data. Since `P1-14` parked work retains reason, responsible office user and next-review context; customer and priority come from the job.
 
 ### People, Teams, Skills, And Capacity
 
 Planning should use employee information without exposing private personnel data.
 
-Managers should be able to plan around:
+Since `P1-11`, the capacity assessment plans around:
 
-- contracted or configured working schedules;
-- vacation, sickness, training, and other availability;
-- skills, trade specializations, certifications, and required qualifications;
-- team or crew membership;
-- apprentice supervision requirements;
-- on-call coverage;
-- planned workload and remaining capacity.
+- date-effective working schedules and the labeled schedule fallback, since `P1-04` and `P1-11`;
+- approved vacation, sickness and provisional pending vacation, since `P1-11`; training and other absence types stay open;
+- skills, certifications and required job qualifications, since `P1-09` and `P1-11`;
+- date-effective team membership, since `P1-09` and `P1-11`;
+- the optional apprentice signal, since `P1-09`; it warns and never blocks;
+- planned workload and remaining minutes per person and Berlin date, since `P1-11`.
 
-Capacity warnings should explain the conflict and allow an authorized user to make a deliberate override. They should not prevent legitimate exceptions with an unexplained error.
+On-call coverage is not planned yet.
+
+Capacity warnings explain every affected person and date and allow a manager to override with a reason tied to the exact assessment fingerprint, since `P1-11`. Legitimate exceptions are never stopped by an unexplained error.
 
 ### Tools, Vehicles, Locations, And Materials
 

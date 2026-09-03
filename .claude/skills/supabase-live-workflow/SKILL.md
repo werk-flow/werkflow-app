@@ -5,46 +5,40 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 # Supabase Live Workflow
 
-WerkFlow runs on **two** cloud Supabase projects since 2026-08-18 (decision `docs/decisions/0003-dev-prod-environment-split.md`), plus a **local Supabase stack** in WSL for the browser-test harness since 2026-08-28 (decision `docs/decisions/0006-testing-architecture.md`; operational reference `docs/technical/environments.md`):
+WerkFlow runs two cloud Supabase projects plus a local stack. Project IDs, plan and compute posture, per-backend configuration, and which tool reaches which backend live in `docs/technical/environments.md`; read it before any Supabase work and do not restate its facts elsewhere.
 
-- **Prod** `jbgaqpdjauzoocplgdsn` — real customers, serves the deployed Vercel app. Treat as read-only outside the migration rule below.
-- **Dev** `mbkkzuqjbdvzelqvuzcn` — local dev, the cloud canary suite, and wave-end cloud batteries. Routine-write territory. Both cloud projects run under the org's Pro plan since 2026-08-21, so dev does not auto-pause; the current plan/compute posture lives in `docs/technical/environments.md`.
-- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) — the default backend for the Golden and audit batteries. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
+- **Prod** serves the deployed Vercel app and real customers. Treat as read-only outside the migration rule below.
+- **Dev** is routine-write territory: local development, the cloud canary suite, and wave-end cloud batteries.
+- **Local stack** (WSL Docker, `supabase db reset` over the committed migrations) is the default backend for the Golden and audit batteries. Reached through the Supabase CLI in WSL and direct psql, not through MCP.
 
-`.env.local` has no permanent target: the `bun run env:local` / `env:dev` / `env:prod` scripts switch it between the three backends. Schemas are kept identical through the shared migration history in `supabase/migrations/`.
+`.env.local` has no permanent target: `bun run env:local` / `env:dev` / `env:prod` switch it between the three backends. Schemas stay identical through the shared migration history in `supabase/migrations/`.
 
-## Which tool reaches what
+## Required workflow
 
-| Access path | Prod | Dev |
-| --- | --- | --- |
-| claude.ai Supabase connector (org-scoped OAuth) | read/write | read/write (both projects share one org since 2026-08-20) |
-| Account-wide Supabase MCP server (`.mcp.json`, PAT via `SUPABASE_ACCESS_TOKEN`) | yes | yes |
-| Supabase CLI `bunx supabase` (PAT exported) | yes — but never `link`/`db push` | yes (repo links to dev ref) |
-| Management API `api.supabase.com` (PAT) | yes | yes |
+1. Inspect the real project before making schema-aware claims or edits. Prod is the source of truth for production state; dev mirrors it through `supabase/migrations/`, so for schema questions dev inspection or the migration files are equivalent to prod.
+2. Prefer MCP or project inspection over guessing from app code or older architecture docs.
+3. When a schema change affects app code, run `bun run types:generate`. It reads dev, covers the `graphql_public` and `public` schemas, and formats with pinned Supabase 2.116.0 and Prettier 3.6.2. `bun run types:check` fails when the committed `lib/supabase/database.types.ts` differs from a fresh generation.
 
-## Required Workflow
-
-1. Inspect the real project before making schema-aware claims or edits. **Prod is the source of truth for production state; dev mirrors it via `supabase/migrations/`.** For schema questions, dev inspection or the migration files are equivalent to prod (fidelity is maintained by the migration rule).
-2. Prefer MCP/project inspection over guessing from app code or older architecture docs.
-3. When schema changes affect app code, regenerate `lib/supabase/database.types.ts` **from dev** (`bunx supabase gen types typescript --project-id mbkkzuqjbdvzelqvuzcn --schema public`) so the repo stays aligned.
-
-## The Migration Rule
+## The migration rule
 
 Every schema change:
 
-1. **Is a committed file** in `supabase/migrations/<version>_<name>.sql` — no ad-hoc DDL that lives only in a database.
-2. **Applies dev-first, prod-second** — via MCP `apply_migration` or the CLI, but always both projects, always the same SQL. Verify on dev (types, tests) before touching prod.
+1. **Is a committed file** in `supabase/migrations/<version>_<name>.sql`. No ad-hoc DDL that lives only in a database.
+2. **Applies dev-first, prod-second**, always both projects, always the same SQL. Verify on dev (types, tests) before touching prod.
+3. **Goes to dev through `bunx supabase db push`** (the repo is linked to the dev ref), because it records the committed file's exact version in the remote history. MCP `apply_migration` stamps its own apply-time version, and canary C9 fails on that divergence, so an MCP-applied dev migration must be followed by the history alignment described in `docs/technical/environments.md` ("The migration rule").
+4. **Goes to prod through MCP `apply_migration`** with the identical SQL. Never `supabase link` or `db push` against prod.
 
-Forbidden: `supabase link` or `db push` against prod; schema changes on prod that have no migration file; running tests or bulk scripts while `.env.local` points at prod (`bun run env:prod` sessions are a deliberate, temporary exception — switch back with `bun run env:dev`).
+Also forbidden: schema changes on prod that have no migration file, and running tests or bulk scripts while `.env.local` points at prod (`bun run env:prod` sessions are a deliberate, temporary exception; switch back with `bun run env:dev`).
 
 The four `*baseline*` repair migrations reconcile pre-split unrecorded drift; they are idempotent no-ops on prod and must never be edited to change history semantics.
 
-## Edge Functions
+## Edge functions
 
-Sources are versioned in `supabase/functions/` and deployed with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`. Dev's secret store holds the dev Resend key (`RESEND_API_KEY`, `FROM_EMAIL`); prod's Resend key is prod-only.
+Sources are versioned in `supabase/functions/` and deployed with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`. Each project's secret store holds its own Resend key; the prod key never leaves prod.
 
 ## Verification
 
 - Ground database-related claims in actual Supabase inspection when needed.
 - Confirm live auth, RLS, table, function, or storage state before relying on it.
-- After Supabase-sensitive changes, verify the relevant behavior with MCP queries or the most direct available check — on dev first.
+- After Supabase-sensitive changes, verify the relevant behavior with MCP queries or the most direct available check, on dev first.
+- Run the guards that cover the change: `bun run migrations:check` (dev history matches the committed files), `bun run types:check`, `bun run realtime:check` (publication and replica-identity parity), and the slice's SQL assertions (`bun run test:sql:p12N`, for example `test:sql:p124`).

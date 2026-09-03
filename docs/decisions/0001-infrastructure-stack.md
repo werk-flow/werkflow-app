@@ -1,6 +1,6 @@
 # 0001 — Infrastructure Stack For Phase 1 And Beyond
 
-- **Status:** Accepted
+- **Status:** accepted (2026-08-04)
 - **Date:** 2026-08-04
 - **Update 2026-08-18:** the shared dev/test/prod Supabase project follow-up is resolved — development and testing moved to a dedicated dev project; see [0003](0003-dev-prod-environment-split.md).
 - **Owner:** Product owner (Tamay), evaluated with agent research across database, auth, storage, and deployment
@@ -22,7 +22,7 @@
 
 ## Context
 
-Before Phase 1 feature build-out, we evaluated replacing Supabase with Convex, Vercel with Railway, and Supabase Auth with WorkOS/Clerk/Better Auth/Convex Auth. Inputs: the extended Phase 1/Phase 2 scope in `docs/product/product-capability-map.md` and `docs/plans/phase-1-build-roadmap.md`, live Supabase state (~30 tables, ~56 RLS policies, 17 Realtime tables, 100+ coupled source files), two video transcripts on Convex and deployment options, and independent verification of current provider pricing.
+Before Phase 1 feature build-out, we evaluated replacing Supabase with Convex, Vercel with Railway, and Supabase Auth with WorkOS/Clerk/Better Auth/Convex Auth. Inputs: the extended Phase 1/Phase 2 scope in [product-capability-map.md](../product/product-capability-map.md) and the Phase 1 roadmap (then the single file `phase-1-build-roadmap.md`, split into [phase-1/roadmap.md](../plans/phase-1/roadmap.md) on 2026-08-24), live Supabase state (~30 tables, ~56 RLS policies, 17 Realtime tables, 100+ coupled source files), two video transcripts on Convex and deployment options, and independent verification of current provider pricing.
 
 ## Rationale
 
@@ -105,13 +105,13 @@ Which infrastructure areas matter to which feature work:
 4. **Wave 4/5 (`P1-45` window):** design and stand up the independent retention archive with per-category policies; qualified legal review before any compliance wording.
 5. **First worker workload (`P1-44`/`P1-47` or earlier if needed):** add Railway (worker + queue), keeping file bytes on the direct-to-R2 path.
 6. **Before mobile app / external identities:** auth re-evaluation decision record.
-7. **Phase 2 start:** provider API keys, budgets, and audit plumbing per `docs/features/ai-automations.md`; no new hosting class.
+7. **Phase 2 start:** provider API keys, budgets, and audit plumbing per [ai-automations.md](../features/ai-automations.md); no new hosting class.
 
 ## Cost Model Snapshot (2026-08, USD, pre-VAT — refresh before pricing decisions)
 
 Fixed platform costs (shared across all customers): Vercel Pro ~$20/seat/month; Supabase Pro from $25/month plus compute size as load grows; Railway ~$20–60/month once workers exist. Roughly **$65–130/month total** at early scale.
 
-Marginal cost per onboarded business is dominated by file storage. At an assumed 2 TB active files per business: R2 ~$30/month (egress $0), archive copy a few dollars at most (subset of documents, cold storage class), database/auth/bandwidth marginal cost near zero at 25-employee scale. **≈$30–35/month per 2 TB business.** Storage allowance must therefore be part of packaging (`docs/product/offer.md`); the 2 TB assumption itself is unvalidated — original-resolution photos/videos, not PDFs, will drive it, so measure real usage during onboarding.
+Marginal cost per onboarded business is dominated by file storage. At an assumed 2 TB active files per business: R2 ~$30/month (egress $0), archive copy a few dollars at most (subset of documents, cold storage class), database/auth/bandwidth marginal cost near zero at 25-employee scale. **≈$30–35/month per 2 TB business.** Storage allowance must therefore be part of packaging ([offer.md](../product/offer.md)); the 2 TB assumption itself is unvalidated — original-resolution photos/videos, not PDFs, will drive it, so measure real usage during onboarding.
 
 Reference prices verified 2026-08: R2 $0.015/GB-month, free egress; Supabase Pro includes 100k MAU; Convex file egress now $0.12/GB (the "$0.30" figure circulating in videos is outdated); Railway $10/GB-RAM-month, $20/vCPU-month, $0.05/GB service egress.
 

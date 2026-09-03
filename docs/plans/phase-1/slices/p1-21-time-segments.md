@@ -1,6 +1,6 @@
 # P1-21 — Explicit time segments
 
-Status: accepted complete — 2026-09-01
+Status: closed (2026-09-01) — accepted P1-21 acceptance record; canonical home for the slice's evidence
 
 ## Bounded Outcome
 
@@ -31,7 +31,7 @@ Employees can capture and atomically switch explicit work, travel, break, standb
 
 ## Primary And Connected Feature Contracts
 
-The primary specification is `docs/features/time-tracking.md`. Connected owners are employee management, jobs/projects, calendar/resource planning, field work, work artifacts, work handover, and maintenance visit jobs. P1-21 reads their identities and does not create competing jobs, schedules, dispatches, maintenance records, documents, stock movements, messages, commercial records, or payroll facts.
+The primary specification is [time-tracking.md](../../../features/time-tracking.md). Connected owners are employee management, jobs/projects, calendar/resource planning, field work, work artifacts, work handover, and maintenance visit jobs. P1-21 reads their identities and does not create competing jobs, schedules, dispatches, maintenance records, documents, stock movements, messages, commercial records, or payroll facts.
 
 ## In Scope
 
@@ -76,7 +76,7 @@ The additive migration is proved locally, applied to DEV, verified, then applied
 
 ## User Flows (Catalog IDs)
 
-The owner confirmed provisional flows `P1-21-F01` through `P1-21-F64`. They cover capture, every switch kind, allocation, travel qualifiers, manual and automatic breaks, standby/call-out, internal activity, explicit end, split and overnight days, totals, duplicate and stale requests, concurrent devices, Realtime, long and invalid recovery, legacy compatibility, roles, isolation, connected projections, historical identity, deferral to P1-22/P1-23, accessibility, and the absence of automatic downstream effects. The product catalog receives the complete German bullets before verification.
+The owner confirmed provisional flows `P1-21-F01` through `P1-21-F64`. They cover capture, every switch kind, allocation, travel qualifiers, manual and automatic breaks, standby/call-out, internal activity, explicit end, split and overnight days, totals, duplicate and stale requests, concurrent devices, Realtime, long and invalid recovery, legacy compatibility, roles, isolation, connected projections, historical identity, deferral to P1-22/P1-23, accessibility, and the absence of automatic downstream effects. The [catalog section for P1-21](../../../product/user-flow-catalog.md#p1-21--explizite-zeitsegmente-2026-09-01) received the complete German bullets before verification.
 
 ## Acceptance Criteria
 
@@ -121,4 +121,9 @@ The closing audit promoted each reusable failure as far up the enforcement ladde
 - Tier 2: the SQL, unit, browser, migration, generated-type, Realtime, advisor and eleven-pass review checks pin those boundaries. `bun run test:sql:p121` owns the non-pgTAP assertion runner and fails on the first SQL error. Shared test helpers now use visible semantic regions, dynamic completed Berlin intervals, the product's duration formatter, keyboard activation of the real calendar button and bounded route-handler signals. Migration parity also rejects a CLI link outside DEV before comparing history. Cloud canary C6 owns its unallocated fixture and proves canonical session/segment persistence instead of expecting new legacy rows or a job from another canary test. ESLint ignores the generated Golden, audit and canary report trees at configuration level, so a retained Playwright trace cannot be linted as application source.
 - Tier 3: no new prose-only rule was needed. The two one-off freshness misses passed their exact producer/consumer proofs and complete unchanged batteries; without recurrence or a supported lower-level invariant, adding a speculative rule would weaken the incident discipline.
 
-The run-to-prevention details live in `docs/technical/test-incident-log.md`.
+The run-to-prevention details live in [test-incident-log.md](../../../technical/test-incident-log.md).
+
+## Links
+
+- Gate runs: [golden-gate-log.md](../../golden-gate-log.md)
+- Progress log: [../log.md](../log.md)

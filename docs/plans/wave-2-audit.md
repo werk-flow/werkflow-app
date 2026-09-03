@@ -1,6 +1,6 @@
 # Wave 2 Flow Audit (per-slice model)
 
-Status: living — Wave 2 per-slice coverage ledger and certification-gate record
+Status: living — last reviewed 2026-09-02; Wave 2 coverage ledger, wave-end certification gate not yet run
 
 Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; the process rules live in [`phase-1/protocol.md`](phase-1/protocol.md) and testing rules 12–13.
 
@@ -23,7 +23,7 @@ Golden gates are unchanged: they stay the lean cross-slice scenario suite that r
 
 ### Fixture-date ownership
 
-Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five days per slice at 06:00 Berlin unless a flow needs otherwise, assigned when the slice starts:
+Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five days per slice, assigned when the slice starts. The default time of day is 06:00 Europe/Berlin; P1-22, P1-23, and P1-24 use 07:00, as their left-behind entries below record.
 
 | Slice                                                     | Owned run-day offsets |
 | --------------------------------------------------------- | --------------------- |
@@ -39,7 +39,8 @@ Wave 1 owns run-day offsets +20 … +69. Wave 2 slices own **+70 onward**, five 
 | P1-22                                                     | +115 … +119           |
 | P1-23                                                     | +120 … +124           |
 | P1-24                                                     | +125 … +129           |
-| (assign the next block when a slice enters `in_progress`) | +130 … +134           |
+
+The next unassigned block starts at +130. It belongs to the Wave 3 audit doc, not to this table.
 
 ## Per-slice validation ladder (what actually runs at each Wave 2 acceptance)
 
@@ -49,17 +50,19 @@ The full Wave 1 battery does NOT rerun at every slice — the full Golden suite 
 2. **Focused, iterating:** the slice's own audit spec (`--grep @AUDIT-W2-P1-XX`) and the slice's golden spec/gate tag until green.
 3. **Affected Wave 1 audit tags:** if the slice materially changed a surface a Wave 1 session owns (e.g. anything under `/kalender` → `@AUDIT-W1-A6`/`A7`; job/checklist surfaces → `@AUDIT-W1-A1`), run those focused tags. Name the chosen tags and the reasoning in the acceptance evidence; "none affected" is a claim that needs a sentence, not silence.
 4. **CodeRabbit review** with fixes, then re-freeze (statics + focused greens).
-5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run** (currently 110). Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
+5. **Final confirmation on a fresh production build, nothing changes after:** the slice's focused audit spec, then **one full Golden run**. Scoped reopening per the Wave 1 rules: app-code or `tests/golden/**` changes reopen the pair; `tests/audit/**`-only changes reopen only the focused audit run.
 
 The full multi-wave audit batteries run at the **wave-end certification gate only** (below) — that is where cross-wave flow regressions get their exhaustive sweep. Never run two Playwright batteries concurrently (shared world artifacts).
 
 ## Wave-end certification gate
 
-After the wave's last slice is accepted: fresh production build, then sequentially (never concurrently) the **full golden suite** and the **full `@AUDIT-W2` battery**, both green in one recorded pair; plus the mechanical set-equality check that the wave's catalog IDs equal the union of the ledger rows below, `0 partial; 0 unmapped`. Record the gate in `docs/plans/golden-gate-log.md` as `AUDIT-W2`. Because every slice already certified its own coverage, this gate is confirmation, not discovery — budget a day, not weeks.
+After the wave's last slice is accepted: fresh production build, then sequentially (never concurrently) the **full golden suite** and the **full `@AUDIT-W2` battery**, both green in one recorded pair; plus the mechanical set-equality check that the wave's catalog IDs equal the union of the ledger rows below, `0 partial; 0 unmapped`. Record the gate in [golden-gate-log.md](golden-gate-log.md) as `AUDIT-W2`. Because every slice already certified its own coverage, this gate is confirmation, not discovery — budget a day, not weeks.
+
+As of 2026-09-02 this gate has not been run or recorded. P1-24 was accepted on that date without a full audit battery, so the sequential Golden plus `@AUDIT-W2` pair is still open.
 
 ## Coverage ledger
 
-One section per slice, added at slice acceptance. Same row format and status vocabulary as Wave 1 (`docs/plans/wave-1-audit.md`): catalog flow IDs, coverage mapping, status, whole-bullet clause evidence, closed with the invariant line.
+One section per slice, added at slice acceptance. Same row format and status vocabulary as Wave 1 ([wave-1-audit.md](wave-1-audit.md)): catalog flow IDs, coverage mapping, status, whole-bullet clause evidence, closed with the invariant line.
 
 ### P1-13 — Versioned work templates
 

@@ -13,8 +13,6 @@ This file carries the complete UI/UX canon: visual language, the component regis
 
 All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` mapping). **To change how the app looks, edit the tokens there — never scatter raw hex values or one-off styles in components.** Interaction behavior lives in the registered components below — to change a behavior, change the component, not the call sites. If tokens/components and this file ever disagree, the code wins — then update this file.
 
-The generic `frontend-design` skill is useful for craft (typography discipline, states, UI copy). Where its "distinctive, bold, take a risk" direction conflicts with this calm operational language, this file wins.
-
 ## Color
 
 - **Orange (`primary`, `--brand-orange`) is the only attention color.** Use it selectively and functionally: primary/submit buttons, focus rings, selection states, important links, step indicators, "current" markers. If orange stops being rare, it stops working.
@@ -160,4 +158,4 @@ A refresh landing mid-dialog can remount it and destroy typed input. The dialog 
 
 1. Adjust tokens in `app/globals.css` (colors, radius, dark mode) — this restyles ~80% of the app coherently.
 2. For control sizing/feel or interaction behavior, adjust the primitives in `components/ui/`.
-3. Update this file only when the *intent* changes — a new registry row, a changed canon rule — and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). Keep `AGENTS.md`'s styling section in sync.
+3. Update this file only when the *intent* changes — a new registry row, a changed canon rule — and mirror any skill change between `.claude/skills/` and `.agents/skills/` (they must stay identical). `AGENTS.md` carries only the short brand rules and points here for the canon, so a canon change lands in this file, not there.

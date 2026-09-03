@@ -79,7 +79,7 @@ Never run the Playwright harness or destructive scripts while `.env.local` point
 | Account-wide Supabase MCP server (`.mcp.json`)   | yes                          | yes                                                 | Official `@supabase/mcp-server-supabase` via `npx`, authenticated by `SUPABASE_ACCESS_TOKEN` (PAT) from the shell environment. Routine writes belong on dev only.                                                                                                   |
 | Supabase CLI (`bunx supabase`)                   | yes (forbidden to link/push) | yes                                                 | With `SUPABASE_ACCESS_TOKEN` exported. The repo links to the **dev** ref only; never `link`/`db push` against prod.                                                                                                                                                 |
 | Management API (`api.supabase.com`)              | yes                          | yes                                                 | Same PAT. Used for read-only prod inspection and dev configuration.                                                                                                                                                                                                 |
-| R2 API tokens (S3 credentials)                   | prod token: prod bucket only | dev token: dev bucket only                          | Per-bucket account tokens since 2026-08-19: `.env.local`/`.env.dev-backup` carry the dev-scoped token, Vercel and `.env.live-backup` carry the prod-scoped one. Both are object-scoped and cannot manage bucket settings (CORS is set in the Cloudflare dashboard). |
+| R2 API tokens (S3 credentials)                   | prod token: prod bucket only | dev token: dev bucket only                          | Per-bucket account tokens since 2026-08-19: `.env.local`/`.env.dev-backup` carry the dev-scoped token, Vercel and `.env.live-backup` carry the prod-scoped one. Both are object-scoped and cannot manage bucket settings (CORS is set in the Cloudflare dashboard). `scripts/setup-r2-cors.ts` therefore needs an account-level R2 token supplied for the run and is not part of routine operation. |
 
 ## The migration rule
 
@@ -89,9 +89,7 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
 - Prod: MCP `apply_migration` against `jbgaqpdjauzoocplgdsn` with the identical SQL, after the change is verified on dev. Never `supabase link`/`db push` against prod. MCP may stamp an apply-time version, so compare the name and statement before aligning the ledger key to the committed filename. P1-20's rollout required exact parity and aligned only its fourteen guarded version keys in PROD; schema objects and business data were unchanged.
 - After a schema change, run `bun run types:generate`. The repository command reads DEV, includes `graphql_public` and `public`, and formats the result with pinned Supabase 2.116.0 and Prettier 3.6.2 versions. Run `bun run types:check` to fail when the committed file differs from a fresh DEV generation. DEV and PROD have the same schema, so DEV remains the generation source.
 
-**Latest parity checkpoint (P1-23, 2026-09-01):** fourteen migrations from `20260901120000` through `20260901133000` were applied DEV-first and then identically to production. Their DEV and PROD ledger keys match the committed filenames, and fresh DEV type generation agrees with the committed account/period/export contract. Production retained 577 legacy time entries, 2 approved correction requests, 23 memberships and 25 personnel records; all 25 P1-23 business tables received zero rows. Production advisors reported no P1-23 security or performance finding and retain only the two pre-existing `set_job_assignment_organization` notices.
-
-**Latest Realtime parity checkpoint (P1-23, 2026-09-01):** `bun run realtime:check` and read-only cloud inspection agree across local, DEV and PROD. Each backend publishes 87 tables: 84 use replica identity `USING INDEX` on exactly `(id, organization_id)`, 3 use the recorded DEFAULT identity, and 0 use FULL. P1-23 publishes only the six mutable account, adjustment-request, period, finding, mapping-profile and export roots; immutable child history stays unpublished. The `supabase_realtime` publication has INSERT, UPDATE and DELETE enabled on all three backends.
+Parity checkpoints are recorded per slice in the slice record under `docs/plans/phase-1/slices/` and in the gate log, not here. To verify parity now, run `bun run migrations:check`, `bun run types:check`, and `bun run realtime:check`.
 
 ## Per-machine onboarding checklist
 
@@ -108,7 +106,8 @@ Every schema change is **a file in `supabase/migrations/` first**, and is applie
    ```
 
 5. **Local stack**: install Docker Engine inside WSL Ubuntu (`docker-ce` via Docker's apt repo; corporate proxies permitting), install the Supabase CLI in WSL (pinned to the version in use — 2.116.0 as of Stage A), then from the repo root in WSL: `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from another machine or from the values `supabase status` prints (the keys are shared CLI defaults; copy `SUPABASE_ACCESS_TOKEN` in from `.env.local` — a swap overwrites `.env.local`, so the PAT must live in every backup).
-6. **Verify**: `bunx supabase projects list` shows both cloud projects; `bun scripts/check-r2.ts` passes the EU round-trip against the dev bucket; `bun run env:local` then `bun run test:golden:gg00` passes against the local stack.
+6. **Browser**: `bunx playwright install chromium` once per machine; rerun it only when `playwright test` reports a missing browser.
+7. **Verify**: `bunx supabase projects list` shows both cloud projects; `bun scripts/check-r2.ts` passes the EU round-trip against the dev bucket; `bun run env:local` then `bun run test:golden:gg00` passes against the local stack.
 
 ## Escape hatches for prod work
 

@@ -1,6 +1,6 @@
 # Phase 1 Coverage Matrices
 
-Status: living — last reviewed 2026-08-24
+Status: living — last reviewed 2026-09-03
 
 Routing aids: the starting-foundation snapshot and the feature-to-slice and cross-cutting coverage matrices. They change only when slice scope or feature routing changes. The slice index lives in [roadmap.md](roadmap.md).
 
@@ -37,7 +37,7 @@ Use this matrix to find every roadmap slice that may require a feature-doc updat
 | Employee management | `P1-03`–`P1-09`, `P1-21`–`P1-24`, `P1-32`, `P1-33`, `P1-47`, `P1-49` |
 | Time tracking | `P1-04`, `P1-06`, `P1-08`, `P1-16`, `P1-21`–`P1-24`, `P1-33`, `P1-38`, `P1-43`, `P1-49` |
 | Document management | `P1-01`, `P1-02`, `P1-08`, `P1-09`, `P1-13`, `P1-15`–`P1-20`, `P1-24`, `P1-30`, `P1-32`, `P1-36`–`P1-47`, `P1-49` |
-| Inventory and procurement | `P1-13`, `P1-16`, `P1-17`, `P1-19`, `P1-25`–`P1-34`, `P1-35`, `P1-38`, `P1-41`, `P1-43`, `P1-49`, `P1-50` |
+| Inventory and procurement | `P1-13`, `P1-16`, `P1-17`, `P1-19`, `P1-25`–`P1-35`, `P1-38`, `P1-41`, `P1-43`, `P1-49`, `P1-50` |
 | Commercial and finance | `P1-15`, `P1-17`, `P1-20`, `P1-23`, `P1-25`, `P1-27`, `P1-30`, `P1-31`, `P1-35`–`P1-43`, `P1-46`, `P1-47`, `P1-50` |
 | AI enabling foundations | `P1-07`, every slice that creates a domain event/action, `P1-45`, `P1-46`, `P1-50`, `P1-51`, `P1-53` |
 

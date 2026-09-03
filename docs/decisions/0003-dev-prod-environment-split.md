@@ -1,7 +1,8 @@
 # 0003 — Dev/Prod Environment Split
 
-- **Status:** accepted, implemented 2026-08-18
-- **Supersedes:** the shared-database follow-up flagged in [0001](0001-infrastructure-stack.md) and formerly tracked in `docs/technical/testing.md` ("Shared-Database Caution") — resolved.
+- **Status:** accepted (2026-08-18) — implemented 2026-08-18
+- **Date:** 2026-08-18
+- **Supersedes:** the shared-database follow-up flagged in [0001](0001-infrastructure-stack.md) and formerly tracked in [testing.md](../technical/testing.md) ("Shared-Database Caution") — resolved.
 - **Amended 2026-08-20:** the separate-orgs model below is historical. After a cost analysis (plans bill per org, compute per project: one Pro org with both projects ≈ $35/month vs $50 for two Pro orgs), the owner transferred the dev project into the "WerkFlow" org and deleted the "WerkFlow Dev" org. Transfer verified: refs, URLs, keys, and auth-config parity unchanged; the org-scoped claude.ai connector now sees both projects. The two-project split itself, the migration rule, and every workflow in this record are unchanged.
 
 ## Decision
@@ -9,9 +10,9 @@
 WerkFlow development and testing move off the production Supabase project onto a dedicated dev project. Production never again carries development or test traffic.
 
 - **Prod:** project `jbgaqpdjauzoocplgdsn`, org "WerkFlow" (`svxdwqapsmvfkchswonc`), AWS eu-central-1, Postgres 17. Serves the deployed Vercel app and real customers. Bucket `werkflow-documents-prod`.
-- **Dev:** project `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev"), org "WerkFlow Dev" (`sptlkyimyrrmthjezafx`), same region (deliberate — identical latency/behavior characteristics), free tier, NANO compute. Serves local dev and the entire Playwright harness. Bucket `werkflow-documents-dev` (EU jurisdiction, localhost-only CORS).
+- **Dev:** project `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev"), org "WerkFlow Dev" (`sptlkyimyrrmthjezafx`), same region (deliberate — identical latency/behavior characteristics), free tier, NANO compute. Historical: since 2026-08-21 the dev project runs on Micro compute inside the Pro org; see [environments.md](../technical/environments.md). Serves local dev and the entire Playwright harness. Bucket `werkflow-documents-dev` (EU jurisdiction, localhost-only CORS).
 - **Separate orgs for billing:** Supabase plans are per-org. Prod's org can upgrade to Pro without paying for the dev project; dev stays free (accepting NANO performance and ~1-week idle auto-pause).
-- The operational reference (env files, tool access, onboarding) is `docs/technical/environments.md`.
+- The operational reference (env files, tool access, onboarding) is [environments.md](../technical/environments.md).
 
 ## Migration history materialization
 
@@ -57,5 +58,5 @@ Consequences and fixes:
 - Statics: `tsc` clean, lint clean, unit tests 188/188.
 - `bun run build` + production `bun start` against dev.
 - Focused `@GG-00` 13/13 (2.0m) — signup, invite email through the dev edge function, direct R2 uploads to the dev bucket, Realtime.
-- Full Golden suite **93/93 (27.4m)** and focused `@AUDIT-W1-A7` **9/9 (6.2m)** — first attempts, no reruns needed; durations ~2× the prod-class baseline (NANO compute, documented in `docs/technical/testing.md`). Teardown destroyed every world; the independent leftover sweep returned `LEFTOVER_SWEEP=0` against dev.
+- Full Golden suite **93/93 (27.4m)** and focused `@AUDIT-W1-A7` **9/9 (6.2m)** — first attempts, no reruns needed; durations ~2× the prod-class baseline (NANO compute, documented in [testing.md](../technical/testing.md)). Teardown destroyed every world; the independent leftover sweep returned `LEFTOVER_SWEEP=0` against dev.
 - Untouched-prod proof: migration count (120) and max version identical to the session-start baseline; zero organizations matching test markers.
