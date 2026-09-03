@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
 import { EntityLinkCard } from '@/components/shared/entity-link-card';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
@@ -636,7 +637,7 @@ export function ProjectDetailContent({
   ];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <DetailPageHeader
         breadcrumbs={[
           { label: 'Aufträge', href: '/auftraege' },
@@ -696,7 +697,7 @@ export function ProjectDetailContent({
         }
       />
 
-      <div className="flex-1 overflow-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6">
+      <PageBody>
         {isAdminOrManager && originRequest && (
           <p className="mb-4 text-sm text-muted-foreground">
             Entstanden aus{' '}
@@ -1023,7 +1024,7 @@ export function ProjectDetailContent({
             </div>
           </div>
         </div>
-      </div>
+      </PageBody>
 
       {/* Dialogs */}
       <CreateJobDialog
@@ -1134,7 +1135,7 @@ export function ProjectDetailContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }
 

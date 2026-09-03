@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { DetailPageHeader } from "@/components/shared/detail-page-header";
+import { PageBody, PageShell } from "@/components/shared/page-shell";
 import {
   MetadataSection,
   MetadataSaveError,
@@ -275,7 +276,7 @@ export function KundenDetailContent({
   ];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={client.name}
@@ -312,7 +313,7 @@ export function KundenDetailContent({
         }
       />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
           {/* Left Column: Metadata + Financial Placeholders */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-1">
@@ -437,7 +438,7 @@ export function KundenDetailContent({
             </div>
           </div>
         </div>
-      </div>
+      </PageBody>
 
       {contactGuard.dialog}
 
@@ -480,6 +481,6 @@ export function KundenDetailContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

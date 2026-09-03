@@ -1,21 +1,26 @@
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ZeiterfassungDashboardSkeleton } from './zeiterfassung-dashboard-skeleton';
+import { ZeiterfassungOverviewSkeleton } from './zeiterfassung-content-skeleton';
 
+/** Org-switch overlay for /zeiterfassung: the area header shape (title bar, `h-9` nav strip) over the overview content. */
 export function ZeiterfassungPageSkeleton() {
   return (
-    <div className="flex h-full flex-col">
-      {/* Header skeleton */}
-      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
-        <Skeleton className="h-8 w-36" />
-        <Skeleton className="h-9 w-40" />
+    <PageShell>
+      <header className="shrink-0 border-b px-4 pt-3 sm:px-6 sm:pt-4">
+        <div className="pb-2">
+          <Skeleton className="h-7 w-36 sm:h-8" />
+        </div>
+        <div className="flex h-9 items-center gap-1">
+          <Skeleton className="mx-3 h-4 w-24" />
+          <Skeleton className="mx-3 h-4 w-16" />
+          <Skeleton className="mx-3 h-4 w-16" />
+          <Skeleton className="mx-3 h-4 w-28" />
+        </div>
       </header>
 
-      {/* Content skeleton */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <Skeleton className="h-10 w-[300px] mb-4" />
-        <ZeiterfassungDashboardSkeleton />
-      </div>
-    </div>
+      <PageBody>
+        <ZeiterfassungOverviewSkeleton />
+      </PageBody>
+    </PageShell>
   );
 }
-

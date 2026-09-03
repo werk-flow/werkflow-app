@@ -5,6 +5,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { Archive, ArrowDown, ArrowUp, History, Loader2, Plus, RotateCcw, Save, Send, Trash2 } from 'lucide-react'
 
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create'
+import { usePageAction } from '@/components/shared/page-action'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -69,7 +70,8 @@ export function WorkTemplatesContent({ initialTemplates, inventoryItems, invento
   const [search, setSearch] = useState('')
   const [targetFilter, setTargetFilter] = useState<'all' | WorkTemplateTargetType>('all')
   const [statusFilter, setStatusFilter] = useState<'active' | 'draft' | 'published' | 'archived'>('active')
-  const [createOpen, setCreateOpen] = useState(false)
+  // The create button lives in the page header outside the data boundary.
+  const { open: createOpen, setOpen: setCreateOpen } = usePageAction()
   const [editing, setEditing] = useState<WorkTemplateDetail | null>(null)
   const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner()
@@ -121,11 +123,7 @@ export function WorkTemplatesContent({ initialTemplates, inventoryItems, invento
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div><h1 className="text-xl font-bold sm:text-2xl">Arbeitsvorlagen</h1><p className="text-sm text-muted-foreground">Wiederverwendbare Aufgaben, Materialplanung und Anforderungen für Aufträge und Projekte.</p></div>
-        <Button onClick={() => setCreateOpen(true)}><Plus className="size-4" />Vorlage erstellen</Button>
-      </div>
+    <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Arbeitsvorlagen suchen" htmlFor="template-search" hideLabel><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Arbeitsvorlagen suchen…" /></Field>
         <Select value={targetFilter} onValueChange={(value) => setTargetFilter(value as typeof targetFilter)}><SelectTrigger aria-label="Ziel filtern"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Aufträge und Projekte</SelectItem><SelectItem value="job">Nur Aufträge</SelectItem><SelectItem value="project">Nur Projekte</SelectItem></SelectContent></Select>

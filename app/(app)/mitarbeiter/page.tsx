@@ -13,6 +13,8 @@ import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
 import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbeiter-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgMember } from '@/components/mitarbeiter/members-table';
 import type { Invite } from '@/components/mitarbeiter/invitations-table';
@@ -154,12 +156,14 @@ export default async function MitarbeiterPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Mitarbeiter</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Mitarbeiter" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -174,22 +178,24 @@ export default async function MitarbeiterPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <Suspense fallback={null}>
         <UrlFlashBanner
           paramKey="removed_member"
           messageTemplate='„{name}" wurde aus der Organisation entfernt.'
         />
       </Suspense>
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
-        <h1 className="text-xl font-bold sm:text-2xl">Mitarbeiter</h1>
-        <div className="flex items-center gap-2">
-          <CreatePersonnelDialog />
-          <InviteDialog />
-        </div>
-      </header>
+      <PageHeader
+        title="Mitarbeiter"
+        actions={
+          <>
+            <CreatePersonnelDialog />
+            <InviteDialog />
+          </>
+        }
+      />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <Suspense fallback={<MitarbeiterContentSkeleton />}>
           <MitarbeiterData
             activeOrgId={activeOrgId}
@@ -197,7 +203,7 @@ export default async function MitarbeiterPage() {
             currentUserRole={currentUserRole!}
           />
         </Suspense>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

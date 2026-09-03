@@ -57,7 +57,7 @@ export function detailActionsButton(page: Page): Locator {
   // same actions trigger on customer, project, and job detail pages.
   return page
     .getByRole('heading', { level: 1 })
-    .locator('xpath=ancestor::div[contains(@class, "sticky")][1]')
+    .locator('xpath=ancestor::*[contains(@class, "sticky")][1]')
     .getByRole('button', { name: 'Aktionen öffnen' });
 }
 

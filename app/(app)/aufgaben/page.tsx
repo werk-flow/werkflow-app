@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { AufgabenContent } from '@/components/aufgaben/aufgaben-content';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 
 // P1-07: the one role-aware attention surface. Every role sees exactly what
 // concerns them — approvals for responsibility holders, open requests for the
@@ -24,24 +26,23 @@ export default async function AufgabenPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Aufgaben</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Aufgaben" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4">
-        <h1 className="text-xl font-bold sm:text-2xl">Aufgaben</h1>
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell>
+      <PageHeader title="Aufgaben" />
+      <PageBody>
         <AufgabenContent />
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

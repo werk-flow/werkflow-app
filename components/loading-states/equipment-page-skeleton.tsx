@@ -1,45 +1,57 @@
+"use client";
+
+import { ServiceToolbarSkeleton } from "@/components/loading-states/service-cases-page-skeleton";
+import { EQUIPMENT_COLUMNS } from "@/components/service/equipment-list-content";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonList, SkeletonTable } from "@/components/ui/skeleton-table";
+
+/** Filter strip and rows. Loaded rows are links, so skeleton rows hover too. */
+export function EquipmentListSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <Skeleton className="h-9 flex-1" />
+        <Skeleton className="h-9 w-full md:w-64" />
+        <Skeleton className="h-9 w-full md:w-36" />
+      </div>
+      <SkeletonList interactive className="md:hidden" />
+      <SkeletonTable
+        columns={EQUIPMENT_COLUMNS}
+        interactive
+        className="hidden shadow-xs md:block"
+      />
+    </div>
+  );
+}
 
 export function EquipmentPageSkeleton() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-52" />
-          <Skeleton className="h-4 w-80 max-w-full" />
-        </div>
-        <Skeleton className="hidden h-9 w-36 md:block" />
-      </div>
-      <div className="flex gap-3">
-        <Skeleton className="h-9 flex-1" />
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="h-9 w-36" />
-      </div>
-      <div className="overflow-hidden rounded-lg border">
-        <Skeleton className="h-10 w-full rounded-none" />
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-4 gap-4 border-t px-4 py-4"
-          >
-            <Skeleton className="h-8" />
-            <Skeleton className="h-8" />
-            <Skeleton className="h-8" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-        ))}
-      </div>
+    <div
+      className="space-y-6"
+      role="status"
+      aria-label="Anlagen und Geräte werden geladen"
+    >
+      <span className="sr-only">Anlagen und Geräte werden geladen.</span>
+      <ServiceToolbarSkeleton
+        actions={<Skeleton className="hidden h-9 w-40 md:block" />}
+      />
+      <EquipmentListSkeleton />
     </div>
   );
 }
 
 export function EquipmentDetailSkeleton() {
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      role="status"
+      aria-label="Anlage wird geladen"
+    >
+      <span className="sr-only">Anlage wird geladen.</span>
       <div className="space-y-2">
-        <Skeleton className="h-4 w-44" />
-        <Skeleton className="h-8 w-72" />
-        <Skeleton className="h-4 w-56" />
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-7 w-72 max-w-full" />
+        <Skeleton className="h-4 w-56 max-w-full" />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <div className="space-y-6">

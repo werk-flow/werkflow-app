@@ -175,6 +175,7 @@ export function CalendarViewTabs({
         <Tabs
           value={view}
           onValueChange={(v) => onViewChange(v as CalendarView)}
+          className="min-w-0"
         >
           <TabsList>
             <TabsTrigger value="day">Tag</TabsTrigger>
@@ -184,7 +185,7 @@ export function CalendarViewTabs({
         </Tabs>
 
         {/* Event type filters - simple checkbox style */}
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <span className="text-muted-foreground">Anzeigen:</span>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <div

@@ -1,6 +1,7 @@
 'use client';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { PersonalienSection } from '@/components/mitarbeiter/personalien-section';
 import { EmploymentConditionsSection } from '@/components/mitarbeiter/employment-conditions-section';
 import { WorkScheduleSection } from '@/components/mitarbeiter/work-schedule-section';
@@ -72,7 +73,7 @@ export function PersonnelRecordDetailContent({
   ];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={name}
@@ -94,7 +95,7 @@ export function PersonnelRecordDetailContent({
         }
       />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
           <PersonalienSection record={record} canEdit={canEdit} />
           <EmploymentConditionsSection
@@ -119,7 +120,7 @@ export function PersonnelRecordDetailContent({
           ) : null}
           <PersonnelHistorySection events={events} actorNames={actorNames} />
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

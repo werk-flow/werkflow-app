@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ListRow } from "@/components/ui/list-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientActionsMenu } from "./client-actions-menu";
 import { CLIENT_TYPE_LABELS, type Client } from "@/lib/jobs/types";
@@ -24,7 +25,7 @@ interface ClientsTableProps {
 
 function ClientCardSkeleton() {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <ListRow skeleton interactive>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <Skeleton className="h-[20px] w-[120px]" />
@@ -36,13 +37,13 @@ function ClientCardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-8 w-8 shrink-0 rounded" />
-    </div>
+    </ListRow>
   );
 }
 
 function ClientRowSkeleton() {
   return (
-    <TableRow>
+    <TableRow skeleton interactive>
       <TableCell className="font-medium">
         <Skeleton className="h-5 w-28" />
       </TableCell>
@@ -66,13 +67,10 @@ function ClientCard({ client }: { client: Client }) {
   const router = useRouter();
 
   return (
-    <div
-      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-      onClick={() => router.push(`/kunden/${client.id}`)}
-    >
+    <ListRow interactive onClick={() => router.push(`/kunden/${client.id}`)}>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium">{client.name}</p>
+          <p className="min-w-0 truncate text-sm font-medium">{client.name}</p>
           <span className="inline-flex shrink-0 items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
             {CLIENT_TYPE_LABELS[client.clientType]}
           </span>
@@ -89,7 +87,7 @@ function ClientCard({ client }: { client: Client }) {
       <div onClick={(e) => e.stopPropagation()}>
         <ClientActionsMenu client={client} />
       </div>
-    </div>
+    </ListRow>
   );
 }
 
@@ -172,7 +170,7 @@ export function ClientsTable({
             {clients.map((client) => (
               <TableRow
                 key={client.id}
-                className="cursor-pointer transition-colors hover:bg-accent/50"
+                interactive
                 onClick={() => router.push(`/kunden/${client.id}`)}
               >
                 <TableCell className="font-medium">

@@ -1,9 +1,17 @@
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import { TimeTrackingSettingsForm } from '@/components/settings/time-tracking-settings-form'
 import { HolidayCalendarSettings } from '@/components/settings/holiday-calendar-settings'
-import TimeAccountSettingsPage from '@/app/(app)/zeiterfassung/einstellungen/page'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import {
   getCachedMemberships,
   getCachedOrganizationCalendar,
@@ -53,7 +61,21 @@ export default async function TimeTrackingSettingsPage() {
         closureDays={calendar.closureDays}
         role={activeMembership.role}
       />
-      <TimeAccountSettingsPage embedded />
+      {/* Time rules live in the Zeiterfassung area (owner ruling 2, 2026-09-03); settings only links there. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Zeitkonten, Regeln & Lohnexport</CardTitle>
+          <CardDescription>
+            Arbeitszeitregeln, Zeitkonten und die Lohnarten-Zuordnung werden im
+            Bereich Zeiterfassung gepflegt.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link href="/zeiterfassung/einstellungen">Zu den Zeitkonto-Regeln</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   )
 }

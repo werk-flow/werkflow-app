@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InviteActionsMenu } from './invite-actions-menu';
 import type { OrgRole } from '@/lib/members/actions';
@@ -47,7 +48,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 // Mobile card skeleton - matches exact card structure
 function InviteCardSkeleton() {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <ListRow skeleton>
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <Skeleton className="h-[20px] w-[180px]" />
@@ -60,14 +61,14 @@ function InviteCardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-8 w-8 rounded shrink-0" />
-    </div>
+    </ListRow>
   );
 }
 
 // Desktop table row skeleton - matches exact cell structure
 function InviteRowSkeleton() {
   return (
-    <TableRow>
+    <TableRow skeleton>
       <TableCell className="font-medium">
         <Skeleton className="h-5 w-48" />
       </TableCell>
@@ -98,10 +99,10 @@ function InviteCard({ invite }: { invite: Invite }) {
   const displayStatus = isExpired ? STATUS_LABELS.expired : statusInfo;
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <ListRow>
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
-          <p className="font-medium truncate text-sm">{invite.email}</p>
+          <p className="min-w-0 font-medium truncate text-sm">{invite.email}</p>
           <span
             className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${displayStatus.className}`}
           >
@@ -136,7 +137,7 @@ function InviteCard({ invite }: { invite: Invite }) {
         status={invite.status}
         isExpired={isExpired}
       />
-    </div>
+    </ListRow>
   );
 }
 

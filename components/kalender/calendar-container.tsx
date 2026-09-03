@@ -42,6 +42,7 @@ import type { JobParkingContext } from "@/lib/parking/types";
 import { clearCalendarDragState } from "./drag-state";
 import { useBanner } from "@/components/ui/banner";
 import { cn } from "@/lib/utils";
+import { PageBody, PageShell } from "@/components/shared/page-shell";
 import { usePlanningWarningConfirmation } from "./planning-warning-dialog";
 
 const EntryDetailsDialog = dynamic(
@@ -1911,7 +1912,7 @@ export function CalendarContainer({
   const showLoadingSkeleton = isLoading || isSwitchingCalendarOrg;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <div ref={calendarHeaderRef}>
         <CalendarHeader
           currentDate={currentDate}
@@ -1951,97 +1952,102 @@ export function CalendarContainer({
         />
       </div>
 
-      <div
-        className="flex-1 overflow-auto overscroll-none"
-        data-calendar-scroll-container=""
-      >
-        {showLoadingSkeleton ? (
-          // Show appropriate skeleton based on view and user role
-          useFullCalendar ? (
-            <FullCalendarSkeleton view={view} />
-          ) : view === "day" ? (
-            <DayViewSkeleton memberCount={filteredMembers.length || 5} />
+      {/* The calendar keeps its own scroller (the day and week grids scroll
+          sideways inside it, a named canon exception), so PageBody only
+          supplies the column slot: padding and clock clearance switched off. */}
+      <PageBody className="flex flex-col p-0 pb-0 sm:p-0 sm:pb-0 overflow-hidden">
+        <div
+          className="flex-1 overflow-auto overscroll-none"
+          data-calendar-scroll-container=""
+        >
+          {showLoadingSkeleton ? (
+            // Show appropriate skeleton based on view and user role
+            useFullCalendar ? (
+              <FullCalendarSkeleton view={view} />
+            ) : view === "day" ? (
+              <DayViewSkeleton memberCount={filteredMembers.length || 5} />
+            ) : (
+              <WeekViewSkeleton memberCount={filteredMembers.length || 5} />
+            )
+          ) : useFullCalendar ? (
+            <FullCalendarView
+              date={currentDate}
+              view={view}
+              entries={filteredEntries}
+              members={members}
+              organizationSettings={organizationSettings}
+              holidayCalendar={holidayCalendar}
+              vacationEntries={vacationEntries}
+              sicknessEntries={sicknessEntries}
+              currentUserId={currentUserId}
+              isAdminOrManager={isAdminOrManager}
+              onEventClick={handleEventClick}
+              onDateSelect={handleDateSelect}
+              onViewChange={handleViewChange}
+              jobs={filteredJobs}
+              onJobDateChange={handleJobDateChange}
+              onParkJob={handleParkJob}
+              onUnparkJob={handleUnparkJob}
+              parkplatzZoneRef={parkplatzButtonRef}
+              parkplatzPanelOpen={parkplatzOpen}
+              onSessionDateChange={handleSessionWeekMove}
+              onPointerOverParkplatzChange={setFcDragOverParkplatz}
+            />
           ) : (
-            <WeekViewSkeleton memberCount={filteredMembers.length || 5} />
-          )
-        ) : useFullCalendar ? (
-          <FullCalendarView
-            date={currentDate}
-            view={view}
-            entries={filteredEntries}
-            members={members}
-            organizationSettings={organizationSettings}
-            holidayCalendar={holidayCalendar}
-            vacationEntries={vacationEntries}
-            sicknessEntries={sicknessEntries}
-            currentUserId={currentUserId}
-            isAdminOrManager={isAdminOrManager}
-            onEventClick={handleEventClick}
-            onDateSelect={handleDateSelect}
-            onViewChange={handleViewChange}
-            jobs={filteredJobs}
-            onJobDateChange={handleJobDateChange}
-            onParkJob={handleParkJob}
-            onUnparkJob={handleUnparkJob}
-            parkplatzZoneRef={parkplatzButtonRef}
-            parkplatzPanelOpen={parkplatzOpen}
-            onSessionDateChange={handleSessionWeekMove}
-            onPointerOverParkplatzChange={setFcDragOverParkplatz}
-          />
-        ) : (
-          <>
-            {view === "day" && (
-              <DayView
-                date={currentDate}
-                entries={filteredEntries}
-                members={filteredMembers}
-                organizationSettings={organizationSettings}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                isAdminOrManager={isAdminOrManager}
-                isLoading={isLoading}
-                onRefresh={handleManualRefresh}
-                onSilentRefresh={handleSilentRefresh}
-                onOperationStart={handleOperationStart}
-                onUpdateJob={updateJob}
-                onManualEntrySuccess={handleManualEntrySuccess}
-                onJobSuccess={handleSilentRefresh}
-                changeRequestMap={changeRequestMap}
-                highlightMemberId={highlightMemberId}
-                jobs={filteredJobs}
-                onParkJob={handleParkJob}
-                onUnparkJob={handleUnparkJob}
-                onScheduleJob={handleScheduleJob}
-                parkplatzButtonRef={parkplatzButtonRef}
-                parkplatzDragJob={parkplatzDragJob}
-              />
-            )}
-            {view === "week" && (
-              <WeekView
-                date={currentDate}
-                entries={filteredEntries}
-                members={filteredMembers}
-                organizationSettings={organizationSettings}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                isAdminOrManager={isAdminOrManager}
-                isLoading={isLoading}
-                onDateSelect={handleDateSelect}
-                onViewChange={handleViewChange}
-                onSessionClick={handleEventClick}
-                changeRequestMap={changeRequestMap}
-                onMemberDayClick={handleMemberDayClick}
-                jobs={filteredJobs}
-                onParkJob={handleParkJob}
-                onUnparkJob={handleUnparkJob}
-                onJobWeekMove={handleJobWeekMove}
-                onJobWeekHeaderMove={handleJobWeekHeaderMove}
-                onSessionWeekMove={handleSessionWeekMove}
-              />
-            )}
-          </>
-        )}
-      </div>
+            <>
+              {view === "day" && (
+                <DayView
+                  date={currentDate}
+                  entries={filteredEntries}
+                  members={filteredMembers}
+                  organizationSettings={organizationSettings}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                  isAdminOrManager={isAdminOrManager}
+                  isLoading={isLoading}
+                  onRefresh={handleManualRefresh}
+                  onSilentRefresh={handleSilentRefresh}
+                  onOperationStart={handleOperationStart}
+                  onUpdateJob={updateJob}
+                  onManualEntrySuccess={handleManualEntrySuccess}
+                  onJobSuccess={handleSilentRefresh}
+                  changeRequestMap={changeRequestMap}
+                  highlightMemberId={highlightMemberId}
+                  jobs={filteredJobs}
+                  onParkJob={handleParkJob}
+                  onUnparkJob={handleUnparkJob}
+                  onScheduleJob={handleScheduleJob}
+                  parkplatzButtonRef={parkplatzButtonRef}
+                  parkplatzDragJob={parkplatzDragJob}
+                />
+              )}
+              {view === "week" && (
+                <WeekView
+                  date={currentDate}
+                  entries={filteredEntries}
+                  members={filteredMembers}
+                  organizationSettings={organizationSettings}
+                  currentUserId={currentUserId}
+                  currentUserRole={currentUserRole}
+                  isAdminOrManager={isAdminOrManager}
+                  isLoading={isLoading}
+                  onDateSelect={handleDateSelect}
+                  onViewChange={handleViewChange}
+                  onSessionClick={handleEventClick}
+                  changeRequestMap={changeRequestMap}
+                  onMemberDayClick={handleMemberDayClick}
+                  jobs={filteredJobs}
+                  onParkJob={handleParkJob}
+                  onUnparkJob={handleUnparkJob}
+                  onJobWeekMove={handleJobWeekMove}
+                  onJobWeekHeaderMove={handleJobWeekHeaderMove}
+                  onSessionWeekMove={handleSessionWeekMove}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </PageBody>
 
       {isAdminOrManager && parkplatzOpen && (
         <ParkplatzPanel
@@ -2173,6 +2179,6 @@ export function CalendarContainer({
       )}
       {warningDialog}
       {planningWarningDialog}
-    </div>
+    </PageShell>
   );
 }

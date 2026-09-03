@@ -9,6 +9,8 @@ import { toClient } from '@/lib/jobs/types';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import type { OrgRole } from '@/lib/members/actions';
 
@@ -84,12 +86,14 @@ export default async function KundenPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Kunden</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Kunden" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -104,23 +108,20 @@ export default async function KundenPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <Suspense fallback={null}>
         <UrlFlashBanner
           paramKey="deleted_client"
           messageTemplate='Kunde „{name}" wurde erfolgreich gelöscht.'
         />
       </Suspense>
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
-        <h1 className="text-xl font-bold sm:text-2xl">Kunden</h1>
-        <CreateClientDialog />
-      </header>
+      <PageHeader title="Kunden" actions={<CreateClientDialog />} />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <Suspense fallback={<KundenContentSkeleton />}>
           <KundenData activeOrgId={activeOrgId} />
         </Suspense>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

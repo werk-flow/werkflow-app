@@ -22,6 +22,15 @@ Record each failed certification and any focused failure that changes shared har
 
 The run manifest receives the classification, cause and prevention through `bun run test:runs classify`. Add the concise durable entry here before closing the slice. Do not call an unexplained retry a transient.
 
+## UI/UX hardening viewport audit (2026-09-03)
+
+The new `@AUDIT-LAYOUT` spec ([testing.md](testing.md), Conventions) walked 25 route-and-role combinations at 375 px for the first time during Phase 2 of the [UI/UX hardening](../plans/uiux-hardening-2026-09.md). Its first two runs each stopped on a real defect, both classified `product`; the third run passed 25/25 under a recorded rerun-budget override once both were fixed.
+
+| Run | Failure and evidence | Correction and durable prevention | Focused proof and cleanup |
+| --- | --- | --- | --- |
+| `2026-09-03T082039140Z-be9f64`, focused `@AUDIT-LAYOUT`, world `mtl9bfzp`, 5/25 | Product; `/zeiterfassung/perioden` rendered a native `type="month"` input, which the audit refuses by design. The first five routes had already passed the horizontal-scroll and document-scroll checks. | `MonthPicker` (`components/ui/month-picker.tsx`, registry row) replaces the input and renders a hidden `YYYY-MM` field for the server-action form (Tier 1); the registry lint now bans `type="month"` and `type="week"` (Tier 2). | Rerun below; world cleaned. |
+| `2026-09-03T082742068Z-80d42f`, focused `@AUDIT-LAYOUT`, world `mtl9jq4j`, 18/25 | Product; `/einstellungen/profil` threw a client exception: the settings shell's mobile section navigation was a raw shadcn `Select` with thirteen options and the new development-time option cap threw at render. The accessibility snapshot showed only the Next.js error heading. | The mobile section navigation is an `AreaNav` strip that scrolls within itself (Tier 1 by the primitive); the option cap stays, since it found the violation the triage had rated borderline. | `2026-09-03T083413210Z-3c351e` passed 25/25 with `--override-rerun-budget` (two consecutive same-class failures, both fixed on the current source); worlds cleaned. |
+
 ## P1-24 campaign (2026-09-02)
 
 The campaign closed on fingerprint `b0be4201…7c4e` with final focused P1-24 audit 2/2, focused Golden 4/4, expanded `GG-07` 8/8, complete Golden 142/142 and DEV canary 9/9. Affected Wave 1 A1/A3/A4/A5 passed 43/43. Every retained world was classified and cleaned; final inventory reported `Open retained worlds: 0`.

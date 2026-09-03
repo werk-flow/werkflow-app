@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactElement } from "react";
 import { MapPin, Plus, Search, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ListRow } from "@/components/ui/list-row";
 import {
   Select,
   SelectContent,
@@ -13,6 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { SkeletonColumn } from "@/components/ui/skeleton-table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useLiveView } from "@/hooks/use-live-view";
 import { getInstalledEquipmentList } from "@/lib/installed-equipment/actions";
 import {
@@ -25,6 +37,38 @@ import {
 } from "@/lib/installed-equipment/types";
 import { EquipmentFormDialog } from "./equipment-form-dialog";
 
+// One column definition for the loaded table and its skeleton (design canon):
+// header count, widths and hover cannot drift apart.
+const TWO_LINE_CELL = (
+  <span className="block space-y-1.5">
+    <Skeleton className="h-4 w-40" />
+    <Skeleton className="h-3 w-24" />
+  </span>
+);
+export const EQUIPMENT_COLUMNS: readonly SkeletonColumn[] = [
+  { id: "equipment", header: "Anlage", skeleton: TWO_LINE_CELL },
+  { id: "site", header: "Kunde & Einsatzort", skeleton: TWO_LINE_CELL },
+  {
+    id: "manufacturer",
+    header: "Hersteller",
+    skeleton: <Skeleton className="h-4 w-32" />,
+  },
+  {
+    id: "state",
+    header: "Zustand",
+    className: "w-40",
+    skeleton: <Skeleton className="h-6 w-24" />,
+  },
+];
+
+function equipmentHref(equipmentNumber: string): string {
+  return `/service/anlagen/${encodeURIComponent(equipmentNumber)}`;
+}
+
+function stateLabel(item: EquipmentListItem): string {
+  return item.archivedAt ? "Archiviert" : EQUIPMENT_STATE_LABELS[item.state];
+}
+
 type EquipmentListContentProps = {
   initialEquipment: EquipmentListItem[];
   clients: EquipmentClientOption[];
@@ -34,6 +78,7 @@ export function EquipmentListContent({
   initialEquipment,
   clients,
 }: EquipmentListContentProps): ReactElement {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<EquipmentCategory | "all">("all");
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -136,50 +181,84 @@ export function EquipmentListContent({
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border shadow-xs">
-            <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
-              <span>Anlage</span>
-              <span>Kunde & Einsatzort</span>
-              <span>Hersteller</span>
-              <span>Zustand</span>
-            </div>
-            <div className="divide-y">
+          <>
+            <div className="space-y-2 md:hidden">
               {filtered.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/service/anlagen/${encodeURIComponent(item.equipmentNumber)}`}
-                  className="grid gap-2 px-4 py-3 transition-colors hover:bg-muted/40 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center md:gap-4"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">
-                      {item.name}
+                <ListRow key={item.id} asChild interactive>
+                  <Link href={equipmentHref(item.equipmentNumber)}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {item.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {item.equipmentNumber} · {item.clientName} ·{" "}
+                        {item.siteName}
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {item.equipmentNumber} ·{" "}
-                      {EQUIPMENT_CATEGORY_LABELS[item.category]}
+                    <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                      {stateLabel(item)}
                     </span>
-                  </span>
-                  <span className="min-w-0 text-sm">
-                    <span className="block truncate">{item.clientName}</span>
-                    <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                      <MapPin className="size-3 shrink-0" />
-                      {item.siteName}
-                    </span>
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {[item.manufacturer, item.model]
-                      .filter(Boolean)
-                      .join(" · ") || "Nicht erfasst"}
-                  </span>
-                  <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-medium">
-                    {item.archivedAt
-                      ? "Archiviert"
-                      : EQUIPMENT_STATE_LABELS[item.state]}
-                  </span>
-                </Link>
+                  </Link>
+                </ListRow>
               ))}
             </div>
-          </div>
+            <div className="hidden rounded-lg border shadow-xs md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {EQUIPMENT_COLUMNS.map((column) => (
+                      <TableHead key={column.id} className={column.className}>
+                        {column.header}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((item) => {
+                    const href = equipmentHref(item.equipmentNumber);
+                    return (
+                      <TableRow
+                        key={item.id}
+                        interactive
+                        onClick={() => router.push(href)}
+                      >
+                        <TableCell>
+                          <Link
+                            href={href}
+                            className="font-medium"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {item.name}
+                          </Link>
+                          <span className="block text-xs text-muted-foreground">
+                            {item.equipmentNumber} ·{" "}
+                            {EQUIPMENT_CATEGORY_LABELS[item.category]}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="block">{item.clientName}</span>
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <MapPin className="size-3 shrink-0" />
+                            {item.siteName}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {[item.manufacturer, item.model]
+                            .filter(Boolean)
+                            .join(" · ") || "Nicht erfasst"}
+                        </TableCell>
+                        <TableCell>
+                          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
+                            {stateLabel(item)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </div>
 

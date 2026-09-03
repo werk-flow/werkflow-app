@@ -1,5 +1,5 @@
-import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
+import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 
 export default function KalenderLoading() {
-  return <KalenderContentSkeleton />;
+  return <KalenderPageSkeleton />;
 }

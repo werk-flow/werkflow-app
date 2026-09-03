@@ -5,6 +5,8 @@ import { CalendarClock, ClipboardList, FileCheck2, MapPin, Pencil, Plus } from "
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { SkeletonColumn } from "@/components/ui/skeleton-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveView } from "@/hooks/use-live-view";
 import { getMaintenanceWorkspace } from "@/lib/maintenance/actions";
@@ -29,6 +31,15 @@ function formatDate(value: string | null): string {
   return value ? dateFormatter.format(new Date(`${value}T12:00:00Z`)) : "Nicht festgelegt";
 }
 
+// One column definition for the due list header and its skeleton (design canon).
+const TWO_LINE_CELL = <span className="block space-y-1.5"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-24" /></span>;
+export const MAINTENANCE_DUE_COLUMNS: readonly SkeletonColumn[] = [
+  { id: "due", header: "Fälligkeit", className: "w-32", skeleton: TWO_LINE_CELL },
+  { id: "plan", header: "Plan & Anlage", skeleton: TWO_LINE_CELL },
+  { id: "client", header: "Kunde & Auftrag", skeleton: TWO_LINE_CELL },
+  { id: "action", header: "Aktion", className: "w-40", skeleton: <Skeleton className="h-8 w-28" /> },
+];
+
 type PlanAction = {
   plan: MaintenancePlanItem;
   toStatus?: "active" | "suspended" | "terminated";
@@ -42,8 +53,6 @@ type DueAction = {
 
 export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace }): ReactElement {
   const [search, setSearch] = useState("");
-  const [planDialogOpen, setPlanDialogOpen] = useState(false);
-  const [coverageDialogOpen, setCoverageDialogOpen] = useState(false);
   const [coverageDocuments, setCoverageDocuments] = useState<MaintenanceWorkspace["coverages"][number] | null>(null);
   const [coverageFollowUp, setCoverageFollowUp] = useState<MaintenanceWorkspace["coverages"][number] | null>(null);
   const [editPlan, setEditPlan] = useState<MaintenancePlanItem | null>(null);
@@ -85,13 +94,7 @@ export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace 
   return (
     <>
       {live.isStale && <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">Die Wartungsdaten konnten nicht aktualisiert werden.</p>}
-      <div className="flex flex-col gap-3 md:flex-row">
-        <Input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Wartung durchsuchen" placeholder="Plan, Kunde, Einsatzort, Auftrag oder Anlage suchen…" className="flex-1" />
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => setCoverageDialogOpen(true)}><FileCheck2 className="size-4" />Abdeckung erfassen</Button>
-          <Button type="button" onClick={() => setPlanDialogOpen(true)}><Plus className="size-4" />Wartungsplan anlegen</Button>
-        </div>
-      </div>
+      <Input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Wartung durchsuchen" placeholder="Plan, Kunde, Einsatzort, Auftrag oder Anlage suchen…" />
       <Tabs defaultValue="due" className="gap-4">
         <TabsList aria-label="Wartungsbereiche">
           <TabsTrigger value="due">Fälligkeiten <span className="text-xs text-muted-foreground">{openDue.length}</span></TabsTrigger>
@@ -103,7 +106,7 @@ export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace 
             <EmptyState icon={<CalendarClock className="size-8" />} title="Keine offenen Wartungsfälligkeiten" description="Aktiviere einen Wartungsplan, damit Fälligkeiten für die nächsten 18 Monate erzeugt werden." />
           ) : (
             <div className="overflow-hidden rounded-lg border shadow-xs">
-              <div className="hidden grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid"><span>Fälligkeit</span><span>Plan & Anlage</span><span>Kunde & Auftrag</span><span>Aktion</span></div>
+              <div className="hidden grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)_auto] gap-4 border-b bg-muted/30 px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">{MAINTENANCE_DUE_COLUMNS.map((column) => <span key={column.id}>{column.header}</span>)}</div>
               <div className="divide-y">
                 {openDue.map((due) => {
                   const plan = workspace.plans.find((item) => item.id === due.planId);
@@ -174,14 +177,26 @@ export function MaintenanceContent({ initial }: { initial: MaintenanceWorkspace 
           )}
         </TabsContent>
       </Tabs>
-      {planDialogOpen && <MaintenancePlanDialog open onOpenChange={setPlanDialogOpen} clients={workspace.clients} templates={workspace.templates} coverages={workspace.coverages} />}
-      {coverageDialogOpen && <MaintenanceCoverageDialog open onOpenChange={setCoverageDialogOpen} clients={workspace.clients} />}
       {coverageDocuments && <MaintenanceCoverageDocumentsDialog open onOpenChange={(open) => { if (!open) setCoverageDocuments(null); }} coverage={coverageDocuments} />}
       {coverageFollowUp && <MaintenanceCoverageFollowUpDialog open onOpenChange={(open) => { if (!open) setCoverageFollowUp(null); }} coverage={coverageFollowUp} currentActorId={workspace.currentActorId} owners={workspace.followUpOwners} />}
       {editPlan && <MaintenancePlanDialog open onOpenChange={(open) => { if (!open) setEditPlan(null); }} clients={workspace.clients} templates={workspace.templates} coverages={workspace.coverages} initial={editPlan} />}
       {planAction && <MaintenancePlanActionDialog open onOpenChange={(open) => { if (!open) setPlanAction(null); }} {...planAction} />}
       {dueAction && <MaintenanceDueActionDialog open onOpenChange={(open) => { if (!open) setDueAction(null); }} due={dueAction.due} defaultAction={dueAction.defaultAction} plannedDurationMinutes={workspace.plans.find((plan) => plan.id === dueAction.due.planId)?.plannedDurationMinutes ?? 120} serviceCases={workspace.serviceCases.filter((serviceCase) => serviceCase.clientId === dueAction.due.clientId && serviceCase.siteId === dueAction.due.siteId)} />}
     </>
+  );
+}
+
+/** The toolbar actions; the page renders them beside the h2, ahead of the workspace. */
+export function MaintenanceCreateButtons({ clients, templates, coverages }: Pick<MaintenanceWorkspace, "clients" | "templates" | "coverages">): ReactElement {
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+  const [coverageDialogOpen, setCoverageDialogOpen] = useState(false);
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" variant="outline" onClick={() => setCoverageDialogOpen(true)}><FileCheck2 className="size-4" />Abdeckung erfassen</Button>
+      <Button type="button" onClick={() => setPlanDialogOpen(true)}><Plus className="size-4" />Wartungsplan anlegen</Button>
+      {planDialogOpen && <MaintenancePlanDialog open onOpenChange={setPlanDialogOpen} clients={clients} templates={templates} coverages={coverages} />}
+      {coverageDialogOpen && <MaintenanceCoverageDialog open onOpenChange={setCoverageDialogOpen} clients={clients} />}
+    </div>
   );
 }
 

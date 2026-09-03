@@ -1,28 +1,28 @@
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// Mirrors the manager job detail. Employees get the field work pack at the
+// same route (one wider column instead of two), so for them this loading
+// state is a deliberate approximation: the role is only known once the data
+// boundary resolves.
 export default function JobDetailLoading() {
   return (
-    <div className="flex h-full flex-col">
-      {/* Header skeleton */}
-      <div className="border-b px-4 py-3 sm:px-6 sm:py-4">
-        <div className="mb-2 flex items-center gap-1.5">
-          <Skeleton className="size-4" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="size-3.5" />
-          <Skeleton className="h-4 w-24" />
-        </div>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-7 w-48 sm:h-8" />
+    <PageShell>
+      <PageHeader
+        breadcrumbs={[{ label: 'Aufträge', href: '/auftraege' }]}
+        title={<Skeleton className="h-7 w-48 sm:h-8" />}
+        badges={
+          <>
             <Skeleton className="h-5 w-24 rounded-full" />
             <Skeleton className="h-5 w-14 rounded-full" />
-          </div>
-          <Skeleton className="h-8 w-8" />
-        </div>
-      </div>
+          </>
+        }
+        actions={<Skeleton className="size-8" />}
+      />
 
       {/* Two-column layout skeleton */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1fr]">
           {/* Left column */}
           <div className="space-y-6">
@@ -79,7 +79,7 @@ export default function JobDetailLoading() {
             <Skeleton className="h-24 w-full rounded-lg" />
           </div>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

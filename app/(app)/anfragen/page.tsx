@@ -12,6 +12,9 @@ import {
   type RequestListEntry,
 } from '@/components/anfragen/anfragen-content';
 import { CreateRequestDialog } from '@/components/anfragen/create-request-dialog';
+import { AnfragenContentSkeleton } from '@/components/loading-states/anfragen-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { OrgRole } from '@/lib/members/actions';
 import {
@@ -155,12 +158,14 @@ export default async function AnfragenPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Anfragen</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Anfragen" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -174,26 +179,21 @@ export default async function AnfragenPage() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4">
-        <h1 className="text-xl font-bold sm:text-2xl">Anfragen</h1>
-        <Suspense fallback={<Skeleton className="h-9 w-36 rounded-md" />}>
-          <CreateRequestDialogData activeOrgId={activeOrgId} />
-        </Suspense>
-      </header>
+    <PageShell>
+      <PageHeader
+        title="Anfragen"
+        actions={
+          <Suspense fallback={<Skeleton className="h-9 w-32" />}>
+            <CreateRequestDialogData activeOrgId={activeOrgId} />
+          </Suspense>
+        }
+      />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <Suspense
-          fallback={
-            <div className="space-y-2">
-              <Skeleton className="h-9 w-72" />
-              <Skeleton className="h-40 w-full" />
-            </div>
-          }
-        >
+      <PageBody>
+        <Suspense fallback={<AnfragenContentSkeleton />}>
           <AnfragenData activeOrgId={activeOrgId} />
         </Suspense>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

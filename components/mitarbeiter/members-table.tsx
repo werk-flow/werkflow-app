@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MemberActionsMenu } from './member-actions-menu';
 import { StatusBadge } from './status-badge';
@@ -89,7 +90,7 @@ interface MembersTableProps {
 // Mobile card skeleton - matches exact card structure
 function MemberCardSkeleton() {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <ListRow skeleton interactive>
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <Skeleton className="h-[20px] w-[120px]" />
@@ -101,14 +102,14 @@ function MemberCardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-8 w-8 rounded shrink-0" />
-    </div>
+    </ListRow>
   );
 }
 
 // Desktop table row skeleton - matches exact cell structure
 function MemberRowSkeleton({ showActions }: { showActions: boolean }) {
   return (
-    <TableRow>
+    <TableRow skeleton interactive>
       <TableCell className="font-medium">
         <Skeleton className="h-5 w-28" />
       </TableCell>
@@ -173,13 +174,13 @@ function MemberCard({
   const router = useRouter();
 
   return (
-    <div
-      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+    <ListRow
+      interactive
       onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
     >
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2">
-          <p className="font-medium truncate text-sm">
+          <p className="min-w-0 font-medium truncate text-sm">
             {member.first_name || member.last_name
               ? `${member.first_name} ${member.last_name}`.trim()
               : '—'}
@@ -217,7 +218,7 @@ function MemberCard({
           />
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          <span className="truncate">{member.email}</span>
+          <span className="min-w-0 max-w-full truncate">{member.email}</span>
           <span className="text-muted-foreground/60">·</span>
           <span>
             Beigetreten:{' '}
@@ -244,7 +245,7 @@ function MemberCard({
           />
         </div>
       )}
-    </div>
+    </ListRow>
   );
 }
 
@@ -386,7 +387,7 @@ export function MembersTable({
               return (
                 <TableRow
                   key={member.user_id}
-                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  interactive
                   onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
                 >
                   <TableCell className="font-medium">

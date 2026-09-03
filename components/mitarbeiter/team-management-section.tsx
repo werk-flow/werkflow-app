@@ -174,7 +174,7 @@ export function TeamManagementSection({
           </p>
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-[1fr_1.5fr_auto]">
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="new-team-name">Name</Label>
             <Input
               id="new-team-name"
@@ -184,7 +184,7 @@ export function TeamManagementSection({
               maxLength={120}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="new-team-description">
               Beschreibung (optional)
             </Label>
@@ -193,7 +193,7 @@ export function TeamManagementSection({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Kurzer operativer Zweck"
-              className="min-h-9"
+              className="min-h-9 min-w-0"
               maxLength={1000}
             />
           </div>
@@ -237,7 +237,7 @@ export function TeamManagementSection({
                   data-testid="team-card"
                   data-team-name={team.name}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Users className="size-4 text-muted-foreground" />
@@ -262,7 +262,7 @@ export function TeamManagementSection({
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex flex-wrap gap-1">
                       {editingTeamId === team.id ? (
                         <>
                           <Button

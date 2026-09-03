@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { Plus } from 'lucide-react';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
@@ -19,6 +20,9 @@ import {
 } from '@/lib/jobs/types';
 import { AuftraegeContent } from '@/components/auftraege/auftraege-content';
 import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
+import { PageActionButton, PageActionProvider } from '@/components/shared/page-action';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import type { OrgMemberOption } from '@/components/auftraege/employee-multi-select';
@@ -66,13 +70,10 @@ async function AuftraegeData({
     if (jobsResult.error) {
       console.error('Error fetching jobs:', jobsResult.error);
       return (
-        <div className="flex h-full flex-col p-6">
-          <h1 className="text-2xl font-bold">Aufträge</h1>
-          <p className="mt-4 text-destructive">
-            Fehler beim Laden der Aufträge:{' '}
-            {jobsResult.error.message || 'Unbekannter Fehler'}
-          </p>
-        </div>
+        <p className="text-destructive">
+          Fehler beim Laden der Aufträge:{' '}
+          {jobsResult.error.message || 'Unbekannter Fehler'}
+        </p>
       );
     }
 
@@ -260,12 +261,14 @@ export default async function AuftraegePage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Aufträge</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Aufträge" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -278,28 +281,47 @@ export default async function AuftraegePage() {
     user.id
   );
 
+  // The header and its create action paint before the list data; the create
+  // dialog itself lives in AuftraegeContent because it needs the loaded lists,
+  // and PageActionProvider shares the open flag across that boundary.
   return (
-    <>
-      <Suspense fallback={null}>
-        <UrlFlashBanner
-          paramKey="deleted_job"
-          messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
+    <PageActionProvider>
+      <PageShell>
+        <Suspense fallback={null}>
+          <UrlFlashBanner
+            paramKey="deleted_job"
+            messageTemplate='Auftrag „{name}" wurde erfolgreich gelöscht.'
+          />
+        </Suspense>
+        <Suspense fallback={null}>
+          <UrlFlashBanner
+            paramKey="deleted_project"
+            messageTemplate='Projekt „{name}" wurde erfolgreich gelöscht.'
+          />
+        </Suspense>
+        <PageHeader
+          title="Aufträge"
+          actions={
+            isAdminOrManager ? (
+              <PageActionButton className="gap-2">
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">Erstellen</span>
+              </PageActionButton>
+            ) : undefined
+          }
         />
-      </Suspense>
-      <Suspense fallback={null}>
-        <UrlFlashBanner
-          paramKey="deleted_project"
-          messageTemplate='Projekt „{name}" wurde erfolgreich gelöscht.'
-        />
-      </Suspense>
-      <Suspense fallback={<AuftraegeContentSkeleton />}>
-        <AuftraegeData
-          activeOrgId={activeOrgId}
-          userId={user.id}
-          isAdminOrManager={isAdminOrManager}
-          initialVisibleColumns={visibleColumns}
-        />
-      </Suspense>
-    </>
+
+        <PageBody>
+          <Suspense fallback={<AuftraegeContentSkeleton />}>
+            <AuftraegeData
+              activeOrgId={activeOrgId}
+              userId={user.id}
+              isAdminOrManager={isAdminOrManager}
+              initialVisibleColumns={visibleColumns}
+            />
+          </Suspense>
+        </PageBody>
+      </PageShell>
+    </PageActionProvider>
   );
 }

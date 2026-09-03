@@ -13,6 +13,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { ListRow } from '@/components/ui/list-row';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -273,7 +274,7 @@ function RowSkeleton({
   visibleColumns: AuftraegeColumnId[];
 }) {
   return (
-    <TableRow>
+    <TableRow skeleton interactive>
       <TableCell className="w-[36px]"><Skeleton className="size-4" /></TableCell>
       {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
         <TableCell><Skeleton className="h-5 w-24" /></TableCell>
@@ -303,7 +304,7 @@ function RowSkeleton({
 
 function CardSkeleton() {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-lg border bg-card px-3 py-2.5">
+    <ListRow skeleton interactive className="items-start">
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
           <Skeleton className="h-3 w-20" />
@@ -320,7 +321,7 @@ function CardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-8 w-8 shrink-0 rounded" />
-    </div>
+    </ListRow>
   );
 }
 
@@ -362,10 +363,7 @@ function StandaloneJobRow({
   const detailHref = `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
 
   return (
-    <TableRow
-      className="cursor-pointer transition-colors hover:bg-accent/50"
-      onClick={() => router.push(detailHref)}
-    >
+    <TableRow interactive onClick={() => router.push(detailHref)}>
       <TableCell className="w-[36px]" />
       {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
         <TableCell className="font-mono text-xs text-muted-foreground">
@@ -488,7 +486,8 @@ function ProjectRow({
   return (
     <>
       <TableRow
-        className="cursor-pointer bg-muted/30 transition-colors hover:bg-accent/50"
+        interactive
+        className="bg-muted/30"
         onClick={() => router.push(projectHref)}
       >
         <TableCell className="w-[36px] pr-0" onClick={(e) => e.stopPropagation()}>
@@ -577,7 +576,8 @@ function ProjectRow({
           return (
             <TableRow
               key={job.id}
-              className="cursor-pointer bg-muted/10 transition-colors hover:bg-accent/50"
+              interactive
+              className="bg-muted/10"
               onClick={() => router.push(childHref)}
             >
               <TableCell className="w-[36px]" />
@@ -687,11 +687,9 @@ function JobCard({
     : `/auftraege/${encodeURIComponent(job.jobNumber!)}`;
 
   return (
-    <div
-      className={cn(
-        'flex cursor-pointer items-start justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50',
-        indented && 'ml-6'
-      )}
+    <ListRow
+      interactive
+      className={cn('items-start', indented && 'ml-6')}
       onClick={() => router.push(detailHref)}
     >
       <div className="min-w-0 flex-1 space-y-1.5">
@@ -744,7 +742,7 @@ function JobCard({
           />
         </div>
       )}
-    </div>
+    </ListRow>
   );
 }
 
@@ -806,8 +804,9 @@ function ProjectCard({
 
   return (
     <div>
-      <div
-        className="flex cursor-pointer items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 transition-colors hover:bg-accent/50"
+      <ListRow
+        interactive
+        className="items-start gap-2 bg-muted/30"
         onClick={() => router.push(projectHref)}
       >
         <button
@@ -880,7 +879,7 @@ function ProjectCard({
             />
           </div>
         )}
-      </div>
+      </ListRow>
 
       {expanded && childJobs.length > 0 && (
         <div className="mt-1 space-y-1">

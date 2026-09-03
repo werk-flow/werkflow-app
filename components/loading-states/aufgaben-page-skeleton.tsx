@@ -1,3 +1,5 @@
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function AufgabenContentSkeleton() {
@@ -13,14 +15,11 @@ export function AufgabenContentSkeleton() {
 
 export function AufgabenPageSkeleton() {
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4">
-        <Skeleton className="h-8 w-32" />
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell>
+      <PageHeader title="Aufgaben" />
+      <PageBody>
         <AufgabenContentSkeleton />
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

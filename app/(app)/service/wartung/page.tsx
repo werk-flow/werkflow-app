@@ -1,11 +1,61 @@
+import { cache, Suspense } from "react";
 import { redirect } from "next/navigation";
 
-import { MaintenanceContent } from "@/components/service/maintenance-content";
-import { ServiceNavigation } from "@/components/service/service-navigation";
+import { MaintenanceContentSkeleton } from "@/components/loading-states/maintenance-page-skeleton";
+import {
+  MaintenanceContent,
+  MaintenanceCreateButtons,
+} from "@/components/service/maintenance-content";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getMaintenanceWorkspace } from "@/lib/maintenance/actions";
 
-export default async function MaintenancePage() {
-  const result = await getMaintenanceWorkspace();
+// One request-scoped read shared by the toolbar actions and the workspace, so
+// the static toolbar paints before the data and the workspace still loads once.
+const loadMaintenanceWorkspace = cache(getMaintenanceWorkspace);
+
+export default function MaintenancePage() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Wartung</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Wiederkehrende Wartung pro Einsatzort planen, fällige Arbeit in
+            Aufträge überführen und mit versionierten Nachweisen abschließen.
+          </p>
+        </div>
+        <Suspense
+          fallback={
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-44" />
+              <Skeleton className="h-9 w-48" />
+            </div>
+          }
+        >
+          <MaintenanceActions />
+        </Suspense>
+      </div>
+      <Suspense fallback={<MaintenanceContentSkeleton />}>
+        <MaintenanceWorkspace />
+      </Suspense>
+    </div>
+  );
+}
+
+async function MaintenanceActions() {
+  const result = await loadMaintenanceWorkspace();
+  if (!result.success) return null;
+  return (
+    <MaintenanceCreateButtons
+      clients={result.workspace.clients}
+      templates={result.workspace.templates}
+      coverages={result.workspace.coverages}
+    />
+  );
+}
+
+async function MaintenanceWorkspace() {
+  const result = await loadMaintenanceWorkspace();
   if (!result.success) {
     if (result.error === "not_authorized") redirect("/auftraege");
     if (result.error === "not_authenticated") redirect("/login");
@@ -22,17 +72,5 @@ export default async function MaintenancePage() {
       </p>
     );
   }
-  return (
-    <div className="space-y-6">
-      <ServiceNavigation />
-      <div>
-        <h1 className="text-2xl font-bold">Wartung</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Wiederkehrende Wartung pro Einsatzort planen, fällige Arbeit in
-          Aufträge überführen und mit versionierten Nachweisen abschließen.
-        </p>
-      </div>
-      <MaintenanceContent initial={result.workspace} />
-    </div>
-  );
+  return <MaintenanceContent initial={result.workspace} />;
 }

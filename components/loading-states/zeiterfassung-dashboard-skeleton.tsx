@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function ZeiterfassungDashboardSkeleton() {
   return (
-    <div className="space-y-6 pb-32">
+    <div className="space-y-6">
       <div className="flex flex-col items-center py-8">
         <Skeleton className="h-[260px] w-[260px] rounded-full" />
         <Skeleton className="mt-6 h-6 w-48" />

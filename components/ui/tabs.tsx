@@ -26,7 +26,10 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        'bg-muted/50 inline-flex h-9 w-fit items-center justify-center rounded-md p-0.5 gap-1',
+        // max-w-full + overflow-x-auto: a strip with many tabs scrolls within itself on
+        // phones instead of widening the page (design canon: no page-level
+        // horizontal scroll). justify-start keeps the first tab reachable.
+        'bg-muted/50 inline-flex h-9 w-fit max-w-full items-center justify-start overflow-x-auto rounded-md p-0.5 gap-1 [scrollbar-width:none]',
         className
       )}
       {...props}
@@ -42,7 +45,7 @@ function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all',
+        'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-all',
         'text-muted-foreground hover:text-foreground',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         'disabled:pointer-events-none disabled:opacity-50',

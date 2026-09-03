@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactElement } from "react";
 import {
+  ArrowLeft,
   ArrowRight,
   ExternalLink,
   History,
@@ -243,12 +244,13 @@ export function EquipmentDetailContent({
           <div className="min-w-0">
             <Link
               href="/service/anlagen"
-              className="text-sm text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
-              Service / Anlagen & Geräte
+              <ArrowLeft className="size-4" />
+              Anlagen & Geräte
             </Link>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold">{item.name}</h1>
+              <h2 className="text-xl font-semibold">{item.name}</h2>
               <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
                 {item.archivedAt
                   ? "Archiviert"
@@ -467,7 +469,7 @@ export function EquipmentDetailContent({
               <h2 className="text-base font-semibold">Kunde & Einsatzort</h2>
               <Link
                 href={`/kunden/${encodeURIComponent(item.clientId)}`}
-                className="mt-3 block rounded-md border p-3 transition-colors hover:bg-muted/40"
+                className="mt-3 block rounded-md border p-3 transition-colors hover:bg-accent/50"
               >
                 <span className="block text-sm font-medium">
                   {item.clientName}
@@ -517,7 +519,7 @@ export function EquipmentDetailContent({
                   {item.parent && (
                     <Link
                       href={`/service/anlagen/${item.parent.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted/40"
+                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
                     >
                       <span>Übergeordnet: {item.parent.name}</span>
                       <ArrowRight className="size-4" />
@@ -527,7 +529,7 @@ export function EquipmentDetailContent({
                     <Link
                       key={component.id}
                       href={`/service/anlagen/${component.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted/40"
+                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
                     >
                       <span>Komponente: {component.name}</span>
                       <ArrowRight className="size-4" />
@@ -536,7 +538,7 @@ export function EquipmentDetailContent({
                   {item.predecessor && (
                     <Link
                       href={`/service/anlagen/${item.predecessor.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted/40"
+                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
                     >
                       <span>Vorgänger: {item.predecessor.name}</span>
                       <ArrowRight className="size-4" />
@@ -545,7 +547,7 @@ export function EquipmentDetailContent({
                   {item.successor && (
                     <Link
                       href={`/service/anlagen/${item.successor.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-muted/40"
+                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
                     >
                       <span>Nachfolger: {item.successor.name}</span>
                       <ArrowRight className="size-4" />
@@ -573,7 +575,7 @@ export function EquipmentDetailContent({
                     <div key={link.id} className="flex items-center gap-1">
                       <Link
                         href={link.href}
-                        className="flex min-w-0 flex-1 items-center justify-between rounded-md border p-2 text-sm hover:bg-muted/40"
+                        className="flex min-w-0 flex-1 items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
                       >
                         <span className="truncate">{link.label}</span>
                         <ExternalLink className="size-4 shrink-0" />

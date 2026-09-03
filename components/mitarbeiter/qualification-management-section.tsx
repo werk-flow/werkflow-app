@@ -142,7 +142,7 @@ export function QualificationManagementSection({
           </p>
         </div>
         <Card className="grid gap-3 p-4 md:grid-cols-[180px_1fr_180px_auto]">
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="capability-kind">Art</Label>
             <Select
               value={kind}
@@ -157,7 +157,7 @@ export function QualificationManagementSection({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="capability-name">Name</Label>
             <Input
               id="capability-name"
@@ -167,7 +167,7 @@ export function QualificationManagementSection({
               maxLength={160}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label htmlFor="capability-warning-days">
               Hinweis vorher (Tage)
             </Label>
@@ -245,7 +245,7 @@ export function QualificationManagementSection({
                 data-testid="capability-definition-row"
                 data-capability-name={capability.name}
               >
-                <div>
+                <div className="min-w-0">
                   <p className="font-medium">{capability.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {getCapabilityKindLabel(capability.kind)}
@@ -417,12 +417,13 @@ export function QualificationManagementSection({
               </div>
             </>
           )}
-          <div className="space-y-1.5 md:col-span-2">
+          <div className="min-w-0 space-y-1.5 md:col-span-2">
             <Label htmlFor="qualification-operational-note">
               Operativer Hinweis (optional)
             </Label>
             <Textarea
               id="qualification-operational-note"
+              className="min-w-0"
               value={operationalNote}
               onChange={(event) => setOperationalNote(event.target.value)}
               maxLength={1000}
@@ -534,8 +535,8 @@ export function QualificationManagementSection({
                     data-employee-name={employee.displayName}
                     data-capability-name={definition.name}
                   >
-                    <div className="flex items-start gap-2">
-                      <Award className="mt-0.5 size-4 text-muted-foreground" />
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Award className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                       <div>
                         <p className="font-medium">
                           {definition.name} · {employee.displayName}

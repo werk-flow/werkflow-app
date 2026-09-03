@@ -33,7 +33,7 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 ## Density and layout
 
 - **One page container.** Every authenticated page is `PageShell` → `PageHeader` → `PageBody` (`components/shared/page-shell.tsx`, `page-header.tsx`). The shell's `<main>` has no padding and no scroll region; `PageBody` owns both plus the bottom clearance for the clock button. Hand-rolled columns are lint-banned. One title style (`text-xl font-bold sm:text-2xl`), one header padding.
-- **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as `eyebrow` and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, so the header and nav survive navigation and loading states. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
+- **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as its `h1` title and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, under an `h2` with the subpage name and a toolbar row for the primary action, so the header and nav survive navigation and loading states. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
 - **No page-level horizontal scroll on any viewport.** Below the tablet breakpoint tables render as `ListRow` cards; nothing is cropped to fake compliance — a component that does not fit gets a mobile layout. Named exceptions, each inside its own scroll region with a visible edge: the calendar day and week grids and the signature pad. Tab strips and area navs scroll within themselves. The 375 px viewport audit fails any route whose document or page body is wider than the viewport.
 - Slim, not chunky: tabs are `h-9`, sidebar nav items `py-1.5`, active nav is a quiet neutral fill (`bg-accent` + `font-medium`), never a loud colored pill.
 - Managers (admin/buero) get efficient, scannable density — tables, filters, inline actions. Field workers (employee) get simpler screens with one big, unmissable primary action; touch targets ≥ 44px on their primary flows.
@@ -73,6 +73,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Job multi-assignment | `JobMultiSelect` | `components/auftraege/job-multi-select` |
 | Fixed enum, under ~10 options | shadcn `Select` | `components/ui/select` |
 | Date entry | `DatePicker` | `components/ui/date-picker` |
+| Month entry (`YYYY-MM`, typed or picked; hidden input for forms) | `MonthPicker` | `components/ui/month-picker` |
 | Time entry | `TimeInput` | `components/ui/time-input` |
 | Date + time | `DateTimeField` (a `DatePicker` + `TimeInput` pair over one `YYYY-MM-DDTHH:mm` value) | `components/ui/date-time-field` |
 | Duration in hours | `DurationHoursInput` | `components/ui/duration-hours-input` |
@@ -87,7 +88,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
-Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container. In development, a raw `Select` with more than nine options throws at render.
+Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, or `type="number"` inputs (range, checkbox and radio join the ban when their last native sites are migrated in the forms sweep), no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container. In development, a raw `Select` with more than nine options throws at render.
 
 Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 

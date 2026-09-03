@@ -5,7 +5,6 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowLeft,
   ArrowRightLeft,
   Building2,
   CircleCheck,
@@ -18,6 +17,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -181,35 +182,22 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2 mb-2">
-          <Link href="/anfragen">
-            <ArrowLeft className="size-4" />
-            Zurück zu Anfragen
-          </Link>
-        </Button>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {request.requestNumber && (
-                <span className="font-mono text-sm text-muted-foreground">
-                  {request.requestNumber}
-                </span>
-              )}
-              <RequestStatusBadge status={request.status} />
-              <RequestUrgencyBadge urgency={request.urgency} />
-            </div>
-            <h1 className="mt-1 text-xl font-bold sm:text-2xl">{request.summary}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {REQUEST_CATEGORY_LABELS[request.category]} ·{' '}
-              {REQUEST_SOURCE_LABELS[request.source]} · Eingegangen am{' '}
-              {formatDateTime(request.receivedAt)}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap gap-2">
+    <PageShell>
+      <DetailPageHeader
+        breadcrumbs={[
+          { label: 'Anfragen', href: '/anfragen' },
+          { label: request.requestNumber || 'Anfrage' },
+        ]}
+        title={request.summary}
+        subtitle={`${REQUEST_CATEGORY_LABELS[request.category]} · ${REQUEST_SOURCE_LABELS[request.source]} · Eingegangen am ${formatDateTime(request.receivedAt)}`}
+        badges={
+          <>
+            <RequestStatusBadge status={request.status} />
+            <RequestUrgencyBadge urgency={request.urgency} />
+          </>
+        }
+        actions={
+          <>
             {isEditable && (
               <>
                 <Button
@@ -265,91 +253,112 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                 Wieder öffnen
               </Button>
             )}
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {data.convertedLink && (
-        <div className="flex items-center gap-2 rounded-lg border bg-card p-4">
-          <CircleCheck className="size-5 shrink-0 text-green-600 dark:text-green-400" />
-          <p className="text-sm">
-            Diese Anfrage wurde umgewandelt:{' '}
-            {data.convertedLink.href ? (
-              <Link
-                href={data.convertedLink.href}
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                {data.convertedLink.label}
-              </Link>
-            ) : (
-              <span className="font-medium">{data.convertedLink.label}</span>
-            )}
-          </p>
-        </div>
-      )}
-
-      {request.status === 'geschlossen' && request.closedReason && (
-        <div className="rounded-lg border bg-card p-4">
-          <p className="text-sm">
-            <span className="font-medium">Ohne Auftrag geschlossen:</span>{' '}
-            {REQUEST_CLOSE_REASON_LABELS[request.closedReason]}
-            {request.closedAt ? ` (${formatDateTime(request.closedAt)})` : ''}
-          </p>
-          {request.closedNote && (
-            <p className="mt-1 text-sm text-muted-foreground">{request.closedNote}</p>
+      <PageBody maxWidth="content">
+        <div className="space-y-4">
+          {data.convertedLink && (
+            <div className="flex items-center gap-2 rounded-lg border bg-card p-4">
+              <CircleCheck className="size-5 shrink-0 text-green-600 dark:text-green-400" />
+              <p className="text-sm">
+                Diese Anfrage wurde umgewandelt:{' '}
+                {data.convertedLink.href ? (
+                  <Link
+                    href={data.convertedLink.href}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {data.convertedLink.label}
+                  </Link>
+                ) : (
+                  <span className="font-medium">{data.convertedLink.label}</span>
+                )}
+              </p>
+            </div>
           )}
-        </div>
-      )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Customer / caller context */}
-        <div className="rounded-lg border bg-card p-4 sm:p-5">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            <Building2 className="size-4" />
-            Kunde
-          </h2>
-          {request.clientId && data.clientName ? (
-            <div className="mt-3 space-y-1.5 text-sm">
-              <Link
-                href={`/kunden/${request.clientId}`}
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                {data.clientName}
-              </Link>
-              {data.siteLabel && (
-                <p className="text-muted-foreground">
-                  <span className="font-medium text-foreground">Einsatzort:</span>{' '}
-                  {data.siteLabel}
-                </p>
+          {request.status === 'geschlossen' && request.closedReason && (
+            <div className="rounded-lg border bg-card p-4">
+              <p className="text-sm">
+                <span className="font-medium">Ohne Auftrag geschlossen:</span>{' '}
+                {REQUEST_CLOSE_REASON_LABELS[request.closedReason]}
+                {request.closedAt ? ` (${formatDateTime(request.closedAt)})` : ''}
+              </p>
+              {request.closedNote && (
+                <p className="mt-1 text-sm text-muted-foreground">{request.closedNote}</p>
               )}
-              {data.contactLabel && (
-                <p className="text-muted-foreground">
-                  <span className="font-medium text-foreground">Ansprechpartner:</span>{' '}
-                  {data.contactLabel}
-                  {data.contactPhone && (
-                    <>
-                      {' · '}
-                      <a
-                        href={`tel:${data.contactPhone.replace(/[^\d+]/g, '')}`}
-                        className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
-                      >
-                        <Phone className="size-3.5" />
-                        {data.contactPhone}
-                      </a>
-                    </>
+            </div>
+          )}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Customer / caller context */}
+            <div className="rounded-lg border bg-card p-4 sm:p-5">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <Building2 className="size-4" />
+                Kunde
+              </h2>
+              {request.clientId && data.clientName ? (
+                <div className="mt-3 space-y-1.5 text-sm">
+                  <Link
+                    href={`/kunden/${request.clientId}`}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    {data.clientName}
+                  </Link>
+                  {data.siteLabel && (
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-foreground">Einsatzort:</span>{' '}
+                      {data.siteLabel}
+                    </p>
                   )}
-                </p>
-              )}
-              {(request.callerName ||
-                request.callerPhone ||
-                request.callerEmail ||
-                request.callerAddress) && (
-                <div className="mt-3 border-t pt-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Erfasste Anruferdaten
-                  </p>
-                  <div className="mt-1 space-y-1">
-                    {request.callerName && <p>{request.callerName}</p>}
+                  {data.contactLabel && (
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-foreground">Ansprechpartner:</span>{' '}
+                      {data.contactLabel}
+                      {data.contactPhone && (
+                        <>
+                          {' · '}
+                          <a
+                            href={`tel:${data.contactPhone.replace(/[^\d+]/g, '')}`}
+                            className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline"
+                          >
+                            <Phone className="size-3.5" />
+                            {data.contactPhone}
+                          </a>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {(request.callerName ||
+                    request.callerPhone ||
+                    request.callerEmail ||
+                    request.callerAddress) && (
+                    <div className="mt-3 border-t pt-3">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Erfasste Anruferdaten
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        {request.callerName && <p>{request.callerName}</p>}
+                        {request.callerPhone && (
+                          <p className="text-muted-foreground">{request.callerPhone}</p>
+                        )}
+                        {request.callerEmail && (
+                          <p className="text-muted-foreground">{request.callerEmail}</p>
+                        )}
+                        {request.callerAddress && (
+                          <p className="text-muted-foreground">{request.callerAddress}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">
+                      {request.callerName || 'Unbekannte/r Anrufer/in'}
+                    </p>
                     {request.callerPhone && (
                       <p className="text-muted-foreground">{request.callerPhone}</p>
                     )}
@@ -359,124 +368,107 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
                     {request.callerAddress && (
                       <p className="text-muted-foreground">{request.callerAddress}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Noch keinem Kunden zugeordnet.
+                    </p>
                   </div>
+                  {isEditable && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setMatchOpen(true)}
+                        disabled={isPending}
+                      >
+                        Vorhandenem Kunden zuordnen
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handlePromote}
+                        disabled={isPending || !request.callerName}
+                      >
+                        {isPending ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <UserPlus className="size-4" />
+                        )}
+                        Als neuen Kunden anlegen
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          ) : (
-            <div className="mt-3 space-y-3">
-              <div className="space-y-1 text-sm">
-                <p className="font-medium">
-                  {request.callerName || 'Unbekannte/r Anrufer/in'}
-                </p>
-                {request.callerPhone && (
-                  <p className="text-muted-foreground">{request.callerPhone}</p>
-                )}
-                {request.callerEmail && (
-                  <p className="text-muted-foreground">{request.callerEmail}</p>
-                )}
-                {request.callerAddress && (
-                  <p className="text-muted-foreground">{request.callerAddress}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Noch keinem Kunden zugeordnet.
-                </p>
-              </div>
-              {isEditable && (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setMatchOpen(true)}
-                    disabled={isPending}
-                  >
-                    Vorhandenem Kunden zuordnen
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handlePromote}
-                    disabled={isPending || !request.callerName}
-                  >
-                    {isPending ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <UserPlus className="size-4" />
-                    )}
-                    Als neuen Kunden anlegen
-                  </Button>
+
+            {/* Request facts */}
+            <div className="rounded-lg border bg-card p-4 sm:p-5">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Details
+              </h2>
+              <dl className="mt-3 space-y-1.5 text-sm">
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Zuständig</dt>
+                  <dd>{data.assigneeName || '—'}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Kategorie</dt>
+                  <dd>{REQUEST_CATEGORY_LABELS[request.category]}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Eingang über</dt>
+                  <dd>{REQUEST_SOURCE_LABELS[request.source]}</dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Eingegangen</dt>
+                  <dd>{formatDateTime(request.receivedAt)}</dd>
+                </div>
+              </dl>
+              {request.details && (
+                <div className="mt-3 border-t pt-3">
+                  <p className="whitespace-pre-wrap text-sm">{request.details}</p>
                 </div>
               )}
             </div>
-          )}
+          </div>
+
+          <ContextualDocumentsSection
+            title="Dokumente & Bilder"
+            description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
+            documents={data.documents}
+            documentTarget={{ kind: "request", requestId: request.id }}
+            canUpload={isEditable}
+            canManage
+          />
+
+          {/* History */}
+          <div className="rounded-lg border bg-card p-4 sm:p-5">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <History className="size-4" />
+              Verlauf
+            </h2>
+            {data.events.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">Noch keine Einträge.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {data.events.map((event) => (
+                  <li key={event.id} className="flex items-baseline gap-2 text-sm">
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {formatDateTime(event.createdAt)}
+                    </span>
+                    <span>
+                      {EVENT_LABELS[event.eventType] ?? event.eventType}
+                      {event.actorName ? (
+                        <span className="text-muted-foreground"> · {event.actorName}</span>
+                      ) : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-
-        {/* Request facts */}
-        <div className="rounded-lg border bg-card p-4 sm:p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Details
-          </h2>
-          <dl className="mt-3 space-y-1.5 text-sm">
-            <div className="flex gap-2">
-              <dt className="w-28 shrink-0 text-muted-foreground">Zuständig</dt>
-              <dd>{data.assigneeName || '—'}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-28 shrink-0 text-muted-foreground">Kategorie</dt>
-              <dd>{REQUEST_CATEGORY_LABELS[request.category]}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-28 shrink-0 text-muted-foreground">Eingang über</dt>
-              <dd>{REQUEST_SOURCE_LABELS[request.source]}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-28 shrink-0 text-muted-foreground">Eingegangen</dt>
-              <dd>{formatDateTime(request.receivedAt)}</dd>
-            </div>
-          </dl>
-          {request.details && (
-            <div className="mt-3 border-t pt-3">
-              <p className="whitespace-pre-wrap text-sm">{request.details}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <ContextualDocumentsSection
-        title="Dokumente & Bilder"
-        description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
-        documents={data.documents}
-        documentTarget={{ kind: "request", requestId: request.id }}
-        canUpload={isEditable}
-        canManage
-      />
-
-      {/* History */}
-      <div className="rounded-lg border bg-card p-4 sm:p-5">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          <History className="size-4" />
-          Verlauf
-        </h2>
-        {data.events.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">Noch keine Einträge.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {data.events.map((event) => (
-              <li key={event.id} className="flex items-baseline gap-2 text-sm">
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                  {formatDateTime(event.createdAt)}
-                </span>
-                <span>
-                  {EVENT_LABELS[event.eventType] ?? event.eventType}
-                  {event.actorName ? (
-                    <span className="text-muted-foreground"> · {event.actorName}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      </PageBody>
 
       <ConvertRequestDialog
         request={request}
@@ -564,6 +556,6 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

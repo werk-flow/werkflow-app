@@ -42,7 +42,7 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
       actorUserId: world.users.admin.id,
       validFrom: period.start,
     });
-    await adminPage.goto("/einstellungen/zeiterfassung");
+    await adminPage.goto("/zeiterfassung/einstellungen");
     const timeAccountSettings = adminPage
       .getByRole("heading", { name: "Zeitregeln & Lohnexport" })
       .locator("xpath=ancestor::main[1]");

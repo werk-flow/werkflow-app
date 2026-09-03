@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { OwnQualificationOverview } from '@/components/mitarbeiter/own-qualification-overview';
 import { ErrorText } from '@/components/ui/error-text';
 import { QualifikationenContentSkeleton } from '@/components/loading-states/qualifikationen-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedUser } from '@/lib/data/cached';
 import { getOwnQualificationProfile } from '@/lib/qualifications/actions';
 
@@ -24,18 +26,16 @@ async function QualificationsData() {
 
 export default function QualificationsPage() {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="shrink-0 border-b bg-background px-4 py-3 sm:px-6 sm:py-4">
-        <h1 className="text-xl font-bold sm:text-2xl">Qualifikationen</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Deine Teams, Fähigkeiten und Zertifizierungen im Überblick.
-        </p>
-      </header>
-      <main className="flex-1 overflow-auto p-4 sm:p-6">
+    <PageShell>
+      <PageHeader
+        title="Qualifikationen"
+        subtitle="Deine Teams, Fähigkeiten und Zertifizierungen im Überblick."
+      />
+      <PageBody>
         <Suspense fallback={<QualifikationenContentSkeleton />}>
           <QualificationsData />
         </Suspense>
-      </main>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

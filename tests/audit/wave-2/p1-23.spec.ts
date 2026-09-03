@@ -107,7 +107,7 @@ test.describe("P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2", () => {
         employees.find((employee) => employee.userId === world.users.employee.id)?.id,
     );
     expect(accountBefore).toBeDefined();
-    await bueroPage.goto("/einstellungen/zeiterfassung");
+    await bueroPage.goto("/zeiterfassung/einstellungen");
     const bueroSettings = bueroPage
       .getByRole("heading", { name: "Zeitregeln & Lohnexport" })
       .locator("xpath=ancestor::main[1]");

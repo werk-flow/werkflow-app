@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { resolveActiveOrgId } from "@/lib/org/cookies";
 import { getCachedUser, getCachedMemberships } from "@/lib/data/cached";
 import { getCachedOrganizationSettings } from "@/lib/data/cached";
-import { ZeiterfassungHeader } from "@/components/zeiterfassung/zeiterfassung-header";
+import { ManualEntryButton } from "@/components/zeiterfassung/manual-entry-button";
 import { ZeiterfassungContent } from "@/components/zeiterfassung/zeiterfassung-content";
 import { ZeiterfassungContentSkeleton } from "@/components/loading-states/zeiterfassung-content-skeleton";
 import {
@@ -25,7 +25,6 @@ import {
   getWeekBounds,
 } from "@/lib/time-tracking/weekly";
 import { getEffectiveResponsibilityHolderForActor } from "@/lib/responsibilities/server";
-import { getTimeAccountAccess } from "@/lib/time-accounts/actions";
 
 function createDefaultClockState(
   activeOrgId: string,
@@ -190,20 +189,16 @@ export default async function ZeiterfassungPage({
     redirect("/login");
   }
 
-  const [activeOrgId, memberships, timeAccountAccess] = await Promise.all([
+  const [activeOrgId, memberships] = await Promise.all([
     resolveActiveOrgId(cookieStore, user.id),
     getCachedMemberships(user.id),
-    getTimeAccountAccess(),
   ]);
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Zeiterfassung</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <p className="text-muted-foreground">
+        Bitte wähle zuerst eine Organisation aus.
+      </p>
     );
   }
 
@@ -218,25 +213,20 @@ export default async function ZeiterfassungPage({
     currentUserRole === "admin" || currentUserRole === "buero";
   const isAdmin = currentUserRole === "admin";
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <ZeiterfassungHeader
-        showManagement={timeAccountAccess.canManage}
-        showSettings={isAdmin}
-        showAdjustmentManagement={timeAccountAccess.canProposeAdjustments}
-      />
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <Suspense fallback={<ZeiterfassungContentSkeleton />}>
-          <ZeiterfassungData
-            activeOrgId={activeOrgId}
-            userId={user.id}
-            isAdminOrManager={isAdminOrManager}
-            isAdmin={isAdmin}
-            currentUserRole={currentUserRole}
-            tab={tab}
-          />
-        </Suspense>
+    <>
+      <div className="mb-4 flex items-center justify-end">
+        <ManualEntryButton />
       </div>
-    </div>
+      <Suspense fallback={<ZeiterfassungContentSkeleton />}>
+        <ZeiterfassungData
+          activeOrgId={activeOrgId}
+          userId={user.id}
+          isAdminOrManager={isAdminOrManager}
+          isAdmin={isAdmin}
+          currentUserRole={currentUserRole}
+          tab={tab}
+        />
+      </Suspense>
+    </>
   );
 }

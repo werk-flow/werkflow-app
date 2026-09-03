@@ -3,7 +3,9 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { DocumentLibraryContent } from '@/components/dokumente/document-library-content';
-import { DokumentePageSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
+import { DokumenteContentSkeleton } from '@/components/loading-states/dokumente-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import {
   getDocumentFolderOptions,
@@ -203,12 +205,14 @@ export default async function DokumentePage({
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Dokumente</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Dokumente" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -229,10 +233,13 @@ export default async function DokumentePage({
   const linkFilter = getDocumentLinkFilter(resolvedSearchParams.link);
   const initialDocumentId = resolvedSearchParams.document?.trim() || null;
 
+  // The library renders its own title block inside the body
+  // (document-library-content.tsx), so the page contributes column and scroll
+  // region only.
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        <Suspense fallback={<DokumentePageSkeleton />}>
+    <PageShell>
+      <PageBody>
+        <Suspense fallback={<DokumenteContentSkeleton />}>
           <DokumenteData
             folderId={folderId}
             view={view}
@@ -243,7 +250,7 @@ export default async function DokumentePage({
             initialDocumentId={initialDocumentId}
           />
         </Suspense>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

@@ -5,6 +5,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Search, Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { filterByQuery } from '@/lib/ui/search';
+import { useFieldContext } from '@/components/ui/field';
 
 export interface SearchableSelectOption {
   value: string;
@@ -119,6 +120,8 @@ export function SearchableSelect({
   const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const field = useFieldContext();
+  const resolvedId = id ?? field?.controlId;
 
   React.useEffect(() => {
     if (open) {
@@ -159,11 +162,13 @@ export function SearchableSelect({
     >
       <PopoverPrimitive.Trigger asChild>
         <button
-          id={id}
+          id={resolvedId}
           ref={triggerRef}
           type="button"
           role="combobox"
           aria-label={ariaLabel}
+          aria-describedby={field?.describedBy}
+          aria-invalid={field?.invalid || undefined}
           aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"
@@ -328,6 +333,8 @@ export function SearchableSelect({
 }
 
 interface SearchableMultiSelectProps extends SearchableSelectBaseProps {
+  /** Trigger id, so a `Field` label can target it; defaults to the `Field` context id. */
+  id?: string;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   placeholder?: string;
@@ -340,6 +347,7 @@ interface SearchableMultiSelectProps extends SearchableSelectBaseProps {
 }
 
 export function SearchableMultiSelect({
+  id,
   options,
   selectedIds,
   onSelectionChange,
@@ -358,6 +366,8 @@ export function SearchableMultiSelect({
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const field = useFieldContext();
+  const resolvedId = id ?? field?.controlId;
   const listboxId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -406,10 +416,13 @@ export function SearchableMultiSelect({
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <button
+          id={resolvedId}
           ref={triggerRef}
           type="button"
           role="combobox"
           aria-label={ariaLabel}
+          aria-describedby={field?.describedBy}
+          aria-invalid={field?.invalid || undefined}
           aria-controls={listboxId}
           aria-expanded={open}
           aria-haspopup="listbox"

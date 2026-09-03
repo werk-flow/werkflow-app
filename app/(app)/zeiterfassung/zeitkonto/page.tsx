@@ -1,10 +1,6 @@
 import { Clock3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TimeAccountNav } from "@/components/zeiterfassung/time-account-nav";
-import {
-  getTimeAccountAccess,
-  getTimeAccountOverview,
-} from "@/lib/time-accounts/actions";
+import { getTimeAccountOverview } from "@/lib/time-accounts/actions";
 import {
   formatMinutes,
   formatPeriod,
@@ -12,20 +8,14 @@ import {
 } from "@/lib/time-accounts/presentation";
 
 export default async function TimeAccountPage() {
-  const [overview, access] = await Promise.all([
-    getTimeAccountOverview(),
-    getTimeAccountAccess(),
-  ]);
+  const overview = await getTimeAccountOverview();
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Zeitkonto</h1>
-          <p className="text-sm text-muted-foreground">
-            Abgeschlossene Monatswerte und nachvollziehbare Kontobewegungen.
-          </p>
-        </div>
-        <TimeAccountNav {...access} currentPath="/zeiterfassung/zeitkonto" />
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Zeitkonto</h2>
+        <p className="text-sm text-muted-foreground">
+          Abgeschlossene Monatswerte und nachvollziehbare Kontobewegungen.
+        </p>
       </div>
       {!overview.account ? (
         <Card>
@@ -119,6 +109,6 @@ export default async function TimeAccountPage() {
           )}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

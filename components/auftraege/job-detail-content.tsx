@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/dialog';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import {
   MetadataSection,
   type MetadataField,
@@ -1219,7 +1220,7 @@ export function JobDetailContent({
   ];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={
@@ -1281,7 +1282,7 @@ export function JobDetailContent({
         }
       />
 
-      <div className="flex-1 overflow-auto px-4 pb-24 pt-4 sm:px-6 sm:pb-28 sm:pt-6">
+      <PageBody>
         {isAdminOrManager && originRequest && (
           <p className="mb-4 text-sm text-muted-foreground">
             Entstanden aus{' '}
@@ -1729,7 +1730,7 @@ export function JobDetailContent({
             </div>
           </div>
         </div>
-      </div>
+      </PageBody>
 
       {/* Delete Dialog */}
       <AlertDialog
@@ -1897,6 +1898,6 @@ export function JobDetailContent({
         onConfirm={handleQualificationOverride}
       />
       {inlineEditWarningDialog}
-    </div>
+    </PageShell>
   );
 }

@@ -3,7 +3,6 @@ import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { TimeAccountNav } from "@/components/zeiterfassung/time-account-nav";
 import {
   closeTimePeriod,
   decidePeriodFinding,
@@ -54,23 +53,17 @@ export default async function TimePeriodDetailPage({
     (finding) => finding.severity === "close_blocked",
   ).length;
   return (
-    <main className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight capitalize">
-            {formatPeriod(detail.period.startDate)}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {detail.period.startDate} – {detail.period.endDate} ·{" "}
-            {PERIOD_STATE_LABELS[
-              detail.period.state as keyof typeof PERIOD_STATE_LABELS
-            ] ?? detail.period.state}
-          </p>
-        </div>
-        <TimeAccountNav
-          {...access}
-          currentPath={`/zeiterfassung/perioden/${periodId}`}
-        />
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight capitalize">
+          {formatPeriod(detail.period.startDate)}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {detail.period.startDate} – {detail.period.endDate} ·{" "}
+          {PERIOD_STATE_LABELS[
+            detail.period.state as keyof typeof PERIOD_STATE_LABELS
+          ] ?? detail.period.state}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -329,6 +322,6 @@ export default async function TimePeriodDetailPage({
           ))}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function EinstellungenContentSkeleton() {
@@ -12,7 +13,7 @@ export function EinstellungenContentSkeleton() {
 
 export function EinstellungenPageSkeleton() {
   return (
-    <div className="flex h-full flex-col">
+    <PageShell>
       <header className="border-b px-4 py-4 sm:px-6">
         <Skeleton className="h-4 w-28" />
         <Skeleton className="mt-2 h-8 w-64" />
@@ -24,12 +25,12 @@ export function EinstellungenPageSkeleton() {
             <Skeleton key={index} className="h-7 w-full" />
           ))}
         </aside>
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <PageBody>
           <div className="mx-auto w-full max-w-5xl">
             <EinstellungenContentSkeleton />
           </div>
-        </div>
+        </PageBody>
       </div>
-    </div>
+    </PageShell>
   );
 }

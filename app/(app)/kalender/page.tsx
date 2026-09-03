@@ -13,7 +13,9 @@ import { getTimeEntries } from '@/lib/time-tracking/actions';
 import { getPlanningEntries } from '@/lib/planning/actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
-import { KalenderContentSkeleton } from '@/components/loading-states/kalender-content-skeleton';
+import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getOrgMembersForUser, type OrgRole } from '@/lib/members/actions';
 import { toLocalDateString } from '@/lib/utils';
 
@@ -103,12 +105,14 @@ export default async function KalenderPage() {
 
   if (!activeOrgId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h1 className="text-2xl font-bold">Kalender</h1>
-        <p className="mt-4 text-muted-foreground">
-          Bitte wähle zuerst eine Organisation aus.
-        </p>
-      </div>
+      <PageShell>
+        <PageHeader title="Kalender" />
+        <PageBody>
+          <p className="text-muted-foreground">
+            Bitte wähle zuerst eine Organisation aus.
+          </p>
+        </PageBody>
+      </PageShell>
     );
   }
 
@@ -122,8 +126,10 @@ export default async function KalenderPage() {
   const isAdminOrManager =
     currentUserRole === 'admin' || currentUserRole === 'buero';
 
+  // CalendarContainer renders the page shell itself: its header carries the
+  // date navigation and the create action, which are bound to client state.
   return (
-    <Suspense fallback={<KalenderContentSkeleton />}>
+    <Suspense fallback={<KalenderPageSkeleton />}>
       <KalenderData
         activeOrgId={activeOrgId}
         userId={user.id}

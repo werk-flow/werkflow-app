@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useFieldContext } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
 interface TimeInputProps
@@ -33,7 +34,9 @@ function EmptySegmentLine() {
  * for consistent cross-browser behavior (especially Safari).
  */
 const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
-  ({ className, value, onChange, disabled, id, onBlur, onFocus, onKeyDown, ...props }, ref) => {
+  ({ className, value, onChange, disabled, id: idProp, onBlur, onFocus, onKeyDown, ...props }, ref) => {
+    const field = useFieldContext();
+    const id = idProp ?? field?.controlId;
     const containerRef = React.useRef<HTMLDivElement>(null);
     const [activeSegment, setActiveSegment] = React.useState<Segment | null>(
       null

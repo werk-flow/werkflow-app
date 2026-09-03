@@ -6,6 +6,7 @@ import { de } from "react-day-picker/locale";
 
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
+import { useFieldContext } from "@/components/ui/field";
 import {
   Popover,
   PopoverContent,
@@ -53,6 +54,7 @@ export function DatePicker({
   id,
   ariaLabel = "Datum",
 }: DatePickerProps) {
+  const field = useFieldContext();
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [activeSegment, setActiveSegment] = React.useState<Segment | null>(
@@ -306,9 +308,11 @@ export function DatePicker({
   return (
     <div
       ref={containerRef}
-      id={id}
+      id={id ?? field?.controlId}
       role="group"
       aria-label={ariaLabel}
+      aria-describedby={field?.describedBy}
+      data-invalid={field?.invalid || undefined}
       tabIndex={disabled ? -1 : 0}
       onFocus={handleFocus}
       onBlur={handleBlur}

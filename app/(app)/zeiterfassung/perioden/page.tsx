@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { TimeAccountNav } from "@/components/zeiterfassung/time-account-nav";
+import { Field } from "@/components/ui/field";
+import { MonthPicker } from "@/components/ui/month-picker";
 import {
   getTimeAccountAccess,
   getTimePeriods,
@@ -28,18 +28,15 @@ export default async function TimePeriodsPage() {
     getTimeAccountAccess(),
   ]);
   return (
-    <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Abrechnungsperioden
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Kalendermonate in Europe/Berlin. Andere Stichtage bleiben eine
-            spätere Erweiterung.
-          </p>
-        </div>
-        <TimeAccountNav {...access} currentPath="/zeiterfassung/perioden" />
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">
+          Abrechnungsperioden
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Kalendermonate in Europe/Berlin. Andere Stichtage bleiben eine
+          spätere Erweiterung.
+        </p>
       </div>
       {access.canManage ? (
         <Card>
@@ -53,15 +50,13 @@ export default async function TimePeriodsPage() {
               action={prepareTimePeriod}
               className="flex flex-wrap items-end gap-3"
             >
-              <label className="grid gap-1.5 text-sm font-medium">
-                Monat
-                <Input
+              <Field label="Monat" htmlFor="time-period-month" required className="w-40">
+                <MonthPicker
+                  id="time-period-month"
                   name="month"
-                  type="month"
                   defaultValue={defaultMonth()}
-                  required
                 />
-              </label>
+              </Field>
               <Button type="submit">Periode vorbereiten</Button>
             </form>
           </CardContent>
@@ -115,6 +110,6 @@ export default async function TimePeriodsPage() {
           )}
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }

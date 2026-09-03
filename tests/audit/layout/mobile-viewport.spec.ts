@@ -20,6 +20,7 @@ const MANAGER_ROUTES = [
   '/zeiterfassung',
   '/zeiterfassung/zeitkonto',
   '/zeiterfassung/perioden',
+  '/zeiterfassung/einstellungen',
   '/qualifikationen',
   '/anfragen',
   '/auftraege',

@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import {
   MetadataSection,
   type MetadataField,
@@ -404,7 +405,7 @@ export function MitarbeiterDetailContent({
   ];
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <PageShell>
       <DetailPageHeader
         breadcrumbs={breadcrumbs}
         title={fullName}
@@ -481,7 +482,7 @@ export function MitarbeiterDetailContent({
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
           {/* Left Column: Profile + Status */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 2xl:grid-cols-1">
@@ -710,7 +711,7 @@ export function MitarbeiterDetailContent({
             />
           </div>
         </div>
-      </div>
+      </PageBody>
 
       {/* Remove Dialog */}
       <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
@@ -760,6 +761,6 @@ export function MitarbeiterDetailContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

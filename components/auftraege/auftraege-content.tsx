@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Plus, ChevronRight } from 'lucide-react';
+import { RefreshCw, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { usePageAction } from '@/components/shared/page-action';
 import { UnifiedAuftraegeTable } from './unified-auftraege-table';
 import { FilterBar } from './filter-bar';
 import { CreateAuftragProjectDialog } from './create-auftrag-project-dialog';
@@ -150,7 +151,8 @@ export function AuftraegeContent({
   const [archiveSortCol, setArchiveSortCol] = useState<SortColumn>('datum');
   const [archiveSortDir, setArchiveSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  // The create button lives in the page header outside the data boundary.
+  const { open: createDialogOpen, setOpen: setCreateDialogOpen } = usePageAction();
 
   const unifiedEntries = useMemo(
     () => buildUnifiedList(jobs, projects),
@@ -364,23 +366,7 @@ export function AuftraegeContent({
   }, [archiveSortCol]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex items-center justify-between border-b bg-background px-4 py-3 sm:px-6 sm:py-4 sticky top-0 z-10 shrink-0">
-        <h1 className="text-xl font-bold sm:text-2xl">Aufträge</h1>
-        {isAdminOrManager && (
-          <Button
-            size="default"
-            className="gap-2"
-            onClick={() => setCreateDialogOpen(true)}
-          >
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Erstellen</span>
-          </Button>
-        )}
-      </header>
-
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-      <div className="space-y-6 pb-20">
+    <div className="space-y-6">
       {/* Active section */}
       <section>
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -571,8 +557,6 @@ export function AuftraegeContent({
           onProjectCreated={handleProjectCreated}
         />
       )}
-    </div>
-    </div>
     </div>
   );
 }

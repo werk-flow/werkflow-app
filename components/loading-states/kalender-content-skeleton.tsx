@@ -1,26 +1,13 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
+// View tabs strip plus the timeline grid. The grid scrolls inside its own
+// region like the live calendar, so the page body never widens on phones.
 export function KalenderContentSkeleton() {
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold sm:text-2xl">Kalender</h1>
-          <div className="flex items-center gap-1">
-            <Skeleton className="h-8 w-8" />
-            <Skeleton className="h-8 w-8" />
-            <Skeleton className="h-8 w-16 ml-2" />
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-9 w-40" />
-        </div>
-      </header>
-
       <div className="border-b px-4 py-2 sm:px-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-10 w-[340px]" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Skeleton className="h-9 w-full max-w-[340px]" />
           <Skeleton className="h-9 w-32" />
         </div>
       </div>

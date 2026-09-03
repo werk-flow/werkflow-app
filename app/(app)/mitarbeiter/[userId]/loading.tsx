@@ -1,27 +1,19 @@
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function MitarbeiterDetailLoading() {
   return (
-    <div className="flex h-full flex-col">
-      {/* Header skeleton */}
-      <div className="border-b px-4 py-3 sm:px-6 sm:py-4">
-        <div className="mb-2 flex items-center gap-1.5">
-          <Skeleton className="size-4" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="size-3.5" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-7 w-48 sm:h-8" />
-            <Skeleton className="h-5 w-24 rounded-full" />
-          </div>
-          <Skeleton className="h-8 w-8 rounded" />
-        </div>
-        <Skeleton className="mt-1 h-4 w-40" />
-      </div>
+    <PageShell>
+      <PageHeader
+        breadcrumbs={[{ label: 'Mitarbeiter', href: '/mitarbeiter' }]}
+        title={<Skeleton className="h-7 w-48 sm:h-8" />}
+        badges={<Skeleton className="h-5 w-24 rounded-full" />}
+        subtitle={<Skeleton className="h-4 w-40" />}
+        actions={<Skeleton className="size-8" />}
+      />
 
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
+      <PageBody>
         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1fr_1.5fr]">
           {/* Cards: stack on mobile, row on md+, back to stack on 2xl (sidebar) */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 2xl:grid-cols-1">
@@ -107,7 +99,7 @@ export default function MitarbeiterDetailLoading() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

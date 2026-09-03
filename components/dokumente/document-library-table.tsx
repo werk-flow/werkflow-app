@@ -1119,8 +1119,8 @@ export function DocumentLibraryTable({
                       data-state={isSelected ? "selected" : undefined}
                       data-document-selection-preserve="true"
                       data-document-table-folder-drop-id={folder.id}
+                      interactive="select"
                       className={cn(
-                        "group cursor-default transition-colors hover:bg-accent/50",
                         isSelected && "bg-primary/10 hover:bg-primary/15",
                         dragTargetFolderId === folder.id &&
                           "bg-primary/20 outline outline-1 outline-primary/60",
@@ -1226,8 +1226,8 @@ export function DocumentLibraryTable({
                     ref={(node) => setRowRef(item.key, node)}
                     data-state={isSelected ? "selected" : undefined}
                     data-document-selection-preserve="true"
+                    interactive="select"
                     className={cn(
-                      "group cursor-default transition-colors hover:bg-accent/50",
                       isSelected && "bg-primary/10 hover:bg-primary/15",
                       draggedItem &&
                         "cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent",

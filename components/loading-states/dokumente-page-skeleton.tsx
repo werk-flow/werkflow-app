@@ -1,3 +1,4 @@
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -207,13 +208,18 @@ export function DokumenteTabContentSkeleton({
   return <DokumenteTableRowsSkeleton rowCount={10} />;
 }
 
-export function DokumentePageSkeleton() {
+// Same geometry as the library body in document-library-content.tsx, which
+// owns the title block; the page shell supplies padding and scroll.
+export function DokumenteContentSkeleton() {
   return (
-    <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-4 rounded-lg p-2">
+    <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Skeleton className="h-7 w-32 sm:h-8" />
-          <Skeleton className="mt-2 h-4 w-96 max-w-full" />
+          <h1 className="text-xl font-bold sm:text-2xl">Dokumente</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Organisiere Dateien, Bilder, Verträge und Auftragsdokumente an einem
+            Ort.
+          </p>
         </div>
         <Skeleton className="h-10 w-52 sm:mt-1" />
       </header>
@@ -247,5 +253,15 @@ export function DokumentePageSkeleton() {
 
       <DokumenteTableRowsSkeleton rowCount={9} />
     </div>
+  );
+}
+
+export function DokumentePageSkeleton() {
+  return (
+    <PageShell>
+      <PageBody>
+        <DokumenteContentSkeleton />
+      </PageBody>
+    </PageShell>
   );
 }

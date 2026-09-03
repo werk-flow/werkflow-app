@@ -7,9 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { redirect } from "next/navigation";
 import { TimeAccountDateField } from "@/components/zeiterfassung/time-account-date-field";
-import { TimeAccountNav } from "@/components/zeiterfassung/time-account-nav";
 import {
   assignEmployeeTimePolicy,
   createDefaultPayrollMapping,
@@ -108,39 +106,22 @@ function AdjustmentRequestForms({
   ));
 }
 
-export default async function TimeAccountSettingsPage({
-  embedded = false,
-}: {
-  embedded?: boolean;
-}) {
-  if (!embedded) redirect("/einstellungen/zeiterfassung");
+export default async function TimeAccountSettingsPage() {
   const [settings, access] = await Promise.all([
     getTimeAccountSettings(),
     getTimeAccountAccess(),
   ]);
-  const content = (
-    <>
-      {embedded ? (
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      <div>
         <h2 className="text-xl font-semibold tracking-tight">
           Zeitregeln & Lohnexport
         </h2>
-      ) : (
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Zeitregeln & Lohnexport
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Organisationseinstellungen mit versionierter, datumswirksamer
-              Historie.
-            </p>
-          </div>
-          <TimeAccountNav
-            {...access}
-            currentPath="/zeiterfassung/einstellungen"
-          />
-        </div>
-      )}
+        <p className="text-sm text-muted-foreground">
+          Organisationseinstellungen mit versionierter, datumswirksamer
+          Historie.
+        </p>
+      </div>
       {!access.isAdmin ? (
         access.canProposeAdjustments ? (
           <Card>
@@ -450,14 +431,6 @@ export default async function TimeAccountSettingsPage({
           </Card>
         </>
       )}
-    </>
-  );
-  const className = embedded
-    ? "w-full space-y-6"
-    : "mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6";
-  return embedded ? (
-    <section className={className}>{content}</section>
-  ) : (
-    <main className={className}>{content}</main>
+    </div>
   );
 }

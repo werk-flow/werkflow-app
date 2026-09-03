@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ListRow } from '@/components/ui/list-row';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import {
@@ -57,7 +58,10 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { INVENTORY_ITEM_COLUMNS } from '@/components/inventar/inventory-table-columns';
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
+import { PageHeader } from '@/components/shared/page-header';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { usePendingTask } from '@/hooks/use-server-action';
@@ -686,20 +690,12 @@ export function InventoryContent({ overview }: InventoryContentProps) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b bg-card px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Inventar</h1>
-            <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-              <span>{overview.summary.totalItems} Artikel</span>
-              <span>·</span>
-              <span>{overview.locations.length} Lager</span>
-              <span>·</span>
-              <span>{plannedItems.length} geplante Artikel</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
+    <PageShell>
+      <PageHeader
+        title="Inventar"
+        subtitle={`${overview.summary.totalItems} Artikel · ${overview.locations.length} Lager · ${plannedItems.length} geplante Artikel`}
+        actions={
+          <>
             <Button
               variant="outline"
               className="gap-2"
@@ -724,10 +720,12 @@ export function InventoryContent({ overview }: InventoryContentProps) {
               <Plus className="size-4" />
               Artikel
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <SummaryTile
             label="Artikel mit Bestand"
             value={String(stockedItemCount)}
@@ -749,10 +747,8 @@ export function InventoryContent({ overview }: InventoryContentProps) {
             icon={<PackagePlus className="size-4" />}
           />
         </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-6">
-        <Tabs defaultValue="all" className="min-h-full">
+        <Tabs defaultValue="all" className="mt-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <TabsList>
               <TabsTrigger value="all">Alle Artikel</TabsTrigger>
@@ -838,72 +834,10 @@ export function InventoryContent({ overview }: InventoryContentProps) {
           </TabsContent>
 
           <TabsContent value="movements" className="mt-4">
-            <div className="overflow-hidden rounded-lg border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Zeitpunkt</TableHead>
-                    <TableHead>Artikel</TableHead>
-                    <TableHead>Lager</TableHead>
-                    <TableHead>Von</TableHead>
-                    <TableHead>Nach</TableHead>
-                    <TableHead>Bewegung</TableHead>
-                    <TableHead className="text-right">Vorher</TableHead>
-                    <TableHead className="text-right">Menge</TableHead>
-                    <TableHead className="text-right">Danach</TableHead>
-                    <TableHead>Grund</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {overview.movements.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                        Noch keine Bewegungen erfasst.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    overview.movements.map((movement) => {
-                      const target = formatMovementTarget(movement);
-                      return (
-                        <TableRow key={movement.id}>
-                          <TableCell className="text-muted-foreground">
-                            {formatDateTime(movement.createdAt)}
-                          </TableCell>
-                          <TableCell className="font-medium">{movement.itemName}</TableCell>
-                          <TableCell>{movement.locationName}</TableCell>
-                          <TableCell>{target.from}</TableCell>
-                          <TableCell>{target.to}</TableCell>
-                          <TableCell>
-                            {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {movement.quantityBefore.toLocaleString('de-DE')}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              'text-right tabular-nums',
-                              movement.quantityDelta < 0
-                                ? 'text-red-600 dark:text-red-300'
-                                : 'text-green-700 dark:text-green-300'
-                            )}
-                          >
-                            {movement.quantityDelta > 0 ? '+' : ''}
-                            {movement.quantityDelta.toLocaleString('de-DE')}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {movement.quantityAfter.toLocaleString('de-DE')}
-                          </TableCell>
-                          <TableCell>{movement.reason ?? '—'}</TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            <MovementsTable movements={overview.movements} />
           </TabsContent>
         </Tabs>
-      </div>
+      </PageBody>
 
       <ItemDialog
         open={itemDialogOpen}
@@ -945,7 +879,7 @@ export function InventoryContent({ overview }: InventoryContentProps) {
         categories={overview.categories}
         onImported={() => router.refresh()}
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -959,7 +893,7 @@ function SummaryTile({
   icon: ReactNode;
 }) {
   return (
-    <div className="rounded-lg border bg-background px-3 py-3">
+    <div className="rounded-lg border bg-card px-3 py-3">
       <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {icon}
         {label}
@@ -979,29 +913,82 @@ function InventoryTable({
   onAdjust: (item: InventoryOverviewItem) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Artikel</TableHead>
-            <TableHead>Typ</TableHead>
-            <TableHead>Lager</TableHead>
-            <TableHead className="text-right">Bestand</TableHead>
-            <TableHead className="text-right">Geplant</TableHead>
-            <TableHead className="text-right">Verfügbar</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="w-10" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.length === 0 ? (
+    <>
+      <div className="space-y-2 md:hidden">
+        {items.length === 0 ? (
+          <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+            Keine Artikel gefunden.
+          </div>
+        ) : (
+          items.map((item) => (
+            <ListRow key={item.id} className="items-start">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 truncate text-sm font-medium">{item.name}</p>
+                  <Badge
+                    variant="outline"
+                    className={cn('shrink-0', stockStatusClasses(item.stockStatus))}
+                  >
+                    {INVENTORY_STOCK_STATUS_LABELS[item.stockStatus]}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                  <span>{INVENTORY_ITEM_TYPE_LABELS[item.itemType]}</span>
+                  {item.internalSku && <span>SKU {item.internalSku}</span>}
+                  {item.categoryName && <span>{item.categoryName}</span>}
+                </div>
+                <p className="text-xs tabular-nums">
+                  <span className="font-medium">
+                    {formatInventoryQuantity(item.availableQuantity, item.unit)} verfügbar
+                  </span>
+                  <span className="text-muted-foreground">
+                    {' '}· Bestand {formatInventoryQuantity(item.totalOnHand, item.unit)} · Geplant{' '}
+                    {formatInventoryQuantity(item.plannedQuantity, item.unit)}
+                  </span>
+                </p>
+                {item.stockByLocation.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {item.stockByLocation
+                      .slice(0, 2)
+                      .map(
+                        (stock) =>
+                          `${stock.locationName} ${formatInventoryQuantity(stock.quantityOnHand, item.unit)}`
+                      )
+                      .join(' · ')}
+                    {item.stockByLocation.length > 2 &&
+                      ` · +${item.stockByLocation.length - 2} weitere`}
+                  </p>
+                )}
+              </div>
+              <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
+            </ListRow>
+          ))
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                Keine Artikel gefunden.
-              </TableCell>
+              {INVENTORY_ITEM_COLUMNS.map((column) => (
+                <TableHead key={column.id} className={column.className}>
+                  {column.header}
+                </TableHead>
+              ))}
             </TableRow>
-          ) : (
-            items.map((item) => (
+          </TableHeader>
+          <TableBody>
+            {items.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={INVENTORY_ITEM_COLUMNS.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  Keine Artikel gefunden.
+                </TableCell>
+              </TableRow>
+            ) : (
+              items.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="min-w-48">
@@ -1054,31 +1041,162 @@ function InventoryTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-8">
-                        <MoreHorizontal className="size-4" />
-                        <span className="sr-only">Aktionen</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onAdjust(item)}>
-                        <SlidersHorizontal className="mr-2 size-4" />
-                        Bestand ändern
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => onEdit(item)}>
-                        <Pencil className="mr-2 size-4" />
-                        Bearbeiten
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <ItemActionsMenu item={item} onEdit={onEdit} onAdjust={onAdjust} />
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function ItemActionsMenu({
+  item,
+  onEdit,
+  onAdjust,
+}: {
+  item: InventoryOverviewItem;
+  onEdit: (item: InventoryOverviewItem) => void;
+  onAdjust: (item: InventoryOverviewItem) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-8 shrink-0">
+          <MoreHorizontal className="size-4" />
+          <span className="sr-only">Aktionen</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => onAdjust(item)}>
+          <SlidersHorizontal className="mr-2 size-4" />
+          Bestand ändern
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onEdit(item)}>
+          <Pencil className="mr-2 size-4" />
+          Bearbeiten
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MovementsTable({ movements }: { movements: InventoryOverview['movements'] }) {
+  return (
+    <>
+      <div className="space-y-2 md:hidden">
+        {movements.length === 0 ? (
+          <div className="rounded-lg border bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+            Noch keine Bewegungen erfasst.
+          </div>
+        ) : (
+          movements.map((movement) => {
+            const target = formatMovementTarget(movement);
+            return (
+              <ListRow key={movement.id} className="items-start">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="min-w-0 truncate text-sm font-medium">{movement.itemName}</p>
+                    <span
+                      className={cn(
+                        'shrink-0 text-sm font-medium tabular-nums',
+                        movement.quantityDelta < 0
+                          ? 'text-red-600 dark:text-red-300'
+                          : 'text-green-700 dark:text-green-300'
+                      )}
+                    >
+                      {movement.quantityDelta > 0 ? '+' : ''}
+                      {movement.quantityDelta.toLocaleString('de-DE')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]} ·{' '}
+                    {formatDateTime(movement.createdAt)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {target.from} → {target.to}
+                  </p>
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    Vorher {movement.quantityBefore.toLocaleString('de-DE')} · Danach{' '}
+                    {movement.quantityAfter.toLocaleString('de-DE')}
+                  </p>
+                  {movement.reason && (
+                    <p className="text-xs text-muted-foreground">Grund: {movement.reason}</p>
+                  )}
+                </div>
+              </ListRow>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Zeitpunkt</TableHead>
+              <TableHead>Artikel</TableHead>
+              <TableHead>Lager</TableHead>
+              <TableHead>Von</TableHead>
+              <TableHead>Nach</TableHead>
+              <TableHead>Bewegung</TableHead>
+              <TableHead className="text-right">Vorher</TableHead>
+              <TableHead className="text-right">Menge</TableHead>
+              <TableHead className="text-right">Danach</TableHead>
+              <TableHead>Grund</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {movements.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                  Noch keine Bewegungen erfasst.
+                </TableCell>
+              </TableRow>
+            ) : (
+              movements.map((movement) => {
+                const target = formatMovementTarget(movement);
+                return (
+                  <TableRow key={movement.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(movement.createdAt)}
+                    </TableCell>
+                    <TableCell className="font-medium">{movement.itemName}</TableCell>
+                    <TableCell>{movement.locationName}</TableCell>
+                    <TableCell>{target.from}</TableCell>
+                    <TableCell>{target.to}</TableCell>
+                    <TableCell>
+                      {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {movement.quantityBefore.toLocaleString('de-DE')}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums',
+                        movement.quantityDelta < 0
+                          ? 'text-red-600 dark:text-red-300'
+                          : 'text-green-700 dark:text-green-300'
+                      )}
+                    >
+                      {movement.quantityDelta > 0 ? '+' : ''}
+                      {movement.quantityDelta.toLocaleString('de-DE')}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {movement.quantityAfter.toLocaleString('de-DE')}
+                    </TableCell>
+                    <TableCell>{movement.reason ?? '—'}</TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 

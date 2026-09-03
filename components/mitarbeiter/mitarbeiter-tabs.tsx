@@ -194,8 +194,8 @@ export function MitarbeiterTabs({
         isAdmin={currentUserRole === 'admin'}
       />
       <Tabs defaultValue="members" className="w-full">
-        <div className="flex items-center justify-between gap-2">
-          <TabsList className="gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <TabsList className="min-w-0 gap-1">
             <TabsTrigger value="members" className="group">
               Mitglieder
               <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-[10px] font-semibold text-muted-foreground group-data-[state=active]:text-foreground">
@@ -219,7 +219,7 @@ export function MitarbeiterTabs({
             size="icon"
             onClick={handleRefresh}
             disabled={isPending}
-            className="h-8 w-8"
+            className="h-8 w-8 shrink-0"
             title="Tabellen aktualisieren"
           >
             <RefreshCw

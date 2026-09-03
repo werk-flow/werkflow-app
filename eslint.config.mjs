@@ -160,6 +160,16 @@ const registrySelectors = [
       "Native datetime inputs are banned — use DatePicker + TimeInput (components/ui). See the werkflow-design skill registry.",
   },
   {
+    selector: 'JSXAttribute[name.name="type"][value.value="month"]',
+    message:
+      'Native month inputs are banned — use MonthPicker (components/ui/month-picker). See the werkflow-design skill registry.',
+  },
+  {
+    selector: 'JSXAttribute[name.name="type"][value.value="week"]',
+    message:
+      'Native week inputs are banned — pick a date with DatePicker or a month with MonthPicker. See the werkflow-design skill registry.',
+  },
+  {
     selector: 'JSXAttribute[name.name="type"][value.value="time"]',
     message:
       "Native time inputs are banned — use TimeInput (components/ui/time-input). See the werkflow-design skill registry.",
@@ -189,6 +199,23 @@ const registrySelectors = [
 // Styling canon (werkflow-design skill): the radius scale stops at rounded-lg
 // (rounded-full stays legitimate for avatars/dots), colors come from tokens in
 // app/globals.css, and gradients use the Tailwind v4 syntax if ever sanctioned.
+// The page column is a primitive (components/shared/page-shell.tsx): every page
+// renders PageShell → PageHeader → PageBody. Hand-rolled copies drifted into
+// five spellings and left the service area with no padding and no scroll region
+// (UI/UX hardening, 2026-09-03).
+const shellSelectors = [
+  {
+    selector: "Literal[value=/\bh-full (min-w-0 )?flex-col overflow-hidden\b/]",
+    message:
+      "Hand-rolled page column. Render PageShell → PageHeader → PageBody from components/shared/page-shell (design canon, Density and layout).",
+  },
+  {
+    selector: "Literal[value=/\bflex-1 overflow-(y-)?auto p-4 sm:p-6\b/]",
+    message:
+      "Hand-rolled page scroll region. Render PageBody from components/shared/page-shell (design canon, Density and layout).",
+  },
+];
+
 const stylingSelectors = [
   {
     selector: 'Literal[value=/rounded-(2xl|3xl)/]',
@@ -379,10 +406,26 @@ const eslintConfig = defineConfig([
   // bans (the ui/ primitives legitimately implement what others must not).
   {
     files: ["app/**/*.tsx", "components/**/*.tsx"],
-    ignores: ["components/ui/**"],
+    ignores: ["components/ui/**", "components/shared/page-shell.tsx"],
     plugins: { ui: uiRules },
     rules: {
       "ui/label-in-spaced-container": "error",
+      "no-restricted-syntax": [
+        "error",
+        ...alwaysOnSelectors,
+        ...prodRefSelectors,
+        ...realtimeSelectors,
+        ...stylingSelectors,
+        ...shellSelectors,
+        ...registrySelectors,
+      ],
+    },
+  },
+  // The page-shell primitive is the one home of the column literals the
+  // shellSelectors ban; it keeps every other product rule.
+  {
+    files: ["components/shared/page-shell.tsx"],
+    rules: {
       "no-restricted-syntax": [
         "error",
         ...alwaysOnSelectors,

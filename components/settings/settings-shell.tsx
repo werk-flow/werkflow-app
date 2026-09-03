@@ -1,16 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { AreaNav } from '@/components/shared/area-nav';
+import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Separator } from '@/components/ui/separator';
 import {
   DEFAULT_SETTINGS_SECTION_SLUG,
@@ -31,7 +26,6 @@ type SettingsShellProps = {
 
 export function SettingsShell({ children }: SettingsShellProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { activeOrg } = useOrganization();
 
   const currentSection =
@@ -46,7 +40,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
     isOrganizationSection && currentSection.adminOnlyWrites && !isAdmin;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
+    <PageShell className="bg-background">
       <header className="sticky top-0 z-10 shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex flex-col gap-4 px-4 py-4 sm:px-6">
           <div className="space-y-1">
@@ -80,27 +74,17 @@ export function SettingsShell({ children }: SettingsShellProps) {
             </div>
           </div>
 
+          {/* Phones: the section list is route navigation, so it is an AreaNav
+              strip that scrolls within itself, not a select (thirteen sections
+              exceed the raw-Select cap and a select hides the current place). */}
           <div className="md:hidden">
-            <Select
-              value={currentSection?.slug ?? DEFAULT_SETTINGS_SECTION_SLUG}
-              onValueChange={(value) => router.push(getSettingsHref(value))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Bereich wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {accountSections.map((section) => (
-                  <SelectItem key={section.slug} value={section.slug}>
-                    {section.label}
-                  </SelectItem>
-                ))}
-                {organizationSections.map((section) => (
-                  <SelectItem key={section.slug} value={section.slug}>
-                    {section.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AreaNav
+              ariaLabel="Einstellungsbereiche"
+              items={[...accountSections, ...organizationSections].map((section) => ({
+                href: getSettingsHref(section.slug),
+                label: section.label,
+              }))}
+            />
           </div>
         </div>
       </header>
@@ -122,13 +106,13 @@ export function SettingsShell({ children }: SettingsShellProps) {
           </div>
         </aside>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-4 py-4 sm:px-6 sm:py-6">
+        <PageBody>
+          <div className="mx-auto w-full max-w-5xl">
             {children}
           </div>
-        </div>
+        </PageBody>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

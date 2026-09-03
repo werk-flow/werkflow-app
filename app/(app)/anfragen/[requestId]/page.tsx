@@ -231,9 +231,5 @@ export default async function AnfrageDetailPage({
     assignees,
   };
 
-  return (
-    <div className="flex h-full flex-col overflow-auto p-4 sm:p-6">
-      <RequestDetailContent data={data} />
-    </div>
-  );
+  return <RequestDetailContent data={data} />;
 }

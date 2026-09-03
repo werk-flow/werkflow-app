@@ -65,6 +65,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ListRow } from "@/components/ui/list-row";
 import {
   Select,
   SelectContent,
@@ -733,11 +734,11 @@ function MoveDestinationDialog({
               className="min-h-0 flex-1 overflow-auto p-4"
               onContextMenu={(event) => event.preventDefault()}
             >
-              <div className="min-w-[720px] overflow-hidden rounded-md border bg-background">
-                <div className="grid grid-cols-[minmax(360px,1fr)_140px_160px] border-b px-4 py-2 text-xs font-medium text-muted-foreground">
+              <div className="overflow-hidden rounded-md border bg-background">
+                <div className="grid grid-cols-[minmax(0,1fr)] border-b px-4 py-2 text-xs font-medium text-muted-foreground sm:grid-cols-[minmax(0,1fr)_140px_160px]">
                   <span>Name</span>
-                  <span>Typ</span>
-                  <span>Geändert</span>
+                  <span className="hidden sm:inline">Typ</span>
+                  <span className="hidden sm:inline">Geändert</span>
                 </div>
                 <div className="divide-y">
                   {childFolders.map((folder) => {
@@ -749,7 +750,7 @@ function MoveDestinationDialog({
                       <div
                         key={folder.id}
                         className={cn(
-                          "grid w-full grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-left text-sm transition-colors hover:bg-muted/70",
+                          "grid w-full grid-cols-[minmax(0,1fr)] items-center px-4 py-3 text-left text-sm transition-colors hover:bg-muted/70 sm:grid-cols-[minmax(0,1fr)_140px_160px]",
                           isDisabled && "cursor-not-allowed",
                         )}
                         onDoubleClick={() => {
@@ -776,7 +777,7 @@ function MoveDestinationDialog({
                         </span>
                         <span
                           className={cn(
-                            "text-muted-foreground",
+                            "hidden text-muted-foreground sm:inline",
                             isDisabled && "opacity-45",
                           )}
                         >
@@ -784,7 +785,7 @@ function MoveDestinationDialog({
                         </span>
                         <span
                           className={cn(
-                            "text-muted-foreground",
+                            "hidden text-muted-foreground sm:inline",
                             isDisabled && "opacity-45",
                           )}
                         >
@@ -801,7 +802,7 @@ function MoveDestinationDialog({
                       <div
                         key={document.id}
                         className={cn(
-                          "grid grid-cols-[minmax(360px,1fr)_140px_160px] items-center px-4 py-3 text-sm",
+                          "grid grid-cols-[minmax(0,1fr)] items-center px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_140px_160px]",
                           isSelected
                             ? "bg-muted/70 text-muted-foreground opacity-60"
                             : "text-muted-foreground",
@@ -818,8 +819,12 @@ function MoveDestinationDialog({
                             {document.displayName}
                           </button>
                         </span>
-                        <span>{getFileTypeLabel(document)}</span>
-                        <span>{formatDate(document.updatedAt)}</span>
+                        <span className="hidden sm:inline">
+                          {getFileTypeLabel(document)}
+                        </span>
+                        <span className="hidden sm:inline">
+                          {formatDate(document.updatedAt)}
+                        </span>
                       </div>
                     );
                   })}
@@ -2538,8 +2543,8 @@ export function DocumentLibraryContent({
               return (
                 <ContextMenu key={folder.id} modal={false}>
                   <ContextMenuTrigger asChild>
-                    <div
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+                    <ListRow
+                      interactive
                       onClick={() => navigateToFolder(folder.id)}
                     >
                       <div
@@ -2572,7 +2577,7 @@ export function DocumentLibraryContent({
                           handlers={handlers}
                         />
                       </div>
-                    </div>
+                    </ListRow>
                   </ContextMenuTrigger>
                   <FolderContextMenuContent
                     folder={folder}
@@ -2603,8 +2608,8 @@ export function DocumentLibraryContent({
               return (
                 <ContextMenu key={document.id} modal={false}>
                   <ContextMenuTrigger asChild>
-                    <div
-                      className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+                    <ListRow
+                      interactive
                       onClick={() => openDocumentViewer(document)}
                     >
                       <div
@@ -2648,7 +2653,7 @@ export function DocumentLibraryContent({
                           handlers={handlers}
                         />
                       </div>
-                    </div>
+                    </ListRow>
                   </ContextMenuTrigger>
                   <DocumentContextMenuContent
                     document={document}
