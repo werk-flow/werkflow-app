@@ -21,13 +21,6 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   getParkingResponsibleOptions,
@@ -184,21 +177,18 @@ export function ParkingContextDialog({
 
         <form onSubmit={handleSave} noValidate className="space-y-4">
           <Field label="Grund" htmlFor="parking-reason" required>
-            <Select
+            {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
+            <SearchableSelect
+              options={Object.entries(PARKING_REASON_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              }))}
               value={reason}
-              onValueChange={(value) => setReason(value as JobParkingReason)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Grund auswählen" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PARKING_REASON_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(value) => setReason(value as JobParkingReason)}
+              placeholder="Grund auswählen"
+              searchPlaceholder="Grund suchen"
+              emptyMessage="Kein passender Grund gefunden"
+            />
           </Field>
 
           <Field label="Notiz (optional)" htmlFor="parking-note">

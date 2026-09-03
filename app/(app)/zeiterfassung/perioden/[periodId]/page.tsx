@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { TIME_PERIOD_RESULT_COLUMNS } from "@/components/zeiterfassung/time-period-result-columns";
+import {
   closeTimePeriod,
   decidePeriodFinding,
   downloadPayrollExport,
@@ -101,58 +110,42 @@ export default async function TimePeriodDetailPage({
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Monatswerte</h2>
-        <div className="overflow-x-auto rounded-lg border bg-card">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40 text-left text-muted-foreground">
-              <tr>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Mitarbeiter/in
-                </th>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Soll
-                </th>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Gewertet
-                </th>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Differenz
-                </th>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Schlusssaldo
-                </th>
-                <th scope="col" className="px-4 py-3 font-medium">
-                  Sollquelle
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {TIME_PERIOD_RESULT_COLUMNS.map((column) => (
+                  <TableHead key={column.id} className={column.className}>
+                    {column.header}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {detail.results.map((result) => (
-                <tr
-                  key={result.employeeRecordId}
-                  className="border-b last:border-b-0"
-                >
-                  <td className="px-4 py-3 font-medium">
+                <TableRow key={result.employeeRecordId}>
+                  <TableCell className="font-medium">
                     {result.employeeName}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {formatMinutes(result.targetMinutes)}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {formatMinutes(result.creditedMinutes)}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {formatMinutes(result.periodDeltaMinutes)}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">
+                  </TableCell>
+                  <TableCell className="tabular-nums">
                     {formatMinutes(result.closingBalanceMinutes)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
                     {result.authoritativeTargets ? "Arbeitsplan" : "Ersatzwert"}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </section>
 

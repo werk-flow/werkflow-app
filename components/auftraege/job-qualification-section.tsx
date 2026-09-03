@@ -1,16 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Award, Loader2, X } from 'lucide-react';
+import { Award, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
+import { SectionError } from '@/components/ui/section-error';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import {
   getJobQualificationDetail,
@@ -52,24 +53,23 @@ export function JobQualificationSection({
   if (detail === undefined) {
     if (view.isLoading) {
       return (
-        <Card className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Qualifikationsabdeckung wird geladen…
+        <Card className="gap-4 p-4" role="status" aria-busy="true">
+          <span className="sr-only">Qualifikationsabdeckung wird geladen.</span>
+          <div className="flex items-center gap-2">
+            <Skeleton className="size-4" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
         </Card>
       );
     }
     return (
-      <Card className="p-4">
-        <ErrorText>Qualifikationsabdeckung konnte nicht geladen werden.</ErrorText>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          onClick={() => void refresh()}
-        >
-          Erneut versuchen
-        </Button>
-      </Card>
+      <SectionError onRetry={() => void refresh()} retryLabel="Erneut versuchen">
+        Qualifikationsabdeckung konnte nicht geladen werden.
+      </SectionError>
     );
   }
 

@@ -73,8 +73,11 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
     const card = employeePage.getByTestId('work-lifecycle-card');
     await card.getByRole('button', { name: 'Blocker', exact: true }).click();
     const dialog = employeePage.getByRole('dialog');
-    await dialog.locator('#work-blocker-reason').click();
-    await employeePage.getByRole('option', { name: 'Zugang zum Einsatzort' }).click();
+    await selectFromSearchable(
+      employeePage,
+      dialog.locator('#work-blocker-reason'),
+      'Zugang zum Einsatzort'
+    );
     await dialog.locator('#work-blocker-details').fill('Schlüssel fehlt am vereinbarten Ort.');
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
@@ -121,8 +124,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
     const card = adminPage.getByTestId('work-lifecycle-card');
     await card.getByRole('button', { name: 'Parken', exact: true }).click();
     const dialog = adminPage.getByRole('dialog');
-    await dialog.locator('#work-blocker-reason').click();
-    await adminPage.getByRole('option', { name: 'Material', exact: true }).click();
+    await selectFromSearchable(adminPage, dialog.locator('#work-blocker-reason'), 'Material');
     await dialog.locator('#work-blocker-details').fill('Liefertermin beim Großhandel klären.');
     await selectFromSearchable(
       adminPage,

@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { getPlanningOptions } from '@/lib/planning/actions';
 import {
@@ -160,9 +161,14 @@ export function DispatchIssueDialog({
         {loadError ? (
           <ErrorText>{loadError}</ErrorText>
         ) : !readiness ? (
-          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Bereitschaft wird geprüft …
+          <div className="space-y-2" role="status" aria-busy="true">
+            <span className="sr-only">Bereitschaft wird geprüft.</span>
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="space-y-2 rounded-md border bg-muted/30 px-3 py-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-64 max-w-full" />
+              </div>
+            ))}
           </div>
         ) : (
           <>

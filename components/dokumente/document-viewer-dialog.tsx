@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   getDocumentSignedUrl,
   getDocumentViewSignedUrl,
@@ -201,8 +202,9 @@ export function DocumentViewerDialog({
               <p className="text-sm text-white/70">{error}</p>
             </div>
           ) : !signedUrl ? (
-            <div className="flex h-full items-center justify-center text-sm text-white/60">
-              Vorschau wird geladen...
+            <div className="flex h-full items-center justify-center p-6" role="status" aria-busy="true">
+              <span className="sr-only">Vorschau wird geladen.</span>
+              <Skeleton className="h-full max-h-[70vh] w-full max-w-3xl bg-white/10" />
             </div>
           ) : canPreviewImage(document) ? (
             <div className="flex h-full items-center justify-center overflow-auto p-6">

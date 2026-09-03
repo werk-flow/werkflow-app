@@ -224,14 +224,17 @@ function StepIndicator({
 }
 
 function OtpCodeInput({
+  id,
   value,
   onChange,
 }: {
+  id: string;
   value: string;
   onChange: (value: string) => void;
 }) {
   return (
     <InputOTP
+      id={id}
       value={value}
       onChange={onChange}
       maxLength={6}
@@ -628,10 +631,13 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                   </div>
 
                   <div className="space-y-3">
-                    <OtpCodeInput
-                      value={currentOtpCode}
-                      onChange={setCurrentOtpCode}
-                    />
+                    <Field label="Bestätigungscode" htmlFor="current-email-otp" required>
+                      <OtpCodeInput
+                        id="current-email-otp"
+                        value={currentOtpCode}
+                        onChange={setCurrentOtpCode}
+                      />
+                    </Field>
                     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                       <span>
                         Code gültig für {currentOtpExpiryCountdown ?? '00:00'}
@@ -832,10 +838,13 @@ export function EmailChangeCard({ initialState }: EmailChangeCardProps) {
                   </div>
 
                   <div className="space-y-3">
-                    <OtpCodeInput
-                      value={newEmailOtpCode}
-                      onChange={setNewEmailOtpCode}
-                    />
+                    <Field label="Bestätigungscode" htmlFor="new-email-otp" required>
+                      <OtpCodeInput
+                        id="new-email-otp"
+                        value={newEmailOtpCode}
+                        onChange={setNewEmailOtpCode}
+                      />
+                    </Field>
                     <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                       <button
                         type="button"

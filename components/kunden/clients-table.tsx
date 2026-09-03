@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/table";
 import { ListRow } from "@/components/ui/list-row";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from "@/components/ui/skeleton-table";
 import { ClientActionsMenu } from "./client-actions-menu";
 import { CLIENT_TYPE_LABELS, type Client } from "@/lib/jobs/types";
 
@@ -23,43 +28,76 @@ interface ClientsTableProps {
   skeletonCount?: number;
 }
 
-function ClientCardSkeleton() {
+// One column definition for the loaded table and its skeleton (design canon):
+// header count, widths and hover cannot drift apart.
+export const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
+  {
+    id: "name",
+    header: "Name",
+    className: "w-[25%]",
+    skeleton: <Skeleton className="h-5 w-28" />,
+  },
+  {
+    id: "type",
+    header: "Typ",
+    className: "w-[120px] px-4",
+    skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
+  },
+  { id: "email", header: "E-Mail", skeleton: <Skeleton className="h-5 w-40" /> },
+  {
+    id: "phone",
+    header: "Telefon",
+    className: "w-[150px]",
+    skeleton: <Skeleton className="h-5 w-28" />,
+  },
+  {
+    id: "actions",
+    header: "",
+    className: "w-[50px]",
+    skeleton: <Skeleton className="size-8 rounded" />,
+  },
+];
+
+function ClientsTableHeader() {
   return (
-    <ListRow skeleton interactive>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-[20px] w-[120px]" />
-          <Skeleton className="h-[18px] w-[70px] rounded-full" />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <Skeleton className="h-[16px] w-[160px]" />
-          <Skeleton className="h-[16px] w-[100px]" />
-        </div>
-      </div>
-      <Skeleton className="h-8 w-8 shrink-0 rounded" />
-    </ListRow>
+    <TableHeader>
+      <TableRow>
+        {CLIENT_COLUMNS.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
   );
 }
 
-function ClientRowSkeleton() {
+/** Same frame as the loaded list; rows hover because loaded rows navigate. */
+export function ClientsTableSkeleton({ count }: { count: number }) {
   return (
-    <TableRow skeleton interactive>
-      <TableCell className="font-medium">
-        <Skeleton className="h-5 w-28" />
-      </TableCell>
-      <TableCell className="px-4">
-        <Skeleton className="h-[22px] w-20 rounded-full" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-5 w-40" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-5 w-28" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-8 w-8 rounded" />
-      </TableCell>
-    </TableRow>
+    <>
+      <SkeletonList count={count} interactive className="md:hidden">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-[20px] w-[120px]" />
+            <Skeleton className="h-[18px] w-[70px] rounded-full" />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <Skeleton className="h-[16px] w-[160px]" />
+            <Skeleton className="h-[16px] w-[100px]" />
+          </div>
+        </div>
+        <Skeleton className="size-8 shrink-0 rounded" />
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <ClientsTableHeader />
+          <TableBody>
+            <SkeletonRows columns={CLIENT_COLUMNS} rows={count} interactive />
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -98,36 +136,7 @@ export function ClientsTable({
 }: ClientsTableProps) {
   const router = useRouter();
   if (isLoading && skeletonCount > 0) {
-    return (
-      <>
-        {/* Mobile view - Card skeletons */}
-        <div className="space-y-2 md:hidden">
-          {Array.from({ length: skeletonCount }).map((_, i) => (
-            <ClientCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Desktop view - Table skeletons */}
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[25%]">Name</TableHead>
-                <TableHead className="w-[120px] px-4">Typ</TableHead>
-                <TableHead>E-Mail</TableHead>
-                <TableHead className="w-[150px]">Telefon</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: skeletonCount }).map((_, i) => (
-                <ClientRowSkeleton key={i} />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </>
-    );
+    return <ClientsTableSkeleton count={skeletonCount} />;
   }
 
   if (clients.length === 0) {
@@ -157,15 +166,7 @@ export function ClientsTable({
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[25%]">Name</TableHead>
-              <TableHead className="w-[120px] px-4">Typ</TableHead>
-              <TableHead>E-Mail</TableHead>
-              <TableHead className="w-[150px]">Telefon</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
+          <ClientsTableHeader />
           <TableBody>
             {clients.map((client) => (
               <TableRow

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
+import { ListRow } from '@/components/ui/list-row';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { JobPickerModal } from '@/components/job-picker-modal';
@@ -568,48 +569,45 @@ function MenuCard({
   active,
   onClick
 }: MenuCardProps) {
+  // A menu tile is a row that acts on click; a disabled tile keeps its hint
+  // reachable via `title`, so it stays a real disabled button without hover.
   return (
-    <button
-      type="button"
-      className="w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-      disabled={disabled}
-      onClick={onClick}
+    <ListRow
+      asChild
+      interactive={!disabled}
+      className={cn(
+        'w-full p-4 text-left',
+        disabled && 'cursor-not-allowed opacity-60',
+        active && 'ring-1 ring-primary/30'
+      )}
     >
-      <Card
-        className={cn(
-          'transition-colors',
-          disabled ? 'cursor-not-allowed opacity-60' : 'hover:bg-accent/50',
-          active && 'ring-1 ring-primary/30'
-        )}
-      >
-        <CardContent className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <div
+      <button type="button" disabled={disabled} onClick={onClick}>
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full',
+              active ? 'bg-primary/10' : 'bg-brand-purple/10'
+            )}
+          >
+            <Icon
               className={cn(
-                'flex h-10 w-10 items-center justify-center rounded-full',
-                active ? 'bg-primary/10' : 'bg-brand-purple/10'
+                'h-5 w-5',
+                active ? 'text-primary' : 'text-brand-purple'
               )}
-            >
-              <Icon
-                className={cn(
-                  'h-5 w-5',
-                  active ? 'text-primary' : 'text-brand-purple'
-                )}
-              />
-            </div>
-            <div>
-              <p className="font-medium">{title}</p>
-              <p
-                className="max-w-[200px] truncate text-xs text-muted-foreground"
-                title={disabled && disabledHint ? disabledHint : subtitle}
-              >
-                {disabled && disabledHint ? disabledHint : subtitle}
-              </p>
-            </div>
+            />
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-        </CardContent>
-      </Card>
-    </button>
+          <div>
+            <p className="font-medium">{title}</p>
+            <p
+              className="max-w-[200px] truncate text-xs text-muted-foreground"
+              title={disabled && disabledHint ? disabledHint : subtitle}
+            >
+              {disabled && disabledHint ? disabledHint : subtitle}
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+      </button>
+    </ListRow>
   );
 }

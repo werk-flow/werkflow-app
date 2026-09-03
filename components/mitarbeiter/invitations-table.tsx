@@ -12,6 +12,11 @@ import {
 } from '@/components/ui/table';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
 import { InviteActionsMenu } from './invite-actions-menu';
 import type { OrgRole } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
@@ -45,49 +50,82 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   },
 };
 
-// Mobile card skeleton - matches exact card structure
-function InviteCardSkeleton() {
+// One column definition for the loaded table and its skeleton (design canon).
+// Invitation rows do nothing on click, so neither rows nor skeletons hover.
+export const INVITATION_COLUMNS: readonly SkeletonColumn[] = [
+  { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-48" /> },
+  {
+    id: 'role',
+    header: 'Rolle',
+    className: 'w-[140px]',
+    skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    className: 'w-[120px]',
+    skeleton: <Skeleton className="h-[22px] w-16 rounded-full" />,
+  },
+  {
+    id: 'invitedAt',
+    header: 'Eingeladen am',
+    className: 'w-[150px]',
+    skeleton: <Skeleton className="h-5 w-20" />,
+  },
+  {
+    id: 'expiresAt',
+    header: 'Läuft ab am',
+    className: 'w-[140px]',
+    skeleton: <Skeleton className="h-5 w-20" />,
+  },
+  {
+    id: 'actions',
+    header: '',
+    className: 'w-[50px]',
+    skeleton: <Skeleton className="size-8 rounded" />,
+  },
+];
+
+function InvitationsTableHeader() {
   return (
-    <ListRow skeleton>
-      <div className="flex-1 min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-[20px] w-[180px]" />
-          <Skeleton className="h-[18px] w-[75px] rounded-full" />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <Skeleton className="h-[18px] w-[70px] rounded-full" />
-          <Skeleton className="h-[16px] w-[110px]" />
-          <Skeleton className="h-[16px] w-[95px]" />
-        </div>
-      </div>
-      <Skeleton className="h-8 w-8 rounded shrink-0" />
-    </ListRow>
+    <TableHeader>
+      <TableRow>
+        {INVITATION_COLUMNS.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
   );
 }
 
-// Desktop table row skeleton - matches exact cell structure
-function InviteRowSkeleton() {
+export function InvitationsTableSkeleton({ count }: { count: number }) {
   return (
-    <TableRow skeleton>
-      <TableCell className="font-medium">
-        <Skeleton className="h-5 w-48" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-[22px] w-20 rounded-full" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-[22px] w-16 rounded-full" />
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        <Skeleton className="h-5 w-20" />
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        <Skeleton className="h-5 w-20" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-8 w-8 rounded" />
-      </TableCell>
-    </TableRow>
+    <>
+      <SkeletonList count={count} className="md:hidden">
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-[20px] w-[180px]" />
+            <Skeleton className="h-[18px] w-[75px] rounded-full" />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <Skeleton className="h-[18px] w-[70px] rounded-full" />
+            <Skeleton className="h-[16px] w-[110px]" />
+            <Skeleton className="h-[16px] w-[95px]" />
+          </div>
+        </div>
+        <Skeleton className="size-8 rounded shrink-0" />
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <InvitationsTableHeader />
+          <TableBody>
+            <SkeletonRows columns={INVITATION_COLUMNS} rows={count} />
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -154,37 +192,7 @@ export function InvitationsTable({
 }: InvitationsTableProps) {
   // Show skeleton loading state
   if (isLoading && skeletonCount > 0) {
-    return (
-      <>
-        {/* Mobile view - Card skeletons */}
-        <div className="space-y-2 md:hidden">
-          {Array.from({ length: skeletonCount }).map((_, i) => (
-            <InviteCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Desktop view - Table skeletons */}
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>E-Mail</TableHead>
-                <TableHead className="w-[140px]">Rolle</TableHead>
-                <TableHead className="w-[120px]">Status</TableHead>
-                <TableHead className="w-[150px]">Eingeladen am</TableHead>
-                <TableHead className="w-[140px]">Läuft ab am</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: skeletonCount }).map((_, i) => (
-                <InviteRowSkeleton key={i} />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </>
-    );
+    return <InvitationsTableSkeleton count={skeletonCount} />;
   }
 
   if (invites.length === 0) {
@@ -214,16 +222,7 @@ export function InvitationsTable({
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>E-Mail</TableHead>
-              <TableHead className="w-[140px]">Rolle</TableHead>
-              <TableHead className="w-[120px]">Status</TableHead>
-              <TableHead className="w-[150px]">Eingeladen am</TableHead>
-              <TableHead className="w-[140px]">Läuft ab am</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
+          <InvitationsTableHeader />
           <TableBody>
             {invites.map((invite) => {
               const statusInfo = STATUS_LABELS[invite.status] || STATUS_LABELS.pending;

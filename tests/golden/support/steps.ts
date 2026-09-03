@@ -1087,8 +1087,11 @@ export async function reportOwnBlockerOnJobPage(
   const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: "Blocker", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.locator("#work-blocker-reason").click();
-  await page.getByRole("option", { name: "Zugang zum Einsatzort" }).click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#work-blocker-reason"),
+    "Zugang zum Einsatzort",
+  );
   await dialog.locator("#work-blocker-details").fill(details);
   await dialog.getByRole("button", { name: "Speichern", exact: true }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
@@ -1117,8 +1120,7 @@ export async function parkJobOnJobPage(
   const lifecycle = page.getByRole("main").getByTestId("work-lifecycle-card");
   await lifecycle.getByRole("button", { name: "Parken", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.locator("#work-blocker-reason").click();
-  await page.getByRole("option", { name: "Material", exact: true }).click();
+  await selectFromSearchable(page, dialog.locator("#work-blocker-reason"), "Material");
   await dialog.locator("#work-blocker-details").fill(details);
   await selectFromSearchable(
     page,
@@ -3860,10 +3862,8 @@ export async function createPlannedCalendarEntry(
         weekly: /W.chentlich/,
         monthly: /Monatlich/,
       } as const;
-      const recurrenceBlock = dialog
-        .getByText("Rhythmus", { exact: true })
-        .locator("..");
-      await recurrenceBlock.getByRole("combobox").click();
+      // The Rhythmus Field wires its id onto the select trigger.
+      await dialog.locator("#planning-frequency").click();
       await page
         .getByRole("option", {
           name: frequencyLabels[options.recurrence.frequency],
@@ -4183,10 +4183,11 @@ export async function setParkingContextFromParkplatz(
   const dialog = page
     .getByRole("dialog")
     .filter({ has: page.getByRole("heading", { name: "Parkplatz-Kontext" }) });
-  await dialog.locator("#parking-reason").click();
-  await page
-    .getByRole("option", { name: options.reasonLabel, exact: true })
-    .click();
+  await selectFromSearchable(
+    page,
+    dialog.locator("#parking-reason"),
+    options.reasonLabel,
+  );
   if (options.note) await dialog.locator("#parking-note").fill(options.note);
   if (options.responsibleName) {
     await selectFromSearchable(

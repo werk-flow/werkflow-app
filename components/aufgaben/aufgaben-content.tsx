@@ -21,6 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
 import { Card } from '@/components/ui/card';
+import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import {
@@ -207,8 +208,7 @@ export function AufgabenContent() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <PersonnelOwnActionsSection />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <AufgabenListSkeleton />
       </div>
     );
   }
@@ -575,6 +575,58 @@ export function AufgabenContent() {
   );
 }
 
+const SKELETON_ROW_KEYS = [0, 1, 2] as const;
+
+/**
+ * Mirrors the loaded page: the task heading, one task group (icon + title,
+ * divided card of title/meta rows) and the notification card (unread dot,
+ * text, "Gelesen" button slot). Cards are not clickable as a whole, so
+ * nothing here hovers.
+ */
+export function AufgabenListSkeleton() {
+  return (
+    <div className="space-y-8" aria-hidden="true">
+      <section className="space-y-4">
+        <Skeleton className="h-5 w-32" />
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 px-1">
+            <Skeleton className="size-4" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+          <Card className="gap-0 divide-y py-0">
+            {SKELETON_ROW_KEYS.map((key) => (
+              <div key={key} className="space-y-1.5 px-4 py-3">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-56 max-w-full" />
+              </div>
+            ))}
+          </Card>
+        </div>
+      </section>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-8 w-48" />
+        </div>
+        <Card className="gap-0 divide-y py-0">
+          {SKELETON_ROW_KEYS.map((key) => (
+            <div
+              key={key}
+              className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Skeleton className="size-2 shrink-0 rounded-full" />
+                <Skeleton className="h-4 w-64 max-w-full" />
+              </div>
+              <Skeleton className="h-8 w-24" />
+            </div>
+          ))}
+        </Card>
+      </section>
+    </div>
+  );
+}
+
 function TaskGroup({
   icon,
   title,
@@ -821,13 +873,10 @@ function TaskLink({
   children: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      aria-label={ariaLabel}
-      data-task-source={sourceId}
-      className="block px-4 py-3 transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-    >
-      {children}
-    </Link>
+    <ListRow asChild interactive variant="plain">
+      <Link href={href} aria-label={ariaLabel} data-task-source={sourceId}>
+        {children}
+      </Link>
+    </ListRow>
   );
 }

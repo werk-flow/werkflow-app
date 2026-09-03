@@ -1,3 +1,4 @@
+import { AuftraegeTableSkeleton } from '@/components/auftraege/unified-auftraege-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -74,29 +75,7 @@ export default function MitarbeiterDetailLoading() {
             </div>
             {/* Search bar */}
             <Skeleton className="h-9 w-full rounded-md" />
-            {/* Table skeleton */}
-            <div className="rounded-lg border bg-card">
-              <div className="border-b px-4 py-3">
-                <div className="flex gap-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-4 w-20" />
-                  ))}
-                </div>
-              </div>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 border-b px-4 py-3 last:border-0"
-                >
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-4 flex-1 max-w-[200px]" />
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-5 w-24 rounded-full" />
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                  <Skeleton className="h-4 w-20" />
-                </div>
-              ))}
-            </div>
+            <AuftraegeTableSkeleton count={5} showActions />
           </div>
         </div>
       </PageBody>

@@ -105,6 +105,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useBanner } from "@/components/ui/banner";
 import { DokumenteTabContentSkeleton } from "@/components/loading-states/dokumente-page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRealtimeRouterRefresh } from "@/hooks/use-realtime-router-refresh";
 import { usePendingTask } from "@/hooks/use-server-action";
 import {
@@ -3119,9 +3120,15 @@ export function DocumentLibraryContent({
                     </Button>
                   </div>
                   {isDetailsLoading ? (
-                    <p className="px-3 py-2 text-sm text-muted-foreground">
-                      Versionen werden geladen...
-                    </p>
+                    <div className="divide-y" role="status" aria-busy="true">
+                      <span className="sr-only">Versionen werden geladen.</span>
+                      {Array.from({ length: 2 }, (_, index) => (
+                        <div key={index} className="space-y-1.5 px-3 py-2">
+                          <Skeleton className="h-4 w-40 max-w-full" />
+                          <Skeleton className="h-3 w-56 max-w-full" />
+                        </div>
+                      ))}
+                    </div>
                   ) : detailsData?.versions.length ? (
                     <div className="divide-y">
                       {detailsData.versions.map((version) => (
@@ -3163,9 +3170,19 @@ export function DocumentLibraryContent({
                   Verlauf
                 </p>
                 {isDetailsLoading ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Verlauf wird geladen...
-                  </p>
+                  <div
+                    className="mt-2 space-y-2 rounded-md border p-2"
+                    role="status"
+                    aria-busy="true"
+                  >
+                    <span className="sr-only">Verlauf wird geladen.</span>
+                    {Array.from({ length: 3 }, (_, index) => (
+                      <div key={index} className="space-y-1">
+                        <Skeleton className="h-4 w-44 max-w-full" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    ))}
+                  </div>
                 ) : detailsData?.auditEvents.length ? (
                   <div className="mt-2 max-h-48 space-y-2 overflow-auto rounded-md border p-2">
                     {detailsData.auditEvents.map((event) => (

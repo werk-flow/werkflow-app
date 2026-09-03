@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ContactRound } from 'lucide-react';
 
+import { ListRow } from '@/components/ui/list-row';
 import {
   Table,
   TableBody,
@@ -82,34 +83,34 @@ export function PersonnelRecordsSection({
           const name = formatEmployeeRecordName(record, profileNames[record.id]);
           return (
             // A real link so keyboard, middle-click, and copy-link work.
-            <Link
-              key={record.id}
-              href={`/mitarbeiter/${record.id}`}
-              aria-label={`Personalakte öffnen: ${name}`}
-              className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-medium">{name}</p>
-                  {record.employeeNumber && (
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {record.employeeNumber}
-                    </span>
+            <ListRow key={record.id} asChild interactive>
+              <Link
+                href={`/mitarbeiter/${record.id}`}
+                aria-label={`Personalakte öffnen: ${name}`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium">{name}</p>
+                    {record.employeeNumber && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {record.employeeNumber}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <EmploymentStateBadge state={getEmploymentState(record)} />
+                    <AccessStateBadge
+                      state={getAccessState(record, hasPendingInvite)}
+                    />
+                  </div>
+                  {record.entryDate && (
+                    <p className="text-xs text-muted-foreground">
+                      Eintritt: {formatDate(record.entryDate)}
+                    </p>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <EmploymentStateBadge state={getEmploymentState(record)} />
-                  <AccessStateBadge
-                    state={getAccessState(record, hasPendingInvite)}
-                  />
-                </div>
-                {record.entryDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Eintritt: {formatDate(record.entryDate)}
-                  </p>
-                )}
-              </div>
-            </Link>
+              </Link>
+            </ListRow>
           );
         })}
       </div>
@@ -137,7 +138,7 @@ export function PersonnelRecordsSection({
               return (
                 <TableRow
                   key={record.id}
-                  className="cursor-pointer transition-colors hover:bg-accent/50"
+                  interactive
                   onClick={() => router.push(`/mitarbeiter/${record.id}`)}
                 >
                   <TableCell className="max-w-0">

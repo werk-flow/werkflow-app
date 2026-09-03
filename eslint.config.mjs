@@ -236,6 +236,31 @@ const shellSelectors = [
   },
 ];
 
+// Hover fidelity (design canon, Loading states): a row hovers only through the
+// `interactive` flag of TableRow / ListRow, so a skeleton row and the loaded
+// row cannot disagree. The class literal itself is the defect (UI/UX
+// hardening Phase 4, 2026-09-03); components/ui owns the one token. State
+// tints layered on an interactive row (selected, dragged) live in named
+// module constants, not in the row's className literal.
+const hoverSelectors = [
+  {
+    selector: "Literal[value=/hover:bg-accent.50/]",
+    message:
+      "Row hover comes only from TableRow / ListRow `interactive` (design canon, Loading states). Render the row through the primitive (ListRow asChild for links) instead of the class literal.",
+  },
+  {
+    selector: "TemplateElement[value.raw=/hover:bg-accent.50/]",
+    message:
+      "Row hover comes only from TableRow / ListRow `interactive` (design canon, Loading states). Render the row through the primitive (ListRow asChild for links) instead of the class literal.",
+  },
+  {
+    selector:
+      'JSXOpeningElement[name.name=/^(TableRow|ListRow)$/] > JSXAttribute[name.name="className"] Literal[value=/cursor-pointer|hover:/]',
+    message:
+      "TableRow / ListRow take `interactive` (true or \"select\") instead of cursor and hover classes, so skeleton rows inherit the same behavior (design canon, Loading states).",
+  },
+];
+
 const stylingSelectors = [
   {
     selector: 'Literal[value=/rounded-(2xl|3xl)/]',
@@ -438,6 +463,7 @@ const eslintConfig = defineConfig([
         ...stylingSelectors,
         ...shellSelectors,
         ...registrySelectors,
+        ...hoverSelectors,
       ],
     },
   },

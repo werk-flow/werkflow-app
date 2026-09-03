@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getDocumentLinkCatalog,
   updateDocumentLinks,
@@ -595,8 +596,17 @@ export function DocumentLinkDialog({
 
           <div className="max-h-80 overflow-auto rounded-md border">
             {isLoadingCatalog ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Einträge werden geladen...
+              <div className="divide-y" role="status" aria-busy="true">
+                <span className="sr-only">Einträge werden geladen.</span>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div key={index} className="flex items-center gap-3 px-3 py-2.5">
+                    <Skeleton className="size-4 shrink-0 rounded-sm" />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <Skeleton className="h-4 w-48 max-w-full" />
+                      <Skeleton className="h-3 w-32 max-w-full" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : visibleTargets.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">

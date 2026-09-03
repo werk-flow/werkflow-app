@@ -734,8 +734,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       assignEmployeeName: employeeName,
     });
     await staleDialog.getByText('Wiederholen', { exact: true }).click();
-    const rhythmBlock = staleDialog.getByText('Rhythmus', { exact: true }).locator('..');
-    await rhythmBlock.getByRole('combobox').click();
+    // The Rhythmus Field wires its id onto the select trigger.
+    await staleDialog.locator('#planning-frequency').click();
     await adminPage.getByRole('option', { name: /T.glich/ }).click();
     await staleDialog.locator('#planning-count').fill('2');
     await staleDialog.getByRole('button', { name: /Planung pr.fen und speichern/ }).click();

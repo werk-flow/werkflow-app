@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { filterByQuery } from '@/lib/ui/search';
 import { getJobsForPicker } from '@/lib/time-tracking/actions';
@@ -150,8 +151,14 @@ export function JobPickerModal({
 
           <DialogBody className="min-h-40">
             {isLoading && jobs.length === 0 ? (
-              <div className="flex items-center justify-center py-10">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="space-y-0.5" role="status" aria-busy="true">
+                <span className="sr-only">Aufträge werden geladen.</span>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div key={index} className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+                    <Skeleton className="size-5 shrink-0 rounded-full" />
+                    <Skeleton className="h-4 w-48 max-w-full" />
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="space-y-0.5" role="radiogroup" aria-label="Auftrag">

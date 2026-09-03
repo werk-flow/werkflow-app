@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList } from '@/components/ui/skeleton-table';
 
 export default function ProjectDetailLoading() {
   return (
@@ -60,20 +61,25 @@ export default function ProjectDetailLoading() {
                 <Skeleton className="h-4 w-28" />
               </div>
             </div>
-            {/* Jobs table */}
-            <div className="rounded-lg border bg-card p-4">
-              <Skeleton className="mb-4 h-5 w-48" />
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 border-b py-3 last:border-0"
-                >
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-5 w-24 rounded-full" />
-                  <Skeleton className="h-4 w-20" />
+            {/* Child jobs: a list of link rows, so the placeholders hover too */}
+            <div className="rounded-lg border bg-card">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <Skeleton className="h-5 w-48" />
+                <Skeleton className="h-7 w-20" />
+              </div>
+              <SkeletonList count={4} interactive className="p-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <Skeleton className="h-4 w-24 rounded-full" />
+                    <Skeleton className="h-4 w-14 rounded-full" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
                 </div>
-              ))}
+              </SkeletonList>
             </div>
             {/* Placeholder sections */}
             <Skeleton className="h-24 w-full rounded-lg" />

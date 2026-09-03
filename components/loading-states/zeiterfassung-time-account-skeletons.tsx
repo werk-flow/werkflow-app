@@ -1,42 +1,15 @@
+import { Fragment, type ReactNode } from 'react';
+
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonTable, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import { SkeletonTable } from '@/components/ui/skeleton-table';
+import { TIME_PERIOD_RESULT_COLUMNS } from '@/components/zeiterfassung/time-period-result-columns';
 
 // Content-only skeletons for the Zeiterfassung subpages. The area layout keeps
 // the header and `AreaNav` on screen, so each one mirrors only what its page
-// renders below: the `h2` title, then cards or tables shaped like the data.
-
-const NUMERIC_CELL = <Skeleton className="h-4 w-16" />;
-
-const PERIOD_SUMMARY_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'month', header: 'Monat' },
-  { id: 'target', header: 'Soll', skeleton: NUMERIC_CELL },
-  { id: 'credited', header: 'Gewertet', skeleton: NUMERIC_CELL },
-  { id: 'delta', header: 'Differenz', skeleton: NUMERIC_CELL },
-  { id: 'state', header: 'Status', skeleton: <Skeleton className="h-4 w-20" /> },
-];
-
-const ACCOUNT_EVENT_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'reason', header: 'Buchung', skeleton: <Skeleton className="h-4 w-48" /> },
-  { id: 'date', header: 'Datum', skeleton: <Skeleton className="h-4 w-20" /> },
-  { id: 'minutes', header: 'Minuten', skeleton: NUMERIC_CELL },
-];
-
-const PERIOD_LIST_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'month', header: 'Monat', skeleton: <Skeleton className="h-4 w-32" /> },
-  { id: 'state', header: 'Status', skeleton: <Skeleton className="h-4 w-20" /> },
-  { id: 'employees', header: 'Mitarbeitende', skeleton: NUMERIC_CELL },
-  { id: 'findings', header: 'Hinweise', skeleton: NUMERIC_CELL },
-  { id: 'open', header: '', className: 'w-20', skeleton: <Skeleton className="h-8 w-16" /> },
-];
-
-const PERIOD_RESULT_COLUMNS: readonly SkeletonColumn[] = [
-  { id: 'employee', header: 'Mitarbeiter/in', skeleton: <Skeleton className="h-4 w-36" /> },
-  { id: 'target', header: 'Soll', skeleton: NUMERIC_CELL },
-  { id: 'credited', header: 'Gewertet', skeleton: NUMERIC_CELL },
-  { id: 'delta', header: 'Differenz', skeleton: NUMERIC_CELL },
-  { id: 'closing', header: 'Schlusssaldo', skeleton: NUMERIC_CELL },
-  { id: 'source', header: 'Sollquelle', skeleton: <Skeleton className="h-4 w-20" /> },
-];
+// renders below: the `h2` title, then cards or lists shaped like the data.
+// The Zeitkonto and Perioden lists are header-less grid rows on their pages,
+// not tables, so their placeholders repeat that row shape; only the period
+// detail's Monatswerte is a table and shares its column definition.
 
 function SubpageTitle() {
   return (
@@ -51,6 +24,17 @@ function SectionTitle() {
   return <Skeleton className="h-6 w-40" />;
 }
 
+/** The bordered list the Zeitkonto and Perioden pages render their rows in. */
+function BorderedList({ count, children }: { count: number; children: ReactNode }) {
+  return (
+    <div aria-hidden="true" className="overflow-hidden rounded-lg border bg-card">
+      {Array.from({ length: count }, (_, index) => (
+        <Fragment key={index}>{children}</Fragment>
+      ))}
+    </div>
+  );
+}
+
 export function TimeAccountSkeleton() {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
@@ -58,11 +42,27 @@ export function TimeAccountSkeleton() {
       <Skeleton className="h-28 w-full rounded-lg" />
       <div className="space-y-3">
         <SectionTitle />
-        <SkeletonTable columns={PERIOD_SUMMARY_COLUMNS} rows={4} />
+        <BorderedList count={4}>
+          <div className="grid gap-2 border-b p-4 last:border-b-0 sm:grid-cols-5">
+            <Skeleton className="h-5 w-28" />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </BorderedList>
       </div>
       <div className="space-y-3">
         <SectionTitle />
-        <SkeletonTable columns={ACCOUNT_EVENT_COLUMNS} rows={4} />
+        <BorderedList count={4}>
+          <div className="flex items-center justify-between gap-4 border-b p-4 last:border-b-0">
+            <div className="space-y-1.5">
+              <Skeleton className="h-5 w-48 max-w-full" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </BorderedList>
       </div>
     </div>
   );
@@ -73,7 +73,18 @@ export function TimePeriodsSkeleton() {
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <SubpageTitle />
       <Skeleton className="h-32 w-full rounded-lg" />
-      <SkeletonTable columns={PERIOD_LIST_COLUMNS} rows={5} />
+      <BorderedList count={5}>
+        <div className="grid items-center gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto]">
+          <div className="space-y-1.5">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+      </BorderedList>
     </div>
   );
 }
@@ -89,7 +100,7 @@ export function TimePeriodDetailSkeleton() {
       </div>
       <div className="space-y-3">
         <SectionTitle />
-        <SkeletonTable columns={PERIOD_RESULT_COLUMNS} rows={5} />
+        <SkeletonTable columns={TIME_PERIOD_RESULT_COLUMNS} rows={5} className="bg-card" />
       </div>
       <div className="space-y-3">
         <SectionTitle />

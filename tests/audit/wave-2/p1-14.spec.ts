@@ -133,8 +133,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     let card = employeePage.getByTestId('work-lifecycle-card');
     await card.getByRole('button', { name: 'Blocker', exact: true }).click();
     let dialog = employeePage.getByRole('dialog');
-    await dialog.locator('#work-blocker-reason').click();
-    await employeePage.getByRole('option', { name: 'Sicherheit' }).click();
+    await selectFromSearchable(employeePage, dialog.locator('#work-blocker-reason'), 'Sicherheit');
     await dialog.locator('#work-blocker-details').fill('Arbeitsbereich muss abgesperrt werden.');
     await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
     await expect(card.getByText(/Offene Blocker klären/)).toBeVisible();
@@ -169,8 +168,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     card = adminPage.getByTestId('work-lifecycle-card');
     await card.getByRole('button', { name: 'Parken' }).click();
     dialog = adminPage.getByRole('dialog');
-    await dialog.locator('#work-blocker-reason').click();
-    await adminPage.getByRole('option', { name: 'Kunde' }).click();
+    await selectFromSearchable(adminPage, dialog.locator('#work-blocker-reason'), 'Kunde');
     await dialog
       .locator('#work-blocker-details')
       .fill('Neuen Ausführungstermin mit Kunde abstimmen.');
@@ -495,8 +493,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(projectCard.getByText('Automatisch abgeleitet')).toBeVisible();
     await projectCard.getByRole('button', { name: 'Parken' }).click();
     let dialog = adminPage.getByRole('dialog');
-    await dialog.locator('#work-blocker-reason').click();
-    await adminPage.getByRole('option', { name: 'Kapazität' }).click();
+    await selectFromSearchable(adminPage, dialog.locator('#work-blocker-reason'), 'Kapazität');
     await dialog
       .locator('#work-blocker-details')
       .fill('Projekt wird bis zur neuen Einsatzplanung geparkt.');

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ErrorText } from "@/components/ui/error-text";
+import { ListRow } from "@/components/ui/list-row";
 import { SectionError } from "@/components/ui/section-error";
 import {
   Dialog,
@@ -459,21 +460,22 @@ export function EquipmentDetailContent({
           <aside className="space-y-6">
             <section className="rounded-lg border p-4 shadow-xs">
               <h2 className="text-base font-semibold">Kunde & Einsatzort</h2>
-              <Link
-                href={`/kunden/${encodeURIComponent(item.clientId)}`}
-                className="mt-3 block rounded-md border p-3 transition-colors hover:bg-accent/50"
-              >
-                <span className="block text-sm font-medium">
-                  {item.clientName}
-                </span>
-                <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                  <MapPin className="size-3" />
-                  {item.siteName}
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {item.siteAddress}
-                </span>
-              </Link>
+              <ListRow asChild interactive className="mt-3">
+                <Link href={`/kunden/${encodeURIComponent(item.clientId)}`}>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">
+                      {item.clientName}
+                    </span>
+                    <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" />
+                      {item.siteName}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {item.siteAddress}
+                    </span>
+                  </span>
+                </Link>
+              </ListRow>
             </section>
             <section className="rounded-lg border p-4 shadow-xs">
               <h2 className="text-base font-semibold">Kennungen</h2>
@@ -509,41 +511,36 @@ export function EquipmentDetailContent({
                 <h2 className="text-base font-semibold">Anlagenbeziehungen</h2>
                 <div className="mt-3 space-y-2">
                   {item.parent && (
-                    <Link
-                      href={`/service/anlagen/${item.parent.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
-                    >
-                      <span>Übergeordnet: {item.parent.name}</span>
-                      <ArrowRight className="size-4" />
-                    </Link>
+                    <ListRow asChild interactive className="text-sm">
+                      <Link href={`/service/anlagen/${item.parent.equipmentNumber}`}>
+                        <span>Übergeordnet: {item.parent.name}</span>
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </ListRow>
                   )}
                   {item.components.map((component) => (
-                    <Link
-                      key={component.id}
-                      href={`/service/anlagen/${component.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
-                    >
-                      <span>Komponente: {component.name}</span>
-                      <ArrowRight className="size-4" />
-                    </Link>
+                    <ListRow key={component.id} asChild interactive className="text-sm">
+                      <Link href={`/service/anlagen/${component.equipmentNumber}`}>
+                        <span>Komponente: {component.name}</span>
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </ListRow>
                   ))}
                   {item.predecessor && (
-                    <Link
-                      href={`/service/anlagen/${item.predecessor.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
-                    >
-                      <span>Vorgänger: {item.predecessor.name}</span>
-                      <ArrowRight className="size-4" />
-                    </Link>
+                    <ListRow asChild interactive className="text-sm">
+                      <Link href={`/service/anlagen/${item.predecessor.equipmentNumber}`}>
+                        <span>Vorgänger: {item.predecessor.name}</span>
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </ListRow>
                   )}
                   {item.successor && (
-                    <Link
-                      href={`/service/anlagen/${item.successor.equipmentNumber}`}
-                      className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
-                    >
-                      <span>Nachfolger: {item.successor.name}</span>
-                      <ArrowRight className="size-4" />
-                    </Link>
+                    <ListRow asChild interactive className="text-sm">
+                      <Link href={`/service/anlagen/${item.successor.equipmentNumber}`}>
+                        <span>Nachfolger: {item.successor.name}</span>
+                        <ArrowRight className="size-4" />
+                      </Link>
+                    </ListRow>
                   )}
                 </div>
               </section>
@@ -565,13 +562,12 @@ export function EquipmentDetailContent({
                 <div className="mt-3 space-y-2">
                   {item.workLinks.map((link) => (
                     <div key={link.id} className="flex items-center gap-1">
-                      <Link
-                        href={link.href}
-                        className="flex min-w-0 flex-1 items-center justify-between rounded-md border p-2 text-sm hover:bg-accent/50"
-                      >
-                        <span className="truncate">{link.label}</span>
-                        <ExternalLink className="size-4 shrink-0" />
-                      </Link>
+                      <ListRow asChild interactive className="min-w-0 flex-1 text-sm">
+                        <Link href={link.href}>
+                          <span className="truncate">{link.label}</span>
+                          <ExternalLink className="size-4 shrink-0" />
+                        </Link>
+                      </ListRow>
                       <Button
                         type="button"
                         variant="ghost"

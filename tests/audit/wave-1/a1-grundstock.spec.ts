@@ -1120,10 +1120,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("button", { name: "Parken", exact: true })
       .click();
     const parkDialog = adminPage.getByRole("dialog");
-    await parkDialog.locator("#work-blocker-reason").click();
-    await adminPage
-      .getByRole("option", { name: "Kapazität", exact: true })
-      .click();
+    await selectFromSearchable(
+      adminPage,
+      parkDialog.locator("#work-blocker-reason"),
+      "Kapazität",
+    );
     await parkDialog
       .locator("#work-blocker-details")
       .fill("Projekt wird bis zur neuen Kapazitätsplanung geparkt.");
@@ -1345,10 +1346,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("button", { name: "Parken", exact: true })
       .click();
     const parkingDialog = adminPage.getByRole("dialog");
-    await parkingDialog.locator("#work-blocker-reason").click();
-    await adminPage
-      .getByRole("option", { name: "Kapazität", exact: true })
-      .click();
+    await selectFromSearchable(
+      adminPage,
+      parkingDialog.locator("#work-blocker-reason"),
+      "Kapazität",
+    );
     await parkingDialog
       .locator("#work-blocker-details")
       .fill("Auftrag bleibt bis zur nächsten Kapazitätsprüfung im Parkplatz.");
@@ -1754,10 +1756,11 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       has: adminPage.getByRole("heading", { name: "Parkplatz-Kontext" }),
     });
     await expect(parkingContextDialog).toBeVisible({ timeout: 20_000 });
-    await parkingContextDialog.locator("#parking-reason").click();
-    await adminPage
-      .getByRole("option", { name: "Kapazität", exact: true })
-      .click();
+    await selectFromSearchable(
+      adminPage,
+      parkingContextDialog.locator("#parking-reason"),
+      "Kapazität",
+    );
     await parkingContextDialog
       .locator("#parking-note")
       .fill("A1 Auftrag wird bis zur neuen Kapazitätsplanung geparkt.");

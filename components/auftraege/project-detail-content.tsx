@@ -24,6 +24,7 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useBanner } from '@/components/ui/banner';
+import { ListRow } from '@/components/ui/list-row';
 import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu,
@@ -824,7 +825,7 @@ export function ProjectDetailContent({
                   Noch keine Aufträge in diesem Projekt.
                 </div>
               ) : (
-                <div className="divide-y">
+                <div className="space-y-2 p-3">
                   {liveJobs.map((job) => (
                     <ChildJobRow
                       key={job.id}
@@ -1148,10 +1149,8 @@ function ChildJobRow({
   const href = `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(job.jobNumber!)}`;
 
   return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50"
-    >
+    <ListRow asChild interactive>
+      <Link href={href}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">
@@ -1184,7 +1183,7 @@ function ChildJobRow({
           )}
         </div>
       </div>
-
-    </Link>
+      </Link>
+    </ListRow>
   );
 }

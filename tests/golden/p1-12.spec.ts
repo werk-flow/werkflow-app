@@ -81,8 +81,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     const lifecycle = adminPage.getByTestId('work-lifecycle-card');
     await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
     const parkingDialog = adminPage.getByRole('dialog');
-    await parkingDialog.locator('#work-blocker-reason').click();
-    await adminPage.getByRole('option', { name: 'Material', exact: true }).click();
+    await selectFromSearchable(adminPage, parkingDialog.locator('#work-blocker-reason'), 'Material');
     await parkingDialog.locator('#work-blocker-details').fill('Rückstau bis zur Lieferung.');
     await selectFromSearchable(
       adminPage,

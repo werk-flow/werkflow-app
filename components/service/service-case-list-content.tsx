@@ -8,13 +8,7 @@ import { MapPin, Plus, Search, Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SkeletonColumn } from "@/components/ui/skeleton-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -86,10 +80,21 @@ export function ServiceCaseListContent({
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" aria-label="Servicefälle durchsuchen" placeholder="Nummer, Kunde, Einsatzort oder Anlage suchen…" />
         </div>
-        <Select value={status} onValueChange={(value) => setStatus(value as ServiceCaseStatus | "open" | "all")}>
-          <SelectTrigger className="w-full md:w-60" aria-label="Servicefälle nach Status filtern"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="open">Offene Servicefälle</SelectItem><SelectItem value="all">Alle Status</SelectItem>{SERVICE_CASE_STATUSES.map((value) => <SelectItem key={value} value={value}>{SERVICE_CASE_STATUS_LABELS[value]}</SelectItem>)}</SelectContent>
-        </Select>
+        {/* Twelve options: at or above ten the registry requires a searchable control. */}
+        <div className="w-full md:w-60">
+          <SearchableSelect
+            ariaLabel="Servicefälle nach Status filtern"
+            value={status}
+            onChange={(value) => setStatus(value as ServiceCaseStatus | "open" | "all")}
+            options={[
+              { value: "open", label: "Offene Servicefälle" },
+              { value: "all", label: "Alle Status" },
+              ...SERVICE_CASE_STATUSES.map((value) => ({ value, label: SERVICE_CASE_STATUS_LABELS[value] })),
+            ]}
+            searchPlaceholder="Status suchen"
+            emptyMessage="Kein passender Status"
+          />
+        </div>
       </div>
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed px-6 py-12 text-center">

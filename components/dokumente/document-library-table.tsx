@@ -7,6 +7,7 @@ import {
   useState,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import {
   ArrowDown,
@@ -23,6 +24,12 @@ import {
 } from "lucide-react";
 
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from "@/components/ui/skeleton-table";
 import {
   Table,
   TableBody,
@@ -48,6 +55,92 @@ type DocumentTableSortColumn =
   "name" | "uploadedBy" | "date" | "size" | "type" | "linkedTo";
 
 type SortDirection = "asc" | "desc";
+
+type DocumentColumn = SkeletonColumn & {
+  id: DocumentTableSortColumn | "selection" | "actions";
+};
+
+/** Outline of the selection circle; revealed on row hover like the loaded control. */
+function SkeletonSelectionCircle({ visible = false }: { visible?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex size-5 items-center justify-center rounded-full border border-muted-foreground/45 bg-background transition-opacity",
+        visible ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+      )}
+    />
+  );
+}
+
+// One column definition for the loaded header, the empty row and the skeleton
+// (design canon): widths, breakpoints and cell count cannot drift apart. The
+// loaded header swaps in the live selection control and sort buttons.
+export const DOCUMENT_COLUMNS: readonly DocumentColumn[] = [
+  {
+    id: "selection",
+    header: <SkeletonSelectionCircle visible />,
+    className: "w-[36px]",
+    skeleton: <SkeletonSelectionCircle />,
+  },
+  {
+    id: "name",
+    header: "Name",
+    skeleton: (
+      <div className="flex min-w-0 items-center gap-2">
+        <Skeleton className="size-4 shrink-0 rounded-sm" />
+        <Skeleton className="h-4 w-52 max-w-[75%]" />
+      </div>
+    ),
+  },
+  {
+    id: "uploadedBy",
+    header: "Erstellt / Hochgeladen von",
+    className: "hidden md:table-cell",
+    skeleton: <Skeleton className="h-4 w-36 max-w-full" />,
+  },
+  {
+    id: "date",
+    header: "Datum",
+    className: "hidden w-[140px] sm:table-cell",
+    skeleton: <Skeleton className="h-4 w-20" />,
+  },
+  {
+    id: "size",
+    header: "Größe",
+    className: "hidden w-[110px] sm:table-cell",
+    skeleton: <Skeleton className="h-4 w-14" />,
+  },
+  {
+    id: "type",
+    header: "Typ",
+    className: "hidden w-[120px] lg:table-cell",
+    skeleton: <Skeleton className="h-4 w-16" />,
+  },
+  {
+    id: "linkedTo",
+    header: "Verknüpft mit",
+    className: "hidden xl:table-cell",
+    skeleton: (
+      <div className="flex max-w-64 gap-1">
+        <Skeleton className="h-5 w-20 rounded-full" />
+        <Skeleton className="h-5 w-16 rounded-full" />
+      </div>
+    ),
+  },
+  {
+    id: "actions",
+    header: null,
+    className: "w-[50px]",
+    skeleton: <Skeleton className="ml-auto size-8 rounded-md" />,
+  },
+];
+
+// State tints layered on top of the `select` interaction: the row's hover
+// itself comes only from `interactive="select"`. A selected row keeps its
+// tint under the pointer; a row being dragged stops reacting to it.
+const SELECTED_ROW_CLASS = "bg-primary/10 hover:bg-primary/15";
+const DRAGGED_ROW_CLASS =
+  "cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent";
 
 type DocumentActionHandlers = {
   onOpen: () => void;
@@ -396,7 +489,7 @@ function SortableHeader({
   onSort,
   className,
 }: {
-  label: string;
+  label: ReactNode;
   column: DocumentTableSortColumn;
   currentColumn: DocumentTableSortColumn;
   currentDirection: SortDirection;
@@ -1036,66 +1129,40 @@ export function DocumentLibraryTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[36px]">
-              <SelectionCircle
-                checked={allVisibleSelected}
-                alwaysVisible
-                label={
-                  allVisibleSelected
-                    ? "Alle sichtbaren Einträge abwählen"
-                    : "Alle sichtbaren Einträge auswählen"
-                }
-                onClick={handleHeaderSelection}
-              />
-            </TableHead>
-            <SortableHeader
-              label="Name"
-              column="name"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-            />
-            <SortableHeader
-              label="Erstellt / Hochgeladen von"
-              column="uploadedBy"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-              className="hidden md:table-cell"
-            />
-            <SortableHeader
-              label="Datum"
-              column="date"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-              className="hidden w-[140px] sm:table-cell"
-            />
-            <SortableHeader
-              label="Größe"
-              column="size"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-              className="hidden w-[110px] sm:table-cell"
-            />
-            <SortableHeader
-              label="Typ"
-              column="type"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-              className="hidden w-[120px] lg:table-cell"
-            />
-            <SortableHeader
-              label="Verknüpft mit"
-              column="linkedTo"
-              currentColumn={sortColumn}
-              currentDirection={sortDirection}
-              onSort={handleSort}
-              className="hidden xl:table-cell"
-            />
-            <TableHead className="w-[50px]" />
+            {DOCUMENT_COLUMNS.map((column) => {
+              if (column.id === "selection") {
+                return (
+                  <TableHead key={column.id} className={column.className}>
+                    <SelectionCircle
+                      checked={allVisibleSelected}
+                      alwaysVisible
+                      label={
+                        allVisibleSelected
+                          ? "Alle sichtbaren Einträge abwählen"
+                          : "Alle sichtbaren Einträge auswählen"
+                      }
+                      onClick={handleHeaderSelection}
+                    />
+                  </TableHead>
+                );
+              }
+              if (column.id === "actions") {
+                return (
+                  <TableHead key={column.id} className={column.className} />
+                );
+              }
+              return (
+                <SortableHeader
+                  key={column.id}
+                  label={column.header}
+                  column={column.id}
+                  currentColumn={sortColumn}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                  className={column.className}
+                />
+              );
+            })}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1121,7 +1188,7 @@ export function DocumentLibraryTable({
                       data-document-table-folder-drop-id={folder.id}
                       interactive="select"
                       className={cn(
-                        isSelected && "bg-primary/10 hover:bg-primary/15",
+                        isSelected && SELECTED_ROW_CLASS,
                         dragTargetFolderId === folder.id &&
                           "bg-primary/20 outline outline-1 outline-primary/60",
                       )}
@@ -1228,9 +1295,8 @@ export function DocumentLibraryTable({
                     data-document-selection-preserve="true"
                     interactive="select"
                     className={cn(
-                      isSelected && "bg-primary/10 hover:bg-primary/15",
-                      draggedItem &&
-                        "cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent",
+                      isSelected && SELECTED_ROW_CLASS,
+                      draggedItem && DRAGGED_ROW_CLASS,
                     )}
                     onPointerDown={(event) => handleRowPointerDown(event, item)}
                     onClick={(event) => handleRowSelectionClick(event, item)}
@@ -1331,7 +1397,7 @@ export function DocumentLibraryTable({
           {sortedItems.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={8}
+                colSpan={DOCUMENT_COLUMNS.length}
                 className="h-48 text-center text-sm text-muted-foreground"
               >
                 Noch keine Dokumente gefunden.
@@ -1376,5 +1442,53 @@ export function DocumentLibraryTable({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The library's loading frame: the desktop table with select-style rows and
+ * the mobile card list, whose loaded rows open on click (see
+ * document-library-content.tsx).
+ */
+export function DocumentTableSkeleton({
+  rowCount = 10,
+}: {
+  rowCount?: number;
+}) {
+  return (
+    <>
+      <div className="relative -mx-4 hidden min-h-[50vh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {DOCUMENT_COLUMNS.map((column) => (
+                <TableHead key={column.id} className={column.className}>
+                  {column.header}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <SkeletonRows
+              columns={DOCUMENT_COLUMNS}
+              rows={rowCount}
+              interactive="select"
+            />
+          </TableBody>
+        </Table>
+      </div>
+
+      <SkeletonList interactive className="md:hidden">
+        <Skeleton className="size-5 shrink-0 rounded-sm" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Skeleton className="size-4 shrink-0 rounded-sm" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-40 max-w-full" />
+            <Skeleton className="h-3 w-56 max-w-full" />
+          </div>
+        </div>
+        <Skeleton className="size-8 shrink-0 rounded-md" />
+      </SkeletonList>
+    </>
   );
 }

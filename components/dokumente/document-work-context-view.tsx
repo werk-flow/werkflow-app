@@ -19,6 +19,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { ListRow } from '@/components/ui/list-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
 import {
   Table,
   TableBody,
@@ -99,6 +106,63 @@ type WorkContextGroups = {
   clientGroups: SimpleDocumentGroup[];
   employeeGroups: SimpleDocumentGroup[];
 };
+
+// One column definition for the loaded header and the skeleton (design canon):
+// widths, breakpoints and cell count cannot drift apart.
+export const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
+  {
+    id: 'expand',
+    header: null,
+    className: 'w-[44px]',
+    skeleton: <Skeleton className="size-6 rounded-sm" />,
+  },
+  {
+    id: 'context',
+    header: 'Verknüpfung',
+    skeleton: (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-60 max-w-[75%]" />
+        <Skeleton className="h-3 w-36 max-w-[55%]" />
+      </div>
+    ),
+  },
+  {
+    id: 'type',
+    header: 'Typ',
+    className: 'hidden lg:table-cell',
+    skeleton: <Skeleton className="h-4 w-20" />,
+  },
+  {
+    id: 'documents',
+    header: 'Dokumente',
+    skeleton: (
+      <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="h-5 w-16 rounded-full" />
+        <Skeleton className="h-4 w-44 max-w-[65%]" />
+      </div>
+    ),
+  },
+  {
+    id: 'actions',
+    header: null,
+    className: 'w-[52px]',
+    skeleton: <Skeleton className="ml-auto size-8 rounded-md" />,
+  },
+];
+
+function WorkContextTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow>
+        {WORK_CONTEXT_COLUMNS.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+  );
+}
 
 function formatFileSize(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
@@ -368,7 +432,8 @@ function DocumentInlineRow({
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>
         <TableRow
-          className="cursor-pointer bg-background transition-colors hover:bg-accent/50"
+          interactive
+          className="bg-background"
           onClick={() => handlers.onOpen()}
         >
           <TableCell className="w-[44px]" />
@@ -426,10 +491,7 @@ function MobileDocumentCard({
   return (
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>
-        <div
-          className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
-          onClick={() => handlers.onOpen()}
-        >
+        <ListRow interactive onClick={() => handlers.onOpen()}>
           <div className="flex min-w-0 items-center gap-2">
             {renderFileIcon(document)}
             <div className="min-w-0">
@@ -448,7 +510,7 @@ function MobileDocumentCard({
               handlers={handlers}
             />
           </div>
-        </div>
+        </ListRow>
       </ContextMenuTrigger>
       <DocumentContextMenuContent
         document={document}
@@ -536,15 +598,7 @@ export function DocumentWorkContextView({
     <>
       <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[44px]" />
-              <TableHead>Verknüpfung</TableHead>
-              <TableHead className="hidden lg:table-cell">Typ</TableHead>
-              <TableHead>Dokumente</TableHead>
-              <TableHead className="w-[52px]" />
-            </TableRow>
-          </TableHeader>
+          <WorkContextTableHeader />
           <TableBody>
             {projectGroups.map((group) => {
               const rowId = `project:${group.project.id}`;
@@ -558,7 +612,8 @@ export function DocumentWorkContextView({
               return (
                 <Fragment key={rowId}>
                   <TableRow
-                    className="cursor-pointer bg-muted/30 transition-colors hover:bg-accent/50"
+                    interactive
+                    className="bg-muted/30"
                     onClick={() => toggleExpanded(rowId)}
                   >
                     <TableCell className="w-[44px] pr-0">
@@ -690,7 +745,7 @@ export function DocumentWorkContextView({
               return (
                 <Fragment key={rowId}>
                   <TableRow
-                    className="cursor-pointer transition-colors hover:bg-accent/50"
+                    interactive
                     onClick={() => toggleExpanded(rowId)}
                   >
                     <TableCell className="w-[44px] pr-0">
@@ -759,7 +814,7 @@ export function DocumentWorkContextView({
               return (
                 <Fragment key={rowId}>
                   <TableRow
-                    className="cursor-pointer transition-colors hover:bg-accent/50"
+                    interactive
                     onClick={() => toggleExpanded(rowId)}
                   >
                     <TableCell className="w-[44px] pr-0">
@@ -826,8 +881,9 @@ export function DocumentWorkContextView({
 
           return (
             <div key={rowId} className="space-y-2">
-              <div
-                className="flex cursor-pointer items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2.5 transition-colors hover:bg-accent/50"
+              <ListRow
+                interactive
+                className="items-start gap-2 bg-muted/30"
                 onClick={() => toggleExpanded(rowId)}
               >
                 <button
@@ -863,7 +919,7 @@ export function DocumentWorkContextView({
                   />
                 </div>
                 <OpenContextLink href={projectHref} label="Öffnen" />
-              </div>
+              </ListRow>
 
               {isExpanded && (
                 <div className="ml-6 space-y-2">
@@ -929,8 +985,9 @@ export function DocumentWorkContextView({
 
           return (
             <div key={rowId} className="space-y-2">
-              <div
-                className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+              <ListRow
+                interactive
+                className="items-start gap-2"
                 onClick={() => toggleExpanded(rowId)}
               >
                 <button
@@ -963,7 +1020,7 @@ export function DocumentWorkContextView({
                   />
                 </div>
                 <OpenContextLink href={jobHref} label="Öffnen" />
-              </div>
+              </ListRow>
 
               {isExpanded && (
                 <div className="ml-6 space-y-2">
@@ -988,8 +1045,9 @@ export function DocumentWorkContextView({
 
           return (
             <div key={rowId} className="space-y-2">
-              <div
-                className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50"
+              <ListRow
+                interactive
+                className="items-start gap-2"
                 onClick={() => toggleExpanded(rowId)}
               >
                 <button
@@ -1014,7 +1072,7 @@ export function DocumentWorkContextView({
                   />
                 </div>
                 <OpenContextLink href={group.href} label="Öffnen" />
-              </div>
+              </ListRow>
 
               {isExpanded && (
                 <div className="ml-6 space-y-2">
@@ -1032,6 +1090,34 @@ export function DocumentWorkContextView({
           );
         })}
       </div>
+    </>
+  );
+}
+
+/** Loading frame of the work-context view; every loaded group row expands on click. */
+export function WorkContextSkeleton() {
+  return (
+    <>
+      <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
+        <Table>
+          <WorkContextTableHeader />
+          <TableBody>
+            <SkeletonRows columns={WORK_CONTEXT_COLUMNS} interactive />
+          </TableBody>
+        </Table>
+      </div>
+
+      <SkeletonList count={5} interactive className="space-y-3 md:hidden">
+        <Skeleton className="size-5 shrink-0 rounded-sm" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-44 max-w-full" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-5 w-16 rounded-full" />
+            <Skeleton className="h-4 w-32 max-w-full" />
+          </div>
+        </div>
+        <Skeleton className="size-7 shrink-0 rounded-md" />
+      </SkeletonList>
     </>
   );
 }

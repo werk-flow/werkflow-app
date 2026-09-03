@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { ListRow } from '@/components/ui/list-row';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { JobActionsMenu } from './job-actions-menu';
 import { ProjectActionsMenu } from './project-actions-menu';
@@ -39,6 +40,7 @@ import {
 } from '@/lib/jobs/types';
 import {
   AUFTRAEGE_VISIBLE_COLUMN_LABELS,
+  DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
   isAuftraegeColumnVisible,
   resolveVisibleAuftraegeColumns,
   type AuftraegeColumnId,
@@ -263,65 +265,148 @@ function MarqueeText({ children, className }: { children: React.ReactNode; class
 }
 
 // ============================================
-// Skeletons
+// Columns And Skeletons
 // ============================================
 
-function RowSkeleton({
-  showActions,
-  visibleColumns,
+type AuftraegeTableColumnId = AuftraegeColumnId | 'selection' | 'actions';
+
+interface AuftraegeTableColumn extends SkeletonColumn {
+  id: AuftraegeTableColumnId;
+}
+
+// One definition for the header row and the skeleton rows, so widths,
+// responsive visibility, and placeholder shapes cannot drift apart. The
+// header of a sortable column still renders through `SortableHeader`.
+export const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
+  { id: 'selection', header: null, className: 'w-[36px]', skeleton: <Skeleton className="size-4" /> },
+  { id: 'nr', header: 'Nr', className: 'w-[120px]', skeleton: <Skeleton className="h-5 w-24" /> },
+  {
+    id: 'bezeichnung',
+    header: AUFTRAEGE_VISIBLE_COLUMN_LABELS.bezeichnung,
+    skeleton: <Skeleton className="h-5 w-32" />,
+  },
+  { id: 'kunde', header: 'Kunde', className: 'w-[140px]', skeleton: <Skeleton className="h-5 w-24" /> },
+  {
+    id: 'status',
+    header: 'Status',
+    className: 'min-w-[280px]',
+    skeleton: <Skeleton className="h-[22px] w-32 rounded-full" />,
+  },
+  {
+    id: 'prioritaet',
+    header: 'Priorität',
+    className: 'w-[100px]',
+    skeleton: <Skeleton className="h-[22px] w-16 rounded-full" />,
+  },
+  {
+    id: 'mitarbeiter',
+    header: 'Mitarbeiter',
+    className: 'hidden xl:table-cell w-[120px]',
+    skeleton: <Skeleton className="h-5 w-20" />,
+  },
+  { id: 'datum', header: 'Datum', className: 'w-[170px]', skeleton: <Skeleton className="h-5 w-20" /> },
+  { id: 'actions', header: null, className: 'w-[50px]', skeleton: <Skeleton className="h-8 w-8 rounded" /> },
+];
+
+/** The columns a table with these preferences renders, in order. */
+export function auftraegeColumns(
+  visibleColumns: AuftraegeColumnId[],
+  showActions: boolean,
+): AuftraegeTableColumn[] {
+  return AUFTRAEGE_COLUMNS.filter((column) => {
+    if (column.id === 'selection') return true;
+    if (column.id === 'actions') return showActions;
+    return isAuftraegeColumnVisible(visibleColumns, column.id);
+  });
+}
+
+function isSortableColumn(columnId: AuftraegeTableColumnId): columnId is SortColumn {
+  return columnId !== 'selection' && columnId !== 'actions' && columnId !== 'mitarbeiter';
+}
+
+interface AuftraegeSortState {
+  column: SortColumn;
+  direction: 'asc' | 'desc';
+  onSort: (column: SortColumn) => void;
+  /** Archived entries keep a fixed status column. */
+  isArchive?: boolean;
+}
+
+function AuftraegeTableHeaderRow({
+  columns,
+  sort,
 }: {
-  showActions: boolean;
-  visibleColumns: AuftraegeColumnId[];
+  columns: readonly AuftraegeTableColumn[];
+  /** Omitted by route skeletons, which render plain headers. */
+  sort?: AuftraegeSortState;
 }) {
   return (
-    <TableRow skeleton interactive>
-      <TableCell className="w-[36px]"><Skeleton className="size-4" /></TableCell>
-      {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
-        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+    <TableRow>
+      {columns.map((column) =>
+        sort && isSortableColumn(column.id) && !(sort.isArchive && column.id === 'status') ? (
+          <SortableHeader
+            key={column.id}
+            label={column.header}
+            column={column.id}
+            currentColumn={sort.column}
+            currentDirection={sort.direction}
+            onSort={sort.onSort}
+            className={column.className}
+          />
+        ) : (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        )
       )}
-      {isAuftraegeColumnVisible(visibleColumns, 'bezeichnung') && (
-        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-      )}
-      {isAuftraegeColumnVisible(visibleColumns, 'kunde') && (
-        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-      )}
-      {isAuftraegeColumnVisible(visibleColumns, 'status') && (
-        <TableCell><Skeleton className="h-[22px] w-32 rounded-full" /></TableCell>
-      )}
-      {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && (
-        <TableCell><Skeleton className="h-[22px] w-16 rounded-full" /></TableCell>
-      )}
-      {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (
-        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-      )}
-      {isAuftraegeColumnVisible(visibleColumns, 'datum') && (
-        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-      )}
-      {showActions && <TableCell><Skeleton className="h-8 w-8 rounded" /></TableCell>}
     </TableRow>
   );
 }
 
-function CardSkeleton() {
+/** Loading placeholder with the exact frame of the loaded list; every row is a link, so rows hover. */
+export function AuftraegeTableSkeleton({
+  count,
+  showActions,
+  visibleColumns = DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
+  sort,
+}: {
+  count: number;
+  showActions: boolean;
+  visibleColumns?: AuftraegeColumnId[];
+  sort?: AuftraegeSortState;
+}) {
+  const columns = auftraegeColumns(visibleColumns, showActions);
   return (
-    <ListRow skeleton interactive className="items-start">
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-4 w-32" />
+    <>
+      <SkeletonList count={count} interactive className="md:hidden">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-3 rounded-full" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-3 w-3 rounded-full" />
-          <Skeleton className="h-3 w-20" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-5 w-16 rounded-full" />
-        </div>
+        {showActions && <Skeleton className="h-8 w-8 shrink-0 rounded" />}
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <AuftraegeTableHeaderRow columns={columns} sort={sort} />
+          </TableHeader>
+          <TableBody>
+            <SkeletonRows columns={columns} rows={count} interactive />
+          </TableBody>
+        </Table>
       </div>
-      <Skeleton className="h-8 w-8 shrink-0 rounded" />
-    </ListRow>
+    </>
   );
 }
 
@@ -919,7 +1004,7 @@ function SortableHeader({
   onSort,
   className,
 }: {
-  label: string;
+  label: React.ReactNode;
   column: SortColumn;
   currentColumn: SortColumn;
   currentDirection: 'asc' | 'desc';
@@ -1028,58 +1113,16 @@ export function UnifiedAuftraegeTable({
     });
   };
 
+  const sort: AuftraegeSortState = { column: sortColumn, direction: sortDirection, onSort, isArchive };
+
   if (isLoading && skeletonCount > 0) {
     return (
-      <>
-        <div className="space-y-2 md:hidden">
-          {Array.from({ length: skeletonCount }).map((_, i) => (
-            <CardSkeleton key={i} />
-          ))}
-        </div>
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[36px]" />
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'nr') && (
-                  <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
-                )}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
-                  <SortableHeader label={AUFTRAEGE_VISIBLE_COLUMN_LABELS.bezeichnung} column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-                )}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
-                  <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
-                )}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'status') &&
-                  (isArchive ? (
-                    <TableHead className="min-w-[280px]">Status</TableHead>
-                  ) : (
-                    <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
-                  ))}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'prioritaet') && (
-                  <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
-                )}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'mitarbeiter') && (
-                  <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
-                )}
-                {isAuftraegeColumnVisible(effectiveVisibleColumns, 'datum') && (
-                  <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
-                )}
-                {isAdminOrManager && <TableHead className="w-[50px]" />}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: skeletonCount }).map((_, i) => (
-                <RowSkeleton
-                  key={i}
-                  showActions={isAdminOrManager}
-                  visibleColumns={effectiveVisibleColumns}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </>
+      <AuftraegeTableSkeleton
+        count={skeletonCount}
+        showActions={isAdminOrManager}
+        visibleColumns={effectiveVisibleColumns}
+        sort={sort}
+      />
     );
   }
 
@@ -1150,34 +1193,10 @@ export function UnifiedAuftraegeTable({
       <div className="hidden md:block">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-[36px]" />
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'nr') && (
-                <SortableHeader label="Nr" column="nr" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[120px]" />
-              )}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'bezeichnung') && (
-                <SortableHeader label={AUFTRAEGE_VISIBLE_COLUMN_LABELS.bezeichnung} column="bezeichnung" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} />
-              )}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'kunde') && (
-                <SortableHeader label="Kunde" column="kunde" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[140px]" />
-              )}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'status') &&
-                (isArchive ? (
-                  <TableHead className="min-w-[280px]">Status</TableHead>
-                ) : (
-                  <SortableHeader label="Status" column="status" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="min-w-[280px]" />
-                ))}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'prioritaet') && (
-                <SortableHeader label="Priorität" column="prioritaet" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[100px]" />
-              )}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'mitarbeiter') && (
-                <TableHead className="hidden xl:table-cell w-[120px]">Mitarbeiter</TableHead>
-              )}
-              {isAuftraegeColumnVisible(effectiveVisibleColumns, 'datum') && (
-                <SortableHeader label="Datum" column="datum" currentColumn={sortColumn} currentDirection={sortDirection} onSort={onSort} className="w-[170px]" />
-              )}
-              {isAdminOrManager && <TableHead className="w-[50px]" />}
-            </TableRow>
+            <AuftraegeTableHeaderRow
+              columns={auftraegeColumns(effectiveVisibleColumns, isAdminOrManager)}
+              sort={sort}
+            />
           </TableHeader>
           <TableBody>
             {entries.map((entry) => {

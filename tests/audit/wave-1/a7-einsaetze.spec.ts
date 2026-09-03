@@ -836,8 +836,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     const lifecycle = adminPage.getByTestId('work-lifecycle-card');
     await lifecycle.getByRole('button', { name: 'Parken', exact: true }).click();
     const parkingDialog = adminPage.getByRole('dialog');
-    await parkingDialog.locator('#work-blocker-reason').click();
-    await adminPage.getByRole('option', { name: 'Kapazität', exact: true }).click();
+    await selectFromSearchable(adminPage, parkingDialog.locator('#work-blocker-reason'), 'Kapazität');
     await parkingDialog
       .locator('#work-blocker-details')
       .fill('Einsatz wird aus dem Parkplatz heraus abgestimmt.');
@@ -989,9 +988,10 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     });
     await expect(contextDialog).toBeVisible({ timeout: 20_000 });
     // The P1-14 canonical reason vocabulary is offered in one place.
+    // The reason picker is a searchable listbox (ten options); its rows are buttons.
     await contextDialog.locator('#parking-reason').click();
-    const reasonOptions = adminPage.getByRole('option');
-    await expect(reasonOptions).toHaveCount(10);
+    const reasonListbox = adminPage.getByRole('listbox');
+    await expect(reasonListbox.getByRole('button')).toHaveCount(10);
     for (const label of [
       'Kunde',
       'Material',
@@ -1004,9 +1004,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       'Interne Klärung',
       'Sonstiges',
     ]) {
-      await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
+      await expect(reasonListbox.getByRole('button', { name: label, exact: true })).toBeVisible();
     }
-    await adminPage.getByRole('option', { name: 'Freigabe', exact: true }).click();
+    await reasonListbox.getByRole('button', { name: 'Freigabe', exact: true }).click();
     await contextDialog.locator('#parking-note').fill('A7 Freigabe des Eigentümers steht aus.');
     await selectFromSearchable(
       adminPage,

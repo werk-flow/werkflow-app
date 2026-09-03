@@ -13,6 +13,11 @@ import {
 } from '@/components/ui/table';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
 import { MemberActionsMenu } from './member-actions-menu';
 import { StatusBadge } from './status-badge';
 import { HoursDisplay } from './hours-display';
@@ -87,56 +92,106 @@ interface MembersTableProps {
   removalBlockedByUserId?: Record<string, string>;
 }
 
-// Mobile card skeleton - matches exact card structure
-function MemberCardSkeleton() {
-  return (
-    <ListRow skeleton interactive>
-      <div className="flex-1 min-w-0 space-y-1">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-[20px] w-[120px]" />
-          <Skeleton className="h-[18px] w-[70px] rounded-full" />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <Skeleton className="h-[16px] w-[160px]" />
-          <Skeleton className="h-[16px] w-[100px]" />
-        </div>
+// One column definition for the loaded table and its skeleton (design canon):
+// header count, widths and hover cannot drift apart. The actions column is
+// appended only for managers, see `memberColumns`.
+export const MEMBER_COLUMNS: readonly SkeletonColumn[] = [
+  {
+    id: 'name',
+    header: 'Name',
+    className: 'w-[18%]',
+    skeleton: <Skeleton className="h-5 w-28" />,
+  },
+  { id: 'email', header: 'E-Mail', skeleton: <Skeleton className="h-5 w-48" /> },
+  {
+    id: 'role',
+    header: 'Rolle',
+    className: 'w-[120px] px-4',
+    skeleton: <Skeleton className="h-[22px] w-20 rounded-full" />,
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    className: 'w-[150px] px-4',
+    skeleton: <Skeleton className="h-[22px] w-24 rounded-full" />,
+  },
+  {
+    id: 'progress',
+    header: 'Tagesfortschritt',
+    className: 'w-[150px] px-4',
+    skeleton: (
+      <div className="flex items-center gap-2 min-w-[100px]">
+        <Skeleton className="h-2 flex-1" />
+        <Skeleton className="h-4 w-8" />
       </div>
-      <Skeleton className="h-8 w-8 rounded shrink-0" />
-    </ListRow>
+    ),
+  },
+  {
+    id: 'joined',
+    header: 'Beigetreten',
+    className: 'w-[120px]',
+    skeleton: <Skeleton className="h-5 w-20" />,
+  },
+];
+
+const MEMBER_ACTIONS_COLUMN: SkeletonColumn = {
+  id: 'actions',
+  header: '',
+  className: 'w-[50px]',
+  skeleton: <Skeleton className="size-8 rounded" />,
+};
+
+export function memberColumns(showActions: boolean): readonly SkeletonColumn[] {
+  return showActions ? [...MEMBER_COLUMNS, MEMBER_ACTIONS_COLUMN] : MEMBER_COLUMNS;
+}
+
+function MembersTableHeader({ columns }: { columns: readonly SkeletonColumn[] }) {
+  return (
+    <TableHeader>
+      <TableRow>
+        {columns.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
   );
 }
 
-// Desktop table row skeleton - matches exact cell structure
-function MemberRowSkeleton({ showActions }: { showActions: boolean }) {
+/** Same frame as the loaded list; rows hover because loaded rows navigate. */
+export function MembersTableSkeleton({
+  count,
+  showActions,
+}: {
+  count: number;
+  showActions: boolean;
+}) {
+  const columns = memberColumns(showActions);
   return (
-    <TableRow skeleton interactive>
-      <TableCell className="font-medium">
-        <Skeleton className="h-5 w-28" />
-      </TableCell>
-      <TableCell>
-        <Skeleton className="h-5 w-48" />
-      </TableCell>
-      <TableCell className="px-4">
-        <Skeleton className="h-[22px] w-20 rounded-full" />
-      </TableCell>
-      <TableCell className="px-4">
-        <Skeleton className="h-[22px] w-24 rounded-full" />
-      </TableCell>
-      <TableCell className="px-4">
-        <div className="flex items-center gap-2 min-w-[100px]">
-          <Skeleton className="h-2 flex-1" />
-          <Skeleton className="h-4 w-8" />
+    <>
+      <SkeletonList count={count} interactive className="md:hidden">
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-[20px] w-[120px]" />
+            <Skeleton className="h-[18px] w-[70px] rounded-full" />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <Skeleton className="h-[16px] w-[160px]" />
+            <Skeleton className="h-[16px] w-[100px]" />
+          </div>
         </div>
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        <Skeleton className="h-5 w-20" />
-      </TableCell>
-      {showActions && (
-        <TableCell>
-          <Skeleton className="h-8 w-8 rounded" />
-        </TableCell>
-      )}
-    </TableRow>
+        {showActions && <Skeleton className="size-8 rounded shrink-0" />}
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <MembersTableHeader columns={columns} />
+          <TableBody>
+            <SkeletonRows columns={columns} rows={count} interactive />
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -268,40 +323,10 @@ export function MembersTable({
   // Show skeleton loading state
   if (isLoading && skeletonCount > 0) {
     return (
-      <>
-        {/* Mobile view - Card skeletons */}
-        <div className="space-y-2 md:hidden">
-          {Array.from({ length: skeletonCount }).map((_, i) => (
-            <MemberCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Desktop view - Table skeletons */}
-        <div className="hidden md:block">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[18%]">Name</TableHead>
-                <TableHead>E-Mail</TableHead>
-                <TableHead className="w-[120px] px-4">Rolle</TableHead>
-                <TableHead className="w-[150px] px-4">Status</TableHead>
-                <TableHead className="w-[150px] px-4">
-                  Tagesfortschritt
-                </TableHead>
-                <TableHead className="w-[120px]">Beigetreten</TableHead>
-                {canManageMembers && (
-                  <TableHead className="w-[50px]"></TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {Array.from({ length: skeletonCount }).map((_, i) => (
-                <MemberRowSkeleton key={i} showActions={canManageMembers} />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </>
+      <MembersTableSkeleton
+        count={skeletonCount}
+        showActions={canManageMembers}
+      />
     );
   }
 
@@ -358,17 +383,7 @@ export function MembersTable({
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[18%]">Name</TableHead>
-              <TableHead>E-Mail</TableHead>
-              <TableHead className="w-[120px] px-4">Rolle</TableHead>
-              <TableHead className="w-[150px] px-4">Status</TableHead>
-              <TableHead className="w-[150px] px-4">Tagesfortschritt</TableHead>
-              <TableHead className="w-[120px]">Beigetreten</TableHead>
-              {canManageMembers && <TableHead className="w-[50px]"></TableHead>}
-            </TableRow>
-          </TableHeader>
+          <MembersTableHeader columns={memberColumns(canManageMembers)} />
           <TableBody>
             {members.map((member) => {
               const memberName =

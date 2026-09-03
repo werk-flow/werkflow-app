@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
 import {
@@ -291,8 +292,14 @@ export function TimeCorrectionDialog({
         </DialogHeader>
         <DialogBody className="space-y-4">
           {loadingOptions || !options ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Daten werden geladen …
+            <div className="space-y-4" role="status" aria-busy="true">
+              <span className="sr-only">Daten werden geladen.</span>
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ))}
             </div>
           ) : (
             <>

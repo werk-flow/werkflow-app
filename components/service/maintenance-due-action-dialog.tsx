@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { TimeInput } from "@/components/ui/time-input";
 import { useServerAction } from "@/hooks/use-server-action";
@@ -379,9 +380,17 @@ export function MaintenanceDueActionDialog({
                   Versionierte Arbeitsnachweise
                 </legend>
                 {isEvidenceLoading ? (
-                  <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                    Arbeitsnachweise werden geladen…
-                  </p>
+                  <div
+                    className="space-y-3 rounded-md border p-3"
+                    role="status"
+                    aria-busy="true"
+                  >
+                    <span className="sr-only">
+                      Arbeitsnachweise werden geladen.
+                    </span>
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
                 ) : evidenceLoadFailed ? (
                   <SectionError>
                     Die Arbeitsnachweise konnten nicht geladen werden. Schließe

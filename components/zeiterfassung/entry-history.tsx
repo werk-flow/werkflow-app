@@ -27,6 +27,7 @@ import {
   TableRow
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { getTimeEntries } from '@/lib/time-tracking/actions';
@@ -51,6 +52,34 @@ interface EntryHistoryProps {
 interface EntryWithProfile extends TimeEntry {
   firstName?: string | null;
   lastName?: string | null;
+}
+
+// Entry rows do nothing on click, so neither they nor their skeletons hover.
+export const ENTRY_HISTORY_COLUMNS: readonly SkeletonColumn[] = [
+  { id: 'employee', header: 'Mitarbeiter', skeleton: <Skeleton className="h-4 w-32" /> },
+  { id: 'type', header: 'Typ', skeleton: <Skeleton className="h-4 w-20" /> },
+  { id: 'timestamp', header: 'Zeitstempel', skeleton: <Skeleton className="h-4 w-32" /> },
+  { id: 'status', header: 'Status', skeleton: <Skeleton className="h-5 w-20 rounded-full" /> },
+  { id: 'manual', header: 'Manuell', skeleton: <Skeleton className="h-4 w-8" /> },
+  { id: 'reviewedAt', header: 'Bearbeitet am', skeleton: <Skeleton className="h-4 w-32" /> },
+  {
+    id: 'actions',
+    header: 'Aktionen',
+    className: 'text-right',
+    skeleton: <Skeleton className="ml-auto h-8 w-28" />,
+  },
+];
+
+function EntryHistoryHeaderRow() {
+  return (
+    <TableRow>
+      {ENTRY_HISTORY_COLUMNS.map((column) => (
+        <TableHead key={column.id} className={column.className}>
+          {column.header}
+        </TableHead>
+      ))}
+    </TableRow>
+  );
 }
 
 const STATUS_LABELS: Record<
@@ -280,11 +309,28 @@ export function EntryHistory({
       <ErrorText>{error}</ErrorText>
 
       {view.isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
+        <>
+          <SkeletonList count={5} className="md:hidden">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-40" />
+            </div>
+          </SkeletonList>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <EntryHistoryHeaderRow />
+              </TableHeader>
+              <TableBody>
+                <SkeletonRows columns={ENTRY_HISTORY_COLUMNS} rows={5} />
+              </TableBody>
+            </Table>
+          </div>
+        </>
       ) : entries.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -348,15 +394,7 @@ export function EntryHistory({
           <div className="hidden md:block">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Mitarbeiter</TableHead>
-                  <TableHead>Typ</TableHead>
-                  <TableHead>Zeitstempel</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Manuell</TableHead>
-                  <TableHead>Bearbeitet am</TableHead>
-                  <TableHead className="text-right">Aktionen</TableHead>
-                </TableRow>
+                <EntryHistoryHeaderRow />
               </TableHeader>
               <TableBody>
                 {entries.map((entry) => (

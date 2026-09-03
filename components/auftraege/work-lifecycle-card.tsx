@@ -357,23 +357,16 @@ function BlockerDialog({
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
             <Field label="Grund" htmlFor="work-blocker-reason" required>
-              <Select
+              {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
+              <SearchableSelect
+                options={Object.entries(WORK_BLOCKER_REASON_LABELS).map(
+                  ([value, label]) => ({ value, label }),
+                )}
                 value={reason}
-                onValueChange={(value) => setReason(value as WorkBlockerReason)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(WORK_BLOCKER_REASON_LABELS).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
+                onChange={(value) => setReason(value as WorkBlockerReason)}
+                searchPlaceholder="Grund suchen"
+                emptyMessage="Kein passender Grund gefunden"
+              />
             </Field>
             <Field
               label="Nächster Schritt / Details"

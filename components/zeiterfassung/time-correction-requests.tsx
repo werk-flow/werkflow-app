@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -176,7 +177,29 @@ export function TimeCorrectionRequests({
   };
 
   if (view.isLoading) {
-    return <p className="py-6 text-sm text-muted-foreground">Zeitkorrekturen werden geladen …</p>;
+    return (
+      <div className="space-y-3" role="status" aria-busy="true">
+        <span className="sr-only">Zeitkorrekturen werden geladen.</span>
+        <Skeleton className="h-5 w-44" />
+        {Array.from({ length: 2 }, (_, index) => (
+          <Card key={index} className="gap-4 py-4">
+            <CardHeader className="px-4">
+              <div className="flex items-start gap-3">
+                <Skeleton className="size-4 shrink-0" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-48 max-w-full" />
+                  <Skeleton className="h-3 w-64 max-w-full" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 px-4">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-8 w-40" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
   }
   if (view.error) return <ErrorText>{view.error}</ErrorText>;
   if (requests.length === 0) {

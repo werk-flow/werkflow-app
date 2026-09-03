@@ -7,6 +7,13 @@ import { Inbox, RefreshCw, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ListRow } from '@/components/ui/list-row';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
 import {
   Table,
   TableBody,
@@ -43,6 +50,89 @@ const FILTER_TABS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'geschlossen', label: 'Geschlossen' },
   { value: 'alle', label: 'Alle' },
 ];
+
+// One column definition for the loaded table and its skeleton (design canon):
+// header count, widths and hover cannot drift apart.
+const BADGE_CELL = <Skeleton className="h-5 w-16 rounded-full" />;
+export const REQUEST_COLUMNS: readonly SkeletonColumn[] = [
+  {
+    id: 'number',
+    header: 'Nr.',
+    className: 'w-[110px]',
+    skeleton: <Skeleton className="h-4 w-16" />,
+  },
+  { id: 'summary', header: 'Anliegen', skeleton: <Skeleton className="h-4 w-3/4" /> },
+  {
+    id: 'caller',
+    header: 'Kunde / Anrufer',
+    className: 'w-[18%]',
+    skeleton: <Skeleton className="h-4 w-28" />,
+  },
+  {
+    id: 'category',
+    header: 'Kategorie',
+    className: 'w-[140px]',
+    skeleton: <Skeleton className="h-4 w-20" />,
+  },
+  { id: 'urgency', header: 'Dringlichkeit', className: 'w-[110px]', skeleton: BADGE_CELL },
+  { id: 'status', header: 'Status', className: 'w-[120px]', skeleton: BADGE_CELL },
+  {
+    id: 'receivedAt',
+    header: 'Eingegangen',
+    className: 'w-[140px]',
+    skeleton: <Skeleton className="h-4 w-28" />,
+  },
+  {
+    id: 'assignee',
+    header: 'Zuständig',
+    className: 'w-[15%]',
+    skeleton: <Skeleton className="h-4 w-24" />,
+  },
+];
+
+function RequestsTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow>
+        {REQUEST_COLUMNS.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+/** Same frame as the loaded list; rows hover because loaded rows navigate. */
+export function AnfragenTableSkeleton({ count }: { count: number }) {
+  return (
+    <>
+      <SkeletonList count={count} interactive className="md:hidden">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-5 w-2/3" />
+            {BADGE_CELL}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="mt-1.5">{BADGE_CELL}</div>
+        </div>
+      </SkeletonList>
+      <div className="hidden md:block">
+        <Table>
+          <RequestsTableHeader />
+          <TableBody>
+            <SkeletonRows columns={REQUEST_COLUMNS} rows={count} interactive />
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
 
 function formatReceivedAt(receivedAt: string): string {
   return new Intl.DateTimeFormat('de-DE', {
@@ -173,57 +263,48 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
           {/* Mobile view - card layout (a real link for keyboard/middle-click) */}
           <div className="space-y-2 md:hidden">
             {filteredEntries.map((entry) => (
-              <Link
-                key={entry.request.id}
-                href={`/anfragen/${entry.request.id}`}
-                aria-label={`Anfrage öffnen: ${entry.request.summary}`}
-                className="block rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="min-w-0 truncate text-sm font-medium">
-                    {entry.request.summary}
-                  </p>
-                  <RequestStatusBadge status={entry.request.status} />
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                  <span className="truncate">{requestCallerLabel(entry)}</span>
-                  <span className="text-muted-foreground/60">&middot;</span>
-                  <span>{REQUEST_CATEGORY_LABELS[entry.request.category]}</span>
-                  <span className="text-muted-foreground/60">&middot;</span>
-                  <span>{formatReceivedAt(entry.request.receivedAt)}</span>
-                </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <RequestUrgencyBadge urgency={entry.request.urgency} />
-                  {entry.convertedLabel && (
-                    <span className="text-xs text-muted-foreground">
-                      → {entry.convertedLabel}
-                    </span>
-                  )}
-                </div>
-              </Link>
+              <ListRow key={entry.request.id} asChild interactive>
+                <Link
+                  href={`/anfragen/${entry.request.id}`}
+                  aria-label={`Anfrage öffnen: ${entry.request.summary}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-sm font-medium">
+                        {entry.request.summary}
+                      </p>
+                      <RequestStatusBadge status={entry.request.status} />
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className="truncate">{requestCallerLabel(entry)}</span>
+                      <span className="text-muted-foreground/60">&middot;</span>
+                      <span>{REQUEST_CATEGORY_LABELS[entry.request.category]}</span>
+                      <span className="text-muted-foreground/60">&middot;</span>
+                      <span>{formatReceivedAt(entry.request.receivedAt)}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <RequestUrgencyBadge urgency={entry.request.urgency} />
+                      {entry.convertedLabel && (
+                        <span className="text-xs text-muted-foreground">
+                          → {entry.convertedLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              </ListRow>
             ))}
           </div>
 
           {/* Desktop view - table layout */}
           <div className="hidden md:block">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[110px]">Nr.</TableHead>
-                  <TableHead>Anliegen</TableHead>
-                  <TableHead className="w-[18%]">Kunde / Anrufer</TableHead>
-                  <TableHead className="w-[140px]">Kategorie</TableHead>
-                  <TableHead className="w-[110px]">Dringlichkeit</TableHead>
-                  <TableHead className="w-[120px]">Status</TableHead>
-                  <TableHead className="w-[140px]">Eingegangen</TableHead>
-                  <TableHead className="w-[15%]">Zuständig</TableHead>
-                </TableRow>
-              </TableHeader>
+              <RequestsTableHeader />
               <TableBody>
                 {filteredEntries.map((entry) => (
                   <TableRow
                     key={entry.request.id}
-                    className="cursor-pointer transition-colors hover:bg-accent/50"
+                    interactive
                     onClick={() => router.push(`/anfragen/${entry.request.id}`)}
                   >
                     <TableCell className="text-muted-foreground">

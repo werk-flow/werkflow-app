@@ -60,7 +60,10 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { INVENTORY_ITEM_COLUMNS } from '@/components/inventar/inventory-table-columns';
+import {
+  INVENTORY_ITEM_COLUMNS,
+  INVENTORY_MOVEMENT_COLUMNS,
+} from '@/components/inventar/inventory-table-columns';
 import { LocationSelectWithCreate } from '@/components/inventar/location-select-with-create';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
@@ -1139,22 +1142,20 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Zeitpunkt</TableHead>
-              <TableHead>Artikel</TableHead>
-              <TableHead>Lager</TableHead>
-              <TableHead>Von</TableHead>
-              <TableHead>Nach</TableHead>
-              <TableHead>Bewegung</TableHead>
-              <TableHead className="text-right">Vorher</TableHead>
-              <TableHead className="text-right">Menge</TableHead>
-              <TableHead className="text-right">Danach</TableHead>
-              <TableHead>Grund</TableHead>
+              {INVENTORY_MOVEMENT_COLUMNS.map((column) => (
+                <TableHead key={column.id} className={column.className}>
+                  {column.header}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {movements.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={INVENTORY_MOVEMENT_COLUMNS.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   Noch keine Bewegungen erfasst.
                 </TableCell>
               </TableRow>

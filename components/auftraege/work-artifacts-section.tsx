@@ -24,6 +24,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useBanner } from '@/components/ui/banner';
 import { useLiveView } from '@/hooks/use-live-view';
@@ -496,7 +497,17 @@ function WorkArtifactDialog({
               }}>Aktualisieren</Button>
             </div>
           )}
-          {loading ? <div className="flex min-h-48 items-center justify-center"><Loader2 className="size-5 animate-spin" /></div> : editing ? (
+          {loading ? (
+            <div className="min-h-48 space-y-4" role="status" aria-busy="true">
+              <span className="sr-only">Arbeitsnachweis wird geladen.</span>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : editing ? (
             <ArtifactForm kind={kind} setKind={setKind} lockedKind={Boolean(detail)} visibility={visibility}
               setVisibility={setVisibility} title={title} setTitle={setTitle} capturedAt={capturedAt}
               setCapturedAt={setCapturedAt} content={content} patchContent={patchContent}
