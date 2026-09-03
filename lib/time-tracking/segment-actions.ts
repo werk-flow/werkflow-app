@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { getAuthenticatedUser, getCachedOrganizationSettings } from '@/lib/data/cached';
 import { getBusinessTodayIso } from '@/lib/personnel/types';
@@ -35,14 +36,14 @@ const travelRouteSchema = z.enum([
 ]);
 const travelRoleSchema = z.enum(['driver', 'passenger', 'unspecified']);
 const selectionSchema: z.ZodType<TimeActivitySelection> = z.union([
-  z.strictObject({ kind: z.literal('work'), allocationKind: z.literal('job'), jobId: z.uuid() }),
+  z.strictObject({ kind: z.literal('work'), allocationKind: z.literal('job'), jobId: uuidSchema }),
   z.strictObject({ kind: z.literal('work'), allocationKind: z.literal('unallocated'), jobId: z.null() }),
-  z.strictObject({ kind: z.literal('callout'), allocationKind: z.literal('job'), jobId: z.uuid() }),
+  z.strictObject({ kind: z.literal('callout'), allocationKind: z.literal('job'), jobId: uuidSchema }),
   z.strictObject({ kind: z.literal('callout'), allocationKind: z.literal('unallocated'), jobId: z.null() }),
   z.strictObject({
     kind: z.literal('travel'),
     allocationKind: z.literal('job'),
-    jobId: z.uuid(),
+    jobId: uuidSchema,
     travelRoute: travelRouteSchema,
     travelRole: travelRoleSchema,
   }),
@@ -67,8 +68,8 @@ const selectionSchema: z.ZodType<TimeActivitySelection> = z.union([
 ]);
 
 const transitionSchema = z.object({
-  organizationId: z.uuid(),
-  operationId: z.uuid(),
+  organizationId: uuidSchema,
+  operationId: uuidSchema,
   action: z.enum([
     'start',
     'switch',
@@ -78,7 +79,7 @@ const transitionSchema = z.object({
     'recover_continue',
     'recover_end',
   ]),
-  expectedSessionId: z.uuid().nullable(),
+  expectedSessionId: uuidSchema.nullable(),
   expectedVersion: z.number().int().positive().nullable(),
   selection: selectionSchema.nullable(),
   acknowledgeLong: z.boolean(),
@@ -184,7 +185,7 @@ export async function transitionTimeActivity(
 export async function getCanonicalClockState(
   organizationId: string
 ): Promise<{ success: true; state: LiveClockState | null } | { success: false; error: string }> {
-  if (!z.string().uuid().safeParse(organizationId).success) {
+  if (!uuidSchema.safeParse(organizationId).success) {
     return { success: false, error: 'invalid_input' };
   }
   const user = await getAuthenticatedUser();

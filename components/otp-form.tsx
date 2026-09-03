@@ -11,12 +11,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel
-} from '@/components/ui/field';
+import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import {
   InputOTP,
   InputOTPGroup,
@@ -240,9 +236,12 @@ export function OTPForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="otp">Verifizierungscode</FieldLabel>
+          <div className="flex flex-col gap-6">
+            <Field
+              label="Verifizierungscode"
+              htmlFor="otp"
+              description="Bitte gib den sechsstelligen Code ein, um dein Konto zu bestätigen."
+            >
               <InputOTP
                 id="otp"
                 autoFocus
@@ -261,21 +260,15 @@ export function OTPForm({
                   <InputOTPSlot index={5} />
                 </InputOTPGroup>
               </InputOTP>
-              <FieldDescription>
-                Bitte gib den sechsstelligen Code ein, um dein Konto zu
-                bestätigen.
-              </FieldDescription>
             </Field>
 
-            {formError ? (
-              <p className="text-sm text-destructive">{formError}</p>
-            ) : null}
+            <ErrorText>{formError}</ErrorText>
 
-            <FieldGroup>
+            <div className="flex flex-col gap-4">
               <Button type="submit" disabled={isSubmitting} className="w-full">
                 {isSubmitting ? 'Überprüfung läuft...' : 'Code bestätigen'}
               </Button>
-              <FieldDescription className="text-center">
+              <p className="text-center text-sm text-muted-foreground">
                 Code nicht erhalten?{' '}
                 {resendCooldown > 0 ? (
                   <span className="text-muted-foreground">
@@ -291,9 +284,9 @@ export function OTPForm({
                     {isResending ? 'Sende erneut...' : 'Erneut senden'}
                   </button>
                 )}
-              </FieldDescription>
-            </FieldGroup>
-          </FieldGroup>
+              </p>
+            </div>
+          </div>
         </form>
       </CardContent>
     </Card>

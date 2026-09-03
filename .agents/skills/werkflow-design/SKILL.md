@@ -32,6 +32,9 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 
 ## Density and layout
 
+- **One page container.** Every authenticated page is `PageShell` → `PageHeader` → `PageBody` (`components/shared/page-shell.tsx`, `page-header.tsx`). The shell's `<main>` has no padding and no scroll region; `PageBody` owns both plus the bottom clearance for the clock button. Hand-rolled columns are lint-banned. One title style (`text-xl font-bold sm:text-2xl`), one header padding.
+- **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as `eyebrow` and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, so the header and nav survive navigation and loading states. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
+- **No page-level horizontal scroll on any viewport.** Below the tablet breakpoint tables render as `ListRow` cards; nothing is cropped to fake compliance — a component that does not fit gets a mobile layout. Named exceptions, each inside its own scroll region with a visible edge: the calendar day and week grids and the signature pad. Tab strips and area navs scroll within themselves. The 375 px viewport audit fails any route whose document or page body is wider than the viewport.
 - Slim, not chunky: tabs are `h-9`, sidebar nav items `py-1.5`, active nav is a quiet neutral fill (`bg-accent` + `font-medium`), never a loud colored pill.
 - Managers (admin/buero) get efficient, scannable density — tables, filters, inline actions. Field workers (employee) get simpler screens with one big, unmissable primary action; touch targets ≥ 44px on their primary flows.
 - Don't wrap every block in a card. Prefer sections with headings, spacing, and dividers when hierarchy alone is enough; use cards for genuinely separate objects.
@@ -51,6 +54,16 @@ The first question for any control is: **does this list contain entities or a fi
 
 | Interaction | Component | Import from |
 | --- | --- | --- |
+| Page column, header, scroll body | `PageShell`, `PageHeader`, `PageBody` | `components/shared/page-shell`, `components/shared/page-header` |
+| Route tabs of an area with subpages | `AreaNav` (in the area `layout.tsx`) | `components/shared/area-nav` |
+| Label + control stack (every form field) | `Field` (owns gap, required marker, helper text, `ErrorText`, ARIA wiring; `Input`/`Textarea` read its context) | `components/ui/field` |
+| Table row that reacts to a click | `TableRow interactive` (`"select"` for click-selects, double-click-opens) | `components/ui/table` |
+| Mobile card row of a list | `ListRow` (`interactive`, `asChild` for links, `skeleton`) | `components/ui/list-row` |
+| Loading placeholder for a table or card list | `SkeletonTable` / `SkeletonRows` / `SkeletonList` fed by the list's own column definition | `components/ui/skeleton-table` |
+| Row for a record the user just created | `PendingRow` | `components/ui/pending-row` |
+| Spinner at the point of change | `InlinePending` + `useBusyIds` for per-row pending | `components/ui/inline-pending`, `hooks/use-busy-id` |
+| Instant local echo of a list mutation | `useOptimisticList` (insert/update/remove with rollback and self-expiry) | `hooks/use-optimistic-list` |
+| Progress over N items | `useBatchProgress` | `hooks/use-batch-progress` |
 | Single choice from an entity list | `SearchableSelect` | `components/ui/searchable-select` |
 | Multi choice from an entity list | `SearchableMultiSelect` | `components/ui/searchable-select` |
 | Entity choice with inline create | `SelectWithCreate` | `components/ui/select-with-create` |
@@ -74,7 +87,9 @@ The first question for any control is: **does this list contain entities or a fi
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
-Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, or `type="number"` inputs, no native `<select>`, no sonner imports.
+Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container. In development, a raw `Select` with more than nine options throws at render.
+
+Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 
 Rules the registry components already encode — don't re-implement them per call site: search with a clear button, de-DE case-insensitive filtering (`filterByQuery` in `lib/ui/search`), empty states, `allowNone`, an `action` slot for inline create, `readOnly` rendering, and dialog-aware portaling. Empty-state copy: "Kein/e X gefunden" when a search filters to nothing; when the source list itself is empty, say what the list is for and offer the next action (the `action` slot or an adjacent button).
 
@@ -85,6 +100,12 @@ Rules the registry components already encode — don't re-implement them per cal
 ### Forms and Enter
 
 Every non-destructive create/edit dialog renders a real `<form onSubmit={...}>`; the primary button is `type="submit"`. Enter submits — that is the whole convention, no manual `onKeyDown` Enter shims. Textareas keep Enter for newlines natively. Validate at the point of action: field-level problems render `ErrorText` under the field (with `aria-invalid` on the input), submit-level failures render `ErrorText` next to the submit button.
+
+Every field is a `Field`: it renders the label, the `*` for `required` (plus `aria-required`), helper text wired through `aria-describedby`, and the field error. Helper text is `text-xs text-muted-foreground`; `rows` on a textarea is not used (it sizes to content).
+
+**The submit button is never disabled as a validation hint.** A disabled button makes the user hunt for what is missing and is skipped by keyboard and screen-reader navigation. It stays enabled; on click the form marks the missing fields with `ErrorText` and focuses the first one. Disable only while the action is pending (double-submit protection). The one exception: forms with at most two obvious required fields (login) may enable on completeness.
+
+**Buttons have six states** (default, hover, focus-visible, pressed, loading, disabled). The `Button` primitive owns the first four (`active:` is the pressed darkening); loading is the spinner inside the button the caller renders while `isPending`; disabled means pending or an obviously unavailable action, nothing else.
 
 A nested dialog form (e.g. a quick-create dialog opened from a select inside another dialog's form) must call `event.stopPropagation()` in its `onSubmit`: React synthetic submit events bubble through portals along the React tree and would otherwise submit the surrounding form too.
 
@@ -104,7 +125,9 @@ One convention: on success the dialog closes immediately and the success banner 
 
 ### Loading states
 
-- Every route segment ships a `loading.tsx` skeleton from `components/loading-states/` that mirrors the real layout — structure first, data fills in. New top-level routes also get an entry in the app-shell org-switch skeleton map (`components/sidebar/app-shell.tsx`).
+- Every route segment ships a `loading.tsx` skeleton from `components/loading-states/` that mirrors the real layout — structure first, data fills in. New top-level routes also get an entry in the app-shell org-switch skeleton map (`components/sidebar/app-shell.tsx`). In an area with a `layout.tsx`, the subpage `loading.tsx` renders content only; the header and `AreaNav` stay on screen.
+- **A skeleton mirrors the hover of what it loads, exactly.** Hovering a loading row highlights it like the real row will, and never suggests an interaction the loaded row lacks. This is structural, not reviewed: a list component exports its column definition once and renders rows and `SkeletonRows` from it, `TableRow`/`ListRow` carry `interactive` for loaded and skeleton rows alike, and hover exists only through that flag. One hover token everywhere: `hover:bg-accent/50`. Rows that do nothing on click have no hover, and so do their skeletons.
+- A skeleton never stands in for data that exists. After the user's own action the list keeps its rows and shows a `PendingRow` or an inline indicator; a full-list skeleton after a mutation is a defect.
 - Section-level async loads inside a page use a section skeleton, not a centered spinner with text.
 - Inline spinners are only for small contained actions: inside the clicked button or beside the refreshed control.
 - Determinate operations (uploads, imports) show progress, never a bare spinner.
@@ -131,6 +154,23 @@ One convention: on success the dialog closes immediately and the success banner 
 | Long-running operation | Progress banner that resolves into success or error |
 | Background/list-level failure | Error banner |
 
+### Pending feedback: something happens in the first frame
+
+No interaction may leave the user wondering whether anything happened, even for a second. The matrix names the feedback during the request, chosen by interaction kind; the success and failure surfaces above then take over.
+
+| Interaction | Feedback while the server works |
+| --- | --- |
+| Create from a dialog | The dialog closes at once; the list shows the new record as an optimistic row (`useOptimisticList`) or a `PendingRow` at its sorted position until the server confirms |
+| Inline toggle or reorder (checklist item, drag) | Optimistic: the state flips immediately, rolls back with the error on failure |
+| Row action (approve, withdraw, acknowledge) | `InlinePending` at that row via `useBusyIds`; the other rows stay usable |
+| Section-level edit | `InlinePending` in the section header (`useServerAction`'s `isPending`) |
+| Edit from a dialog | Button spinner while pending; on success the dialog closes and the changed row shows `isSettling` through an inline indicator until the authoritative read lands |
+| N-item operation (import, batch review, bulk move, upload) | `useBatchProgress` rendered as `role="progressbar"`, never a bare spinner |
+| Manual list refresh | Icon spins; rows stay on screen. Never a skeleton over existing data |
+| Direct manipulation with undo (drag, park) | Optimistic move; the success banner fires after persistence, not before |
+
+Pending state binds to the awaited server call (`useServerAction`), never to a router transition: `useTransition` is banned in product code. The optimistic echo is reconciled by id and expires by itself when the server list catches up; every optimistic path has a rollback and shows the failure at the point of action.
+
 ### No silent failures
 
 Every mutation's failure is visible at the point of action — this is a defect class, not a style preference. `console.error` alone is never acceptable; neither is closing a dialog on failure or discarding a result (`void someMutation()`). Error copy answers what happened, why (when known), and what to do next, in natural German, without exposing backend internals. One failure, one surface — no double-reporting the same error through two channels.
@@ -144,6 +184,11 @@ A refresh landing mid-dialog can remount it and destroy typed input. The dialog 
 ## Checklist before shipping UI
 
 - [ ] Values come from tokens/primitives, no ad-hoc hex or radius
+- [ ] Page is `PageShell` → `PageHeader` → `PageBody`; an area with subpages has a `layout.tsx` with `AreaNav`
+- [ ] Nothing scrolls the page horizontally at 375 px; tables have a `ListRow` card layout below the tablet breakpoint
+- [ ] Every field is a `Field`; required fields carry the marker; the submit button is not pre-disabled
+- [ ] Every mutation shows pending feedback in the first frame per the matrix; no skeleton over existing data
+- [ ] Skeleton rows share the list's column definition and its `interactive` flag
 - [ ] Controls come from the component registry; no raw entity `Select`, native date/time/number inputs, or native `<select>`
 - [ ] Non-destructive dialogs are real forms (Enter submits); destructive confirms are `AlertDialog`
 - [ ] Feedback follows the policy matrix; every failure is visible at the point of action

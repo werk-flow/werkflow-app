@@ -110,21 +110,24 @@ export function AnfragenContent({ entries }: AnfragenContentProps) {
   return (
     <>
       <div className="mb-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
+        {/* Stacks on phones: side by side, the search input shrank to nothing
+            under the refresh icon and tapping "refresh" opened the keyboard. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Tabs
             value={statusFilter}
             onValueChange={(value) => setStatusFilter(value as StatusFilter)}
+            className="min-w-0"
           >
-            <TabsList className="h-9">
+            <TabsList className="h-9 max-w-full justify-start overflow-x-auto">
               {FILTER_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value}>
+                <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
                   {tab.label}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <div className="relative w-full max-w-xs">
+          <div className="flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end">
+            <div className="relative min-w-0 flex-1 sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}

@@ -1,6 +1,7 @@
 import { z } from 'zod'
+import { uuidSchema } from '@/lib/validation/uuid'
 
-const uuid = z.string().uuid()
+const uuid = uuidSchema
 const nullableText = (maximum: number) =>
   z.string().trim().max(maximum).nullable().optional().transform((value) => value || null)
 

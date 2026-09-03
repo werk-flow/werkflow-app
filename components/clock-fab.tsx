@@ -54,7 +54,10 @@ export function ClockFAB() {
           )}
         </Button>
         {statusError && (
-          <div className="max-w-56 rounded-md bg-destructive/10 px-2 py-2 text-xs text-destructive" role="alert">
+          <div
+            className="max-w-56 rounded-md border border-destructive/40 bg-card px-3 py-2 text-xs text-destructive shadow-lg"
+            role="alert"
+          >
             <p>Der Zeitstatus konnte nicht sicher geladen werden.</p>
             <Button
               type="button"

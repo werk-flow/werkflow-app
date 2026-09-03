@@ -53,26 +53,31 @@ export function DateTimeField({
     onChange(`${baseDate}T${nextTime}`);
   }
 
+  // Container query, not a viewport breakpoint: the pair lives inside dialogs
+  // and two-column grids whose width does not follow the viewport. Below 20rem
+  // the time input drops under the date so neither can overflow a phone sheet.
   return (
     <div
-      className="grid grid-cols-[1fr_auto] gap-2"
+      className="@container"
       aria-invalid={invalid || undefined}
       aria-describedby={describedById}
     >
-      <DatePicker
-        id={`${idPrefix}-date`}
-        value={dateValue}
-        onChange={handleDateChange}
-        disabled={disabled}
-        ariaLabel={dateAriaLabel}
-      />
-      <TimeInput
-        id={`${idPrefix}-time`}
-        className="w-28"
-        value={timePart}
-        onChange={handleTimeChange}
-        disabled={disabled}
-      />
+      <div className="grid grid-cols-1 gap-2 @[20rem]:grid-cols-[1fr_auto]">
+        <DatePicker
+          id={`${idPrefix}-date`}
+          value={dateValue}
+          onChange={handleDateChange}
+          disabled={disabled}
+          ariaLabel={dateAriaLabel}
+        />
+        <TimeInput
+          id={`${idPrefix}-time`}
+          className="w-full @[20rem]:w-28"
+          value={timePart}
+          onChange={handleTimeChange}
+          disabled={disabled}
+        />
+      </div>
     </div>
   );
 }

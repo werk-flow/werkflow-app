@@ -531,11 +531,11 @@ export function AppShell({
         initialCounts={initialAttentionCounts}
         initialOrganizationId={initialOrganizationId}
       >
-        <div className="flex h-screen flex-col bg-background md:flex-row">
+        <div className="flex h-dvh w-full flex-col overflow-hidden overscroll-none bg-background md:flex-row">
           <MobileHeader />
           <DesktopSidebar />
           <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
-          <div className="relative min-h-0 flex-1 overflow-hidden">
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
             <main
               aria-hidden={isSwitchingOrg}
               className={cn(

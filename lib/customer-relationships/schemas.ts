@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 const optionalText = (maximumLength: number) =>
   z
@@ -12,7 +13,7 @@ export const followUpInputSchema = z
   .object({
     title: z.string().trim().min(1).max(160),
     note: optionalText(2000),
-    ownerUserId: z.uuid(),
+    ownerUserId: uuidSchema,
     dueAt: z.iso.datetime({ offset: true }),
     sourceType: z
       .enum([
@@ -25,7 +26,7 @@ export const followUpInputSchema = z
         'maintenance_coverage',
       ])
       .optional(),
-    sourceId: z.uuid().optional(),
+    sourceId: uuidSchema.optional(),
     reason: optionalText(2000),
   })
   .strict()
@@ -44,7 +45,7 @@ export const followUpTransitionSchema = z
 
 export const communicationSettingsInputSchema = z
   .object({
-    preferredContactId: z.uuid().optional(),
+    preferredContactId: uuidSchema.optional(),
     preferredChannel: z
       .enum(['phone', 'email', 'sms', 'letter', 'in_person'])
       .optional(),
@@ -58,7 +59,7 @@ export const communicationSettingsInputSchema = z
 
 export const communicationPreferenceInputSchema = z
   .object({
-    contactId: z.uuid().optional(),
+    contactId: uuidSchema.optional(),
     channel: z.enum(['phone', 'email', 'sms', 'letter', 'in_person']),
     purpose: z.enum([
       'appointment_service',
@@ -72,7 +73,7 @@ export const communicationPreferenceInputSchema = z
 
 export const communicationGuidanceInputSchema = z
   .object({
-    contactId: z.uuid().nullable(),
+    contactId: uuidSchema.nullable(),
     channel: z.enum(['phone', 'email', 'sms', 'letter', 'in_person']),
     purpose: z.enum([
       'appointment_service',

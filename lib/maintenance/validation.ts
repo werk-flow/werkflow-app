@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 import {
   MAINTENANCE_COVERAGE_STATUSES,
@@ -20,9 +21,9 @@ const nullableDate = z.preprocess(
 
 export const maintenanceCoverageSchema = z
   .object({
-    coverageId: z.string().uuid(),
-    clientId: z.string().uuid(),
-    siteId: z.string().uuid(),
+    coverageId: uuidSchema,
+    clientId: uuidSchema,
+    siteId: uuidSchema,
     reference: nullableText(1, 160),
     description: nullableText(1, 5000),
     status: z.enum(MAINTENANCE_COVERAGE_STATUSES),
@@ -32,7 +33,7 @@ export const maintenanceCoverageSchema = z
     renewalDate: nullableDate,
     reviewDueDate: nullableDate,
     operationalNote: nullableText(1, 5000),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .superRefine((value, context) => {
     if (
@@ -50,13 +51,13 @@ export const maintenanceCoverageSchema = z
 
 export const maintenancePlanSchema = z
   .object({
-    planId: z.string().uuid(),
-    revisionId: z.string().uuid(),
-    clientId: z.string().uuid(),
-    siteId: z.string().uuid(),
-    maintenanceCoverageId: z.string().uuid().optional().nullable(),
+    planId: uuidSchema,
+    revisionId: uuidSchema,
+    clientId: uuidSchema,
+    siteId: uuidSchema,
+    maintenanceCoverageId: uuidSchema.optional().nullable(),
     status: z.enum(["draft", "active"]),
-    templateVersionId: z.string().uuid(),
+    templateVersionId: uuidSchema,
     effectiveFromDate: z.string().date(),
     firstDueDate: z.string().date(),
     intervalMonths: z.number().int().min(1).max(120),
@@ -68,13 +69,13 @@ export const maintenancePlanSchema = z
     overlapReason: nullableText(3, 1000),
     reason: z.string().trim().min(3).max(1000),
     equipmentIds: z
-      .array(z.string().uuid())
+      .array(uuidSchema)
       .min(1)
       .max(50)
       .refine((ids) => new Set(ids).size === ids.length, {
         message: "Jede Anlage darf nur einmal ausgewählt werden.",
       }),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .superRefine((value, context) => {
     if (value.firstDueDate < value.effectiveFromDate) {
@@ -88,21 +89,21 @@ export const maintenancePlanSchema = z
   });
 
 export const maintenanceTransitionSchema = z.object({
-  planId: z.string().uuid(),
+  planId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   toStatus: z.enum(["active", "suspended", "terminated"]),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const maintenanceVisitLinkSchema = z
   .object({
-    dueWorkIds: z.array(z.string().uuid()).min(1).max(20),
+    dueWorkIds: z.array(uuidSchema).min(1).max(20),
     expectedVersions: z.array(z.number().int().positive()).min(1).max(20),
-    jobId: z.string().uuid(),
-    planningOccurrenceId: z.string().uuid().optional().nullable(),
+    jobId: uuidSchema,
+    planningOccurrenceId: uuidSchema.optional().nullable(),
     reason: z.string().trim().min(3).max(1000),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .superRefine((value, context) => {
     if (value.dueWorkIds.length !== value.expectedVersions.length) {
@@ -116,28 +117,28 @@ export const maintenanceVisitLinkSchema = z
   });
 
 export const maintenanceScheduleSchema = z.object({
-  dueWorkId: z.string().uuid(),
+  dueWorkId: uuidSchema,
   expectedVersion: z.number().int().positive(),
-  jobId: z.string().uuid(),
+  jobId: uuidSchema,
   startsAtLocal: z.string().datetime({ local: true }),
   durationMinutes: z.number().int().min(15).max(1440),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const maintenanceExceptionSchema = z.object({
-  dueWorkId: z.string().uuid(),
+  dueWorkId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   toStatus: z.enum(["skipped", "cancelled", "superseded"]),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const maintenanceCompletionSchema = z.object({
-  dueWorkId: z.string().uuid(),
+  dueWorkId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   scopeOutcome: z.enum(MAINTENANCE_SCOPE_OUTCOMES),
   completedOn: z.string().date(),
-  workArtifactRevisionIds: z.array(z.string().uuid()).min(1).max(50),
+  workArtifactRevisionIds: z.array(uuidSchema).min(1).max(50),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });

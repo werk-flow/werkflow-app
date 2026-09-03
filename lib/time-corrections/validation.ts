@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import type { TimeCorrectionKind } from './types';
 
@@ -9,15 +10,15 @@ export const timeCorrectionSourceInputSchema = z.object({
     'canonical_segment',
     'correction_application',
   ]),
-  id: z.uuid(),
+  id: uuidSchema,
 });
 
 export const timeCorrectionFactInputSchema = z.object({
   factId: z.string().min(1).max(100),
-  employeeRecordId: z.uuid(),
+  employeeRecordId: uuidSchema,
   entryType: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
   timestamp: z.iso.datetime({ offset: true }),
-  jobId: z.uuid().nullable().optional(),
+  jobId: uuidSchema.nullable().optional(),
   activityKind: z
     .enum(['work', 'travel', 'break', 'standby', 'callout', 'internal_activity'])
     .nullable()
@@ -25,8 +26,8 @@ export const timeCorrectionFactInputSchema = z.object({
 });
 
 export const submitTimeCorrectionSchema = z.object({
-  organizationId: z.uuid(),
-  subjectEmployeeRecordId: z.uuid(),
+  organizationId: uuidSchema,
+  subjectEmployeeRecordId: uuidSchema,
   kind: z.enum([
     'add',
     'edit',
@@ -40,7 +41,7 @@ export const submitTimeCorrectionSchema = z.object({
   reason: z.string().trim().min(3).max(2000),
   source: timeCorrectionSourceInputSchema.nullable(),
   proposedFacts: z.array(timeCorrectionFactInputSchema).max(20),
-  operationId: z.uuid(),
+  operationId: uuidSchema,
 });
 
 export type SubmitTimeCorrectionInput = z.infer<
@@ -52,7 +53,7 @@ export const reviseTimeCorrectionSchema = submitTimeCorrectionSchema.omit({
   subjectEmployeeRecordId: true,
   kind: true,
 }).extend({
-  requestId: z.uuid(),
+  requestId: uuidSchema,
   expectedRevision: z.number().int().positive(),
 });
 
@@ -61,11 +62,11 @@ export type ReviseTimeCorrectionInput = z.infer<
 >;
 
 export const reviewTimeCorrectionSchema = z.object({
-  requestId: z.uuid(),
+  requestId: uuidSchema,
   expectedRevision: z.number().int().positive(),
   decision: z.enum(['approve', 'reject', 'clarify']),
   comment: z.string().trim().max(2000).nullable(),
-  operationId: z.uuid(),
+  operationId: uuidSchema,
 });
 
 export type ReviewTimeCorrectionInput = z.infer<

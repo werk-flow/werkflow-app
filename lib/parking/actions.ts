@@ -7,6 +7,7 @@
 
 import { revalidatePath, updateTag } from 'next/cache';
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -25,10 +26,10 @@ const PARKING_REASONS = Object.keys(PARKING_REASON_LABELS) as [
 ];
 
 const parkingContextSchema = z.object({
-  jobId: z.string().uuid(),
+  jobId: uuidSchema,
   reason: z.enum(PARKING_REASONS),
   note: z.string().trim().max(1000).nullable(),
-  responsibleEmployeeRecordId: z.string().uuid(),
+  responsibleEmployeeRecordId: uuidSchema,
   nextReviewDate: z.string().date(),
 });
 

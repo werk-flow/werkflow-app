@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { revalidatePath, updateTag } from 'next/cache';
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -53,7 +54,7 @@ const EXPOSED_HANDOVER_ERROR_CODES = new Set([
 
 const targetSchema = z.object({
   targetType: z.enum(['job', 'project']),
-  targetId: z.string().uuid(),
+  targetId: uuidSchema,
 });
 const targetNumberSchema = z.object({
   targetType: z.enum(['job', 'project']),
@@ -61,20 +62,20 @@ const targetNumberSchema = z.object({
   projectNumber: z.string().trim().min(1).max(100).optional(),
 });
 const saveSchema = targetSchema.extend({
-  packageId: z.string().uuid(),
+  packageId: uuidSchema,
   expectedPackageVersion: z.number().int().nonnegative(),
-  requestId: z.string().uuid(),
+  requestId: uuidSchema,
   selectedSourceKeys: z.array(z.string().min(3).max(1000)).max(200),
 });
 const previewSchema = targetSchema.extend({
-  packageId: z.string().uuid(),
+  packageId: uuidSchema,
   expectedPackageVersion: z.number().int().positive(),
-  releaseId: z.string().uuid(),
+  releaseId: uuidSchema,
 });
 const releaseSchema = previewSchema.extend({
-  requestId: z.string().uuid(),
-  documentId: z.string().uuid(),
-  documentLinkId: z.string().uuid(),
+  requestId: uuidSchema,
+  documentId: uuidSchema,
+  documentLinkId: uuidSchema,
   expectedExecutionVersion: z.number().int().nonnegative(),
   expectedContentHash: z.string().regex(/^[0-9a-f]{64}$/),
   reason: z.string().trim().min(3).max(1000),
@@ -82,8 +83,8 @@ const releaseSchema = previewSchema.extend({
   overrideReason: z.string().trim().max(1000).optional(),
 });
 const reopenSchema = targetSchema.extend({
-  packageId: z.string().uuid(),
-  requestId: z.string().uuid(),
+  packageId: uuidSchema,
+  requestId: uuidSchema,
   expectedPackageVersion: z.number().int().positive(),
   expectedExecutionVersion: z.number().int().nonnegative(),
   reason: z.string().trim().min(3).max(1000),
@@ -857,7 +858,7 @@ export async function returnWorkHandoverForCorrection(input: z.input<typeof reop
 export async function getWorkHandoverFieldStatus(jobId: string): Promise<
   { success: true; status: WorkHandoverFieldStatus } | Failure
 > {
-  const parsed = z.string().uuid().safeParse(jobId);
+  const parsed = uuidSchema.safeParse(jobId);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;

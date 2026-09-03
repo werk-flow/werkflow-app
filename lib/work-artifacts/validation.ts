@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType } from './types';
 
 const optionalText = z.string().trim().max(5000).optional();
-const optionalUuid = z.string().uuid().optional();
+const optionalUuid = uuidSchema.optional();
 
 const workArtifactContentSchema = z.object({
   siteId: optionalUuid,
@@ -66,11 +67,11 @@ const workArtifactContentSchema = z.object({
 });
 
 export const saveWorkArtifactSchema = z.object({
-  artifactId: z.string().uuid(),
-  revisionId: z.string().uuid(),
+  artifactId: uuidSchema,
+  revisionId: uuidSchema,
   expectedVersion: z.number().int().nonnegative().nullable(),
   targetType: z.enum(['job', 'project']),
-  targetId: z.string().uuid(),
+  targetId: uuidSchema,
   kind: z.enum(WORK_ARTIFACT_KINDS),
   visibility: z.enum(['internal_only', 'customer_facing']),
   capturedAt: z.string().datetime({ offset: true }),
@@ -123,13 +124,13 @@ export const saveWorkArtifactSchema = z.object({
 });
 
 export const voidWorkArtifactSchema = z.object({
-  artifactId: z.string().uuid(), actionId: z.string().uuid(),
+  artifactId: uuidSchema, actionId: uuidSchema,
   expectedVersion: z.number().int().nonnegative(),
   reason: z.string().trim().min(3).max(2000),
 });
 
 export const workArtifactActionSchema = z.object({
-  artifactId: z.string().uuid(), revisionId: z.string().uuid(), actionId: z.string().uuid(),
+  artifactId: uuidSchema, revisionId: uuidSchema, actionId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   actionType: z.enum(['review_requested', 'review_withdrawn', 'internal_approved', 'internal_rejected',
     'correction_requested', 'customer_acknowledged', 'customer_refused', 'customer_reserved',

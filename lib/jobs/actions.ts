@@ -1,5 +1,6 @@
 'use server';
 
+import { UUID_PATTERN } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from './auth';
@@ -45,8 +46,6 @@ import {
   loadWorkTemplateRequirementRows,
 } from '@/lib/work-templates/server';
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_JOB_ASSIGNMENTS = 200;
 
 // ============================================

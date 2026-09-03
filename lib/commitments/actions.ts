@@ -6,6 +6,7 @@
 
 import { revalidatePath, updateTag } from 'next/cache';
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -15,7 +16,7 @@ import type { CustomerCommitment } from './types';
 
 const recordCommitmentSchema = z
   .object({
-    occurrenceId: z.string().uuid(),
+    occurrenceId: uuidSchema,
     committedDate: z.string().date(),
     windowStartTime: z
       .string()
@@ -26,7 +27,7 @@ const recordCommitmentSchema = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable(),
     source: z.enum(['telefonisch', 'vor_ort', 'schriftlich_manuell', 'sonstige']),
-    contactId: z.string().uuid().nullable(),
+    contactId: uuidSchema.nullable(),
   })
   .superRefine((value, context) => {
     if ((value.windowStartTime === null) !== (value.windowEndTime === null)) {
@@ -96,7 +97,7 @@ export async function withdrawCustomerCommitment(
   commitmentId: string,
   reason: string
 ): Promise<{ success: true } | { success: false; error: string }> {
-  if (!z.string().uuid().safeParse(commitmentId).success) {
+  if (!uuidSchema.safeParse(commitmentId).success) {
     return { success: false, error: 'invalid_input' };
   }
   const trimmedReason = reason.trim();
@@ -139,7 +140,7 @@ export async function getActiveCommitmentsForOccurrences(
 > {
   // Malformed ids reject the whole call rather than being silently dropped.
   if (
-    occurrenceIds.some((id) => !z.string().uuid().safeParse(id).success)
+    occurrenceIds.some((id) => !uuidSchema.safeParse(id).success)
   ) {
     return { success: false, error: 'invalid_input' };
   }

@@ -121,8 +121,9 @@ describe('browser spec conventions (testing.md)', () => {
     const source = readFileSync(path, 'utf8');
     const name = specName(path);
 
-    test(`${name} carries a wave-audit grep tag`, () => {
-      expect(source).toMatch(/@AUDIT-W\d/);
+    test(`${name} carries an audit grep tag`, () => {
+      // Wave specs carry @AUDIT-W<N>; cross-wave layout audits carry @AUDIT-LAYOUT.
+      expect(source).toMatch(/@AUDIT-(W\d|LAYOUT)/);
     });
   }
 });

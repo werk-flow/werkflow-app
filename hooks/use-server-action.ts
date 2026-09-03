@@ -35,18 +35,35 @@ export function usePendingTask(): {
  * `useTransition` semantics this replaces. Errors propagate to the caller
  * after the pending count settles.
  */
+export type ServerActionPhase = 'idle' | 'pending' | 'settling';
+
+/**
+ * `settle` (optional) names the read that makes the surface authoritative
+ * again after the action resolves: a `useLiveView` refresh, or a promise that
+ * resolves when refreshed server props arrive. `run` still returns as soon
+ * as the action does, so a dialog closes immediately; `isSettling` stays true
+ * until the settle read finishes, and the landing surface shows that window
+ * with an inline indicator instead of a skeleton (feedback canon, 2026-09-03).
+ * A settle failure never rejects `run`; the live view owns that error.
+ */
 export function useServerAction<Args extends readonly unknown[], Result>(
-  action: (...args: Args) => Promise<Result>
+  action: (...args: Args) => Promise<Result>,
+  options: { settle?: (result: Result) => Promise<unknown> } = {}
 ): {
   run: (...args: Args) => Promise<Result>;
   isPending: boolean;
+  isSettling: boolean;
+  phase: ServerActionPhase;
 } {
   const [pendingCount, setPendingCount] = useState(0);
+  const [settlingCount, setSettlingCount] = useState(0);
   const mountedRef = useRef(true);
   const actionRef = useRef(action);
+  const settleRef = useRef(options.settle);
 
   useEffect(() => {
     actionRef.current = action;
+    settleRef.current = options.settle;
   });
 
   useEffect(() => {
@@ -58,14 +75,32 @@ export function useServerAction<Args extends readonly unknown[], Result>(
 
   const run = useCallback(async (...args: Args): Promise<Result> => {
     setPendingCount((count) => count + 1);
+    let result: Result;
     try {
-      return await actionRef.current(...args);
+      result = await actionRef.current(...args);
     } finally {
       if (mountedRef.current) {
         setPendingCount((count) => count - 1);
       }
     }
+    const settle = settleRef.current;
+    if (settle && mountedRef.current) {
+      setSettlingCount((count) => count + 1);
+      void settle(result)
+        .catch(() => undefined)
+        .finally(() => {
+          if (mountedRef.current) setSettlingCount((count) => count - 1);
+        });
+    }
+    return result;
   }, []);
 
-  return { run, isPending: pendingCount > 0 };
+  const isPending = pendingCount > 0;
+  const isSettling = settlingCount > 0;
+  return {
+    run,
+    isPending,
+    isSettling,
+    phase: isPending ? 'pending' : isSettling ? 'settling' : 'idle',
+  };
 }

@@ -2,6 +2,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import type { ReadinessResult } from "@/lib/dispatch/types";
 import { WORK_ARTIFACT_KINDS, WORK_ARTIFACT_STATUSES } from "@/lib/work-artifacts/types";
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 export type WorkTargetType = "job" | "project";
 export type WorkExecutionState =
@@ -245,11 +246,11 @@ const jsonSchema: z.ZodType<Json> = z.lazy(() =>
     z.record(z.string(), jsonSchema),
   ]),
 );
-const nullableUuidSchema = z.string().uuid().nullable();
+const nullableUuidSchema = uuidSchema.nullable();
 const workExecutionStateSchema = z.enum(WORK_EXECUTION_STATES);
 const workBlockerSchema: z.ZodType<WorkBlocker> = z.object({
-  id: z.string().uuid(),
-  organization_id: z.string().uuid(),
+  id: uuidSchema,
+  organization_id: uuidSchema,
   job_id: nullableUuidSchema,
   project_id: nullableUuidSchema,
   parent_project_parking_blocker_id: nullableUuidSchema,
@@ -272,8 +273,8 @@ const workBlockerSchema: z.ZodType<WorkBlocker> = z.object({
   resolution_note: z.string().nullable(),
 });
 const workDependencySchema: z.ZodType<WorkDependency> = z.object({
-  id: z.string().uuid(),
-  organization_id: z.string().uuid(),
+  id: uuidSchema,
+  organization_id: uuidSchema,
   dependent_job_id: nullableUuidSchema,
   dependent_project_id: nullableUuidSchema,
   predecessor_job_id: nullableUuidSchema,
@@ -294,8 +295,8 @@ const workDependencySchema: z.ZodType<WorkDependency> = z.object({
   is_satisfied: z.boolean(),
 });
 const workExecutionEventSchema: z.ZodType<WorkExecutionEvent> = z.object({
-  id: z.string().uuid(),
-  organization_id: z.string().uuid(),
+  id: uuidSchema,
+  organization_id: uuidSchema,
   job_id: nullableUuidSchema,
   project_id: nullableUuidSchema,
   event_type: z.string().min(1),
@@ -313,7 +314,7 @@ const workExecutionEventSchema: z.ZodType<WorkExecutionEvent> = z.object({
 const databaseWorkLifecycleSnapshotSchema: z.ZodType<DatabaseWorkLifecycleSnapshot> =
   z.object({
     targetType: z.enum(["job", "project"]),
-    targetId: z.string().uuid(),
+    targetId: uuidSchema,
     executionState: workExecutionStateSchema,
     executionVersion: z.number().int().nonnegative(),
     isLegacy: z.boolean(),
@@ -333,9 +334,9 @@ const databaseWorkLifecycleSnapshotSchema: z.ZodType<DatabaseWorkLifecycleSnapsh
       requiredCustomerDecisions: z.number().int().nonnegative(),
       requiredSignatures: z.number().int().nonnegative(),
       artifactFacts: z.array(z.object({
-        artifactId: z.string().uuid(),
+        artifactId: uuidSchema,
         version: z.number().int().positive(),
-        revisionId: z.string().uuid(),
+        revisionId: uuidSchema,
         status: z.enum(WORK_ARTIFACT_STATUSES),
         kind: z.enum(WORK_ARTIFACT_KINDS),
         latestActionId: nullableUuidSchema,

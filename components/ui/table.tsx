@@ -51,19 +51,47 @@ const TableFooter = React.forwardRef<
 ))
 TableFooter.displayName = "TableFooter"
 
-const TableRow = React.forwardRef<
-  HTMLTableRowElement,
-  React.HTMLAttributes<HTMLTableRowElement>
->(({ className, ...props }, ref) => (
-  <tr
-    ref={ref}
-    className={cn(
-      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-      className
-    )}
-    {...props}
-  />
-))
+// Hover is opt-in (design canon, 2026-09-03): a row hovers only when a click
+// does something. `interactive` navigates or acts on click; `"select"` is the
+// Dokumente flavor where click selects and double-click opens (the `group`
+// reveals the selection circle). Skeleton rows pass the same value, so a
+// loading placeholder can never promise more or less than the loaded row.
+export type TableRowInteractive = boolean | "select"
+
+export const TABLE_ROW_INTERACTIVE_CLASS =
+  "cursor-pointer transition-colors hover:bg-accent/50"
+export const TABLE_ROW_SELECT_CLASS =
+  "group cursor-default transition-colors hover:bg-accent/50"
+
+export function tableRowClassName(
+  interactive: TableRowInteractive | undefined,
+  className?: string
+): string {
+  return cn(
+    "border-b data-[state=selected]:bg-muted",
+    interactive === true && TABLE_ROW_INTERACTIVE_CLASS,
+    interactive === "select" && TABLE_ROW_SELECT_CLASS,
+    className
+  )
+}
+
+type TableRowProps = React.HTMLAttributes<HTMLTableRowElement> & {
+  interactive?: TableRowInteractive
+  /** Loading placeholder row: same classes as the loaded row, hidden from assistive tech. */
+  skeleton?: boolean
+}
+
+const TableRow = React.forwardRef<HTMLTableRowElement, TableRowProps>(
+  ({ className, interactive, skeleton, ...props }, ref) => (
+    <tr
+      ref={ref}
+      data-skeleton={skeleton ? "" : undefined}
+      aria-hidden={skeleton ? true : undefined}
+      className={tableRowClassName(interactive, className)}
+      {...props}
+    />
+  )
+)
 TableRow.displayName = "TableRow"
 
 const TableHead = React.forwardRef<

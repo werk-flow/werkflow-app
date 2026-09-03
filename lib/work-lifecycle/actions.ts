@@ -2,6 +2,7 @@
 
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 import { CACHE_TAGS } from "@/lib/data/cached";
 import { authenticateAndAuthorize } from "@/lib/jobs/auth";
@@ -28,7 +29,7 @@ import {
 
 const targetSchema = z.object({
   targetType: z.enum(["job", "project"]),
-  targetId: z.string().uuid(),
+  targetId: uuidSchema,
 });
 const versionSchema = z.number().int().nonnegative();
 const reasonSchema = z.string().trim().min(3).max(1000);
@@ -46,30 +47,30 @@ const transitionInputSchema = targetSchema.extend({
   overrideGates: z.boolean().optional(),
 });
 const clearProjectOverrideInputSchema = z.object({
-  projectId: z.string().uuid(),
+  projectId: uuidSchema,
   expectedVersion: versionSchema,
   reason: reasonSchema,
 });
 const blockerInputSchema = targetSchema
   .extend({
-    instructionItemId: z.string().uuid().optional(),
-    blockerId: z.string().uuid().optional(),
+    instructionItemId: uuidSchema.optional(),
+    blockerId: uuidSchema.optional(),
     expectedVersion: versionSchema.optional(),
     reason: workBlockerReasonSchema,
     details: detailsSchema.optional(),
-    responsibleEmployeeRecordId: z.string().uuid(),
+    responsibleEmployeeRecordId: uuidSchema,
     nextReviewDate: z.string().date(),
   })
   .refine((value) => value.reason !== "other" || value.details, {
     message: "details_required",
   });
 const blockerStateInputSchema = z.object({
-  blockerId: z.string().uuid(),
+  blockerId: uuidSchema,
   expectedVersion: versionSchema,
   resolutionNote: reasonSchema,
 });
 const reopenBlockerInputSchema = z.object({
-  blockerId: z.string().uuid(),
+  blockerId: uuidSchema,
   expectedVersion: versionSchema,
   reason: reasonSchema,
 });
@@ -78,7 +79,7 @@ const parkInputSchema = targetSchema
     expectedExecutionVersion: versionSchema,
     reason: workBlockerReasonSchema,
     details: detailsSchema.optional(),
-    responsibleEmployeeRecordId: z.string().uuid(),
+    responsibleEmployeeRecordId: uuidSchema,
     nextReviewDate: z.string().date(),
   })
   .refine((value) => value.reason !== "other" || value.details, {
@@ -89,9 +90,9 @@ const unparkInputSchema = targetSchema.extend({
   reason: reasonSchema,
 });
 const dependencyPredecessorSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("job"), id: z.string().uuid() }),
-  z.object({ type: z.literal("project"), id: z.string().uuid() }),
-  z.object({ type: z.literal("instruction"), id: z.string().uuid() }),
+  z.object({ type: z.literal("job"), id: uuidSchema }),
+  z.object({ type: z.literal("project"), id: uuidSchema }),
+  z.object({ type: z.literal("instruction"), id: uuidSchema }),
   z.object({
     type: z.literal("declared"),
     kind: workDeclaredDependencyKindSchema,
@@ -99,7 +100,7 @@ const dependencyPredecessorSchema = z.discriminatedUnion("type", [
 ]);
 const dependencyInputSchema = targetSchema
   .extend({
-    dependencyId: z.string().uuid().optional(),
+    dependencyId: uuidSchema.optional(),
     expectedVersion: versionSchema.optional(),
     predecessor: dependencyPredecessorSchema,
     description: z.string().trim().min(3).max(1000).optional(),
@@ -110,13 +111,13 @@ const dependencyInputSchema = targetSchema
     { message: "description_required" },
   );
 const dependencyStateInputSchema = z.object({
-  dependencyId: z.string().uuid(),
+  dependencyId: uuidSchema,
   expectedVersion: versionSchema,
   state: z.enum(["open", "satisfied", "waived"]),
   reason: reasonSchema,
 });
 const removeDependencyInputSchema = z.object({
-  dependencyId: z.string().uuid(),
+  dependencyId: uuidSchema,
   expectedVersion: versionSchema,
   reason: reasonSchema,
 });
@@ -859,8 +860,8 @@ export async function linkWorkDependencyArtifactApproval(input: {
   actionId: string;
   reason: string;
 }): Promise<WorkActionFailure | { success: true; dependency: WorkDependency }> {
-  const parsed = z.object({ dependencyId: z.string().uuid(), expectedVersion: versionSchema,
-    actionId: z.string().uuid(), reason: reasonSchema }).safeParse(input);
+  const parsed = z.object({ dependencyId: uuidSchema, expectedVersion: versionSchema,
+    actionId: uuidSchema, reason: reasonSchema }).safeParse(input);
   if (!parsed.success) return { success: false, error: "invalid_input" };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;

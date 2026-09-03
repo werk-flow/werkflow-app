@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath, updateTag } from 'next/cache';
-import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
@@ -340,7 +340,7 @@ export async function linkWorkArtifactSource(input: {
     input.revisionId,
     input.linkId,
     selectedSourceId,
-  ].every((identifier) => z.uuid().safeParse(identifier).success)) {
+  ].every((identifier) => uuidSchema.safeParse(identifier).success)) {
     return { success: false, error: 'invalid_input' };
   }
   const auth = await authenticateAndAuthorize();

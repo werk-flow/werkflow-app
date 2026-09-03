@@ -72,10 +72,40 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
   SelectPrimitive.ScrollDownButton.displayName
 
+// Registry rule (werkflow-design): raw Select is for fixed enums under ~10
+// options; entity lists and anything with ten or more options must be a
+// searchable component. The count is checked at render in development so an
+// enum that grows past the limit, or an entity list wired to a raw Select,
+// fails the page instead of shipping.
+const MAX_RAW_SELECT_OPTIONS = 9
+
+function assertRawSelectOptionCount(children: React.ReactNode) {
+  if (process.env.NODE_ENV !== "development") return
+  let count = 0
+  const visit = (node: React.ReactNode) => {
+    React.Children.forEach(node, (child) => {
+      if (!React.isValidElement<{ children?: React.ReactNode }>(child)) return
+      if (child.type === SelectItem) {
+        count += 1
+        return
+      }
+      if (child.props.children) visit(child.props.children)
+    })
+  }
+  visit(children)
+  if (count > MAX_RAW_SELECT_OPTIONS) {
+    throw new Error(
+      `Raw Select renders ${count} options; the registry caps it at ${MAX_RAW_SELECT_OPTIONS}. Use SearchableSelect or SelectWithCreate (werkflow-design skill, component registry).`
+    )
+  }
+}
+
 const SelectContent = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => (
+>(({ className, children, position = "popper", ...props }, ref) => {
+  assertRawSelectOptionCount(children)
+  return (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -106,7 +136,8 @@ const SelectContent = React.forwardRef<
       <SelectScrollDownButton />
     </SelectPrimitive.Content>
   </SelectPrimitive.Portal>
-))
+  )
+})
 SelectContent.displayName = SelectPrimitive.Content.displayName
 
 const SelectLabel = React.forwardRef<

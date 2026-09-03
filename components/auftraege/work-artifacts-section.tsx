@@ -14,6 +14,8 @@ import {
 import { DateTimeField } from '@/components/ui/date-time-field';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
+// Aliased: this file already has a local text-field helper named `Field`.
+import { Field as FormField } from '@/components/ui/field';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -529,8 +531,8 @@ function WorkArtifactDialog({
                 <FormDisclosure label="Kundenentscheidung und Unterschrift">
                   <div className="space-y-4 rounded-md border p-4">
                     <p className="text-xs text-muted-foreground">{WORK_ARTIFACT_LEGAL_NOTICE}</p>
-                    <div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="artifact-customer-name">Name</Label><Input id="artifact-customer-name" value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></div><div><Label htmlFor="artifact-customer-role">Rolle/Funktion</Label><Input id="artifact-customer-role" value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} /></div></div>
-                    <div><Label htmlFor="artifact-customer-relationship">Bezug zum Kunden</Label><Input id="artifact-customer-relationship" value={customerRelationship} onChange={(event) => setCustomerRelationship(event.target.value)} /></div>
+                    <div className="grid gap-3 sm:grid-cols-2"><FormField label="Name" htmlFor="artifact-customer-name"><Input value={customerName} onChange={(event) => setCustomerName(event.target.value)} /></FormField><FormField label="Rolle/Funktion" htmlFor="artifact-customer-role"><Input value={customerRole} onChange={(event) => setCustomerRole(event.target.value)} /></FormField></div>
+                    <FormField label="Bezug zum Kunden" htmlFor="artifact-customer-relationship"><Input value={customerRelationship} onChange={(event) => setCustomerRelationship(event.target.value)} /></FormField>
                     <div className="flex flex-wrap gap-2"><Button type="button" onClick={() => customerAction('customer_acknowledged')} disabled={isPending || customerName.trim().length < 2}>Bestätigung erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_reserved')} disabled={isPending || customerName.trim().length < 2 || actionReason.trim().length < 3}>Vorbehalt erfassen</Button><Button type="button" variant="outline" onClick={() => customerAction('customer_refused')} disabled={isPending || customerName.trim().length < 2 || actionReason.trim().length < 3}>Ablehnung erfassen</Button></div>
                     <SignaturePad disabled={isPending || Boolean(pendingSignatureDocumentId)} onChange={setSignatureFile} />
                     {pendingSignatureDocumentId && <p className="text-xs text-muted-foreground">Der Upload ist bereit. Du kannst das Speichern erneut versuchen.</p>}

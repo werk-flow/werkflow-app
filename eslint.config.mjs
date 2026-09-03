@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import { playwrightSpecRules } from "./eslint-rules/playwright-spec-rules.mjs";
+import { uiRules } from "./eslint-rules/ui-rules.mjs";
 
 // ENFORCEMENT LADDER TIER 2 (docs/decisions/0005-enforcement-ladder.md).
 // ESLint flat config does NOT merge `no-restricted-syntax` across blocks: the
@@ -23,6 +24,27 @@ const authSelectors = [
       "signOut() without an explicit scope defaults to 'global' and revokes the user's sessions on every device. Pass { scope: 'local' } (or a deliberate 'global'/'others' with a comment). See docs/technical/test-incident-log.md (2026-08-27) and decision 0005.",
   },
 ];
+
+// The strict zod uuid check (RFC 4122 version and variant nibbles) rejects the
+// hand-made production organization ids; every Wave 1/2 validator that used it
+// returned invalid_input for those tenants without logging (2026-09-03). The
+// app-wide validator is uuidSchema in lib/validation/uuid.ts, the one file
+// exempt from this rule.
+const uuidSelectors = [
+  {
+    selector:
+      'CallExpression[callee.property.name="uuid"][callee.object.type="CallExpression"][callee.object.callee.property.name="string"]',
+    message:
+      "z.string().uuid() is strict RFC 4122 and rejects real production ids. Import { uuidSchema } from '@/lib/validation/uuid' (incident 2026-09-03).",
+  },
+  {
+    selector: 'CallExpression[callee.object.name="z"][callee.property.name="uuid"]',
+    message:
+      "z.uuid() is strict RFC 4122 and rejects real production ids. Import { uuidSchema } from '@/lib/validation/uuid' (incident 2026-09-03).",
+  },
+];
+
+const alwaysOnSelectors = [...authSelectors, ...uuidSelectors];
 
 // The production Supabase project ref must never reach app or test code: a
 // leaked ref in the harness would write test data into real customer state.
@@ -290,6 +312,13 @@ const eslintConfig = defineConfig([
   {
     files: ["**/*.{ts,tsx}"],
     rules: {
+      "no-restricted-syntax": ["error", ...alwaysOnSelectors],
+    },
+  },
+  // The one home of the permissive uuid validator may use zod's primitives.
+  {
+    files: ["lib/validation/uuid.ts"],
+    rules: {
       "no-restricted-syntax": ["error", ...authSelectors],
     },
   },
@@ -298,7 +327,7 @@ const eslintConfig = defineConfig([
   {
     files: ["tests/**/*.{ts,tsx}"],
     rules: {
-      "no-restricted-syntax": ["error", ...authSelectors, ...prodRefSelectors],
+      "no-restricted-syntax": ["error", ...alwaysOnSelectors, ...prodRefSelectors],
     },
   },
   // Spec files additionally carry the spec-lint set; the shared support
@@ -311,7 +340,7 @@ const eslintConfig = defineConfig([
       "playwright-spec/no-visible-text-zero-count": "error",
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         ...specSelectors,
       ],
@@ -327,7 +356,7 @@ const eslintConfig = defineConfig([
       "no-console": ["error", { allow: ["warn", "error", "info"] }],
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         ...realtimeSelectors,
         ...stylingSelectors,
@@ -351,10 +380,12 @@ const eslintConfig = defineConfig([
   {
     files: ["app/**/*.tsx", "components/**/*.tsx"],
     ignores: ["components/ui/**"],
+    plugins: { ui: uiRules },
     rules: {
+      "ui/label-in-spaced-container": "error",
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         ...realtimeSelectors,
         ...stylingSelectors,
@@ -370,7 +401,7 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         channelSelector,
         authListenerSelector,
@@ -387,7 +418,7 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         ...asyncTransitionSelectors,
         ...pollingSelectors,
@@ -402,7 +433,7 @@ const eslintConfig = defineConfig([
     rules: {
       "no-restricted-syntax": [
         "error",
-        ...authSelectors,
+        ...alwaysOnSelectors,
         ...prodRefSelectors,
         channelSelector,
         visibilitySelector,

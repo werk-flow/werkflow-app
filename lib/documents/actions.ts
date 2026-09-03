@@ -1,5 +1,6 @@
 "use server";
 
+import { UUID_PATTERN } from '@/lib/validation/uuid';
 import { randomUUID } from "crypto";
 import { revalidatePath, updateTag } from "next/cache";
 
@@ -387,8 +388,6 @@ function buildVersionStoragePath({
   });
 }
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Types the in-app viewer actually previews. Everything else is delivered as a
 // download so uploader-controlled active content (HTML, SVG) can never render

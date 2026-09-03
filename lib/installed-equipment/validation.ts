@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 import {
   EQUIPMENT_CATEGORIES,
@@ -24,9 +25,9 @@ export const equipmentIdentifierSchema = z.object({
 
 export const equipmentFormSchema = z
   .object({
-    clientId: z.string().uuid(),
-    siteId: z.string().uuid(),
-    parentEquipmentId: z.string().uuid().optional().nullable(),
+    clientId: uuidSchema,
+    siteId: uuidSchema,
+    parentEquipmentId: uuidSchema.optional().nullable(),
     name: z.string().trim().min(2).max(160),
     category: z.enum(EQUIPMENT_CATEGORIES),
     subtype: z.enum(EQUIPMENT_SUBTYPES).optional().nullable(),
@@ -84,61 +85,61 @@ export const equipmentFormSchema = z
   });
 
 export const equipmentUpdateSchema = equipmentFormSchema.safeExtend({
-  equipmentId: z.string().uuid(),
+  equipmentId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentCreateSchema = equipmentFormSchema.safeExtend({
-  equipmentId: z.string().uuid(),
-  idempotencyKey: z.string().uuid(),
+  equipmentId: uuidSchema,
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentTransitionSchema = z.object({
-  equipmentId: z.string().uuid(),
+  equipmentId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   toState: z.enum(EQUIPMENT_STATES),
   effectiveAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentArchiveSchema = z.object({
-  equipmentId: z.string().uuid(),
+  equipmentId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   archived: z.boolean(),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentReplacementSchema = equipmentFormSchema.safeExtend({
-  predecessorId: z.string().uuid(),
-  successorId: z.string().uuid(),
+  predecessorId: uuidSchema,
+  successorId: uuidSchema,
   expectedVersion: z.number().int().positive(),
   effectiveAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentCorrectionSchema = z.object({
-  equipmentId: z.string().uuid(),
+  equipmentId: uuidSchema,
   expectedVersion: z.number().int().positive(),
-  correctsEventId: z.string().uuid(),
+  correctsEventId: uuidSchema,
   effectiveAt: z.string().datetime({ offset: true }),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const equipmentWorkLinkSchema = z
   .object({
-    equipmentId: z.string().uuid(),
+    equipmentId: uuidSchema,
     expectedVersion: z.number().int().positive(),
-    jobId: z.string().uuid().optional().nullable(),
-    projectId: z.string().uuid().optional().nullable(),
+    jobId: uuidSchema.optional().nullable(),
+    projectId: uuidSchema.optional().nullable(),
     linked: z.boolean(),
     reason: optionalText(1000),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .refine(
     (input) =>
@@ -151,7 +152,7 @@ export const equipmentWorkLinkSchema = z
 
 export const equipmentSourceSchema = z
   .object({
-    equipmentId: z.string().uuid(),
+    equipmentId: uuidSchema,
     expectedVersion: z.number().int().positive(),
     targetType: z.enum([
       "job",
@@ -160,10 +161,10 @@ export const equipmentSourceSchema = z
       "handover_release",
       "document",
     ]),
-    targetId: z.string().uuid(),
+    targetId: uuidSchema,
     documentVersionNumber: z.number().int().positive().optional().nullable(),
     reason: z.string().trim().min(3).max(1000),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .superRefine((input, context) => {
     const hasDocumentVersion = Boolean(input.documentVersionNumber);

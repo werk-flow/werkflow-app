@@ -1,15 +1,16 @@
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 const localDateTimeSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
 
 const assignmentSchema = z.object({
-  employeeRecordId: z.string().uuid(),
-  teamSourceId: z.string().uuid().nullable().default(null),
+  employeeRecordId: uuidSchema,
+  teamSourceId: uuidSchema.nullable().default(null),
 });
 
-export const planningIdSchema = z.string().uuid();
+export const planningIdSchema = uuidSchema;
 
 const baseEntrySchema = z
   .object({
@@ -17,7 +18,7 @@ const baseEntrySchema = z
     internalType: z
       .enum(['internal_work', 'meeting', 'training', 'other'])
       .nullable(),
-    jobId: z.string().uuid().nullable(),
+    jobId: uuidSchema.nullable(),
     title: z.string().trim().max(160).nullable(),
     description: z.string().trim().max(4000).nullable(),
     location: z.string().trim().max(500).nullable(),
@@ -35,7 +36,7 @@ const baseEntrySchema = z
         { message: 'Eine Person darf nur einmal zugewiesen werden.' }
       ),
     teamIds: z
-      .array(z.string().uuid())
+      .array(uuidSchema)
       .max(50)
       .transform((ids) => [...new Set(ids)])
       .default([]),
@@ -87,7 +88,7 @@ const baseEntrySchema = z
 export const createPlanningEntrySchema = baseEntrySchema.and(
   z
     .object({
-      idempotencyKey: z.string().uuid(),
+      idempotencyKey: uuidSchema,
       recurrence: z
         .object({
           frequency: z.enum(['daily', 'weekly', 'monthly']),
@@ -152,7 +153,7 @@ export const createPlanningEntrySchema = baseEntrySchema.and(
 
 export const updatePlanningOccurrenceSchema = baseEntrySchema.and(
   z.object({
-    occurrenceId: z.string().uuid(),
+    occurrenceId: uuidSchema,
     expectedVersion: z.number().int().positive(),
     scope: z.enum(['one', 'future', 'series']),
   })
@@ -163,8 +164,8 @@ export const updatePlanningCalendarSchema = z
     plannedDate: z.string().date().optional(),
     plannedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
     estimatedDurationMinutes: z.number().int().min(15).max(10_080).nullable().optional(),
-    selectedUserIds: z.array(z.string().uuid()).max(100).optional(),
-    selectedEmployeeRecordIds: z.array(z.string().uuid()).max(100).optional(),
+    selectedUserIds: z.array(uuidSchema).max(100).optional(),
+    selectedEmployeeRecordIds: z.array(uuidSchema).max(100).optional(),
     overrideReason: z.string().trim().min(8).max(1000).nullable().optional(),
     assessmentFingerprint: z.string().length(64).nullable().optional(),
   })
@@ -180,7 +181,7 @@ export const updatePlanningCalendarSchema = z
   });
 
 export const planningOccurrenceStatusSchema = z.object({
-  occurrenceId: z.string().uuid(),
+  occurrenceId: uuidSchema,
   status: z.enum(['skipped', 'cancelled']),
   reason: z.string().trim().min(8).max(1000),
 });

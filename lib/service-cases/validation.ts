@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 import {
   SERVICE_CASE_CHARGE_CONTEXTS,
@@ -16,12 +17,12 @@ const nullableText = (minimum: number, maximum: number) =>
 
 export const serviceCaseCreateSchema = z
   .object({
-    serviceCaseId: z.string().uuid(),
-    idempotencyKey: z.string().uuid(),
-    sourceRequestId: z.string().uuid().optional().nullable(),
-    clientId: z.string().uuid().optional().nullable(),
-    contactId: z.string().uuid().optional().nullable(),
-    siteId: z.string().uuid().optional().nullable(),
+    serviceCaseId: uuidSchema,
+    idempotencyKey: uuidSchema,
+    sourceRequestId: uuidSchema.optional().nullable(),
+    clientId: uuidSchema.optional().nullable(),
+    contactId: uuidSchema.optional().nullable(),
+    siteId: uuidSchema.optional().nullable(),
     originalStatement: nullableText(2, 5000),
     originalDetails: nullableText(1, 10000),
     summary: nullableText(2, 300),
@@ -29,7 +30,7 @@ export const serviceCaseCreateSchema = z
     chargeContext: z.enum(SERVICE_CASE_CHARGE_CONTEXTS),
     accessInstructions: nullableText(1, 3000),
     triageNote: nullableText(1, 5000),
-    equipmentIds: z.array(z.string().uuid()).max(30),
+    equipmentIds: z.array(uuidSchema).max(30),
   })
   .superRefine((input, context) => {
     if (input.sourceRequestId) return;
@@ -51,7 +52,7 @@ export const serviceCaseCreateSchema = z
 
 export const serviceCaseUpdateSchema = z
   .object({
-    serviceCaseId: z.string().uuid(),
+    serviceCaseId: uuidSchema,
     expectedVersion: z.number().int().positive(),
     summary: z.string().trim().min(2).max(300),
     urgency: z.enum(SERVICE_CASE_URGENCIES),
@@ -60,10 +61,10 @@ export const serviceCaseUpdateSchema = z
     accessInstructions: nullableText(1, 3000),
     triageNote: nullableText(1, 5000),
     resolutionNote: nullableText(3, 5000),
-    jobId: z.string().uuid().optional().nullable(),
-    equipmentIds: z.array(z.string().uuid()).max(30),
+    jobId: uuidSchema.optional().nullable(),
+    equipmentIds: z.array(uuidSchema).max(30),
     reason: z.string().trim().min(3).max(1000),
-    idempotencyKey: z.string().uuid(),
+    idempotencyKey: uuidSchema,
   })
   .superRefine((input, context) => {
     if (
@@ -81,17 +82,17 @@ export const serviceCaseUpdateSchema = z
   });
 
 export const serviceCaseRelationSchema = z.object({
-  serviceCaseId: z.string().uuid(),
-  relatedServiceCaseId: z.string().uuid(),
+  serviceCaseId: uuidSchema,
+  relatedServiceCaseId: uuidSchema,
   relationType: z.enum(SERVICE_CASE_RELATION_TYPES),
   expectedVersion: z.number().int().positive(),
   reason: z.string().trim().min(3).max(1000),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });
 
 export const serviceCaseEvidenceSchema = z.object({
-  serviceCaseId: z.string().uuid(),
-  workArtifactRevisionId: z.string().uuid(),
+  serviceCaseId: uuidSchema,
+  workArtifactRevisionId: uuidSchema,
   expectedVersion: z.number().int().positive(),
-  idempotencyKey: z.string().uuid(),
+  idempotencyKey: uuidSchema,
 });

@@ -6,6 +6,7 @@
 
 import { revalidatePath, updateTag } from 'next/cache';
 import { z } from 'zod';
+import { uuidSchema } from '@/lib/validation/uuid';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { getJobMaterialLines } from '@/lib/inventory/actions';
@@ -92,7 +93,7 @@ export async function getDispatchOverview(from: string, to: string) {
 }
 
 export async function getJobDispatchCards(jobId: string) {
-  if (!z.string().uuid().safeParse(jobId).success) {
+  if (!uuidSchema.safeParse(jobId).success) {
     return { success: false as const, error: 'invalid_input' };
   }
   const auth = await authenticateAndAuthorize();
@@ -350,8 +351,8 @@ export async function previewDispatchReadiness(input: {
   if (
     (occurrenceId === null) === (jobId === null) ||
     (occurrenceId !== null &&
-      !z.string().uuid().safeParse(occurrenceId).success) ||
-    (jobId !== null && !z.string().uuid().safeParse(jobId).success)
+      !uuidSchema.safeParse(occurrenceId).success) ||
+    (jobId !== null && !uuidSchema.safeParse(jobId).success)
   ) {
     return { success: false as const, error: 'invalid_input' };
   }
@@ -381,11 +382,11 @@ export async function previewDispatchReadiness(input: {
 
 const issueDispatchSchema = z
   .object({
-    occurrenceId: z.string().uuid().nullable(),
-    jobId: z.string().uuid().nullable(),
-    recipientEmployeeRecordIds: z.array(z.string().uuid()).max(100).nullable(),
+    occurrenceId: uuidSchema.nullable(),
+    jobId: uuidSchema.nullable(),
+    recipientEmployeeRecordIds: z.array(uuidSchema).max(100).nullable(),
     note: z.string().trim().max(2000).nullable(),
-    requestId: z.string().uuid(),
+    requestId: uuidSchema,
   })
   .superRefine((value, context) => {
     if ((value.occurrenceId === null) === (value.jobId === null)) {
@@ -453,10 +454,10 @@ export async function updateDispatchInstruction(input: {
   recipientEmployeeRecordIds: string[] | null;
 }) {
   const schema = z.object({
-    dispatchId: z.string().uuid(),
+    dispatchId: uuidSchema,
     expectedRevisionNumber: z.number().int().positive(),
     note: z.string().trim().max(2000).nullable(),
-    recipientEmployeeRecordIds: z.array(z.string().uuid()).max(100).nullable(),
+    recipientEmployeeRecordIds: z.array(uuidSchema).max(100).nullable(),
   });
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { success: false as const, error: 'invalid_input' };
@@ -497,7 +498,7 @@ export async function acknowledgeDispatch(
   expectedRevisionNumber: number
 ) {
   if (
-    !z.string().uuid().safeParse(dispatchId).success ||
+    !uuidSchema.safeParse(dispatchId).success ||
     !Number.isInteger(expectedRevisionNumber) ||
     expectedRevisionNumber < 1
   ) {
@@ -535,7 +536,7 @@ export async function challengeDispatch(
 ) {
   const trimmed = reason.trim();
   if (
-    !z.string().uuid().safeParse(dispatchId).success ||
+    !uuidSchema.safeParse(dispatchId).success ||
     !Number.isInteger(expectedRevisionNumber) ||
     expectedRevisionNumber < 1
   ) {
@@ -576,7 +577,7 @@ export async function resolveDispatchChallenge(
   resolutionReason: string
 ) {
   const trimmed = resolutionReason.trim();
-  if (!z.string().uuid().safeParse(acknowledgementId).success) {
+  if (!uuidSchema.safeParse(acknowledgementId).success) {
     return { success: false as const, error: 'invalid_input' };
   }
   if (trimmed.length < 3 || trimmed.length > 1000) {
@@ -609,7 +610,7 @@ export async function resolveDispatchChallenge(
 
 export async function cancelDispatch(dispatchId: string, reason: string) {
   const trimmed = reason.trim();
-  if (!z.string().uuid().safeParse(dispatchId).success) {
+  if (!uuidSchema.safeParse(dispatchId).success) {
     return { success: false as const, error: 'invalid_input' };
   }
   if (trimmed.length < 3 || trimmed.length > 1000) {
@@ -645,7 +646,7 @@ export async function cancelDispatch(dispatchId: string, reason: string) {
 // ============================================
 
 const batchSelectionSchema = z.object({
-  occurrenceIds: z.array(z.string().uuid()).min(1).max(100),
+  occurrenceIds: z.array(uuidSchema).min(1).max(100),
   dayShift: z.number().int().min(-366).max(366),
   newTime: z
     .string()
@@ -1004,7 +1005,7 @@ export async function previewBatchReschedule(rawInput: unknown) {
 
 const batchCommitSchema = batchSelectionSchema.extend({
   reason: z.string().trim().min(8).max(1000),
-  requestId: z.string().uuid(),
+  requestId: uuidSchema,
   overrideReason: z.string().trim().min(8).max(1000).nullable(),
   assessmentFingerprint: z.string().length(64).nullable(),
 });

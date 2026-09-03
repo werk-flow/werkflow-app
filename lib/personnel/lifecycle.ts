@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "@/lib/validation/uuid";
 
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -19,7 +20,6 @@ export type PersonnelRequirementType =
 export type PersonnelRequirementState =
   Database["public"]["Enums"]["personnel_requirement_state"];
 
-const uuidSchema = z.uuid();
 const reasonSchema = z.string().trim().min(2).max(500);
 const operationSchema = z.object({
   operationId: uuidSchema,
