@@ -1,6 +1,5 @@
 'use client';
 
-import { getTimeEntries } from '@/lib/time-tracking/actions';
 import {
   calculateBreakMinutes,
   calculateBreakSessions,
@@ -13,6 +12,10 @@ import {
   computeBreakdownForSettings,
   type OrgBreakMode,
 } from '@/lib/time-tracking/settings';
+import type {
+  GetTimeEntriesParams,
+  GetTimeEntriesResult,
+} from '@/lib/time-tracking/types';
 
 export type MemberStatus = {
   breakMode: OrgBreakMode;
@@ -32,6 +35,22 @@ export type MemberStatus = {
 type MemberStatusMap = Record<string, MemberStatus>;
 
 const EMPTY_STATUS_MAP: MemberStatusMap = {};
+
+async function fetchTimeEntries(
+  params: GetTimeEntriesParams
+): Promise<GetTimeEntriesResult> {
+  const response = await fetch('/api/time-entries', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    return { success: false, error: 'fetch_failed' };
+  }
+
+  return (await response.json()) as GetTimeEntriesResult;
+}
 
 interface UseMemberStatusOptions {
   organizationId: string;
@@ -76,7 +95,10 @@ export function useMemberStatus({
         tomorrow.setDate(tomorrow.getDate() + 1);
 
         // Fetch all entries for today
-        const result = await getTimeEntries({
+        // A route handler keeps this live client read independent from the
+        // current React Server Component tree. A server-action read can
+        // complete after a link click and restore the page it started from.
+        const result = await fetchTimeEntries({
           organizationId,
           from: today.toISOString(),
           to: tomorrow.toISOString()

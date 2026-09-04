@@ -35,6 +35,7 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 - **One page container.** Every authenticated page is `PageShell` → `PageHeader` → `PageBody` (`components/shared/page-shell.tsx`, `page-header.tsx`). The shell's `<main>` has no padding and no scroll region; `PageBody` owns both plus the bottom clearance for the clock button. Hand-rolled columns are lint-banned. One title style (`text-xl font-bold sm:text-2xl`), one header padding.
 - **Areas with subpages get a `layout.tsx`** that renders the shell and a persistent `PageHeader` with the area name as its `h1` title and `AreaNav` (`components/shared/area-nav.tsx`, underlined route tabs driven by the pathname) in its `nav` slot. Subpages render content only, under an `h2` with the subpage name and a toolbar row for the primary action, so the header and nav survive navigation and loading states. An area tab never leaves its area. In-page state tabs are shadcn `Tabs` (filled pills) and never sit in a header, so the two can't be confused.
 - **No page-level horizontal scroll on any viewport.** Below the tablet breakpoint tables render as `ListRow` cards; nothing is cropped to fake compliance — a component that does not fit gets a mobile layout. Named exceptions, each inside its own scroll region with a visible edge: the calendar day and week grids and the signature pad. Tab strips and area navs scroll within themselves. The 375 px viewport audit fails any route whose document or page body is wider than the viewport.
+- Full-height layouts use dynamic viewport units (`h-dvh` / `min-h-dvh`), never `h-screen` / `min-h-screen`, so mobile browser chrome cannot crop or extend the page. ESLint owns this rule.
 - Slim, not chunky: tabs are `h-9`, sidebar nav items `py-1.5`, active nav is a quiet neutral fill (`bg-accent` + `font-medium`), never a loud colored pill.
 - Managers (admin/buero) get efficient, scannable density — tables, filters, inline actions. Field workers (employee) get simpler screens with one big, unmissable primary action; touch targets ≥ 44px on their primary flows.
 - Don't wrap every block in a card. Prefer sections with headings, spacing, and dividers when hierarchy alone is enough; use cards for genuinely separate objects.
@@ -42,7 +43,7 @@ All theme values live in `app/globals.css` (`:root` tokens + `@theme inline` map
 
 ## Tailwind v4 + shadcn conventions
 
-- Tailwind CSS v4 only. Single `@import 'tailwindcss';` — no `@tailwind` directives, no `content` array, no v3 plugins. Use `bg-linear-*` (not `bg-gradient-*`), built-in container queries, v4 variants.
+- Tailwind CSS v4 only. `app/globals.css` imports Tailwind with `source(none)` and explicitly registers only the class-bearing application directories. Do not restore repository-wide automatic detection: retained browser artifacts can contain hundreds of thousands of files and have already exhausted Turbopack's PostCSS worker timeout. No `@tailwind` directives, no `content` array, no v3 plugins. Use `bg-linear-*` (not `bg-gradient-*`), built-in container queries, v4 variants.
 - **Build UI from the component registry below.** The shadcn primitives in `components/ui/` are the base layer, but for every interaction type the registry names the component that owns it — reach for that one, not for a raw primitive or a one-off styled div.
 - Buttons/inputs/controls inherit their look from `components/ui/` — if a control looks wrong everywhere, fix the primitive, not the call sites.
 - UI copy: natural German with umlauts/ß, sentence case, outcome-named buttons ("Speichern", "Auftrag anlegen"). Code, identifiers, comments: English.
@@ -60,9 +61,11 @@ The first question for any control is: **does this list contain entities or a fi
 | Label + control stack (every form field) | `Field` (owns gap, required marker, helper text, `ErrorText`, ARIA wiring; `Input`/`Textarea` read its context) | `components/ui/field` |
 | Table row that reacts to a click | `TableRow interactive` (`"select"` for click-selects, double-click-opens) | `components/ui/table` |
 | Mobile card row of a list, or a row inside a divided card | `ListRow` (`interactive`, `asChild` for links, `skeleton`; `variant="plain"` drops the box for rows inside a `divide-y` container) | `components/ui/list-row` |
+| Action menu on a row that can replace an optimistic draft or remount under Realtime | `RowActionsMenu` (native trigger/items, body portal, keyboard navigation and focus restoration without a composed Radix `asChild` ref) | `components/ui/row-actions-menu` |
 | Loading placeholder for a table or card list | `SkeletonTable` / `SkeletonRows` / `SkeletonList` fed by the list's own column definition | `components/ui/skeleton-table` |
 | Row for a record the user just created | `PendingRow` | `components/ui/pending-row` |
 | Spinner at the point of change | `InlinePending` + `useBusyIds` for per-row pending | `components/ui/inline-pending`, `hooks/use-busy-id` |
+| Submit control inside a `<form action={serverAction}>` | `PendingSubmitButton` (uses `useFormStatus`; clicked control spins, siblings disable until settlement) | `components/ui/pending-submit-button` |
 | Instant local echo of a list mutation | `useOptimisticList` (insert/update/remove with rollback and self-expiry) | `hooks/use-optimistic-list` |
 | Progress over N items | `useBatchProgress` | `hooks/use-batch-progress` |
 | Manual refresh of a list or a section retry | `RefreshButton` / `useRouterRefresh` (the one home of a router transition; rows stay on screen) | `components/ui/refresh-button` |
@@ -92,7 +95,7 @@ The first question for any control is: **does this list contain entities or a fi
 | Loading placeholders | `Skeleton` + the page skeletons | `components/ui/skeleton`, `components/loading-states/*` |
 | Collapsible form section („Weitere Angaben") | `FormDisclosure` (rotating-chevron pattern) | `components/ui/form-disclosure` |
 
-Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no raw `role="alert"` (errors render through `ErrorText`, `SectionError`, or `Banner`), no native `<select>`, no sonner imports, no hand-rolled page column, no `Label` outside a `Field` or a spaced container, no `hover:bg-accent/50` literal and no cursor or hover classes on `TableRow`/`ListRow` (hover comes from `interactive`). In development, a raw `Select` with more than nine options throws at render.
+Hard rules the ESLint config enforces (outside `components/ui/`): no native `type="date"`, `type="time"`, `type="datetime-local"`, `type="month"`, `type="week"`, `type="number"`, `type="range"`, `type="checkbox"`, or `type="radio"` inputs, no raw `role="alert"` (errors render through `ErrorText`, `SectionError`, or `Banner`), no native `<select>`, no sonner imports, no `h-screen`/`min-h-screen`, no hand-rolled page column, no `Label` outside a `Field` or a spaced container, no `hover:bg-accent/50` literal and no cursor or hover classes on `TableRow`/`ListRow` (hover comes from `interactive`). In development, a raw `Select` with more than nine options throws at render.
 
 Native controls stay out of the web app on every viewport, phones included: the mobile browser is not the native app. A future React Native app uses native pickers because that is its platform; the web app keeps its own components and makes them touch-friendly (44 px targets, `inputMode` for the right keyboard).
 
@@ -120,7 +123,7 @@ Always `AlertDialog` with `AlertDialogCancel` and `AlertDialogAction` — never 
 
 ### Dialog close and success
 
-One convention: on success the dialog closes immediately and the success banner confirms; on failure the dialog stays open with `ErrorText` at the point of action. No inline success flashes before closing, no delayed auto-close timers. Delete flows that redirect confirm via the URL-flash banner on the landing page.
+One convention: on success the dialog closes and the success banner confirms; on failure the dialog stays open with its filled values and `ErrorText` at the point of action. A create dialog may close optimistically only after client validation has ruled out every correctable input problem. If the server can still return a correctable domain error, such as a required overlap reason, keep the dialog mounted and pending until the server accepts it; an optimistic list row may render at the same time from the same promise. No inline success flashes before closing, no delayed auto-close timers. Delete flows that redirect confirm via the URL-flash banner on the landing page.
 
 ### Long forms in dialogs
 
@@ -165,7 +168,7 @@ No interaction may leave the user wondering whether anything happened, even for 
 
 | Interaction | Feedback while the server works |
 | --- | --- |
-| Create from a dialog | The dialog closes at once; the list shows the new record as an optimistic row (`useOptimisticList`) or a `PendingRow` at its sorted position until the server confirms |
+| Create from a dialog | After complete client validation, the list shows the new record as an optimistic row (`useOptimisticList`) or a `PendingRow` at its sorted position. Close immediately only when no correctable server validation can follow; otherwise keep the filled dialog mounted and pending on the same promise until acceptance. |
 | Inline toggle or reorder (checklist item, drag) | Optimistic: the state flips immediately, rolls back with the error on failure |
 | Row action (approve, withdraw, acknowledge) | `InlinePending` at that row via `useBusyIds`; the other rows stay usable |
 | Section-level edit | `InlinePending` in the section header (`useServerAction`'s `isPending`) |
@@ -178,7 +181,7 @@ Pending state binds to the awaited server call (`useServerAction`), never to a r
 
 ### No silent failures
 
-Every mutation's failure is visible at the point of action — this is a defect class, not a style preference. `console.error` alone is never acceptable; neither is closing a dialog on failure or discarding a result (`void someMutation()`). Error copy answers what happened, why (when known), and what to do next, in natural German, without exposing backend internals. One failure, one surface — no double-reporting the same error through two channels.
+Every user-blocking or authoritative mutation failure is visible at the point of action — this is a defect class, not a style preference. `console.error` alone is never acceptable for such a failure; neither is closing a dialog on failure or discarding a result (`void someMutation()`). A best-effort cleanup or post-success follow-on may log without interrupting the already-settled primary outcome only when the call site names that contract and the failure cannot invalidate what the user was told. Error copy answers what happened, why (when known), and what to do next, in natural German, without exposing backend internals. One failure, one surface — no double-reporting the same error through two channels.
 
 ## Realtime, live views, and dialogs
 

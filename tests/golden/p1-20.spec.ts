@@ -96,7 +96,20 @@ async function assignEmployee(
   employeeName: string,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await page.getByRole("button", { name: "Zuweisen", exact: true }).click();
+  const assignButton = page.getByRole("button", {
+    name: "Zuweisen",
+    exact: true,
+  });
+  await expect(assignButton).toBeVisible();
+  // A retained-world diagnostic can replay this stage after the fresh run
+  // already persisted the assignment. Keep the stage idempotent while the
+  // first execution still exercises the complete assignment UI.
+  const existingAssignment = page
+    .getByRole("main")
+    .getByRole("link", { name: employeeName, exact: true });
+  if (await existingAssignment.isVisible()) return;
+
+  await assignButton.click();
   const dialog = page.getByRole("dialog").filter({
     has: page.getByRole("heading", { name: "Mitarbeiter zuweisen" }),
   });

@@ -123,8 +123,10 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     if (/\/verify/.test(page.url())) {
       await confirmTestUserEmail(email);
       await page.goto("/login");
-      await page.getByLabel("E-Mail", { exact: true }).fill(email);
-      await page.getByLabel("Passwort", { exact: true }).fill(password);
+      await page.getByRole("textbox", { name: /^E-Mail/ }).fill(email);
+      await page
+        .getByRole("textbox", { name: /^Passwort/ })
+        .fill(password);
       await page.getByRole("button", { name: "Anmelden" }).click();
       await expect(page).toHaveURL(/\/(upgrade|onboarding)/, {
         timeout: 30_000,
@@ -2159,7 +2161,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage
       .getByRole("option", { name: "Ausstehend", exact: true })
       .click();
-    await history.getByRole("button", { name: "Laden" }).click();
+    await history
+      .getByRole("button", { name: "Einträge aktualisieren" })
+      .click();
     const pendingRows = history.locator("tbody tr");
     await expect(pendingRows).toHaveCount(2, { timeout: 20_000 });
     for (const row of await pendingRows.all()) {
@@ -2167,18 +2171,20 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       await expect(row).toContainText("Ausstehend");
     }
 
-    const fromDate = history.getByText("Von", { exact: true }).locator("..");
-    const toDate = history.getByText("Bis", { exact: true }).locator("..");
-    await typeIntoDatePicker(fromDate, "Datum", todayDigits);
-    await typeIntoDatePicker(toDate, "Datum", todayDigits);
-    await history.getByRole("button", { name: "Laden" }).click();
+    await typeIntoDatePicker(history, "Von", todayDigits);
+    await typeIntoDatePicker(history, "Bis", todayDigits);
+    await history
+      .getByRole("button", { name: "Einträge aktualisieren" })
+      .click();
     await expect(pendingRows).toHaveCount(2, { timeout: 20_000 });
 
     await filters.filter({ hasText: "Ausstehend" }).click();
     await adminPage
       .getByRole("option", { name: "Genehmigt", exact: true })
       .click();
-    await history.getByRole("button", { name: "Laden" }).click();
+    await history
+      .getByRole("button", { name: "Einträge aktualisieren" })
+      .click();
     // Emil's live clock/break events from the A1-05 journey are approved too,
     // so the exact approved total is state-dependent. Assert this test's own
     // admin-created 00:10/00:15 pair and the filter contract on every row.
@@ -2200,7 +2206,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
     await adminPage
       .getByRole("option", { name: "Ausstehend", exact: true })
       .click();
-    await history.getByRole("button", { name: "Laden" }).click();
+    await history
+      .getByRole("button", { name: "Einträge aktualisieren" })
+      .click();
     await expect(visibleText(adminPage, "Keine Einträge gefunden")).toBeVisible(
       {
         timeout: 20_000,
@@ -2693,7 +2701,10 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("alertdialog")
       .getByRole("button", { name: "Datei löschen" })
       .click();
-    await adminPage.getByRole("button", { name: "Papierkorb" }).click();
+    const trashButton = adminPage.getByRole("button", { name: "Papierkorb" });
+    await expect(trashButton).toBeDisabled();
+    await expect(trashButton).toBeEnabled({ timeout: 30_000 });
+    await trashButton.click();
     await expect(visibleText(adminPage, fileName)).toBeVisible({
       timeout: 20_000,
     });
@@ -2715,7 +2726,9 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .getByRole("alertdialog")
       .getByRole("button", { name: "Datei löschen" })
       .click();
-    await adminPage.getByRole("button", { name: "Papierkorb" }).click();
+    await expect(trashButton).toBeDisabled();
+    await expect(trashButton).toBeEnabled({ timeout: 30_000 });
+    await trashButton.click();
     await adminPage
       .getByRole("button", { name: `Dateiaktionen für ${fileName} öffnen` })
       .click();
@@ -3002,6 +3015,13 @@ test.describe("A1 Grundstock und Wave 0 @AUDIT-W1-A1", () => {
       .fill("Servicefahrzeug Nord");
     await locationDialog.getByRole("button", { name: "Speichern" }).click();
     await expect(locationDialog).toHaveCount(0, { timeout: 20_000 });
+    await adminPage.getByRole("tab", { name: "Lager", exact: true }).click();
+    await expect(
+      adminPage.getByRole("status", { name: "Lager wird angelegt" }),
+    ).toHaveCount(0, { timeout: 30_000 });
+    await expect(
+      inventoryLocationCard(adminPage, vehicleLocation),
+    ).toContainText("Fahrzeug");
 
     await adminPage.goto("/inventar");
     await expect(visibleText(adminPage, inventoryItemName)).toBeVisible();

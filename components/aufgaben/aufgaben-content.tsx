@@ -165,6 +165,7 @@ export function AufgabenContent() {
 
   const overview = view.data ?? null;
   const refetch = view.refresh;
+  const isMarkingAllRead = busy.isBusy(ALL_NOTIFICATIONS_ID);
 
   // Mark-as-read is a micro-toggle: the dot disappears at once (optimistic
   // echo on the live view), the failure restores the snapshot and shows an
@@ -435,15 +436,16 @@ export function AufgabenContent() {
           <h2 id="benachrichtigungen-heading" className="text-sm font-semibold">
             Benachrichtigungen
           </h2>
-          {unreadCount > 1 && (
+          {(unreadCount > 1 || isMarkingAllRead) && (
             <Button
               variant="outline"
               size="sm"
               className="gap-1.5"
               onClick={() => void handleMarkAllRead()}
               disabled={busy.anyBusy}
+              data-pending={isMarkingAllRead ? 'true' : 'false'}
             >
-              {busy.isBusy(ALL_NOTIFICATIONS_ID) ? (
+              {isMarkingAllRead ? (
                 <InlinePending active label="Benachrichtigungen werden markiert" />
               ) : (
                 <CheckCheck className="size-3.5" />
@@ -460,6 +462,7 @@ export function AufgabenContent() {
         ) : (
           <Card className="gap-0 divide-y py-0">
             {overview.notifications.map((notification) => {
+              const isMarkingRead = busy.isBusy(notification.sourceId);
               const range =
                 notification.sourceType === 'sickness_report'
                   ? formatSicknessRange(
@@ -518,19 +521,20 @@ export function AufgabenContent() {
                       )}
                     </div>
                   </div>
-                  {notification.unread && (
+                  {(notification.unread || isMarkingRead) && (
                     <Button
                       variant="ghost"
                       size="sm"
                       className="gap-1.5 text-muted-foreground"
                       onClick={() => void handleMarkRead(notification)}
                       disabled={
-                        busy.isBusy(notification.sourceId) ||
+                        isMarkingRead ||
                         busy.isBusy(ALL_NOTIFICATIONS_ID)
                       }
+                      data-pending={isMarkingRead ? 'true' : 'false'}
                       aria-label={`Benachrichtigung vom ${range} als gelesen markieren`}
                     >
-                      {busy.isBusy(notification.sourceId) ? (
+                      {isMarkingRead ? (
                         <InlinePending active label="Wird als gelesen markiert" />
                       ) : (
                         <Check className="size-3.5" />

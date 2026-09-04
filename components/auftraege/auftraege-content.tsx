@@ -297,6 +297,18 @@ export function AuftraegeContent({
     () => projectOverlay.map((entry) => entry.item),
     [projectOverlay]
   );
+  // Creation pickers must follow the same client-owned collection as the
+  // table, otherwise a confirmed create remains unselectable until the next
+  // route refresh. Pending inserts stay out because their temporary ids are
+  // not valid server references.
+  const dialogJobs = useMemo(
+    () => jobOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
+    [jobOverlay]
+  );
+  const dialogProjects = useMemo(
+    () => projectOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
+    [projectOverlay]
+  );
   const rowFeedback = useMemo<AuftraegeRowFeedback>(
     () => ({
       pendingIds: new Set(
@@ -833,8 +845,8 @@ export function AuftraegeContent({
           <CreateAuftragProjectDialog
             clients={clients}
             members={members}
-            projects={projects}
-            jobs={jobs}
+            projects={dialogProjects}
+            jobs={dialogJobs}
             open={createDialogOpen}
             onOpenChange={setCreateDialogOpen}
             onJobSubmit={handleJobSubmit}

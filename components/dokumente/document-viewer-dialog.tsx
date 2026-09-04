@@ -154,7 +154,7 @@ export function DocumentViewerDialog({
         className={cn(
           'flex !h-[96vh] !max-h-[96vh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-neutral-950 p-0 text-white shadow-2xl sm:!max-w-none',
           isExpanded &&
-            '!h-screen !max-h-screen !w-screen rounded-none border-0 sm:!max-w-none'
+            '!h-dvh !max-h-dvh !w-screen rounded-none border-0 sm:!max-w-none'
         )}
       >
         <DialogHeader className="border-b border-white/10 bg-neutral-950/95 px-4 py-3">

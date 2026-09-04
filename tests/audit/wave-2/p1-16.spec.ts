@@ -144,7 +144,9 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await employeePage.setViewportSize(FIELD_VIEWPORT);
     const pack = await openFieldWorkPack(employeePage, childJobNumber, projectNumber);
-    await expect(pack).toContainText(projectTitle);
+    await expect(employeePage.getByRole('navigation', { name: 'Pfad' })).toContainText(
+      projectTitle
+    );
     await expect(pack).toContainText(customerName);
     await expect(pack).toContainText(contactName);
     await expect(pack).toContainText(siteName);

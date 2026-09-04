@@ -6,7 +6,7 @@
  */
 export function AppShellSkeleton() {
   return (
-    <div className="flex h-screen flex-col bg-background md:flex-row">
+    <div className="flex h-dvh flex-col bg-background md:flex-row">
       <header className="flex md:hidden items-center justify-between border-b bg-card px-4 py-3 sticky top-0 z-30">
         <div className="h-9 w-9" />
         <div className="h-7 w-28 rounded bg-muted animate-pulse" />

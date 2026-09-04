@@ -255,25 +255,29 @@ export function MaintenancePlanDialog({
       idempotencyKey: mutationIdentity.current.idempotencyKey,
     };
   }
-  const { run, isPending } = useServerAction(async () => {
-    setError(null);
-    const result = initial
-      ? await reviseMaintenancePlan({
-          ...buildInput(),
-          expectedVersion: initial.version,
-        })
-      : await createMaintenancePlan(buildInput());
-    if (!result.success) {
-      setError(ERROR_MESSAGES[result.error] ?? GENERIC_ERROR);
-      return;
-    }
-    onOpenChange(false);
-    if (initial && onSaved) {
-      onSaved();
-    } else {
-      router.refresh();
-    }
-  });
+  const { run, isPending } = useServerAction(
+    async (submittedCreate?: ReturnType<typeof createMaintenancePlan>) => {
+      setError(null);
+      const result = submittedCreate
+        ? await submittedCreate
+        : initial
+          ? await reviseMaintenancePlan({
+              ...buildInput(),
+              expectedVersion: initial.version,
+            })
+          : await createMaintenancePlan(buildInput());
+      if (!result.success) {
+        setError(ERROR_MESSAGES[result.error] ?? GENERIC_ERROR);
+        return;
+      }
+      onOpenChange(false);
+      if (initial && onSaved) {
+        onSaved();
+      } else if (!onSubmitted) {
+        router.refresh();
+      }
+    },
+  );
   const fieldErrors = attempted ? missingFields(form, Boolean(initial)) : {};
 
   function submit(): void {
@@ -286,6 +290,7 @@ export function MaintenancePlanDialog({
       return;
     }
     if (!initial && onSubmitted) {
+      const createResult = createMaintenancePlan(buildInput());
       onSubmitted({
         draft: {
           kind: "plan",
@@ -299,7 +304,7 @@ export function MaintenancePlanDialog({
           intervalMonths: Number(form.intervalMonths),
           status: form.status,
         },
-        result: createMaintenancePlan(buildInput()).then(
+        result: createResult.then(
           (created) =>
             created.success
               ? { success: true as const }
@@ -310,7 +315,11 @@ export function MaintenancePlanDialog({
           () => ({ success: false as const, message: GENERIC_ERROR }),
         ),
       });
-      onOpenChange(false);
+      // The pending list and this dialog observe the same request. Keep the
+      // form mounted until the server accepts it so a correctable domain
+      // error (for example a missing overlap reason) remains beside the
+      // user's filled values.
+      void run(createResult);
       return;
     }
     void run();

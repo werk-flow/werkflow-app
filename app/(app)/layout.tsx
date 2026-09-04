@@ -28,7 +28,7 @@ import { getAttentionCounts } from '@/lib/attention/actions';
 import type { AttentionCounts } from '@/lib/attention/types';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { CURRENT_ORG_COOKIE, resolveActiveOrgId } from '@/lib/org/cookies';
 
 async function getInitialAppRuntimeState({
   activeOrgId,
@@ -89,12 +89,16 @@ async function AppProviders({ children }: { children: React.ReactNode }) {
   const initialRuntimeState = await getInitialAppRuntimeState({
     activeOrgId,
   });
+  const activeOrgCookieNeedsSync =
+    activeOrgId !== null &&
+    cookieStore.get(CURRENT_ORG_COOKIE)?.value !== activeOrgId;
 
   return (
     <BannerProvider>
       <OrganizationProvider
         initialMemberships={memberships}
         initialActiveOrgId={activeOrgId}
+        initialActiveOrgCookieNeedsSync={activeOrgCookieNeedsSync}
         initialIsSubscribed={isSubscribed}
       >
         <RealtimeProvider>

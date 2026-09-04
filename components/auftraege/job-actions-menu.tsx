@@ -2,23 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  MoreHorizontal,
-  ExternalLink,
-  Trash2,
-  Loader2,
-  Pencil,
-} from 'lucide-react';
+import { ExternalLink, Loader2, Trash2, Pencil } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+import { RowActionsMenu } from '@/components/ui/row-actions-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,41 +107,28 @@ export function JobActionsMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <MoreHorizontal className="size-4" />
-            )}
-            <span className="sr-only">Aktionen öffnen</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => router.push(detailHref)}>
-            <ExternalLink className="size-4" />
-            Details anzeigen
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
-            <Pencil className="size-4" />
-            Bearbeiten
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            <Trash2 className="size-4" />
-            Löschen
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <RowActionsMenu
+        disabled={isLoading}
+        actions={[
+          {
+            label: 'Details anzeigen',
+            icon: <ExternalLink className="size-4" />,
+            onSelect: () => router.push(detailHref),
+          },
+          {
+            label: 'Bearbeiten',
+            icon: <Pencil className="size-4" />,
+            onSelect: () => setShowEditDialog(true),
+          },
+          {
+            label: 'Löschen',
+            icon: <Trash2 className="size-4" />,
+            onSelect: () => setShowDeleteDialog(true),
+            variant: 'destructive',
+            separatorBefore: true,
+          },
+        ]}
+      />
 
       <AlertDialog
         open={showDeleteDialog}

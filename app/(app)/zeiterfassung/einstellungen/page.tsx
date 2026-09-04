@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -8,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PendingSubmitButton } from "@/components/ui/pending-submit-button";
 import { TimeAccountDateField } from "@/components/zeiterfassung/time-account-date-field";
 import {
   assignEmployeeTimePolicy,
@@ -44,33 +44,33 @@ function AdjustmentRequestForms({
       <div className="grid gap-1.5 text-sm font-medium">
         Art
         <div className="flex flex-wrap gap-1">
-          <Button
-            type="submit"
+          <PendingSubmitButton
             name="adjustmentKind"
             value="manual_adjustment"
             variant="outline"
             size="sm"
+            pendingLabel="Korrektur wird beantragt"
           >
             Korrektur
-          </Button>
-          <Button
-            type="submit"
+          </PendingSubmitButton>
+          <PendingSubmitButton
             name="adjustmentKind"
             value="expiry"
             variant="outline"
             size="sm"
+            pendingLabel="Verfall wird beantragt"
           >
             Verfall
-          </Button>
-          <Button
-            type="submit"
+          </PendingSubmitButton>
+          <PendingSubmitButton
             name="adjustmentKind"
             value="payout"
             variant="outline"
             size="sm"
+            pendingLabel="Auszahlung wird beantragt"
           >
             Auszahlung
-          </Button>
+          </PendingSubmitButton>
         </div>
       </div>
       <Field label="Minuten" htmlFor={`adjustment-minutes-${account.id}`} required>
@@ -191,17 +191,21 @@ export default async function TimeAccountSettingsPage() {
                   />
                 </Field>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="submit" name="policyKind" value="default">
+                  <PendingSubmitButton
+                    name="policyKind"
+                    value="default"
+                    pendingLabel="Standardversion wird gespeichert"
+                  >
                     Standardversion bestätigen
-                  </Button>
-                  <Button
-                    type="submit"
+                  </PendingSubmitButton>
+                  <PendingSubmitButton
                     name="policyKind"
                     value="exception"
                     variant="outline"
+                    pendingLabel="Ausnahmeregel wird angelegt"
                   >
                     Neue Ausnahmeregel anlegen
-                  </Button>
+                  </PendingSubmitButton>
                 </div>
               </form>
             </CardContent>
@@ -242,9 +246,8 @@ export default async function TimeAccountSettingsPage() {
                         {settings.policies
                           .filter((policy) => !policy.isDefault)
                           .map((policy) => (
-                            <Button
+                            <PendingSubmitButton
                               key={policy.id}
-                              type="submit"
                               name="policyId"
                               value={policy.id}
                               variant={
@@ -253,9 +256,10 @@ export default async function TimeAccountSettingsPage() {
                                   : "outline"
                               }
                               size="sm"
+                              pendingLabel="Regel wird ausgewählt"
                             >
                               {policy.name} · V{policy.version}
-                            </Button>
+                            </PendingSubmitButton>
                           ))}
                       </div>
                     </div>
@@ -281,7 +285,9 @@ export default async function TimeAccountSettingsPage() {
                         required
                       />
                     </Field>
-                    <Button type="submit">Zuweisen</Button>
+                    <PendingSubmitButton pendingLabel="Regel wird zugewiesen">
+                      Zuweisen
+                    </PendingSubmitButton>
                   </form>
                 ))
               )}
@@ -355,7 +361,9 @@ export default async function TimeAccountSettingsPage() {
                           required
                         />
                       </Field>
-                      <Button type="submit">Konto eröffnen</Button>
+                      <PendingSubmitButton pendingLabel="Zeitkonto wird eröffnet">
+                        Konto eröffnen
+                      </PendingSubmitButton>
                     </form>
                   ))}
                 </div>
@@ -409,16 +417,21 @@ export default async function TimeAccountSettingsPage() {
                           placeholder="Entscheidungsgrund"
                           required
                         />
-                        <Button
+                        <PendingSubmitButton
                           name="decision"
                           value="rejected"
                           variant="outline"
+                          pendingLabel="Antrag wird abgelehnt"
                         >
                           Ablehnen
-                        </Button>
-                        <Button name="decision" value="approved">
+                        </PendingSubmitButton>
+                        <PendingSubmitButton
+                          name="decision"
+                          value="approved"
+                          pendingLabel="Antrag wird freigegeben"
+                        >
                           Freigeben
-                        </Button>
+                        </PendingSubmitButton>
                       </form>
                     </div>
                   ))}
@@ -440,7 +453,9 @@ export default async function TimeAccountSettingsPage() {
             </CardHeader>
             <CardContent>
               <form action={createDefaultPayrollMapping}>
-                <Button type="submit">Standardzuordnung bestätigen</Button>
+                <PendingSubmitButton pendingLabel="Standardzuordnung wird gespeichert">
+                  Standardzuordnung bestätigen
+                </PendingSubmitButton>
               </form>
             </CardContent>
           </Card>

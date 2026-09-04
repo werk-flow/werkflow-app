@@ -289,25 +289,29 @@ export async function createJob(
   ).toBeHidden({ timeout: 15_000 });
 
   // Phase 5 creation is optimistic: validation closes the dialog before the
-  // server action settles. Do not let a following navigation abort that
-  // request. The pending marker clearing proves the action response landed;
-  // the visible row then proves the confirmed result replaced the draft.
+  // server action settles. A child row is not mounted while its project is
+  // collapsed, so expand the owning project before observing the pending
+  // marker. Otherwise the absence check passes vacuously and a prefix match
+  // on the project number can be mistaken for the confirmed child.
+  if (options.projectNumber) {
+    const projectNumber = visibleText(page, options.projectNumber, true);
+    await expect(projectNumber).toBeVisible({ timeout: 15_000 });
+    const projectRow = projectNumber.locator("xpath=ancestor::tr[1]");
+    const expandProjectButton = projectRow.getByRole("button", {
+      name: "Projekt aufklappen",
+    });
+    if (await expandProjectButton.isVisible().catch(() => false)) {
+      await expandProjectButton.click();
+    }
+  }
+
+  // Do not let a following navigation abort the request. The mounted pending
+  // marker clearing proves the action response landed; the exact visible job
+  // number then proves the confirmed result replaced the draft.
   await expect(
     page.locator("[data-pending-row]").filter({ hasText: options.jobNumber }),
   ).toHaveCount(0, { timeout: 15_000 });
-  const confirmedJobNumber = visibleText(page, options.jobNumber);
-  if (
-    options.projectNumber &&
-    !(await confirmedJobNumber.isVisible().catch(() => false))
-  ) {
-    const projectRow = page
-      .locator("tbody tr:visible")
-      .filter({ hasText: options.projectNumber })
-      .first();
-    await projectRow
-      .getByRole("button", { name: "Projekt aufklappen" })
-      .click();
-  }
+  const confirmedJobNumber = visibleText(page, options.jobNumber, true);
   await expect(confirmedJobNumber).toBeVisible({
     timeout: 15_000,
   });
@@ -1046,7 +1050,10 @@ export async function openFieldWorkPack(
     ? `/auftraege/projekt/${encodeURIComponent(projectNumber)}/${encodeURIComponent(jobNumber)}`
     : `/auftraege/${encodeURIComponent(jobNumber)}`;
   await page.goto(path);
-  const pack = page.getByTestId("field-work-pack");
+  // Scope to the active application surface. During an RSC navigation Next.js
+  // may retain a hidden transition copy outside <main>; a document-wide test-id
+  // lookup would then fail strict mode despite one user-visible work pack.
+  const pack = page.getByRole("main").getByTestId("field-work-pack");
   await expect(pack).toBeVisible({ timeout: 20_000 });
   await expect(pack.getByTestId("field-work-pack-overview")).toHaveAttribute(
     "data-realtime-ready",
@@ -1096,7 +1103,7 @@ export async function changeTimeOnWorkPack(
   page: Page,
   action: "start" | "stop" | "switch",
 ): Promise<void> {
-  const pack = page.getByTestId("field-work-pack");
+  const pack = page.getByRole("main").getByTestId("field-work-pack");
   const label =
     action === "start"
       ? "Arbeitszeit starten"
@@ -2094,13 +2101,25 @@ export async function selectFromSearchable(
   };
   const searchFirst = options?.searchFirst ?? true;
   const restoreOpenState = async (): Promise<void> => {
-    await openPicker();
-    if (searchFirst) {
-      await listbox
-        .locator("..")
-        .getByRole("textbox")
-        .fill(optionText, { timeout: 2_000 });
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await openPicker();
+      if (!searchFirst) return;
+      try {
+        await listbox
+          .locator("..")
+          .getByRole("textbox")
+          .fill(optionText, { timeout: 2_000 });
+        return;
+      } catch (error) {
+        lastError = error;
+        // Realtime can remount the open picker while its search field is
+        // filling. Reopen it and resolve the current textbox on the next pass.
+      }
     }
+    throw new Error("Searchable picker search could not be restored.", {
+      cause: lastError,
+    });
   };
   await restoreOpenState();
   const optionName = new RegExp(
@@ -3056,25 +3075,30 @@ export async function markAttentionNotificationReadViaButton(
   sourceId: string,
 ): Promise<void> {
   const row = attentionNotificationRow(page, sourceId);
-  await row
-    .getByRole("button", {
-      name: /^Benachrichtigung vom .* als gelesen markieren$/,
-    })
-    .click();
+  const button = row.getByRole("button", {
+    name: /^Benachrichtigung vom .* als gelesen markieren$/,
+  });
+  await button.click();
   await expect(row).toHaveAttribute("data-unread", "false", {
     timeout: 15_000,
   });
+  // The optimistic unread flag changes in the first frame. The action button
+  // stays mounted while its Server Action is pending, so disappearance is the
+  // durable completion boundary rather than the optimistic echo.
+  await expect(button).toHaveCount(0, { timeout: 15_000 });
 }
 
 export async function markAllAttentionNotificationsReadViaButton(
   page: Page,
 ): Promise<void> {
-  await page
-    .getByRole("button", { name: "Alle als gelesen markieren" })
-    .click();
+  const button = page.getByRole("button", { name: "Alle als gelesen markieren" });
+  await button.click();
   await expect(page.locator('[data-unread="true"]')).toHaveCount(0, {
     timeout: 15_000,
   });
+  // Keep the bulk control observable until the persisted write and reconcile
+  // read settle; otherwise this helper can return on the optimistic echo.
+  await expect(button).toHaveCount(0, { timeout: 15_000 });
 }
 
 // The sidebar badge on the Aufgaben entry (desktop sidebar only; the mobile

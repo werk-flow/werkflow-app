@@ -42,23 +42,8 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       null
     );
     const [isFocused, setIsFocused] = React.useState(false);
-    const [useNativeInput, setUseNativeInput] = React.useState(false);
-
     // Combine refs
     React.useImperativeHandle(ref, () => containerRef.current!);
-
-    React.useEffect(() => {
-      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-        return;
-      }
-
-      const media = window.matchMedia('(pointer: coarse)');
-      const update = () => setUseNativeInput(media.matches);
-
-      update();
-      media.addEventListener?.('change', update);
-      return () => media.removeEventListener?.('change', update);
-    }, []);
 
     // Parse value into hours and minutes
     const parseValue = (val: string): { hours: number; minutes: number } => {
@@ -205,27 +190,6 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       'px-1.5 py-1 rounded-sm cursor-pointer transition-colors select-none';
     const segmentActiveClass = 'bg-primary text-primary-foreground';
     const segmentInactiveClass = 'hover:bg-accent';
-
-    if (useNativeInput) {
-      return (
-        <div ref={containerRef} className={cn('w-full', className)}>
-          <input
-            type="time"
-            id={id}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            onKeyDown={onKeyDown}
-            disabled={disabled}
-            className={cn(
-              'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
-              'dark:bg-input/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50'
-            )}
-          />
-        </div>
-      );
-    }
 
     return (
       <div

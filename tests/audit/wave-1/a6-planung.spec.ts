@@ -699,13 +699,19 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await expect(
       pendingWarning.getByText(`${employeeName}: ${fallbackMessage} (${pendingDate})`)
     ).toBeVisible();
+    const planWithReasonButton = pendingDialog.getByRole('button', {
+      name: 'Mit Begründung planen',
+    });
+    const overrideReason = pendingDialog.locator('#planning-override');
+    await expect(planWithReasonButton).toBeEnabled();
+    await planWithReasonButton.click();
     await expect(
-      pendingDialog.getByRole('button', { name: 'Mit Begründung planen' })
-    ).toBeDisabled();
-    await pendingDialog
-      .locator('#planning-override')
-      .fill(`A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`);
-    await pendingDialog.getByRole('button', { name: 'Mit Begründung planen' }).click();
+      pendingDialog.getByText('Bitte begründe die Abweichung mit mindestens 8 Zeichen.')
+    ).toBeVisible();
+    await expect(overrideReason).toHaveAttribute('aria-invalid', 'true');
+    await expect(overrideReason).toBeFocused();
+    await overrideReason.fill(`A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`);
+    await planWithReasonButton.click();
     await expect(pendingDialog).toHaveCount(0, { timeout: 30_000 });
     await expect(visibleText(adminPage, 'Termin wurde geplant.')).toBeVisible({
       timeout: 15_000,

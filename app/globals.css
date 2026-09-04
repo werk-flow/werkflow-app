@@ -1,4 +1,10 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
+
+@source '.';
+@source '../components';
+@source '../hooks';
+@source '../lib';
+@source '../proxy.ts';
 
 :root {
   --background: #fefcfa;

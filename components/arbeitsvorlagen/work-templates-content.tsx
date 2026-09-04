@@ -200,12 +200,16 @@ function CreateTemplateDialog({ open, onOpenChange, onCreate }: { open: boolean;
   const [error, setError] = useState<string | null>(null)
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (!name.trim()) { setError('Bitte gib einen Namen an.'); return }
+    if (!name.trim()) {
+      setError('Bitte gib einen Namen an.')
+      document.getElementById('new-template-name')?.focus()
+      return
+    }
     onCreate({ name, description, targetType })
     setName(''); setDescription(''); setTargetType('job'); setError(null)
     onOpenChange(false)
   }
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Arbeitsvorlage erstellen</DialogTitle><DialogDescription>Lege zuerst Ziel und Namen fest. Inhalte ergänzt du im nächsten Schritt.</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Name" htmlFor="new-template-name" required><Input autoFocus value={name} onChange={(event) => { setName(event.target.value); setError(null) }} /></Field><Field label="Gilt für" htmlFor="new-template-target"><Select value={targetType} onValueChange={(value) => setTargetType(value as WorkTemplateTargetType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="job">Aufträge</SelectItem><SelectItem value="project">Projekte</SelectItem></SelectContent></Select></Field><Field label="Beschreibung" htmlFor="new-template-description"><Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></Field><ErrorText>{error}</ErrorText></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit">Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Arbeitsvorlage erstellen</DialogTitle><DialogDescription>Lege zuerst Ziel und Namen fest. Inhalte ergänzt du im nächsten Schritt.</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Name" htmlFor="new-template-name" required error={error}><Input autoFocus value={name} onChange={(event) => { setName(event.target.value); setError(null) }} /></Field><Field label="Gilt für" htmlFor="new-template-target"><Select value={targetType} onValueChange={(value) => setTargetType(value as WorkTemplateTargetType)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="job">Aufträge</SelectItem><SelectItem value="project">Projekte</SelectItem></SelectContent></Select></Field><Field label="Beschreibung" htmlFor="new-template-description"><Textarea value={description} onChange={(event) => setDescription(event.target.value)} /></Field></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit">Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
 function TemplateEditorDialog({ detail, onOpenChange, inventoryItems, inventoryLocations, capabilities, onChanged }: { detail: WorkTemplateDetail | null; onOpenChange: (open: boolean) => void; inventoryItems: InventoryPickerOption[]; inventoryLocations: InventoryLocation[]; capabilities: CapabilityDefinition[]; onChanged: (message: string) => Promise<void> }) {
@@ -352,6 +356,17 @@ function CapabilitiesEditor({ draft, editable, onChange, capabilities, onCreateC
 // Closes on submit; the editor selects the optimistic qualification on the line and reports the outcome.
 function CreateCapabilityDialog({ open, onOpenChange, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; onSubmit: (input: CreateCapabilityInput) => void }) {
   const [name, setName] = useState(''); const [kind, setKind] = useState<CapabilityKind>('skill'); const [error, setError] = useState<string | null>(null)
-  function submit(event: React.FormEvent) { event.preventDefault(); event.stopPropagation(); if (!name.trim()) { setError('Bitte gib einen Namen an.'); return }; onSubmit({ name, kind }); setName(''); setError(null); onOpenChange(false) }
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Qualifikation erstellen</DialogTitle><DialogDescription>Erweitert den gemeinsamen Qualifikationskatalog der Organisation.</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Name" htmlFor="quick-capability-name" required><Input value={name} onChange={(event) => { setName(event.target.value); setError(null) }} /></Field><Field label="Art" htmlFor="quick-capability-kind"><Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}><SelectTrigger aria-label="Art der Qualifikation"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="skill">Fähigkeit</SelectItem><SelectItem value="certification">Zertifizierung</SelectItem></SelectContent></Select></Field><ErrorText>{error}</ErrorText></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit">Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
+  function submit(event: React.FormEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!name.trim()) {
+      setError('Bitte gib einen Namen an.')
+      document.getElementById('quick-capability-name')?.focus()
+      return
+    }
+    onSubmit({ name, kind })
+    setName(''); setError(null)
+    onOpenChange(false)
+  }
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><form onSubmit={submit} className="contents"><DialogHeader><DialogTitle>Qualifikation erstellen</DialogTitle><DialogDescription>Erweitert den gemeinsamen Qualifikationskatalog der Organisation.</DialogDescription></DialogHeader><div className="space-y-4"><Field label="Name" htmlFor="quick-capability-name" required error={error}><Input value={name} onChange={(event) => { setName(event.target.value); setError(null) }} /></Field><Field label="Art" htmlFor="quick-capability-kind"><Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}><SelectTrigger aria-label="Art der Qualifikation"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="skill">Fähigkeit</SelectItem><SelectItem value="certification">Zertifizierung</SelectItem></SelectContent></Select></Field></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Abbrechen</Button><Button type="submit">Erstellen</Button></DialogFooter></form></DialogContent></Dialog>
 }

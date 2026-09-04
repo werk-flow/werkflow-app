@@ -19,7 +19,6 @@ import { PendingRow } from '@/components/ui/pending-row';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { JobActionsMenu } from './job-actions-menu';
 import { ProjectActionsMenu } from './project-actions-menu';
 import {
@@ -187,40 +186,35 @@ function AvatarStack({
   const overflow = userIds.length - max;
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex -space-x-1.5">
-        {visible.map((uid) => {
-          const member = memberLookup.get(uid);
-          const initials = member ? getInitials(member.firstName, member.lastName) : '?';
-          const fullName = member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
-          return (
-            <Tooltip key={uid}>
-              <TooltipTrigger asChild>
-                <span className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground">
-                  {initials}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">{fullName}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-        {overflow > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground">
-                +{overflow}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              {userIds.slice(max).map((uid) => {
-                const m = memberLookup.get(uid);
-                return m ? `${m.firstName} ${m.lastName}` : 'Unbekannt';
-              }).join(', ')}
-            </TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-    </TooltipProvider>
+    <div className="flex -space-x-1.5">
+      {visible.map((uid) => {
+        const member = memberLookup.get(uid);
+        const initials = member ? getInitials(member.firstName, member.lastName) : '?';
+        const fullName = member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
+        return (
+          <span
+            key={uid}
+            title={fullName}
+            aria-label={fullName}
+            className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground"
+          >
+            {initials}
+          </span>
+        );
+      })}
+      {overflow > 0 && (
+        <span
+          title={userIds.slice(max).map((uid) => {
+            const member = memberLookup.get(uid);
+            return member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
+          }).join(', ')}
+          aria-label={`${overflow} weitere Mitarbeitende`}
+          className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground"
+        >
+          +{overflow}
+        </span>
+      )}
+    </div>
   );
 }
 

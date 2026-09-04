@@ -97,7 +97,7 @@ export default async function InviteErrorPage({
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-background px-4">
       <div className="mx-auto max-w-md text-center">
         <div className="mb-6 flex justify-center">
           <div className="rounded-full bg-destructive/10 p-4">

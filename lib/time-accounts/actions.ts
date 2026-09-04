@@ -18,7 +18,10 @@ import {
   createSignedDownloadUrl,
 } from "@/lib/storage/r2";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { applyApprovedTimeCorrections } from "@/lib/time-corrections/projection";
+import {
+  hasUnclosedLegacySequence,
+  projectLegacyEntriesForWindow,
+} from "@/lib/time-accounts/legacy-projection";
 import {
   isTimeCorrectionSnapshot,
   type TimeCorrectionApplicationProjection,
@@ -315,19 +318,6 @@ function buildLegacyIntervals(
       ? interval.sourceId
       : `legacy:${employeeRecordId}:${interval.sourceId}`,
   }));
-}
-
-function hasUnclosedLegacySequence(entries: readonly TimeEntry[]): boolean {
-  let active = false;
-  for (const entry of [...entries].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp),
-  )) {
-    if (entry.status !== "approved") continue;
-    if (["clock_in", "break_start", "break_end"].includes(entry.entryType))
-      active = true;
-    if (entry.entryType === "clock_out") active = false;
-  }
-  return active;
 }
 
 async function requireAuth(): Promise<
@@ -1371,11 +1361,17 @@ export async function prepareTimePeriod(formData: FormData): Promise<void> {
       ),
     ),
   );
-  const effectiveEntries = applyApprovedTimeCorrections(
-    toLegacyEntries((legacyRows ?? []) as Array<Record<string, unknown>>),
-    approvedCorrectionApplications,
-    context.orgId,
-  );
+  const effectiveEntries = projectLegacyEntriesForWindow({
+    entries: toLegacyEntries(
+      (legacyRows ?? []) as Array<Record<string, unknown>>,
+    ),
+    applications: approvedCorrectionApplications,
+    organizationId: context.orgId,
+    startInstant: getBerlinInstant(
+      `${addLocalDays(bounds.start, -1)}T00:00`,
+    ),
+    endInstant,
+  });
   legacyByUser.clear();
   for (const entry of effectiveEntries) {
     const list = legacyByUser.get(entry.userId) ?? [];

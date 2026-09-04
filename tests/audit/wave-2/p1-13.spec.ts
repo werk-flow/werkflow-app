@@ -66,6 +66,24 @@ async function appliedTemplateStateOrNull(
   }
 }
 
+async function waitForAppliedTemplateState(
+  organizationId: string,
+  input: { jobNumber?: string; projectNumber?: string }
+) {
+  let state = await appliedTemplateStateOrNull(organizationId, input);
+  await expect
+    .poll(
+      async () => {
+        state = await appliedTemplateStateOrNull(organizationId, input);
+        return state !== null;
+      },
+      { timeout: 20_000 }
+    )
+    .toBe(true);
+  if (!state) throw new Error('Applied work-template state did not settle after creation.');
+  return state;
+}
+
 async function customerExists(organizationId: string, customerName: string): Promise<boolean> {
   try {
     await getCustomerNumber(organizationId, customerName);
@@ -104,8 +122,11 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       }),
     });
     await dialog.getByRole('button', { name: 'Erstellen', exact: true }).click();
-    await expect(dialog.getByRole('alert')).toContainText('Bitte prüfe');
-    await dialog.locator('#new-template-name').fill(`Audit Wartung ${world.runId}`);
+    const templateName = dialog.locator('#new-template-name');
+    await expect(dialog.getByText('Bitte gib einen Namen an.')).toBeVisible();
+    await expect(templateName).toHaveAttribute('aria-invalid', 'true');
+    await expect(templateName).toBeFocused();
+    await templateName.fill(`Audit Wartung ${world.runId}`);
     await dialog
       .locator('#new-template-description')
       .fill(`Wiederkehrende Projektarbeit ${world.runId}`);
@@ -291,7 +312,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       workTemplateName: name,
       qualificationOverrideReason: 'Abweichung für den vollständigen Auditfluss.',
     });
-    let state = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
+    let state = await waitForAppliedTemplateState(world.orgId, { jobNumber });
     expect(state.applications).toHaveLength(1);
     expect(state.materials).toHaveLength(1);
     expect(state.capabilities).toHaveLength(1);
@@ -512,7 +533,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       title: `Nachträglich ${world.runId}`,
       plannedDateDigits: digits(DATES[1]),
     });
-    let state = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
+    let state = await waitForAppliedTemplateState(world.orgId, { jobNumber });
     const occurrenceCountBeforeApplication = state.planningOccurrences.length;
     expect(state.applications).toHaveLength(0);
     expect(state.instructions).toHaveLength(0);
@@ -715,7 +736,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const employeeRow = adminPage.getByRole('row').filter({ hasText: employeeName });
     await expect(employeeRow).toBeVisible({ timeout: 15_000 });
-    await employeeRow.click();
+    await employeeRow.getByRole('link', { name: employeeName }).click();
     const employeeCreateButton = adminPage.getByRole('button', {
       name: 'Auftrag erstellen',
     });

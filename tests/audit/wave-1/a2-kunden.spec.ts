@@ -335,15 +335,17 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await adminPage.getByRole('button', { name: 'Aktionen öffnen' }).click();
     await adminPage.getByRole('menuitem', { name: 'Bearbeiten' }).click();
     const dialog = adminPage.getByRole('dialog');
-    await dialog.locator('#edit-project-client').click();
-    await adminPage.getByPlaceholder('Kunde suchen...').fill(targetCustomer);
-    await adminPage
-      .getByRole('listbox')
-      .getByRole('button')
-      .filter({ hasText: targetCustomer })
-      .click();
-    await expect(dialog.locator('#edit-project-client')).toContainText(targetCustomer);
-    await dialog.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await selectFromSearchable(
+      adminPage,
+      dialog.locator('#edit-project-client'),
+      targetCustomer
+    );
+    const saveProjectButton = dialog.getByRole('button', {
+      name: 'Speichern',
+      exact: true,
+    });
+    await expect(saveProjectButton).toBeEnabled();
+    await saveProjectButton.click();
     await expect(dialog).toHaveCount(0, { timeout: 20_000 });
 
     const after = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
@@ -1170,11 +1172,19 @@ test.describe('A2 Kundencluster @AUDIT-W1-A2', () => {
     await expect(
       warning.getByText(/WerkFlow entscheidet nicht über die rechtliche Zulässigkeit/)
     ).toBeVisible();
-    await expect(warning.getByRole('button', { name: 'Begründet fortfahren' })).toBeDisabled();
-    await warning
-      .locator('#contact-exception-reason')
-      .fill('E-Mail ist für die laufende Störungsbehebung erforderlich');
-    await warning.getByRole('button', { name: 'Begründet fortfahren' }).click();
+    const continueButton = warning.getByRole('button', {
+      name: 'Begründet fortfahren',
+    });
+    const exceptionReason = warning.locator('#contact-exception-reason');
+    await expect(continueButton).toBeEnabled();
+    await continueButton.click();
+    await expect(warning.getByText('Bitte begründe die Ausnahme.')).toBeVisible();
+    await expect(exceptionReason).toHaveAttribute('aria-invalid', 'true');
+    await expect(exceptionReason).toBeFocused();
+    await exceptionReason.fill(
+      'E-Mail ist für die laufende Störungsbehebung erforderlich'
+    );
+    await continueButton.click();
     await expect(warning).toHaveCount(0, { timeout: 15_000 });
 
     const relationship = await getCustomerRelationshipState(world.orgId, customer);

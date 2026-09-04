@@ -73,7 +73,13 @@ test.describe("P1-23 time accounts and payroll handoff @P1-23 @GG-07", () => {
     await accountForm
       .getByLabel(`Anfangssaldo in Minuten für ${adminName}`)
       .fill("15");
-    await accountForm.getByRole("button", { name: "Konto eröffnen" }).click();
+    const openAccountButton = accountForm.getByRole("button", {
+      name: "Konto eröffnen",
+    });
+    await openAccountButton.click();
+    // The form disappears only after the Server Action commits and its
+    // authoritative settings read no longer lists this account as missing.
+    await expect(openAccountButton).toHaveCount(0, { timeout: 15_000 });
     await openRemainingP123Accounts({
       organizationId: world.orgId,
       actorUserId: world.users.admin.id,

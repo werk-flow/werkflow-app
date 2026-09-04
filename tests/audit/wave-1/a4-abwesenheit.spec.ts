@@ -371,12 +371,18 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     const saveCorrection = dialog.getByRole('button', {
       name: 'Korrektur speichern',
     });
-    await expect(saveCorrection).toBeDisabled();
-    await dialog.locator('#correct-sickness-half-day').click();
-    await dialog
-      .locator('#correct-sickness-reason')
-      .fill(`A4 telefonisch auf halbtags korrigiert ${world.runId}`);
+    const correctionReason = dialog.locator('#correct-sickness-reason');
     await expect(saveCorrection).toBeEnabled();
+    await saveCorrection.click();
+    await expect(
+      dialog.getByText('Bitte gib einen Grund für die Korrektur an.')
+    ).toBeVisible();
+    await expect(correctionReason).toHaveAttribute('aria-invalid', 'true');
+    await expect(correctionReason).toBeFocused();
+    await dialog.locator('#correct-sickness-half-day').click();
+    await correctionReason.fill(
+      `A4 telefonisch auf halbtags korrigiert ${world.runId}`
+    );
     await saveCorrection.click();
     await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 

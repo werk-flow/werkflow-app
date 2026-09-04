@@ -71,6 +71,7 @@ type OrganizationProviderProps = {
   children: ReactNode
   initialMemberships: UserOrg[]
   initialActiveOrgId: string | null
+  initialActiveOrgCookieNeedsSync: boolean
   initialIsSubscribed: boolean
 }
 
@@ -78,6 +79,7 @@ export function OrganizationProvider({
   children,
   initialMemberships,
   initialActiveOrgId,
+  initialActiveOrgCookieNeedsSync,
   initialIsSubscribed,
 }: OrganizationProviderProps) {
   const router = useRouter()
@@ -86,10 +88,13 @@ export function OrganizationProvider({
   const [, startTransition] = useTransition()
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships)
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId)
-  const [isLoading, setIsLoading] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(initialIsSubscribed)
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false)
   const pendingOrgIdRef = useRef<string | null>(null)
+  // Background membership reconciliation keeps the last-known sidebar in
+  // place. Replacing it with a skeleton would unmount an open organization
+  // picker; actual organization switches have their own explicit lock.
+  const isLoading = false
 
   // Sync state when server-provided props change (e.g. after router.refresh())
   useEffect(() => {
@@ -108,7 +113,11 @@ export function OrganizationProvider({
   // so that subsequent server-side renders can read it immediately.
   const hasSetCookieRef = useRef(false)
   useEffect(() => {
-    if (initialActiveOrgId && !hasSetCookieRef.current) {
+    if (
+      initialActiveOrgCookieNeedsSync &&
+      initialActiveOrgId &&
+      !hasSetCookieRef.current
+    ) {
       hasSetCookieRef.current = true
       setActiveOrgCookie(initialActiveOrgId).catch((error: unknown) => {
         console.error('Failed to synchronize the active organization', error)
@@ -118,7 +127,7 @@ export function OrganizationProvider({
         })
       })
     }
-  }, [initialActiveOrgId, showBanner])
+  }, [initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner])
 
   const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null
 
@@ -126,7 +135,6 @@ export function OrganizationProvider({
   const refreshGenerationRef = useRef(0)
   const refreshMemberships = useCallback(async () => {
     const generation = ++refreshGenerationRef.current
-    setIsLoading(true)
     try {
       const supabase = createSupabaseBrowserClient()
       const {
@@ -190,10 +198,13 @@ export function OrganizationProvider({
           await setActiveOrgCookie(newActiveId)
         }
       }
-    } finally {
-      if (generation === refreshGenerationRef.current) {
-        setIsLoading(false)
-      }
+    } catch (error) {
+      if (generation !== refreshGenerationRef.current) return
+      console.error('Error refreshing memberships:', error)
+      showBanner({
+        variant: 'error',
+        message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
+      })
     }
   }, [activeOrgId, showBanner])
 

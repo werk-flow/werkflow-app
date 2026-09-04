@@ -244,8 +244,11 @@ export async function closeDocumentUploadProgressDialog(page: Page): Promise<voi
 }
 
 export function inventoryLocationCard(page: Page, locationName: string): Locator {
-  // Inventory location cards have no landmark or test id.
-  return page.locator('div.rounded-lg.border').filter({ hasText: locationName });
+  // The heading is the card's stable semantic anchor; the ancestor only
+  // establishes the assertion scope for its type and item count.
+  return page
+    .getByRole('heading', { name: locationName, exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "rounded-lg") and contains(@class, "border")][1]');
 }
 
 export function projectMaterialTotal(page: Page, itemName: string): Locator {

@@ -958,6 +958,9 @@ export function DocumentLibraryContent({
   const moveCopyBatch = useBatchProgress<BulkStep>();
   const createFolder = useServerAction(createDocumentFolder);
   const [isNavigationPending, startNavigationTransition] = useTransition();
+  const [activeDocumentMutationCount, setActiveDocumentMutationCount] =
+    useState(0);
+  const hasPendingDocumentMutation = activeDocumentMutationCount > 0;
   const { showBanner } = useBanner();
   const [moveCopyError, setMoveCopyError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
@@ -1027,7 +1030,6 @@ export function DocumentLibraryContent({
 
   useEffect(() => {
     // Route props are the authoritative state after folder or filter navigation.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearchQuery(initialSearchQuery);
     setPendingNavigation(null);
   }, [category, currentFolderId, initialSearchQuery, linkFilter, view]);
@@ -1040,7 +1042,6 @@ export function DocumentLibraryContent({
     initialDocumentIdRef.current = initialDocumentId;
     if (initialDocumentChanged || viewingInitialDocument) {
       // Keep an open viewer synchronized with the authoritative route payload.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewerDocument(initialDocument);
     }
   }, [initialDocument, initialDocumentId, viewerDocument?.id]);
@@ -1135,6 +1136,17 @@ export function DocumentLibraryContent({
     await waitForDocuments();
   }
 
+  async function runDocumentMutationFlow<Result>(
+    mutation: () => Promise<Result>,
+  ): Promise<Result> {
+    setActiveDocumentMutationCount((current) => current + 1);
+    try {
+      return await mutation();
+    } finally {
+      setActiveDocumentMutationCount((current) => Math.max(0, current - 1));
+    }
+  }
+
   // Drops the rows at once, runs the mutation per document, and restores the
   // rows whose mutation failed. Used for trash and restore in both directions.
   async function mutateDocuments(
@@ -1157,51 +1169,55 @@ export function DocumentLibraryContent({
   }
 
   async function trashDocuments(documentsToTrash: OrganizationDocument[]) {
-    const total = documentsToTrash.length;
-    const { failedCount } = await mutateDocuments(
-      documentsToTrash,
-      deleteDocument,
-    );
-    if (failedCount > 0) {
-      showFeedback(
-        "error",
-        total === 1
-          ? "Die Datei konnte nicht gelöscht werden."
-          : `${failedCount} von ${total} Dateien konnten nicht gelöscht werden.`,
+    return runDocumentMutationFlow(async () => {
+      const total = documentsToTrash.length;
+      const { failedCount } = await mutateDocuments(
+        documentsToTrash,
+        deleteDocument,
       );
-    } else {
-      showUndoBanner(
-        total === 1
-          ? "Datei wurde in den Papierkorb verschoben."
-          : `${total} Dateien wurden in den Papierkorb verschoben.`,
-        () => restoreDocuments(documentsToTrash),
-      );
-    }
-    refreshDocuments();
+      if (failedCount > 0) {
+        showFeedback(
+          "error",
+          total === 1
+            ? "Die Datei konnte nicht gelöscht werden."
+            : `${failedCount} von ${total} Dateien konnten nicht gelöscht werden.`,
+        );
+      } else {
+        showUndoBanner(
+          total === 1
+            ? "Datei wurde in den Papierkorb verschoben."
+            : `${total} Dateien wurden in den Papierkorb verschoben.`,
+          () => restoreDocuments(documentsToTrash),
+        );
+      }
+      if (failedCount < total) await settleAfterRefresh();
+    });
   }
 
   async function restoreDocuments(documentsToRestore: OrganizationDocument[]) {
-    const total = documentsToRestore.length;
-    const { failedCount } = await mutateDocuments(
-      documentsToRestore,
-      restoreDocument,
-    );
-    if (failedCount > 0) {
-      showFeedback(
-        "error",
-        total === 1
-          ? "Die Datei konnte nicht wiederhergestellt werden."
-          : `${failedCount} von ${total} Dateien konnten nicht wiederhergestellt werden.`,
+    return runDocumentMutationFlow(async () => {
+      const total = documentsToRestore.length;
+      const { failedCount } = await mutateDocuments(
+        documentsToRestore,
+        restoreDocument,
       );
-    } else {
-      showUndoBanner(
-        total === 1
-          ? "Datei wurde wiederhergestellt."
-          : `${total} Dateien wurden wiederhergestellt.`,
-        () => trashDocuments(documentsToRestore),
-      );
-    }
-    refreshDocuments();
+      if (failedCount > 0) {
+        showFeedback(
+          "error",
+          total === 1
+            ? "Die Datei konnte nicht wiederhergestellt werden."
+            : `${failedCount} von ${total} Dateien konnten nicht wiederhergestellt werden.`,
+        );
+      } else {
+        showUndoBanner(
+          total === 1
+            ? "Datei wurde wiederhergestellt."
+            : `${total} Dateien wurden wiederhergestellt.`,
+          () => trashDocuments(documentsToRestore),
+        );
+      }
+      if (failedCount < total) await settleAfterRefresh();
+    });
   }
 
   function removeDocumentsFromSelection(documentIds: string[]) {
@@ -1373,6 +1389,9 @@ export function DocumentLibraryContent({
     targetView: DocumentLibraryView;
     targetFolderId: string | null;
   }) {
+    if (busy.anyBusy || hasPendingDocumentMutation || isNavigationPending) {
+      return;
+    }
     if (targetView === view && targetFolderId === currentFolderId) return;
 
     setPendingNavigation({ view: targetView, folderId: targetFolderId });
@@ -2117,7 +2136,7 @@ export function DocumentLibraryContent({
           return;
         }
 
-        void (async () => {
+        void runDocumentMutationFlow(async () => {
           const { failedCount: failedDocumentCount } = await mutateDocuments(
             documentsToDelete,
             deleteDocument,
@@ -2147,8 +2166,8 @@ export function DocumentLibraryContent({
               } in den Papierkorb verschoben.`,
             );
           }
-          refreshDocuments();
-        })();
+          if (failedCount < itemCount) await settleAfterRefresh();
+        });
       },
     });
   }
@@ -2436,6 +2455,11 @@ export function DocumentLibraryContent({
               size="sm"
               variant={visibleView === "trash" ? "secondary" : "outline"}
               data-document-trash-drop="true"
+              disabled={
+                busy.anyBusy ||
+                hasPendingDocumentMutation ||
+                isNavigationPending
+              }
               className={cn(
                 "min-w-32",
                 isTrashDragOver &&
@@ -2465,7 +2489,14 @@ export function DocumentLibraryContent({
               onDragLeave={() => setIsTrashDragOver(false)}
               onDrop={handleTrashDrop}
             >
-              <Trash2 className="size-4" />
+              {busy.anyBusy || hasPendingDocumentMutation ? (
+                <InlinePending
+                  active
+                  label="Dokumentaktion wird ausgeführt"
+                />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
               Papierkorb
             </Button>
           </div>

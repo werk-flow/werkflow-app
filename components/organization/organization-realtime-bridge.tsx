@@ -9,8 +9,10 @@ import { useLiveView } from '@/hooks/use-live-view';
  * active org id), so it cannot subscribe itself; this bridge mounts just
  * below the provider and routes `organization_members` events — and the
  * provider's focus/visibility catch-up — into `refreshMemberships`.
- * `initialData` suppresses the mount read: the server render that mounted
- * the app shell already produced current memberships.
+ * The mount read is intentional: another tab or browser context can change
+ * memberships while this shell is absent, and the browser query reconciles
+ * that state without coupling it to a cookie-writing Server Action or an RSC
+ * refresh of the route that happened to mount the shell.
  */
 export function OrganizationRealtimeBridge() {
   const { refreshMemberships } = useOrganization();
@@ -21,7 +23,6 @@ export function OrganizationRealtimeBridge() {
       await refreshMemberships();
       return { ok: true, data: null };
     },
-    initialData: null,
   });
 
   return null;

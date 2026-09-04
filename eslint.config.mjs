@@ -263,6 +263,16 @@ const hoverSelectors = [
 
 const stylingSelectors = [
   {
+    selector: 'Literal[value=/h-screen/]',
+    message:
+      "Viewport-height layouts use h-dvh/min-h-dvh so mobile browser chrome cannot crop or extend the page (werkflow-design skill: Density and layout).",
+  },
+  {
+    selector: 'TemplateElement[value.raw=/h-screen/]',
+    message:
+      "Viewport-height layouts use h-dvh/min-h-dvh so mobile browser chrome cannot crop or extend the page (werkflow-design skill: Density and layout).",
+  },
+  {
     selector: 'Literal[value=/rounded-(2xl|3xl)/]',
     message:
       "The radius scale stops at rounded-lg for containers (werkflow-design skill: shape and depth). rounded-2xl+ is off-canon.",
