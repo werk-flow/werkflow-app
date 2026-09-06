@@ -1,0 +1,76 @@
+# A checkout price the client is allowed to set
+
+Source: https://www.instagram.com/p/Dcy-rVRD5jM/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-02
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your AI built your Stripe checkout. 
+
+The price lives in your frontend. Change it to one dollar. Stripe will process it. Your server never validates the amount against your product pricing. Create sessions server-side with database prices. Use Stripe Price IDs. Verify payment with webhooks before provisioning access. 
+
+Your checkout page is not your pricing. Your server is.
+
+-MM
+
+#vibecoding #aidirectedengineering #stripe #security #production
+
+## Transcript
+
+your AI built your Stripe checkout,
+the price lives in your front end.
+So if you change it to $1 Stripe will still process it.
+So your AI integrated Stripe,
+your user clicks the buy button,
+your front end sends a checkout request
+with the price in the body
+and Stripe charges whatever amount your code sends.
+So your server never checks whether that number
+matches your actual product pricing and that's the hack.
+So now your checkout is just a suggestion.
+Here's how we're gonna make it a contract.
+Step one, create checkout sessions on your server
+with prices from your database.
+The client sends a product ID, never a dollar amount.
+So your server looks up the price,
+creates the Stripe session with the verified amount
+and returns the session to the client.
+So direct your AI to move all Stripe session creation
+to a server endpoint that ignores
+any price the front end sends.
+That's definitely a win.
+Step two, use Stripe price IDs instead of raw dollar amounts.
+So Stripe will let you create price objects tied
+to your products in your dashboard.
+So when your server references a price ID,
+the charge amount is locked inside of Stripe system.
+So no code on your side can ever override it.
+So direct your AI to replace every raw amount
+in your checkout flow with a Stripe price ID.
+That's a win.
+And number three, verify payment through web hooks
+before granting any access.
+Your checkout success page is not proof of payment.
+A user can still navigate to your success URL
+without paying.
+So direct your AI to implement a Stripe web hook listener
+so that it confirms the payment event,
+validates the amount against your product price
+and only then provisions access to the purchase resource.
+Your checkout folks is not your pricing, your server is.
+And right now your server believes whatever the browser
+is telling it at checkout.
+So let's get it cleaned up.
+That's a win.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Create checkout sessions server-side using prices from the database.
+2. Use Stripe Price IDs rather than amounts passed in from the page.
+3. Verify the payment through webhooks before provisioning access.

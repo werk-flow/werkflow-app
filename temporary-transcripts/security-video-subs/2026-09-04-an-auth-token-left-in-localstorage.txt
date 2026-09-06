@@ -1,0 +1,73 @@
+# An auth token left where any script can read it
+
+Source: https://www.instagram.com/p/Dc3kkckjyYV/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-04
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your AI stored your authentication token in localStorage. 
+
+Any script on your page can steal it and log in as your user. That chat widget you added can read it right now. Move tokens to httpOnly cookies JavaScript cannot touch. Short expiration with refresh rotation. Token revocation when a user's security state changes. 
+
+Your auth token is the key. Stop leaving it on the counter.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #authentication #production
+
+## Transcript
+
+Your AI stored your authentication token in local storage.
+Now any script on your page can steal it
+and log in as your user.
+So your AI built your login system,
+user authenticates, server sends,
+back to a JWT file, front end stores it in local storage.
+That token is your user's identity.
+And it is sitting in a storage location
+that every script on your page can read.
+So that chat widget you added last week
+can read your user's auth tokens right now.
+Here's how we're gonna fix it.
+Number one, move your tokens out of local storage
+and into HTTP only cookies.
+An HTTP only cookie cannot be read by JavaScript.
+It travels with every request automatically
+and is invisible to any script running on your page.
+So direct your AI to refactor authentication flow
+so it stores the JWT in a secure HTTP only same site cookie
+instead of local storage.
+That's a win.
+Number two, set token expiration short
+and implement refresh tokens.
+A stolen JWT that lasts 30 days
+is an open door for 30 days.
+A token that expires in 15 minutes
+limits that damage window.
+So direct your AI to implement short lived access tokens
+with a secure refresh token rotation
+that issues a new pair on each refresh.
+That's a win.
+And number three, add token revocation.
+If a user changes their password
+or reports a compromised account,
+every active token for that user should die immediately.
+So direct your AI to implement a token revocation list
+or per user token version, right?
+So that it invalidates all existing tokens
+when the user's security state changes.
+Your auth token is your user's key to the building.
+Stop leaving it on the counter where anyone can copy it.
+And that is a win.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Move tokens into httpOnly cookies that JavaScript cannot touch.
+2. Use short expiry with refresh rotation.
+3. Revoke tokens when a user's security state changes.

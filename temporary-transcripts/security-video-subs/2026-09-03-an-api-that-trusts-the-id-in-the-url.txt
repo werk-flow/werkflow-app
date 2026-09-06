@@ -1,0 +1,75 @@
+# An API that trusts the user id in the URL
+
+Source: https://www.instagram.com/p/Dc1jZHyiWz0/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-03
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your API uses the user ID in the URL to load their data. 
+
+Change the number. See someone else's account. Your AI built the endpoints. It never checks whether the person requesting user 15's data is actually user 15. Verify ownership on every request. Replace sequential IDs with UUIDs. Audit every endpoint that takes an ID. 
+
+Your API should not trust the URL. It should trust the session.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #api #production
+
+## Transcript
+
+Your API is using the user ID and the URL to load the data.
+So you change the number
+and you see someone else's account altogether.
+So your AI, yeah, built your API endpoints.
+Your front end sends the logged in user's ID
+and gets their data right back.
+But your API never checks whether the person
+making the request is actually the right user.
+So your authorization is in the URL
+and your URL is one guess away
+from every other user's data.
+Let's get this handled.
+Step one, verify ownership on every API request.
+Every endpoint that returns user specific data
+must check the authenticated user's identity
+against the resource that they are requesting.
+So if user 12 requests user 15's data,
+the server returns a 403.
+So direct your AI to add ownership verification middleware
+so that it compares the authenticated session user
+against the resource owner on every protected endpoint.
+That's a win.
+Step two, stop using sequential IDs in your URLs.
+User one, user two, user three, or order 1001, 1002, 1003.
+Sequential IDs make enumeration trivial.
+An attacker writes a loop
+and downloads every user's data in minutes.
+So direct your AI to replace sequential integer IDs
+with UUIDs in all API endpoints and database references.
+That's a win.
+And step three, audit every endpoint
+that takes an ID as a parameter.
+Your AI built dozens of endpoints.
+Every one of them accepts an ID in the URL,
+query string, or a request body,
+a potential access control failure.
+So direct your AI to list every endpoint
+so that it accepts a resource identifier,
+verify ownership checks exist on each one,
+and flag any endpoint where a user can access resources
+that do not belong to them.
+Your API should not trust the URL.
+It should trust the user session.
+That's your win.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Verify ownership on every request.
+2. Replace sequential IDs with UUIDs.
+3. Audit every endpoint that takes an ID.

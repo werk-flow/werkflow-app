@@ -1,0 +1,79 @@
+# Cloud functions that bypass every database rule
+
+Source: https://www.instagram.com/p/Dc6OazplYFM/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-05
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your AI built Firebase Cloud Functions with the Admin SDK. 
+
+The Admin SDK bypasses every security rule in your database. Your function takes user input and executes it with full admin privileges. Validate every input before it hits the database. Scope every query to the authenticated user. Audit the gap between what your functions can access and what they should. 
+
+Your rules stop at the client. Your functions have no rules at all.
+
+-MM
+
+#vibecoding #aidirectedengineering #firebase #security #production
+
+## Transcript
+
+Your AI built Firebase Cloud Functions with the admin SDK.
+Well, the admin SDK bypasses every security rule.
+So your AI wrote Firebase Cloud Functions
+to handle your backend logic,
+which has unrestricted access to your entire database.
+No security rules apply.
+Your function takes user input directly from the request,
+builds a database query and executes it
+with full admin privileges.
+So if a user changes the collection name
+or document ID in their request,
+your function queries whatever they wanna ask for.
+So your security rules protect the front end,
+but your Cloud Functions have no rules at all.
+Let's get it fixed.
+Step one, validate every input parameter
+before it reaches the database.
+So your Firebase Cloud Function should never pass
+raw user input into a database query.
+Direct your AI to add input validation
+to every Cloud Function that checks parameter types,
+enforces allowed values and rejects any request
+with unexpected fields or values before the query executes.
+That's definitely a win.
+Step two, scope every query to the authenticated user's data.
+The admin SDK will query anything.
+Your function, well, it should not.
+So even though the admin SDK has full access,
+every query should filter by the authenticated user's ID.
+So direct your AI to add user scoping
+to every database operation in every Cloud Function.
+So a function never returns or modifies data
+belonging to another user.
+And step three, audit the gap
+between what your functions can access
+and what they should access.
+The admin SDK can read and write every collection,
+every document and every field.
+So direct your AI to list every Cloud Function,
+document what data it accesses
+and verify each function only touches
+what the requesting user is authorized to see.
+Flag any function that reaches beyond
+the authenticated user's own data.
+So your security rules, they stop the client.
+Your Cloud Functions start where those rules end.
+And right now they have no boundaries of their own.
+So let's get them locked in.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Validate every input before it reaches the database.
+2. Scope every query to the authenticated user.
+3. Audit the gap between what your functions can access and what they should.

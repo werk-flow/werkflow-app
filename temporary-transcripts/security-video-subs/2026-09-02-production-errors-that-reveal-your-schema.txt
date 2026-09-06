@@ -1,0 +1,70 @@
+# A production error page that hands out your schema
+
+Source: https://www.instagram.com/p/DcybEeAEhP8/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-02
+Topic: security-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Your app just showed a user your database name, your server file path, and the query that failed. 
+
+They were not trying to hack you. They clicked a broken link. Your AI built error handling for development and you shipped it to production. Database name. Table structure. The ORM you are using. Separate error responses by environment. Route every error to logging, not the screen. Build custom error pages that reveal nothing. 
+
+Your users found a bug. Do not let the bug report write itself.
+
+-MM
+
+#vibecoding #aidirectedengineering #security #errorhandling #production
+
+## Transcript
+
+Your AI built app just showed a user your database name, your server file path, and
+their query that failed.
+And they were not trying to hack you, they accidentally clicked on a broken link.
+Your AI built error handling.
+Great.
+Detailed stack traces, full database queries, and internal file paths.
+However, you shipped it to production, and now your users are seeing the same data.
+So an attacker does not need to probe your system, your error pages are doing the reconnaissance
+for them.
+So let's get it cleaned up.
+Step 1.
+Separate your error responses by environment.
+Development shows the full stack trace.
+Production shows a generic message.
+Your users should never see an error that contains a file path, a query string, or a
+database name, or even a package version.
+So direct your AI to implement environment-aware error handling, so that it returns detailed
+errors only in development and returns generic user-friendly responses in production.
+That's definitely a win.
+Step 2.
+Route every error to centralized logging.
+Not to the user's screen.
+Every error your app throws should be captured, time stamped, and searchable in your monitoring
+system.
+No doubt about it.
+The user sees a clean error page.
+You see the full detail in your logs.
+So direct your AI to implement structured error logging that captures the full stack
+trace, request context, and the user session data in your monitoring tool without exposing
+any of it to the client.
+That's also a win.
+And step 3.
+Build custom error pages that reveal nothing.
+So your 404, or your 500, or your timeout page, every one of them should be branded,
+helpful, and architecturally silent.
+So direct your AI to build custom error pages for every common error code.
+So that it gives the user a clear next step without revealing any server-side details.
+Those users who found a bug do not let the bug write itself or the report.
+That's not a win.
+
+## Orchestration prompt
+
+Source: the directives stated in the video caption.
+
+1. Separate error responses by environment.
+2. Route every error to logging, not to the screen.
+3. Build custom error pages that reveal nothing.

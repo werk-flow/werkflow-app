@@ -1,0 +1,56 @@
+# Build for one operator, then sell to the market
+
+Source: https://www.instagram.com/p/Dc6s_Nqj2wo/
+Creator: @mattmurphyai
+Platform: Instagram
+Posted: 2026-09-05
+Topic: product-growth-video-subs
+Transcript: Whisper small.en, transcribed from the video audio
+
+## Caption
+
+Every business within five miles of you has a scheduling problem they are paying someone else to solve badly. 
+
+The salon is paying $200 a month for a platform that cannot handle walk-ins. The contractor has software that ignores drive time. The dentist has a receptionist spending four hours confirming appointments a text message could handle. You do not need to build a platform. 
+
+Build a system for one operator. Then sell it to every operator in your market. Stop paying for software that was built for everyone and works for no one.
+
+-MM
+
+#vibecoding #aidirectedengineering #founders #operators #production
+
+## Transcript
+
+Every business within five miles of you has a scheduling problem they are paying someone else to solve the old way.
+A hair salon pays a monthly SaaS booking platform that cannot handle walk-ins or texts.
+The HVAC contractor pays for field technician software that ignores drive time between jobs or
+optimizes driver routes, right? Or a dental office that has a receptionist spending four hours every single day
+confirming appointments and automated text could have handled on its own.
+So every one of them is renting a legacy SaaS tool built for every industry and customized for none.
+So how do we get a piece of the action? Here's how. Number one, the scheduling problem is not a technology problem.
+It's a workflow problem.
+Every business matches calendars to clients to services to time.
+But the rules are different for almost every single business.
+So the salon has stylus with different specialties and different availability, right?
+The contractor has service zones and equipment requirements and the dentist office has insurance verification
+before an appointment can even be confirmed.
+So no platform that is built for everyone handles the rules that matter for someone, right?
+That is the custom gap you use AI to build yourself into. That's totally a win.
+Number two, you do not need to build a full SaaS platform.
+You need to build a system for one operator. Pick one salon. Her stylus, her services, her walk-in policy, her
+cancellation rules, her automated confirmations.
+A scheduling system scope to exactly how her business runs its best. Again, it's not a SaaS product.
+It's a custom build that replaces the generic tool that she is renting from someone else.
+So direct your AI to build a scheduling engine scope to the specific workflow rules of one business and one operator.
+That's the win.
+Step three, take time to scale. The second salon costs you almost nothing at all.
+Same problem, same workflow, same rules with a different logo. You're no longer freelancing. You are now productizing and scaling.
+So build one, sell it to every salon or every contractor or every studio in your market.
+It's a win no matter which one you choose to pursue. The operator owns the system as an asset.
+That's a win and no more monthly fee payments to a platform that doesn't understand their business.
+So trust me, operators are ready to stop paying for software that was built for everyone and works for no one all day long.
+Get in there, talk to them about it.
+
+## Orchestration prompt
+
+None: this video contains no explicit agent directive.
